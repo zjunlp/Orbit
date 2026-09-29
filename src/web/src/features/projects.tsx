@@ -78,18 +78,21 @@ export function ProjectsPage({ token }: { token: string }) {
     <>
       <div className="section-line">
         <p className="muted">研究目标、里程碑与执行证据归档。进度由你确认。</p>
-        <button
-          type="button"
-          className="primary"
-          disabled={!capabilities.data}
-          onClick={() =>
-            capabilities.data?.project_workspaces
-              ? setCreating(true)
-              : edit(blank())
-          }
-        >
-          ＋ 新建项目
-        </button>
+        <div className="actions">
+          <a href="#runs">查看科研运行 →</a>
+          <button
+            type="button"
+            className="primary"
+            disabled={!capabilities.data}
+            onClick={() =>
+              capabilities.data?.project_workspaces
+                ? setCreating(true)
+                : edit(blank())
+            }
+          >
+            ＋ 新建项目
+          </button>
+        </div>
       </div>
       <Notice error={projects.error} loading={!projects.data} />
       {creating && (

@@ -3,7 +3,7 @@
 状态：W01/W02 已实现。单管理员、单节点控制台，支持项目初始化、方案查看、实验提交、取消、结果和分析。
 [W 设计与维护边界](../architecture/web-research-workflow.md)；[验证记录](../changes/20260920-web-workflow-w84d2a.md)。
 
-2026-09-28 页面整理：主导航为「实验、科研项目、资源、设置」，默认进入实验列表。科研项目继续直接访问；旧任务、运行、Records 和 Agent 页面收在设置中，原有链接仍有效。Benchmark 结果复盘见[实验工作台](benchmark-workspace.md)。
+主导航为「实验、科研项目、资源、设置」，默认进入实验列表。科研项目页提供「查看科研运行」入口；运行列表 `#runs` 和运行详情 `#execution/<run>` 均归属「科研项目」，直接打开或刷新也保持该导航高亮。旧任务、Records 和 Agent 页面收在设置中，原有链接仍有效。Benchmark 结果复盘见[实验工作台](benchmark-workspace.md)。
 
 ## 启动与访问
 

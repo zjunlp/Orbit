@@ -22,13 +22,16 @@ const navigation = [
   ["resources", "资源", "▥"],
   ["settings", "设置", "⚙"],
 ];
-const secondaryPages: Record<string, string> = {
-  overview: "总览",
-  tasks: "注册任务",
-  runs: "科研运行",
-  execution: "科研运行",
-  agents: "Agent 配置",
-  records: "运行记录",
+const secondaryPages: Record<
+  string,
+  { title: string; section: "projects" | "settings" }
+> = {
+  overview: { title: "总览", section: "settings" },
+  tasks: { title: "注册任务", section: "settings" },
+  runs: { title: "科研运行", section: "projects" },
+  execution: { title: "科研运行", section: "projects" },
+  agents: { title: "Agent 配置", section: "settings" },
+  records: { title: "运行记录", section: "settings" },
 };
 function readToken() {
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
@@ -173,7 +176,6 @@ function Settings({ token }: { token: string }) {
       <div className="settings-links">
         {[
           ["agents", "Agent 配置", "查看安装版本与认证状态"],
-          ["runs", "科研运行", "查看执行、日志与结果"],
           ["records", "运行记录", "查询历史轨迹和产物"],
           ["tasks", "注册任务", "查看科研任务输入与资源要求"],
           ["overview", "项目总览", "查看项目、任务与近期执行"],
@@ -255,7 +257,7 @@ export function App() {
     );
   const [page, id] = route.split("?")[0].split("/");
   const active = navigation.find(
-    ([key]) => key === (page === "execution" ? "runs" : page),
+    ([key]) => key === (secondaryPages[page]?.section ?? page),
   );
   return (
     <div className="shell">
@@ -281,12 +283,8 @@ export function App() {
           {navigation.map(([key, label, icon]) => (
             <a
               key={key}
-              className={
-                key === page || (key === "settings" && secondaryPages[page])
-                  ? "active"
-                  : ""
-              }
-              aria-current={key === page ? "page" : undefined}
+              className={key === active?.[0] ? "active" : ""}
+              aria-current={key === active?.[0] ? "page" : undefined}
               href={`#${key}`}
             >
               <span aria-hidden="true">{icon}</span>
@@ -311,7 +309,9 @@ export function App() {
       <div className="workspace">
         <header>
           <div>
-            <h1>{active?.[1] ?? secondaryPages[page] ?? "页面不存在"}</h1>
+            <h1>
+              {secondaryPages[page]?.title ?? active?.[1] ?? "页面不存在"}
+            </h1>
           </div>
           <span className="muted">本机研究工作台</span>
         </header>
