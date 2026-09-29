@@ -19,11 +19,11 @@
 .benchmark-workspace textarea {
   width: 100%;
   min-width: 0;
-  border: 1px solid #cbdad7;
-  border-radius: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 9px 11px;
   background: #fff;
-  color: #203b3b;
+  color: var(--text);
 }
 .benchmark-workspace textarea {
   resize: vertical;
@@ -43,7 +43,7 @@
   width: 110px;
   height: 5px;
   margin-top: 6px;
-  accent-color: #087d70;
+  accent-color: var(--accent);
 }
 .benchmark-workspace td {
   max-width: 380px;
@@ -77,8 +77,8 @@
 .bench-chart {
   padding: 16px 20px;
   background: #fff;
-  border: 1px solid #dae5e2;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 .bench-register form {
   display: flex;
@@ -114,14 +114,14 @@
   font-size: 23px;
 }
 .bench-negative {
-  color: #b14435;
+  color: var(--danger);
 }
 .bench-positive {
-  color: #087d70;
+  color: var(--success);
 }
 .bench-warning {
-  background: #fff4e4;
-  border-left: 3px solid #c88832;
+  background: var(--warning-bg);
+  border-left: 3px solid var(--warning);
   padding: 10px 14px;
   overflow-wrap: anywhere;
 }
@@ -146,14 +146,14 @@
   overflow-wrap: anywhere;
 }
 .score-missing {
-  background: #edf0ef;
-  color: #62716e;
+  background: var(--neutral-bg);
+  color: var(--muted);
 }
 .score-zero {
-  background: #fff0db;
+  background: var(--warning-bg);
 }
 .score-present {
-  background: #d9eee5;
+  background: var(--success-bg);
 }
 .bench-compare-runs {
   display: grid;
@@ -164,7 +164,7 @@
 .bench-tabs {
   display: flex;
   gap: 20px;
-  border-bottom: 1px solid #d4e1dd;
+  border-bottom: 1px solid var(--border);
   padding: 0;
   margin-bottom: 14px;
   flex-wrap: wrap;
@@ -184,16 +184,16 @@
   padding: 3px;
 }
 .bench-step {
-  border: 1px solid #d9e3e0;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   padding: 12px;
   min-width: 0;
   scroll-margin-top: 24px;
   background: #fff;
 }
 .bench-step-error {
-  border-left: 4px solid #bd604c;
-  background: #fffaf8;
+  border-left: 4px solid var(--danger);
+  background: var(--danger-bg);
 }
 .bench-step .section-line {
   flex-wrap: wrap;
@@ -214,7 +214,7 @@
 }
 .bench-file-list .section-line {
   gap: 12px;
-  border-bottom: 1px solid #e4ebe8;
+  border-bottom: 1px solid var(--border-soft);
   padding: 8px 0;
 }
 .bench-preview {
@@ -234,7 +234,7 @@
 .bench-result-table :where(thead) th {
   position: sticky;
   top: 0;
-  background: #f5f9f7;
+  background: var(--canvas);
   z-index: 1;
 }
 .workbench-breadcrumb,
@@ -298,7 +298,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   background: white;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 .workbench-stats > div {
   padding: 18px 20px;
@@ -381,7 +381,7 @@
 }
 .workbench-table {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: white;
 }
 .workbench-table th,
@@ -389,7 +389,7 @@
   padding: 12px 16px;
 }
 .workbench-table tbody tr:hover {
-  background: #f9fbfa;
+  background: var(--accent-soft);
 }
 .workbench-table tbody th {
   max-width: 400px;
@@ -410,10 +410,10 @@
 }
 .result-state {
   font-size: 12px;
-  color: #305e4d;
+  color: var(--success);
 }
 .result-failed {
-  color: #a13e2e;
+  color: var(--danger);
 }
 .table-pagination {
   padding: 14px 0;
@@ -437,9 +437,9 @@
   margin: 16px 0;
 }
 .result-card {
-  background: #f9fafb;
+  background: var(--canvas);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   min-width: 0;
 }
@@ -479,7 +479,7 @@
 }
 .bench-notes {
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .bench-file-list .actions {
   margin-top: 0;
@@ -513,7 +513,7 @@
 }
 .bench-step pre {
   border: 1px solid var(--border-soft);
-  background: #f8fafb;
+  background: var(--canvas);
 }
 @media (max-width: 1100px) {
   .bench-compare-runs {

@@ -7,7 +7,13 @@ import {
   useData,
 } from "../api/console";
 import type { Capabilities } from "../api/workflow";
-import { Badge, Empty, Notice, Panel } from "../components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "../components/common";
 import { ProjectCreate } from "./project-create";
 
 const blank = (): Project => ({
@@ -318,7 +324,7 @@ export function ProjectsPage({ token }: { token: string }) {
           const done = project.milestones.filter((m) => m.done).length;
           return (
             <Panel key={project.id} title={project.name}>
-              <Badge>
+              <Badge variant={statusVariant(project.status)}>
                 {statuses[project.status as keyof typeof statuses] ??
                   project.status}
               </Badge>

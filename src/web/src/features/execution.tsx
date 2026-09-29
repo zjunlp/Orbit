@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { known, request, useData } from "../api/console";
 import type { Capabilities, ControlRun } from "../api/workflow";
-import { Badge, Empty, Notice, Panel } from "../components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "../components/common";
 import { ArtifactFiles } from "./execution-artifacts";
 import { ExecutionEvents } from "./execution-events";
 
@@ -122,7 +128,9 @@ export function ExecutionDetail({ token, id }: { token: string; id: string }) {
       {value && (
         <>
           <Panel title="运行状态">
-            <Badge>运行阶段：{statusLabel(value.state)}</Badge>
+            <Badge variant={statusVariant(value.state)}>
+              运行阶段：{statusLabel(value.state)}
+            </Badge>
             <p>
               执行结果：
               {value.result

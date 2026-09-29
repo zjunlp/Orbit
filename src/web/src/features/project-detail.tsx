@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { type Project, request, useData } from "../api/console";
 import type { Capabilities, ProjectDetail } from "../api/workflow";
-import { Badge, Empty, Notice, Panel } from "../components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "../components/common";
 import { ExecutionList } from "./execution";
 import { ExperimentSubmit } from "./experiment-submit";
 
@@ -87,7 +93,9 @@ export function ProjectDetailPage({
         <>
           <Notice error={data.research_warning} />
           <Panel title="项目概况">
-            <Badge>项目：{data.project.status}</Badge>
+            <Badge variant={statusVariant(data.project.status)}>
+              项目：{data.project.status}
+            </Badge>
             <p className="prewrap">{data.project.goal}</p>
             <p className="break">
               工作区：{data.project.workspace ?? "未绑定"}
