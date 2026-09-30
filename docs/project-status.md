@@ -1,9 +1,9 @@
 # 项目当前状态
 
-Updated at: 2026-09-30T04:10:15.881378+00:00
+Updated at: 2026-09-30T06:47:55.124359+00:00
 
-Basis: 本文在 `refactor/python-research-core` 上提出合并后的状态，以 `main@920ee1d` 为基线。
-实现、验收、Git 集成与常驻部署是不同事实；是否已合并以 Git 为准。
+Basis: `main` 已集成 Python 渐进重构与清理（PR #10，运行代码 `682aad3`）。
+本文更新现有实现、部署验收和剩余缺口；完整 GPU/模型/多节点验收仍按各自范围判断。
 当前阶段：S2 与 S4 持续推进。定位为本机、单管理员的 CPU 科研与原生 benchmark 运行/复盘工具。
 
 ## 阶段概览
@@ -50,7 +50,7 @@ Basis: 本文在 `refactor/python-research-core` 上提出合并后的状态，�
 
 ## 下一步优先级
 
-1. 审阅并集成本次 Python 重构；备份并排空旧活动租约后升级，用实际科研代码走直接实验与比较流程。
+1. 用用户实际科研代码走直接实验、指标比较和会话绑定流程，优先修复真实试用中暴露的阻塞。
 2. 根据 ASI 60 题证据修复评测依赖、保留独立重评版本，再在明确预算下补 TB-Science 求解至评分验收。
 3. 准备训练镜像与不可变数据版本，完成单 GPU 科研 Run，并完善状态备份和安装诊断。
 
@@ -58,11 +58,13 @@ Basis: 本文在 `refactor/python-research-core` 上提出合并后的状态，�
 
 纯代码开发无外部阻塞。真实模型需要认证和明确费用预算；GPU 验收需训练镜像与资源范围，
 多节点需第二台机器与网络；PostTrain 原生验收还需 H100/HTCondor/Apptainer 和共享存储。
-当前 HTTP 面向本机管理员；托管 CI/分支保护仍需平台核实，License 尚未确定。
-本轮未切换生产服务、迁移真实运行数据或启动新模型批次。
+当前 HTTP 面向本机管理员；本轮托管 CI 已通过，分支保护尚未确认启用，License 尚未确定。
+本机已完成停写备份和空租约检查，Controller/Web 在 8766/8765 运行；两次真实 CPU Docker
+实验及页面比较通过，first-study 与 ASI 60 条历史记录保留。未启动新模型批次或 GPU 训练。
 
 ## 相关记录与入口
 
+- [清理、集成与本机升级](changes/20260930-cleanup-and-upgrade-c83f21.md)、[升级和回退](operations/python-upgrade.md)
 - [本次重构与验收](changes/20260930-python-research-core-8e12c4.md)、[实现导读](implementation/python-research-core.md)、[直接实验操作](operations/direct-experiments.md)
 - [ASI 60 题证据复盘](changes/20260928-asi-b3-review-e91c7a.md)、[TB-Science Codex 验收](changes/20260926-tb-science-codex-7ad3e1.md)
 - [BM07 集成维护](changes/20260923-benchmark-integration-maintenance-35a9d2.md)、[GPU 操作](operations/gpu-local.md)、[文档导航](README.md)
