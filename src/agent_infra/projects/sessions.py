@@ -33,6 +33,13 @@ class SessionBindingStore:
         self.projects = projects
 
     def list(self, project_id: str | None = None) -> tuple[SessionBinding, ...]:
+        return self._read(**({"project_id": project_id} if project_id is not None else {}))
+
+    def get(self, provider: str, session_id: str) -> SessionBinding | None:
+        rows = self._read(provider=provider, session_id=session_id)
+        return rows[0] if rows else None
+
+    def _read(self, **filters: str) -> tuple[SessionBinding, ...]:
         try:
             with self.projects.database.connect() as db:
                 generic = db.execute("PRAGMA user_version").fetchone()[0] >= 6
@@ -45,10 +52,10 @@ class SessionBindingStore:
                         "next_offset,next_line FROM codex_sessions"
                     )
                 )
-                if project_id is not None:
-                    query += " WHERE project_id=?"
+                if filters:
+                    query += " WHERE " + " AND ".join(f"{key}=?" for key in filters)
                 rows = db.execute(
-                    query + " ORDER BY started_at DESC", (project_id,) if project_id else ()
+                    query + " ORDER BY started_at DESC", tuple(filters.values())
                 ).fetchall()
                 return tuple(SessionBinding(**dict(row)) for row in rows)
         except FileNotFoundError:
@@ -57,16 +64,6 @@ class SessionBindingStore:
             if "no such table" in str(error):
                 return ()
             raise
-
-    def get(self, provider: str, session_id: str) -> SessionBinding | None:
-        return next(
-            (
-                item
-                for item in self.list()
-                if (item.provider, item.session_id) == (provider, session_id)
-            ),
-            None,
-        )
 
     def bind(self, binding: SessionBinding) -> SessionBinding:
         with self.projects.database.writer(), self.projects.database.connect(write=True) as db:

@@ -6,6 +6,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from agent_infra.gateways.http.server import create_server
+from agent_infra.projects.catalog import ProjectCatalogBridge
+from agent_infra.projects.local import LocalProjectStore
 from agent_infra.records import (
     AttemptManifest,
     EventDraft,
@@ -14,7 +16,6 @@ from agent_infra.records import (
     RunManifest,
 )
 from agent_infra.records.api import DataClass
-from agent_infra.records.catalog import LocalProjectCatalog
 from agent_infra.records.local import LocalRecordsStore
 from agent_infra.resources import LinuxHostResourceMonitor
 from agent_infra.resources.sampling import ResourceSampler
@@ -77,7 +78,7 @@ def main():
         sampler.start()
         service = ConsoleService(
             store,
-            LocalProjectCatalog(root / "projects.sqlite3"),
+            ProjectCatalogBridge(LocalProjectStore(root / "projects"), root / "projects.sqlite3"),
             sampler.read,
             lambda: [],
             (Path("examples/task-packages/file-result/task.yaml"),),

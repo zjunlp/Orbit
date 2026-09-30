@@ -77,34 +77,6 @@ def find_sessions(home: Path | None = None) -> Iterator[CodexSession]:
                 yield metadata
 
 
-def session_for_id(thread_id: str, home: Path | None = None) -> CodexSession:
-    target = str(UUID(thread_id))
-    root = home or codex_home()
-    # Current Codex rollout names contain the thread ID. Verify the metadata;
-    # fall back to a full scan for older or alternative valid file names.
-    named = (
-        path
-        for directory in (root / "sessions", root / "archived_sessions")
-        if directory.is_dir() and not directory.is_symlink()
-        for path in directory.rglob(f"*{target}*.jsonl")
-    )
-    matches = [
-        item
-        for path in named
-        if (item := session_metadata(path, root)) is not None and item.thread_id == target
-    ]
-    if not matches:
-        matches = [item for item in find_sessions(root) if item.thread_id == target]
-    if len(matches) != 1:
-        raise ValueError("Codex session is missing or ambiguous")
-    return matches[0]
-
-
-def belongs_to_workspace(session: CodexSession, workspace: Path) -> bool:
-    # Codex records its initial cwd; a nested project directory is valid.
-    return Path(session.cwd).resolve().is_relative_to(workspace.resolve())
-
-
 def rollout_event(
     row: dict[str, Any], line_number: int, raw_digest: str, thread_id: str
 ) -> EventDraft:

@@ -7,9 +7,10 @@ from http.client import HTTPConnection
 
 import pytest
 
+from agent_infra.projects.catalog import ProjectCatalogBridge
 from agent_infra.projects.console import ProjectConsole
 from agent_infra.projects.local import LocalProjectStore
-from agent_infra.records.catalog import CatalogConflict, LocalProjectCatalog
+from agent_infra.records.catalog import CatalogConflict
 from tests.unit.runs.test_controller import wait_finished
 from tests.web.workflow_fixture import TOKEN, fixture
 
@@ -45,7 +46,8 @@ def test_non_destructive_legacy_mapping_binding_and_missing_associations(app):
     assert before[0]["task_mappings"][0]["resolved"]
     for _ in range(2):
         reopened = ProjectConsole(
-            LocalProjectStore(root / "state/projects"), LocalProjectCatalog(catalog.path)
+            LocalProjectStore(root / "state/projects"),
+            ProjectCatalogBridge(LocalProjectStore(root / "state/projects"), catalog.path),
         )
         assert len(reopened.list_projects(workflow.console.tasks())) == 2
     assert files == set(root.rglob("*"))  # Reading never makes a workspace or migrates documents.

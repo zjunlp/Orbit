@@ -30,6 +30,7 @@
 ## 当前阅读入口
 
 Python 渐进重构后的当前入口：[直接运行与比较实验](operations/direct-experiments.md)、
+[本机升级与回退](operations/python-upgrade.md)、
 [执行内核实现导读](implementation/python-research-core.md)、[重构执行方案](development/python-incremental-refactor.md)。
 它们描述新增直接命令路径和公共内核；较早的冻结 Task、长期 Job 与 benchmark 文档保留各自适用范围。
 

@@ -129,6 +129,8 @@ Codex 从 `CODEX_HOME` 或 `~/.codex` 发现；原有 `project codex ...` 和 no
 
 ## 6. 升级和恢复边界
 
+执行步骤、备份范围及回退检查见 [本机升级手册](python-upgrade.md)。
+
 首次升级前停止旧调度进程，完成或取消旧活动租约，再启动新版，避免旧版本继续在独立账本中分配资源。
 项目库首次写入升级到 v6；租约库升级到 v2。备份状态后升级，不要直接让旧二进制写新版数据库。
 节点账本默认位于 `${XDG_STATE_HOME:-$HOME/.local/state}/agent-infra-node/leases`；

@@ -156,6 +156,9 @@ def test_v5_binding_cursor_migration_is_repeatable(tmp_path, monkeypatch):
     store = SessionBindingStore(projects)
     before = store.get("codex", meta["sessionId"])
     assert before.next_offset == 123
+    assert store.get("claude-code", meta["sessionId"]) is None
+    assert store.list("") == ()
+    assert store.list(options["identifier"]) == (before,)
     store.bind(
         SessionBinding(
             "claude-code", str(uuid4()), options["identifier"], meta["timestamp"], meta["cwd"]

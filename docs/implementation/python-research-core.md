@@ -219,8 +219,8 @@ ASI/TB 的榜单工作台沿用自己的评分、有效性和审阅展示，科�
 | 原问题 | 本次处理 | 保留边界 |
 | --- | --- | --- |
 | native benchmark 中包含整套通用执行生命周期 | 提取 `runs/execution.py`，benchmark 外层仅做定义和协议转换 | 原生结果解释仍归 adapter |
-| Codex 专用绑定与同步逻辑难扩展 | provider-neutral 存储与采集；旧模块改为兼容门面 | 原 CLI、notify、历史 Records 身份不变 |
-| Console 项目可变状态写在 Records catalog | `ProjectCatalogBridge` 只读旧库，首次必要写入时把投影放入 Projects | `LocalProjectCatalog` 的旧 API/fixture 保留，不再由生产 Web 组装 |
+| Codex 专用绑定与同步逻辑难扩展 | provider-neutral 存储与采集；删除无人调用的专用存储包装类 | 原 CLI、notify、历史 Records 身份不变；绑定查询按主键读取 |
+| Console 项目可变状态写在 Records catalog | `ProjectCatalogBridge` 只读旧库，首次必要写入时把投影放入 Projects；删除旧写入器 | 旧 SQLite 数据仍可读取；测试直接构造旧 schema，再验证生产桥接与迁移 |
 | 启动 Controller 就检查模型代理网络 | 模型连接延迟到实际 Task/Planner 使用 | 真实模型功能仍必须满足代理前置条件 |
 | 新前端响应容易与后端手写结构不一致 | 针对新增接口生成 TS 并检查漂移 | 旧接口渐进迁移，不同时重写 HTTP 框架 |
 

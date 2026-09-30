@@ -10,8 +10,8 @@ from agent_infra.bootstrap.projects import project_action
 from agent_infra.bootstrap.research import project_runs, research_action
 from agent_infra.bootstrap.settings import load_settings
 from agent_infra.projects.analysis import AnalysisService
+from agent_infra.projects.catalog import ProjectCatalogBridge
 from agent_infra.projects.console import ProjectConsole
-from agent_infra.records.catalog import LocalProjectCatalog
 from agent_infra.records.local import LocalRecordsStore
 from agent_infra.runs.control_store import RunControlStore
 from agent_infra.runs.query import RunQueries
@@ -56,7 +56,7 @@ def test_context_consistent_across_cli_web_and_analysis_without_read_migration(t
     control = RunControlStore(prepare_controller_root(state))
     entry = control.create("operation", {"kind": "research"}, {"project_id": project})
     before = control.path.read_bytes()
-    catalog = LocalProjectCatalog(tmp_path / "console.sqlite3")
+    catalog = ProjectCatalogBridge(store, tmp_path / "console.sqlite3")
     web = ProjectConsole(store, catalog, run_references=lambda p: project_runs(state, p))
     analysis = AnalysisService(store, RunQueries(control, LocalRecordsStore(tmp_path / "records")))
     contexts = [

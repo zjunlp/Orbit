@@ -13,6 +13,7 @@ from agent_infra.gateways.http.control import create_control_server
 from agent_infra.gateways.http.server import create_server
 from agent_infra.gateways.http.workflow import WorkflowGateway
 from agent_infra.projects.analysis import AnalysisService
+from agent_infra.projects.catalog import ProjectCatalogBridge
 from agent_infra.projects.console import ProjectConsole
 from agent_infra.records import (
     AttemptManifest,
@@ -22,10 +23,10 @@ from agent_infra.records import (
     RecordContext,
     RunManifest,
 )
-from agent_infra.records.catalog import LocalProjectCatalog
 from agent_infra.runs.console import ConsoleService
 from agent_infra.runs.query import RunQueries
 from agent_infra.runs.research_store import ResearchStore
+from tests.fixtures.legacy_catalog import seed_catalog
 from tests.unit.projects.test_compilation import compile, setup
 from tests.unit.runs.test_controller import setup_controller
 from tests.unit.runs.test_service import FakeEnvironment
@@ -44,7 +45,7 @@ def fixture(root: Path):
         prepared, lineage={"project_id": project, "experiment_id": "pilot"}
     )
     queries = RunQueries(control.store, control.records)
-    catalog = LocalProjectCatalog(root / "console/projects.sqlite3")
+    catalog = ProjectCatalogBridge(compiler.store, root / "console/projects.sqlite3")
     console = ConsoleService(
         control.records,
         catalog,
@@ -52,15 +53,19 @@ def fixture(root: Path):
         lambda: [],
         (Path("examples/task-packages/file-result/task.yaml"),),
     )
-    catalog.remember_tasks(console.tasks())
-    legacy = console.save_project(
-        {
-            "name": "旧科研项目",
-            "goal": "保留旧目标",
-            "milestones": [{"title": "原有里程碑", "done": True}],
-            "task_keys": [console.tasks()[0]["key"]],
-        }
-    )
+    task = console.tasks()[0]
+    legacy = {
+        "id": "legacy-project",
+        "revision": 1,
+        "name": "旧科研项目",
+        "goal": "保留旧目标",
+        "status": "planned",
+        "milestones": [{"title": "原有里程碑", "done": True}],
+        "run_ids": [],
+        "task_keys": [task["key"]],
+        "updated_at": "2026-09-17T00:00:00+00:00",
+    }
+    seed_catalog(catalog.path, [legacy], ((task["key"], task["task_id"], task["revision"]),))
     # Seed immutable evidence independently from the fake active run, including private sentinels.
     finished = control.store.create("fixture-result", {"kind": "research"}, {"project_id": project})
     records, now = control.records, datetime.now(UTC)

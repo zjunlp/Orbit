@@ -64,34 +64,6 @@ export function IconGauge() {
   );
 }
 
-export function IconRefresh() {
-  return (
-    <StrokeIcon>
-      <path d="M20 5v5h-5" />
-      <path d="M20 10a8 8 0 1 0 1 6" />
-    </StrokeIcon>
-  );
-}
-
-export function IconArrowRight() {
-  return (
-    <StrokeIcon>
-      <path d="M4 12h16" />
-      <path d="M13 5l7 7-7 7" />
-    </StrokeIcon>
-  );
-}
-
-export function IconDownload() {
-  return (
-    <StrokeIcon>
-      <path d="M12 3v11" />
-      <path d="M7 10l5 5 5-5" />
-      <path d="M4 20h16" />
-    </StrokeIcon>
-  );
-}
-
 export function IconAlert() {
   return (
     <StrokeIcon>
@@ -116,15 +88,6 @@ export function IconCircleX() {
     <StrokeIcon>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M9 9l6 6M15 9l-6 6" />
-    </StrokeIcon>
-  );
-}
-
-export function IconClock() {
-  return (
-    <StrokeIcon>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7.5V12l3 2" />
     </StrokeIcon>
   );
 }

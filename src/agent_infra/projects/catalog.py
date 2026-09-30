@@ -104,7 +104,7 @@ class ProjectCatalogBridge:
             for task in tasks
             if not task.get("error")
         }
-        if not observed or all(key in self._document()["tasks"] for key in observed):
+        if not observed or observed.keys() <= self._document()["tasks"].keys():
             return
 
         def change(document: dict[str, Any]) -> None:

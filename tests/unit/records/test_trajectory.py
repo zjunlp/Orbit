@@ -196,7 +196,8 @@ def test_partial_host_agent_capture_is_not_training_candidate(tmp_path):
 def test_admin_and_private_events_never_enter_queries_trajectory_or_export(tmp_path):
     from dataclasses import asdict
 
-    from agent_infra.records.catalog import LocalProjectCatalog
+    from agent_infra.projects.catalog import ProjectCatalogBridge
+    from agent_infra.projects.local import LocalProjectStore
     from agent_infra.runs.console import ConsoleService
     from agent_infra.runs.control_store import RunControlStore
     from agent_infra.runs.query import RunQueries
@@ -234,7 +235,12 @@ def test_admin_and_private_events_never_enter_queries_trajectory_or_export(tmp_p
     ):
         sink.commit_artifact(file, name=visibility.value, visibility=visibility)
     console = ConsoleService(
-        records, LocalProjectCatalog(tmp_path / "catalog.sqlite3"), lambda: {}, lambda: []
+        records,
+        ProjectCatalogBridge(
+            LocalProjectStore(tmp_path / "projects"), tmp_path / "catalog.sqlite3"
+        ),
+        lambda: {},
+        lambda: [],
     )
     queries = RunQueries(control, records)
     trajectory = AttemptTrajectoryBuilder(records).build(run["attempt_id"])
