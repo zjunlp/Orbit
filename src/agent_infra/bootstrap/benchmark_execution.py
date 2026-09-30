@@ -1,4 +1,4 @@
-"""Compose explicitly enabled benchmark runtimes; research Controller is independent."""
+"""Compose native runtimes with shared local admission and separate external domains."""
 
 import argparse
 import json
@@ -22,6 +22,7 @@ from agent_infra.benchmarks.execution_api import NativeRuntimeAdapter
 from agent_infra.benchmarks.planning import check_plan, read_plan
 from agent_infra.benchmarks.registry import AdapterRegistry
 from agent_infra.bootstrap.benchmark_delivery import benchmark_delivery_action
+from agent_infra.bootstrap.node_resources import node_leases
 from agent_infra.bootstrap.paths import state_root
 from agent_infra.environments.execution_api import ExecutionBackend
 from agent_infra.environments.managed_process import ManagedProcessBackend
@@ -94,7 +95,12 @@ def execution_action(args: argparse.Namespace, registry: AdapterRegistry) -> dic
             "gpu_count",
         }:
             raise ValueError("capacity file has unsupported fields")
-        return {"capacity": asdict(leases.configure(LeaseCapacity(**declared)))}
+        capacity = LeaseCapacity(**declared)
+        shared = node_leases(root)
+        if any(item.state.value != "released" for item in leases.list() + shared.list()):
+            raise ValueError("drain and reconcile this benchmark scope before capacity change")
+        shared.configure(capacity)
+        return {"capacity": asdict(leases.configure(capacity))}
 
     if action == "queue":
 
@@ -115,10 +121,30 @@ def execution_action(args: argparse.Namespace, registry: AdapterRegistry) -> dic
                 }
                 for item in store.queued()
             ],
-            "leases": [lease_document(item) for item in leases.list()],
+            "leases": [lease_document(item) for item in leases.list() + node_leases(root).list()],
+            "admission": "node-shared local leases; separate external/legacy domain",
         }
 
-    def service_for(execution: PreparedExecution) -> BenchmarkExecutionService:
+    def service_for(
+        execution: PreparedExecution, run: dict[str, Any] | None = None
+    ) -> BenchmarkExecutionService:
+        active_legacy = any(
+            item.state.value != "released" and item.claim.allocator != "external"
+            for item in leases.list()
+        )
+        local = execution.frozen_plan.plan.phases[0].resources.allocator != "external"
+        # Existing active queues must finish with the ledger that granted their leases.
+        # Do not change the accounting domain of an in-flight native job.
+        if run and run.get("lease_id"):
+            execution_leases = PersistentLeaseStore(
+                Path(run.get("lease_store", str(root / "leases"))), scope=run.get("lease_scope", "")
+            )
+        elif local:
+            if active_legacy:
+                raise ValueError("finish or cancel legacy leases before admitting new local jobs")
+            execution_leases = node_leases(root, leases.capacity)
+        else:
+            execution_leases = leases
         backend: ExecutionBackend
         if execution.frozen_plan.plan.phases[0].backend == ManagedProcessBackend.backend_id:
             if action == "run" and not args.allow_host_process:
@@ -126,7 +152,7 @@ def execution_action(args: argparse.Namespace, registry: AdapterRegistry) -> dic
             backend = ManagedProcessBackend(root / "native")
             validate_backend(execution, backend.backend_id, backend.features)
             return BenchmarkExecutionService(
-                store, records, backend, root / "workspaces", leases=leases
+                store, records, backend, root / "workspaces", leases=execution_leases
             )
         if action == "run" and not args.allow_native_runtime:
             raise ValueError("review native containers/resources and pass --allow-native-runtime")
@@ -151,12 +177,12 @@ def execution_action(args: argparse.Namespace, registry: AdapterRegistry) -> dic
             root / "workspaces",
             validate_native=validate,
             interpret=runtime.interpret,
-            leases=leases,
+            leases=execution_leases,
         )
 
     def existing(run: dict[str, Any]) -> BenchmarkExecutionService:
         return service_for(
-            PreparedExecution.model_validate_json(json.dumps(run["request"]["execution"]))
+            PreparedExecution.model_validate_json(json.dumps(run["request"]["execution"])), run
         )
 
     if action == "campaign":

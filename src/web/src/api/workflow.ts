@@ -39,7 +39,7 @@ export interface ControlRun {
   kind?: string;
   created_at: string;
   cancel_requested: boolean;
-  lineage: { project_id?: string; experiment_id?: string };
+  lineage: { project_id?: string; experiment_id?: string; name?: string };
   result: {
     status?: string;
     execution_status?: string;

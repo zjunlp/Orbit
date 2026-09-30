@@ -1,4 +1,8 @@
-"""Mutable project catalog, separate from immutable execution evidence."""
+"""Legacy console catalog API. New production writes use projects.catalog.
+
+LocalProjectCatalog remains available for old clients and historical fixtures; it is
+not constructed by the production console. Do not run old and new catalog writers together.
+"""
 
 import json
 import sqlite3

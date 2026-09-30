@@ -119,6 +119,12 @@ class ResearchController:
                         if r["request"].get("kind") == "research"
                     ]
                 }
+            if action in {"status", "events", "trajectory", "artifacts", "artifact"}:
+                target = self.control.store.get(options["run_id"])
+                if target["lineage"].get("project_id") != project:
+                    raise KeyError("Run not found in bound project")
+                if target["request"].get("kind") == "command":
+                    return self.queries.read(action, options["run_id"], options)
             run = (
                 self._run(project, options["run_id"])
                 if action != "open" and not action.startswith("environment_")
@@ -174,25 +180,8 @@ class ResearchController:
         run = self._run(project, options["run_id"])
         if action == "status":
             return run | {"jobs": self.store.jobs(run["run_id"])}
-        if action in {"events", "trajectory", "artifacts"}:
-            if action == "artifacts":
-                return {"items": self.queries.artifacts(run["run_id"])}
-            if action == "events":
-                return self.queries.events(run["run_id"], options.get("cursor"))
-            return self.queries.trajectory(run["run_id"])
-        if action == "artifact":
-            if "format" in options:
-                return self.queries.artifact_view(
-                    run["run_id"],
-                    options["artifact_id"],
-                    options.get("member"),
-                    format=options["format"],
-                    offset=options.get("offset", 0),
-                    limit=options.get("limit", 16 * 1024),
-                )
-            return self.queries.artifact(
-                run["run_id"], options["artifact_id"], options.get("member")
-            )
+        if action in {"events", "trajectory", "artifacts", "artifact"}:
+            return self.queries.read(action, run["run_id"], options)
         if action == "import_trace":
             return self.import_trace(
                 self.evidence.native_sink(run, session), options | {"project_id": project}

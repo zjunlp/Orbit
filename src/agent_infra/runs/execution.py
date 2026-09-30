@@ -7,12 +7,13 @@ and evidence collection both succeed.
 import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
 from agent_infra.environments.execution_api import ExecutionBackend, ExecutionHandle, ExecutionSpec
 from agent_infra.records.api import (
+    ArtifactRef,
     AttemptManifest,
     CaptureStatus,
     DataClass,
@@ -61,9 +62,11 @@ class DurableExecutionService:
         kind: str = "benchmark",
         interpret: Callable[[Path], dict[str, Any]] | None = None,
         leases: PersistentLeaseStore | None = None,
+        after_archive: Callable[[ArtifactRef], None] | None = None,
     ) -> None:
         self.resolve, self.validate, self.interpret = resolve, validate, interpret
         self.kind = kind
+        self.after_archive = after_archive
         self.visibility = Visibility.ADMIN if kind == "benchmark" else Visibility.USER
         self.store, self.records, self.backend, self.workspace_root = (
             store,
@@ -333,6 +336,8 @@ class DurableExecutionService:
                 queue_position=None,
                 shortages=[],
                 lease_id=decision.lease.lease_id,
+                lease_store=str(self.leases.path.parent),
+                lease_scope=self.leases.scope,
                 lease_owner_epoch=decision.lease.owner_epoch,
                 lease_state=decision.lease.state.value,
                 detail=None,
@@ -379,7 +384,12 @@ class DurableExecutionService:
                     slot_held=True,
                     detail="not submitted; replay the same explicit operation to launch",
                 )
-            self.store.update(run["run_id"], state="submitting", slot_held=True)
+            run = self.store.update(
+                run["run_id"],
+                state="submitting",
+                slot_held=True,
+                launch_started_at=datetime.now(UTC).isoformat(),
+            )
             try:
                 self.backend.submit(backend_operation, spec)
             except Exception as error:
@@ -403,6 +413,20 @@ class DurableExecutionService:
             )
         if handle.spec_digest != spec.digest():
             raise ValueError("reconciled operation belongs to a different execution spec")
+        launch_started = run.get("launch_started_at")
+        if receipt.state == "unknown" and handle.native_id is None and launch_started:
+            age = (datetime.now(UTC) - datetime.fromisoformat(launch_started)).total_seconds()
+            if 0 <= age < 10:
+                if run["cancel_requested"]:
+                    self.backend.cancel(handle)
+                # A fresh supervisor needs time to fsync its identity. Keep the lease;
+                # this grace period never authorizes a second launch or early release.
+                return self.store.update(
+                    run["run_id"],
+                    state="submitting",
+                    slot_held=True,
+                    detail="waiting for durable native identity",
+                )
         run = self.store.update(run["run_id"], handle=asdict(handle), slot_held=True)
         if handle.native_id:
             lease_id = run.get("lease_id")
@@ -481,6 +505,13 @@ class DurableExecutionService:
                     submission.root, name="native-submission", visibility=self.visibility
                 )
             )
+            if self.after_archive is not None:
+                try:
+                    self.after_archive(artifact)
+                except Exception as error:
+                    # A rebuildable view is not part of the immutable evidence receipt.
+                    # Preserve a repair marker without retaining already-cleaned resources.
+                    run = self.store.update(run["run_id"], index_error=type(error).__name__)
             return self._finish(
                 run,
                 sink,
@@ -528,6 +559,8 @@ class DurableExecutionService:
             "stream": asdict(stream),
         }
         execution = self.resolve(run["request"])
+        if run.get("index_error"):
+            result["index_error"] = run["index_error"]
         result["resource_accounting"] = self._accounting(run, execution)
         result["budget"] = {
             "planned_wall_seconds": execution.planned_wall_seconds,

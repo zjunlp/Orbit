@@ -23,20 +23,39 @@ def write_ownership(path: Path, entry: dict[str, Any]) -> None:
             os.close(descriptor)
 
 
-def docker_json(*args: str) -> Any:
-    result = subprocess.run(["docker", *args], capture_output=True, text=True, timeout=30)
+def docker_json(*args: str, docker_host: str | None = None) -> Any:
+    result = subprocess.run(
+        ["docker", *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=docker_environment(docker_host) if docker_host else None,
+    )
     if result.returncode:
         raise RuntimeError(f"Docker {args[0]} unavailable; check local daemon and image")
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
-def inspect_local_image(image: str, *, provider: str | None = None) -> str:
+def docker_environment(endpoint: str) -> dict[str, str]:
+    if not endpoint.startswith("unix:///"):
+        raise ValueError("local execution requires an absolute Unix Docker socket")
+    return {key: value for key, value in os.environ.items() if key != "DOCKER_CONTEXT"} | {
+        "DOCKER_HOST": endpoint
+    }
+
+
+def local_docker_endpoint() -> str:
     context = docker_json("context", "inspect")[0]
     endpoint = context["Endpoints"]["docker"]["Host"]
     if not os.environ.get("DOCKER_CONTEXT"):
         endpoint = os.environ.get("DOCKER_HOST") or endpoint
-    if not endpoint.startswith("unix://"):
+    if not endpoint.startswith("unix:///"):
         raise ValueError("controller requires a local Unix Docker endpoint")
+    return str(endpoint)
+
+
+def inspect_local_image(image: str, *, provider: str | None = None) -> str:
+    local_docker_endpoint()
     info = docker_json("image", "inspect", image)[0]
     if info["Config"].get("Volumes"):
         raise ValueError("image declares implicit volumes; use a volume-free image")
@@ -52,13 +71,15 @@ def inspect_local_image(image: str, *, provider: str | None = None) -> str:
     return str(info["Id"])
 
 
-def recover_owned_containers(root: Path) -> tuple[str, ...]:
+def recover_owned_containers(root: Path, *, docker_host: str | None = None) -> tuple[str, ...]:
     """Delete only exact journal + owner label + image matches; fail closed otherwise.
 
-    Caller must hold the controller host lock. Journals precede Docker create, so an
+    Caller must hold the controller host lock, or the execution operation lock with
+    its supervisor confirmed stopped. Journals precede Docker create, so an
     absent container is safe, including the crash window before create or after rm.
     """
     removed: list[str] = []
+    environment = docker_environment(docker_host) if docker_host else None
     for journal in sorted(root.glob("*/ownership.json")):
         if journal.is_symlink() or journal.parent.is_symlink():
             raise ValueError("unsafe Docker ownership journal")
@@ -82,6 +103,7 @@ def recover_owned_containers(root: Path) -> tuple[str, ...]:
             capture_output=True,
             text=True,
             timeout=30,
+            env=environment,
         )
         if result.returncode:
             raise RuntimeError("cannot verify Docker cleanup; controller remains quarantined")
@@ -92,7 +114,9 @@ def recover_owned_containers(root: Path) -> tuple[str, ...]:
                     "container absence alone cannot prove cleanup; node remains quarantined"
                 )
             continue
-        info = docker_json("inspect", name)[0]
+        info = docker_json(
+            "inspect", name, **({"docker_host": docker_host} if docker_host else {})
+        )[0]
         if (
             info["Config"].get("Labels", {}).get("agent-infra.owner") != owner
             or info["Image"] != entry["image_id"]
@@ -100,7 +124,11 @@ def recover_owned_containers(root: Path) -> tuple[str, ...]:
         ):
             raise RuntimeError("container ownership mismatch; refusing cleanup")
         result = subprocess.run(
-            ["docker", "rm", "--force", info["Id"]], capture_output=True, text=True, timeout=30
+            ["docker", "rm", "--force", info["Id"]],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=environment,
         )
         if result.returncode:
             raise RuntimeError("owned container cleanup failed; resources remain quarantined")
@@ -118,6 +146,7 @@ def recover_owned_containers(root: Path) -> tuple[str, ...]:
             capture_output=True,
             text=True,
             timeout=30,
+            env=environment,
         )
         if verify.returncode or verify.stdout.strip():
             raise RuntimeError("container absence could not be proven")

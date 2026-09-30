@@ -1,12 +1,9 @@
-"""Persistent explicit ownership and replay cursor for interactive Codex sessions."""
+"""Compatibility facade for the provider-neutral session store."""
 
-from __future__ import annotations
-
-import sqlite3
 from dataclasses import dataclass
 
-from agent_infra.projects.api import ProjectConflict
 from agent_infra.projects.local import LocalProjectStore
+from agent_infra.projects.sessions import SessionBinding, SessionBindingStore
 
 
 @dataclass(frozen=True)
@@ -19,54 +16,34 @@ class CodexBinding:
     next_line: int
 
 
+def _legacy(binding: SessionBinding) -> CodexBinding:
+    return CodexBinding(
+        binding.session_id,
+        binding.project_id,
+        binding.started_at,
+        binding.cwd,
+        binding.next_offset,
+        binding.next_line,
+    )
+
+
 class CodexBindingStore:
     def __init__(self, projects: LocalProjectStore) -> None:
-        self.projects = projects
+        self.store = SessionBindingStore(projects)
 
     def get(self, thread_id: str) -> CodexBinding | None:
-        try:
-            with self.projects.database.connect() as db:
-                row = db.execute(
-                    "SELECT * FROM codex_sessions WHERE thread_id=?", (thread_id,)
-                ).fetchone()
-                return CodexBinding(**dict(row)) if row is not None else None
-        except FileNotFoundError:
-            return None
-        except sqlite3.OperationalError as error:
-            if "no such table: codex_sessions" in str(error):
-                return None
-            raise
+        binding = self.store.get("codex", thread_id)
+        return _legacy(binding) if binding else None
 
     def bind(self, thread_id: str, project_id: str, started_at: str, cwd: str) -> CodexBinding:
-        with self.projects.database.writer(), self.projects.database.connect(write=True) as db:
-            row = db.execute(
-                "SELECT * FROM codex_sessions WHERE thread_id=?", (thread_id,)
-            ).fetchone()
-            if row is not None:
-                binding = CodexBinding(**dict(row))
-                if (binding.project_id, binding.started_at, binding.cwd) != (
-                    project_id,
-                    started_at,
-                    cwd,
-                ):
-                    raise ProjectConflict(
-                        "Codex session is already bound to another project or metadata"
-                    )
-                return binding
-            db.execute(
-                "INSERT INTO codex_sessions(thread_id,project_id,started_at,cwd) VALUES (?,?,?,?)",
-                (thread_id, project_id, started_at, cwd),
-            )
-            return CodexBinding(thread_id, project_id, started_at, cwd, 0, 0)
+        return _legacy(
+            self.store.bind(SessionBinding("codex", thread_id, project_id, started_at, cwd))
+        )
 
     def advance(
         self, thread_id: str, expected_offset: int, next_offset: int, next_line: int
     ) -> None:
-        with self.projects.database.writer(), self.projects.database.connect(write=True) as db:
-            updated = db.execute(
-                "UPDATE codex_sessions SET next_offset=?,next_line=? "
-                "WHERE thread_id=? AND next_offset=?",
-                (next_offset, next_line, thread_id, expected_offset),
-            )
-            if updated.rowcount != 1:
-                raise ProjectConflict("Codex capture cursor changed; retry synchronization")
+        binding = self.store.get("codex", thread_id)
+        if binding is None:
+            raise ValueError("Codex session is not bound")
+        self.store.advance(binding, expected_offset, next_offset, next_line, None)

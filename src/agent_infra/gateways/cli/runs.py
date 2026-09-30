@@ -3,11 +3,13 @@
 import argparse
 import base64
 import json
+import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import ProxyHandler, Request, build_opener
+from uuid import uuid4
 
 
 def add_run_arguments(commands: Any) -> None:
@@ -33,6 +35,33 @@ def add_run_arguments(commands: Any) -> None:
     )
     run = commands.add_parser("run", help="Preflight, submit and inspect persistent runs")
     actions = run.add_subparsers(dest="action", required=True)
+    command = actions.add_parser(
+        "command", help="Snapshot an existing workspace and run a Docker command"
+    )
+    command.add_argument("--state-dir")
+    command.add_argument("--project", type=Path, default=Path.cwd())
+    command.add_argument("--project-id")
+    command.add_argument("--name", default="Experiment")
+    command.add_argument("--image", required=True)
+    command.add_argument("--cpu", type=float, default=1)
+    command.add_argument("--memory-gib", type=float, default=2)
+    command.add_argument("--gpu-uuid", action="append", default=[])
+    command.add_argument("--mount", action="append", default=[], metavar="SOURCE:/inputs/NAME")
+    command.add_argument("--output", action="append", dest="outputs")
+    command.add_argument("--cwd", default=".")
+    command.add_argument("--timeout", type=float, default=3600)
+    command.add_argument("--network", action="store_true")
+    command.add_argument("--operation-id")
+    command.add_argument("--session-id")
+    command.add_argument("--provider")
+    command.add_argument("--wait", action="store_true")
+    command.add_argument("argv", nargs=argparse.REMAINDER, help="-- executable arguments...")
+    for name in ("rerun", "wait"):
+        item = actions.add_parser(name)
+        item.add_argument("run_id")
+        item.add_argument("--state-dir")
+        if name == "rerun":
+            item.add_argument("--operation-id")
     for name in (
         "preflight",
         "submit",
@@ -117,6 +146,43 @@ class ControllerClient:
 def run_client(state: Path, args: argparse.Namespace) -> dict[str, Any]:
     client = ControllerClient(state)
     action = args.action
+    if action == "command":
+        mounts = []
+        for value in args.mount:
+            source, separator, target = value.partition(":/inputs/")
+            if not separator:
+                raise ValueError("mount format: /host/dataset:/inputs/name (read-only)")
+            mounts.append({"source": str(Path(source).resolve()), "target": "/inputs/" + target})
+        argv = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
+        result = client.request(
+            "runs/command",
+            {
+                "project": str(args.project.resolve()),
+                "project_id": args.project_id,
+                "name": args.name,
+                "image": args.image,
+                "argv": argv,
+                "cwd": args.cwd,
+                "cpu_cores": args.cpu,
+                "memory_bytes": int(args.memory_gib * 1024**3),
+                "gpu_device_ids": args.gpu_uuid,
+                "mounts": mounts,
+                "outputs": args.outputs or ["outputs"],
+                "timeout_seconds": args.timeout,
+                "network": args.network,
+                "session_id": args.session_id,
+                "provider": args.provider,
+                "operation_id": args.operation_id or str(uuid4()),
+            },
+        )
+        return _wait(client, result["run_id"]) if args.wait else result
+    if action == "rerun":
+        return client.request(
+            "runs/" + quote(args.run_id, safe="") + "/rerun",
+            {"operation_id": args.operation_id or str(uuid4())},
+        )
+    if action == "wait":
+        return _wait(client, args.run_id)
     if action in {"submit", "preflight"}:
         body = {
             "task_id": args.task_id,
@@ -162,3 +228,11 @@ def run_client(state: Path, args: argparse.Namespace) -> dict[str, Any]:
     if action == "events" and args.cursor:
         path += "?" + urlencode({"cursor": args.cursor})
     return client.request(path)
+
+
+def _wait(client: ControllerClient, run_id: str) -> dict[str, Any]:
+    while True:
+        result = client.request("runs/" + quote(run_id, safe=""))
+        if result["state"] in {"finished", "quarantined"}:
+            return result
+        time.sleep(1)

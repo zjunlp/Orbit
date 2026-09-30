@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import signal
+import threading
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -12,9 +13,11 @@ from typing import Any
 from agent_infra.bootstrap.gpu import gpu_doctor
 from agent_infra.bootstrap.host_research import import_host_trace, project_context
 from agent_infra.bootstrap.iteration import StudyActions
+from agent_infra.bootstrap.node_resources import node_leases
 from agent_infra.bootstrap.paths import prepare_controller_root, state_root
 from agent_infra.bootstrap.run_preflight import prepare_compiled_run
 from agent_infra.environments import planner_client as planner_helper
+from agent_infra.environments.command import DockerCommandBackend
 from agent_infra.environments.docker import DockerEnvironment
 from agent_infra.environments.model_proxy import ModelProxyRelay, model_connection
 from agent_infra.environments.preparation_docker import DockerEnvironmentPreparer
@@ -27,9 +30,15 @@ from agent_infra.gateways.cli.runs import run_client
 from agent_infra.gateways.cli.study import planner_client, study_client
 from agent_infra.gateways.http.control import create_control_server
 from agent_infra.gateways.mcp.research import serve_mcp
+from agent_infra.projects.local import LocalProjectStore
+from agent_infra.projects.service import ProjectService
 from agent_infra.records.local import LocalRecordsStore
+from agent_infra.records.metrics import MetricIndex
 from agent_infra.resources import LinuxHostResourceMonitor, LocalResourceManager, NodeCapacity
+from agent_infra.resources.api import LeaseCapacity
 from agent_infra.resources.gpu import authorized_gpus
+from agent_infra.runs.command_api import CommandRequest
+from agent_infra.runs.commands import CommandRuns
 from agent_infra.runs.control_api import PreparedRun, SubmissionRequest
 from agent_infra.runs.control_store import RunControlStore
 from agent_infra.runs.controller import LocalRunController
@@ -82,6 +91,7 @@ def serve_controller(
     research: ResearchController | None = None
     preparation: EnvironmentPreparation | None = None
     planner: PlannerSessions | None = None
+    commands: CommandRuns | None = None
     clean = False
     relay: ModelProxyRelay | None = None
     endpoint = root / "endpoint.json"
@@ -107,8 +117,11 @@ def serve_controller(
             and all(f"nvidia.com/gpu={gpu.device_id}" in cdi_devices for gpu in allowed_gpus)
             else "legacy"
         )
+        leases = node_leases(root, LeaseCapacity(256, cpu, memory_bytes, len(allowed_gpus)))
         resources = LocalResourceManager(
-            NodeCapacity(snapshot.node_id, cpu, memory_bytes, gpus=allowed_gpus)
+            NodeCapacity(snapshot.node_id, cpu, memory_bytes, gpus=allowed_gpus),
+            persistent=leases,
+            owner_namespace="controller:" + leases.scope,
         )
         resources.update_snapshot(snapshot)
         records = LocalRecordsStore(root / "records")
@@ -116,12 +129,20 @@ def serve_controller(
         service = LocalRunService(
             environment, resources, root / "work", node_id=snapshot.node_id, records=records
         )
-        connection, relay = model_connection(proxy)
+        connection: tuple[tuple[str, str], ...] | None = None
+        connection_lock = threading.Lock()
+
+        def get_connection() -> tuple[tuple[str, str], ...]:
+            nonlocal connection, relay
+            with connection_lock:
+                if connection is None:
+                    connection, relay = model_connection(proxy)
+                return connection
 
         def prepare(request: SubmissionRequest) -> PreparedRun:
             prepared = prepare_compiled_run(state, request)
             return replace(
-                prepared, request=replace(prepared.request, connection_environment=connection)
+                prepared, request=replace(prepared.request, connection_environment=get_connection())
             )
 
         controller = LocalRunController(
@@ -133,6 +154,35 @@ def serve_controller(
             lambda: resources.update_snapshot(monitor.sample()),
             lambda: recover_owned_containers(root / "environments"),
         )
+        projects = ProjectService(LocalProjectStore(state / "projects"))
+
+        def command_project(request: CommandRequest) -> str:
+            if request.project_id is not None:
+                project = projects.get(request.project_id)
+                if Path(project.workspace) != Path(request.project).resolve():
+                    raise ValueError("command project does not match its registered workspace")
+            else:
+                project = projects.attach(Path(request.project))
+            return project.project_id
+
+        def authorize_command(request: CommandRequest) -> None:
+            if request.cpu_cores > cpu or request.memory_bytes > memory_bytes:
+                raise ValueError("command exceeds the Controller CPU/memory authorization")
+            if set(request.gpu_device_ids) - set(gpu_uuids):
+                raise ValueError("GPU UUID is not authorized by this Controller")
+
+        commands = CommandRuns(
+            controller.store,
+            records,
+            DockerCommandBackend(root / "commands", gpu_mode=gpu_mode),
+            root / "commands",
+            leases,
+            lambda image: inspect_local_image(image),
+            authorize_command,
+            project=command_project,
+            after_archive=MetricIndex(records).index,
+        )
+        commands.start()
         preparation = EnvironmentPreparation(
             controller,
             EnvironmentCatalog(root / "preparation"),
@@ -156,7 +206,7 @@ def serve_controller(
             study.planner_call,
             Path(planner_helper.__file__),
             lambda image: inspect_local_image(image, provider="codex"),
-            connection,
+            get_connection,
         )
         token = secrets.token_urlsafe(32)
         server = create_control_server(
@@ -166,6 +216,7 @@ def serve_controller(
             port,
             research=research,
             planner=planner,
+            commands=commands,
         )
         with server:
             temporary = root / "endpoint.tmp"
@@ -201,6 +252,8 @@ def serve_controller(
         return 0
     finally:
         signal.signal(signal.SIGTERM, previous_handler)
+        if commands is not None:
+            commands.close()
         planner_clean = planner.close() if planner is not None else True
         preparation_clean = preparation.close() if preparation is not None else True
         research_clean = research.close() if research is not None else True

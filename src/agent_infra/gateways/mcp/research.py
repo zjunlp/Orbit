@@ -6,6 +6,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from agent_infra.environments.command_api import ReadonlyMount
 from agent_infra.gateways.cli.research_runtime import ResearchClient
 from agent_infra.gateways.mcp.artifacts import add_artifact_tools
 from agent_infra.gateways.mcp.environment import add_environment_tools
@@ -17,8 +18,10 @@ def create_mcp(client: ResearchClient) -> FastMCP:
         "agent-infra-research",
         instructions=(
             "Tools are bound to one project. Use stable operation IDs for retries. "
-            "Jobs run in /workspace of a CPU Docker image. Disconnecting does not stop "
-            "Jobs; explicitly close the environment to release resources. No host shell."
+            "Use experiment_run for direct code experiments; plans are optional. "
+            "Commands run in Docker with explicit resources and network disabled by default. "
+            "Disconnection does not stop execution. "
+            "Long-lived Jobs still require environment_close."
         ),
     )
 
@@ -26,6 +29,59 @@ def create_mcp(client: ResearchClient) -> FastMCP:
     def project_context() -> dict[str, Any]:
         """Read goal, adopted research plan and existing research Runs before acting."""
         return client.call("context")
+
+    @server.tool()
+    def experiment_run(
+        operation_id: str,
+        image: str,
+        argv: list[str],
+        name: str = "Experiment",
+        cpu: float = 1,
+        memory_gib: float = 2,
+        timeout_seconds: float = 3600,
+        gpu_device_ids: list[str] | None = None,
+        outputs: list[str] | None = None,
+        network: bool = False,
+        cwd: str = ".",
+        mounts: list[ReadonlyMount] | None = None,
+        provider: str | None = None,
+    ) -> dict[str, Any]:
+        """Snapshot this project's code and queue a Docker command; no research plan required.
+
+        Write results to $INFRA_OUTPUT and JSONL metrics to $INFRA_METRICS.
+        Observe the returned Run with experiment_status; disconnection does not stop execution.
+        """
+        return client.experiment(
+            "run",
+            operation_id=operation_id,
+            image=image,
+            argv=argv,
+            name=name,
+            cpu_cores=cpu,
+            memory_bytes=int(memory_gib * 1024**3),
+            timeout_seconds=timeout_seconds,
+            gpu_device_ids=gpu_device_ids or [],
+            outputs=outputs or ["outputs"],
+            network=network,
+            cwd=cwd,
+            mounts=[mount.model_dump(mode="json") for mount in mounts or []],
+            provider=provider,
+        )
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=True))
+    def experiment_status(run_id: str) -> dict[str, Any]:
+        """Read a direct experiment's queue/execution state and result."""
+        return client.experiment("status", run_id=run_id)
+
+    @server.tool()
+    def experiment_cancel(run_id: str) -> dict[str, Any]:
+        """Cancel a bound experiment, retaining evidence and cleanup state."""
+        return client.experiment("cancel", run_id=run_id)
+
+    @server.tool()
+    def experiment_rerun(run_id: str, operation_id: str) -> dict[str, Any]:
+        """Explicitly rerun with a new snapshot of the current code; preserve parent linkage."""
+        return client.experiment("rerun", run_id=run_id, operation_id=operation_id)
 
     @server.tool()
     def environment_open(

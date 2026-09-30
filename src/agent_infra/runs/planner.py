@@ -39,7 +39,7 @@ class PlannerSessions:
         callback: Callable[[str, str, str, dict[str, Any]], dict[str, Any]],
         helper: Path,
         image: Callable[[str], str],
-        connection: tuple[tuple[str, str], ...] = (),
+        connection: tuple[tuple[str, str], ...] | Callable[[], tuple[tuple[str, str], ...]] = (),
         adapter_factory: Callable[[str], InstallableCommandAgentAdapter] = lambda image: (
             CodexAdapter(container_image=image)
         ),
@@ -203,7 +203,8 @@ class PlannerSessions:
                 ProcessCommand(
                     plan.argv,
                     stdin_text=plan.stdin_text,
-                    environment=plan.environment + self.connection,
+                    environment=plan.environment
+                    + (self.connection() if callable(self.connection) else self.connection),
                     timeout_seconds=timeout,
                 ),
             )

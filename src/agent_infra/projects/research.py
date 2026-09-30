@@ -68,6 +68,11 @@ class ResearchService:
         reason: str,
         imported: dict[str, str] | None = None,
     ) -> dict[str, Any]:
+        if self.store.get(project.project_id).request.get("mode") == "attached":
+            raise ProjectConflict(
+                "attached workspaces keep Agent-managed documents; use an init-created project "
+                "for the optional managed research-plan workflow"
+            )
         saved = self.store.save_research(
             project.project_id,
             draft,

@@ -13,11 +13,14 @@ from agent_infra.resources.api import (
     GpuCapacity,
     HostResourceSnapshot,
     NodeCapacity,
+    PersistentLeaseState,
     ResourceAssessment,
+    ResourceClaim,
     ResourceLease,
     ResourceRequest,
     ResourceShortage,
 )
+from agent_infra.resources.persistent import PersistentLeaseStore
 
 Clock = Callable[[], datetime]
 IdFactory = Callable[[], str]
@@ -33,6 +36,8 @@ class LocalResourceManager:
         snapshot_max_age: timedelta = timedelta(seconds=15),
         clock: Clock = lambda: datetime.now(UTC),
         id_factory: IdFactory = lambda: str(uuid.uuid4()),
+        persistent: PersistentLeaseStore | None = None,
+        owner_namespace: str = "controller",
     ) -> None:
         if snapshot_max_age.total_seconds() <= 0:
             raise ValueError("snapshot_max_age must be positive")
@@ -40,6 +45,7 @@ class LocalResourceManager:
         self._snapshot_max_age = snapshot_max_age
         self._clock = clock
         self._id_factory = id_factory
+        self.persistent, self.owner_namespace = persistent, owner_namespace
         self._snapshot: HostResourceSnapshot | None = None
         self._leases: dict[str, ResourceLease] = {}
         self._request_leases: dict[str, str] = {}
@@ -95,6 +101,33 @@ class LocalResourceManager:
                 gpu_device_ids=gpu_ids,
                 created_at=self._clock(),
             )
+            if self.persistent is not None:
+                identity = self.owner_namespace + ":" + request.request_id
+                decision = self.persistent.acquire(
+                    ResourceClaim(
+                        identity,
+                        identity,
+                        "controller-docker",
+                        request.cpu_cores,
+                        request.memory_bytes,
+                        len(gpu_ids),
+                        "local",
+                        gpu_ids,
+                    )
+                )
+                if decision.lease is None:
+                    return AllocationDecision(decision.status, shortages=decision.shortages)
+                if decision.lease.state == PersistentLeaseState.RELEASED:
+                    raise ValueError("request already completed; use a new request identity")
+                lease = ResourceLease(
+                    decision.lease.lease_id,
+                    request.request_id,
+                    self._capacity.node_id,
+                    request.cpu_cores,
+                    request.memory_bytes,
+                    gpu_ids,
+                    decision.lease.created_at,
+                )
             if lease.lease_id in self._leases:
                 raise RuntimeError("lease ID factory returned a duplicate")
             self._leases[lease.lease_id] = lease
@@ -129,6 +162,14 @@ class LocalResourceManager:
 
     def release(self, lease_id: str) -> bool:
         with self._lock:
+            if self.persistent is not None:
+                try:
+                    persistent = self.persistent.get(lease_id)
+                except KeyError:
+                    return False
+                if not persistent.claim.owner_id.startswith(self.owner_namespace + ":"):
+                    raise ValueError("lease belongs to another controller")
+                self.persistent.release(lease_id, persistent.owner_epoch, cleanup_confirmed=True)
             lease = self._leases.pop(lease_id, None)
             if lease is None:
                 return False
@@ -140,6 +181,15 @@ class LocalResourceManager:
     def active_leases(self) -> tuple[ResourceLease, ...]:
         with self._lock:
             return tuple(self._leases.values())
+
+    def reconcile_owned(self) -> None:
+        """Only after the caller confirms this controller's containers are absent."""
+        if self.persistent is not None:
+            for lease in self.persistent.list():
+                if lease.claim.owner_id.startswith(self.owner_namespace + ":"):
+                    self.persistent.release(
+                        lease.lease_id, lease.owner_epoch, cleanup_confirmed=True
+                    )
 
     def _fresh_snapshot(self) -> HostResourceSnapshot | None:
         if self._snapshot is None:

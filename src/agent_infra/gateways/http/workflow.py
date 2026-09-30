@@ -5,10 +5,13 @@ from typing import Any
 
 from agent_infra.projects.analysis import AnalysisService
 from agent_infra.projects.console import ProjectConsole
+from agent_infra.projects.sessions import SessionBindingStore
 from agent_infra.runs.console import ConsoleService
 from agent_infra.runs.control_api import SubmissionRequest
 from agent_infra.runs.query import RunQueries
 from agent_infra.runs.research_store import ResearchStore
+from agent_infra.runs.review import ExperimentReviews
+from agent_infra.runs.review_api import SessionList, SessionSummary
 
 
 def analysis_summary(item: dict[str, Any]) -> dict[str, Any]:
@@ -45,6 +48,13 @@ def analysis_summary(item: dict[str, Any]) -> dict[str, Any]:
 def run_summary(entry: dict[str, Any]) -> dict[str, Any]:
     """Never send controller requests, raw logs or private execution payloads to the browser."""
     result = entry.get("result")
+    if result is not None and entry["request"].get("kind") == "command":
+        result = result | {
+            "execution_status": result.get("execution"),
+            "evaluation_status": result.get("evaluation"),
+            "archive_status": result.get("capture"),
+            "lease_released": not entry.get("slot_held", False),
+        }
     return {
         key: entry[key]
         for key in (
@@ -85,10 +95,14 @@ class WorkflowGateway:
         queries: RunQueries,
         jobs: ResearchStore,
         controller: Callable[[str, dict[str, Any] | None], dict[str, Any]],
+        *,
+        reviews: ExperimentReviews | None = None,
     ) -> None:
         self.projects, self.console, self.queries = projects, console, queries
         self.jobs, self.controller = jobs, controller
         self.analysis = AnalysisService(projects.store, queries)
+        self.reviews = reviews
+        self.sessions = SessionBindingStore(projects.store)
 
     def capabilities(self) -> dict[str, Any]:
         try:
@@ -121,6 +135,35 @@ class WorkflowGateway:
             return self.projects.initialize(body)
         if len(parts) >= 2 and parts[0] == "projects":
             identifier = parts[1]
+            if method == "GET" and parts[2:3] == ["sessions"]:
+                project_id = self.projects.workspace_id(identifier)
+                bindings = self.sessions.list(project_id)
+                if len(parts) == 3:
+                    return SessionList(
+                        project_id=project_id,
+                        sessions=[
+                            SessionSummary(
+                                provider=item.provider,
+                                session_id=item.session_id,
+                                parent_session_id=item.parent_session_id,
+                                started_at=item.started_at,
+                                records_run_id=item.records_run_id,
+                                records_attempt_id=item.records_attempt_id,
+                                captured_lines=item.next_line,
+                            )
+                            for item in bindings
+                        ],
+                    ).model_dump(mode="json")
+                if len(parts) == 5 and parts[4] == "events":
+                    binding = next(
+                        (item for item in bindings if item.records_run_id == parts[3]), None
+                    )
+                    if binding is None:
+                        raise KeyError("session is not bound to this project")
+                    return self.console.events(
+                        binding.records_attempt_id, query.get("cursor", [None])[0]
+                    )
+                raise KeyError("unknown session route")
             if method == "GET" and len(parts) == 2:
                 detail = self.projects.detail(identifier, self.console.tasks())
                 target = detail["project"]["workspace_project_id"]
@@ -158,6 +201,8 @@ class WorkflowGateway:
             run_id = parts[2]
             entry = self.queries.commands.get(run_id)
             if method == "GET":
+                if parts[3:] == ["review"] and self.reviews is not None:
+                    return self.reviews.get(run_id).model_dump(mode="json")
                 if len(parts) == 3:
                     return run_summary(entry) | {
                         "jobs": [
@@ -194,11 +239,17 @@ class WorkflowGateway:
                 if len(parts) == 5 and parts[3] == "artifacts":
                     return self.queries.artifact(run_id, parts[4], query.get("member", [None])[0])
             if method == "POST" and parts[3:] == ["cancel"]:
-                if entry["request"].get("kind"):
+                if entry["request"].get("kind") not in (None, "command"):
                     raise ValueError(
                         "请通过 research close、environment cancel 或 planner stop 结束"
                     )
                 return run_summary(self.controller(f"runs/{run_id}/cancel", {}))
+            if method == "POST" and parts[3:] == ["rerun"]:
+                if entry["request"].get("kind") != "command":
+                    raise ValueError("only direct command experiments support this rerun action")
+                if set(body) != {"operation_id"}:
+                    raise ValueError("rerun requires only operation_id")
+                return run_summary(self.controller(f"runs/{run_id}/rerun", body))
         raise KeyError("unknown workflow route")
 
     def submit(self, identifier: str, body: dict[str, Any], *, submit: bool) -> dict[str, Any]:

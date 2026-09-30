@@ -10,11 +10,14 @@ import {
 } from "../components/common";
 import { ArtifactFiles } from "./execution-artifacts";
 import { ExecutionEvents } from "./execution-events";
+import { ExperimentReviewPanel } from "./experiment-review";
 
 function statusLabel(value: string | null | undefined): string {
   if (!value) return "未记录";
   const labels: Record<string, string> = {
     accepted: "已接收",
+    queued: "等待资源",
+    submitting: "启动中",
     running: "运行中",
     finished: "已结束",
     quarantined: "隔离待处理",
@@ -49,7 +52,7 @@ export function ExecutionList({ runs }: { runs: ControlRun[] }) {
             <tr key={run.run_id}>
               <td>
                 <a href={`#execution/${encodeURIComponent(run.run_id)}`}>
-                  {run.run_id} ↗
+                  {run.lineage.name ?? run.run_id} ↗
                 </a>
               </td>
               <td>
@@ -151,8 +154,14 @@ export function ExecutionDetail({ token, id }: { token: string; id: string }) {
             {value.lineage.project_id && (
               <a href={`#projects/${value.lineage.project_id}`}>查看所属项目</a>
             )}
-            {value.kind === "experiment" &&
-              ["accepted", "running"].includes(value.state) && (
+            {["experiment", "command"].includes(value.kind ?? "experiment") &&
+              [
+                "accepted",
+                "queued",
+                "preparing",
+                "submitting",
+                "running",
+              ].includes(value.state) && (
                 <div className="actions">
                   <button
                     type="button"
@@ -181,6 +190,7 @@ export function ExecutionDetail({ token, id }: { token: string; id: string }) {
                 </div>
               )}
             {value.kind !== "experiment" &&
+              value.kind !== "command" &&
               !["finished", "quarantined"].includes(value.state) && (
                 <p className="muted">
                   长期环境 / Planner 请通过 research close、environment cancel
@@ -191,6 +201,13 @@ export function ExecutionDetail({ token, id }: { token: string; id: string }) {
               <p>{capabilities.data?.controller_reason}</p>
             )}
           </Panel>
+          {value.kind === "command" && (
+            <ExperimentReviewPanel
+              token={token}
+              runId={id}
+              canRun={capabilities.data?.run_control ?? false}
+            />
+          )}
           {Boolean(value.jobs?.length) && (
             <Panel title="容器内 Job">
               {value.jobs?.map((job) => (

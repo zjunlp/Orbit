@@ -52,7 +52,7 @@ class ProjectDatabase:
             db.row_factory = sqlite3.Row
             try:
                 version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in {0, 1, 2, 3, 4, 5}:
+                if version not in {0, 1, 2, 3, 4, 5, 6}:
                     raise ProjectError("unsupported project store version")
                 if write:
                     db.execute("BEGIN IMMEDIATE")
@@ -100,7 +100,29 @@ class ProjectDatabase:
                         "next_line INTEGER NOT NULL DEFAULT 0, "
                         "FOREIGN KEY(project_id) REFERENCES projects(id))"
                     )
-                    db.execute("PRAGMA user_version=5")
+                    db.execute(
+                        "CREATE TABLE IF NOT EXISTS agent_sessions ("
+                        "provider TEXT NOT NULL, session_id TEXT NOT NULL, "
+                        "project_id TEXT NOT NULL, "
+                        "started_at TEXT NOT NULL, cwd TEXT NOT NULL, parent_session_id TEXT, "
+                        "next_offset INTEGER NOT NULL DEFAULT 0, "
+                        "next_line INTEGER NOT NULL DEFAULT 0, "
+                        "prefix_digest TEXT, PRIMARY KEY(provider,session_id), "
+                        "FOREIGN KEY(project_id) REFERENCES projects(id))"
+                    )
+                    if version < 6:
+                        db.execute(
+                            "INSERT OR IGNORE INTO agent_sessions "
+                            "(provider,session_id,project_id,started_at,cwd,next_offset,next_line) "
+                            "SELECT 'codex',thread_id,project_id,started_at,cwd,"
+                            "next_offset,next_line "
+                            "FROM codex_sessions"
+                        )
+                    db.execute(
+                        "CREATE TABLE IF NOT EXISTS console_catalog ("
+                        "source_id TEXT PRIMARY KEY, body TEXT NOT NULL)"
+                    )
+                    db.execute("PRAGMA user_version=6")
                 elif version == 0:
                     if db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
                         raise ProjectError("unrecognized project store schema")

@@ -207,8 +207,15 @@ class ResourceClaim:
     memory_bytes: int | None = None
     gpu_count: int | None = None
     allocator: str = "unspecified"
+    gpu_device_ids: tuple[str, ...] = ()
+    scope: str = ""
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "gpu_device_ids", tuple(self.gpu_device_ids))
+        if len(set(self.gpu_device_ids)) != len(self.gpu_device_ids):
+            raise ValueError("claimed GPU IDs must be unique")
+        if self.gpu_device_ids and len(self.gpu_device_ids) != self.gpu_count:
+            raise ValueError("claimed GPU IDs must match GPU count")
         if not self.request_id or not self.owner_id or not self.backend:
             raise ValueError("claim request, owner, and backend IDs are required")
         if self.cpu_cores is not None and (not isfinite(self.cpu_cores) or self.cpu_cores <= 0):

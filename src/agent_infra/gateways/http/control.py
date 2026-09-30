@@ -6,6 +6,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, cast
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from agent_infra.runs.command_api import CommandRequest
+from agent_infra.runs.commands import CommandRuns
 from agent_infra.runs.control_api import ControlError, SubmissionRequest
 from agent_infra.runs.controller import LocalRunController
 from agent_infra.runs.planner import PlannerSessions
@@ -21,6 +23,7 @@ def create_control_server(
     *,
     research: ResearchController | None = None,
     planner: PlannerSessions | None = None,
+    commands: CommandRuns | None = None,
 ) -> ThreadingHTTPServer:
     if len(token) < 32:
         raise ValueError("controller token must contain at least 32 characters")
@@ -90,6 +93,9 @@ def create_control_server(
             query = parse_qs(parsed.query)
             if parts[:2] != ["api", "v1"]:
                 raise KeyError(self.path)
+            if parts[2:] == ["runs", "command"] and method == "POST" and commands is not None:
+                operation = body.pop("operation_id", None)
+                return commands.submit(operation, CommandRequest.model_validate(body))
             if method == "POST" and planner is not None and parts[2:3] == ["planner"]:
                 if parts[3:] == ["start"]:
                     return planner.start(body["project_id"], body["options"], body["operation_id"])
@@ -118,7 +124,9 @@ def create_control_server(
             if parts[2:] == ["health"] and method == "GET":
                 return {
                     "ready": not controller.quarantined and not controller.closed,
-                    "single_active_run": True,
+                    "single_active_run": commands is None,
+                    "queued_commands": commands is not None,
+                    "frozen_task_slots": 1,
                 }
             if parts[2:] == ["runs", "preflight"] and method == "POST":
                 return controller.preflight(SubmissionRequest.from_dict(body))
@@ -135,6 +143,14 @@ def create_control_server(
                 }
             if len(parts) >= 4 and parts[2] == "runs":
                 run_id = parts[3]
+                if commands is not None and method == "POST":
+                    if parts[4:] == ["rerun"]:
+                        return commands.rerun(run_id, body["operation_id"])
+                    if (
+                        parts[4:] == ["cancel"]
+                        and controller.store.get(run_id)["request"].get("kind") == "command"
+                    ):
+                        return commands.service.status(run_id, cancel=True)
                 if parts[4:] == ["cancel"] and method == "POST":
                     return controller.cancel(run_id)
                 if method != "GET":

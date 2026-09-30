@@ -23,10 +23,12 @@ export function ExecutionEvents({
   token,
   path,
   poll = false,
+  native = false,
 }: {
   token: string;
   path: string;
   poll?: boolean;
+  native?: boolean;
 }) {
   const [pages, setPages] = useState<(string | null)[]>([null]);
   const [filter, setFilter] = useState<TimelineFilter>("highlights");
@@ -49,10 +51,11 @@ export function ExecutionEvents({
   );
   const coverage = events.data?.coverage;
   return (
-    <Panel title="平台执行记录">
+    <Panel title={native ? "宿主机 Agent 会话" : "平台执行记录"}>
       <p className="muted">
-        查看资源、容器、工具调用和任务状态。默认突出实验节点；切换“全部”可看本页所有公开事件。
-        这里不是 Codex 原生会话轨迹。
+        {native
+          ? "从已绑定的原生会话增量采集消息、工具调用和使用量。不代表所有宿主机操作的完整审计。"
+          : "查看资源、容器、工具调用和任务状态。默认突出实验节点；切换“全部”可看本页所有公开事件。宿主机会话在项目页单独查看。"}
       </p>
       {coverage && Object.keys(coverage).length > 0 && (
         <p className="muted">

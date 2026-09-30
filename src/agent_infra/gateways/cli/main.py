@@ -13,6 +13,7 @@ from agent_infra.gateways.cli.projects import (
     add_compilation_arguments,
     add_init_arguments,
     add_research_arguments,
+    add_session_arguments,
 )
 from agent_infra.gateways.cli.research_runtime import add_research_runtime_arguments
 from agent_infra.gateways.cli.runs import add_run_arguments
@@ -58,9 +59,12 @@ def run(
     add_codex_session_arguments(
         project_commands.add_parser("codex", help="Bind local Codex sessions")
     )
+    add_session_arguments(
+        project_commands.add_parser("session", help="Discover and capture host Agent sessions")
+    )
     for name in ("init", "preview"):
         add_init_arguments(project_commands.add_parser(name))
-    for name in ("show", "list", "recover"):
+    for name in ("show", "list", "recover", "attach"):
         entry = project_commands.add_parser(name)
         if name != "list":
             entry.add_argument("identifier", help="Project UUID or original workspace path")
@@ -156,6 +160,22 @@ def run(
         if isinstance(run_result, int):
             return run_result
         print(json.dumps(run_result, default=str, ensure_ascii=False, indent=2))
+        if args.command == "run" and (
+            args.action == "wait" or (args.action == "command" and args.wait)
+        ):
+            raw_outcome = run_result.get("result")
+            outcome = raw_outcome if isinstance(raw_outcome, dict) else {}
+            status = outcome.get(
+                "execution", outcome.get("execution_status", outcome.get("status"))
+            )
+            if status == "completed":
+                return 0
+            if status == "cancelled":
+                return 130
+            if status == "timed_out":
+                return 124
+            code = outcome.get("exit_code")
+            return code if type(code) is int and 1 <= code <= 125 else 1
         return 1 if run_result.get("ready") is False else 0
     if args.command in {"init", "project"}:
         if project_action is None:
@@ -165,11 +185,20 @@ def run(
             action = "research-" + args.research_command
         if action == "codex":
             action = "codex-" + args.codex_command
+        if action == "session":
+            action = "session-" + args.session_command
         values = {
             key: str(value)
             for key, value in vars(args).items()
             if key
-            not in {"command", "project_command", "research_command", "codex_command", "dry_run"}
+            not in {
+                "command",
+                "project_command",
+                "research_command",
+                "codex_command",
+                "session_command",
+                "dry_run",
+            }
             and value is not None
         }
         if "directory_option" in values:

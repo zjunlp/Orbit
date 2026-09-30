@@ -856,3 +856,41 @@ th[scope="row"] {
   margin-bottom: 0;
   min-width: 120px;
 }
+
+/* Compact research review, sharing the console's existing visual tokens. */
+.review-selectors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.review-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-block: 1.25rem;
+}
+.metric-series {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.metric-series svg {
+  display: block;
+  width: 100%;
+  color: var(--muted);
+}
+.metric-series svg text {
+  fill: currentColor;
+  font-size: 10px;
+}
+.review-difference {
+  color: var(--accent);
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .review-selectors {
+    grid-template-columns: 1fr;
+  }
+}
