@@ -1,6 +1,7 @@
 # Python 版渐进重构执行方案
 
-状态：实施中。基线为 `main@920ee1d`；保护标签 `pre-python-refactor-20260929` 已建立。
+状态：R0–R6 的本轮实现与验收已完成，保留边界见第 7 节；Git 集成状态以任务记录与历史为准。
+基线为 `main@920ee1d`；保护标签 `pre-python-refactor-20260929` 已建立。
 实现记录见 [重构任务](../changes/20260930-python-research-core-8e12c4.md)。
 以下阶段是目标与验收条件，完成状态以任务记录为准。
 
@@ -85,7 +86,7 @@ ASI、Harbor trial、PAST family、PostTrain 原生 job 保留自身协议要求
 验收：不创建研究方案也能提交一个已有 Python 脚本；重复请求不重复启动；客户端断开后仍能查询；
 错误、取消及超时保留已生成证据；旧科研入口仍可用。
 
-命令形态示意，尚未实现：
+已实现命令入口（镜像和 Controller 前置条件见[操作说明](../operations/direct-experiments.md)）：
 
 ```sh
 agent-infra run command --project /path/to/research --image python:3.12-slim \
@@ -192,3 +193,16 @@ Claude 子会话能追溯父会话；未授权项目材料不被目录扫描自�
 - 所需检查通过后再按用户授权范围集成；标签只保护代码，运行数据库须单独备份或保留旧根目录。
 - 单个阶段有问题优先 revert 对应提交；数据已经升级时按迁移说明恢复，不能只切标签就假设数据库兼容。
 
+## 7. 落地结果与保留边界
+
+具体调用链、文件位置和升级策略见[实现导读](../implementation/python-research-core.md)。
+
+| 阶段 | 落地结果 | 边界 |
+| --- | --- | --- |
+| R0 | 精确基线标签、独立 worktree、基线检查 | `main` 与 TS worktree 均未改动 |
+| R1 | `CommandRequest`、直接实验 CLI/HTTP/MCP、现有目录登记、显式重跑 | 已有冻结 Task/长期 Job 入口保留各自用途 |
+| R2 | 共用持久执行内核和节点租约，scope 授权、设备互斥、重启续查 | 每个状态根 FIFO；未实现跨队列公平性；旧 Task 的重启策略仍为中断清理 |
+| R3 | 原始证据、源码快照、损坏指标提示和派生索引 | 共用查询和证据语义，未强行合并历史库；源快照需单独备份 |
+| R4 | provider-neutral 会话绑定/续采、Claude 主子会话、Codex 兼容门面 | 显式导入；匿名录制样例验收；未新增真实模型调用 |
+| R5 | 项目双实验比较、配置代码复盘、当前代码重跑、会话面板与生成响应类型 | 原有 benchmark 页面保留；不自动重跑付费批次；旧接口未全部 codegen |
+| R6 | catalog 新写入归 Projects、模型连接延迟初始化、文档导航和回退说明 | 历史 API 兼容导出保留；没有为了删文件破坏已承诺入口 |

@@ -8,13 +8,19 @@ Tasks and single-node Resources, a local Docker Run/Environment slice, durable R
 a simple local research Web console. A local controller now connects compiled research Tasks to
 container Codex execution, persistent status, cancellation, trajectories and downloadable results.
 The Web console shares project initialization, adopted experiments, preflight, submission, cancellation
-and result analysis with the CLI. Bounded iteration is available; distributed execution remains pending.
+and result analysis with the CLI. Existing code can also run directly in Docker, without a research
+plan: durable admission, code snapshots, cancellation, restart reconciliation, metrics comparison,
+and explicit reruns share the existing execution and Records infrastructure. Host Codex and Claude
+sessions can be explicitly bound and incrementally collected. Bounded iteration remains optional;
+distributed execution remains pending.
 See [project status](docs/project-status.md) for acceptance and integration state.
 
 Local project initialization is also available: preserve a research goal, create its workspace,
 and reopen or recover it without an Agent, Docker, or a running server.
 
-For a complete small CPU experiment, follow the [statistics example](examples/research/cpu-statistics/README.md).
+For the shortest existing-code workflow, follow [direct experiments](docs/operations/direct-experiments.md)
+and the deterministic [CPU example](examples/research/direct-command/train.py).
+For a planned Codex CPU experiment, follow the [statistics example](examples/research/cpu-statistics/README.md).
 See the [Run controller commands](docs/reference/local-run-controller.md) and
 [implementation guide](docs/implementation/local-run-controller.md) for setup and recovery.
 
@@ -79,6 +85,20 @@ into frozen Tasks with `agent-infra project compile`; see the
 [code walkthrough](docs/implementation/project-workflow-code-guide.md).
 The Web project page can compile adopted experiments and submit them to the local controller.
 Legacy catalog entries remain intact and can be explicitly linked to an initialized workspace.
+
+To run existing code, start the Controller with the same state directory and use:
+
+```sh
+uv run --locked agent-infra run command --state-dir /absolute/infra-state \
+  --project /absolute/research --image python:3.12-slim \
+  --cpu 1 --memory-gib 0.25 --timeout 60 --wait -- python train.py
+```
+
+The image must exist locally and include `python3` and the script's dependencies. The workspace is
+snapshotted; write results to `outputs/`, metrics to `outputs/metrics.jsonl`, and mount datasets
+explicitly read-only. The project page compares recorded experiments and offers a confirmed rerun
+using current code. See the [implementation guide](docs/implementation/python-research-core.md)
+for shared node quotas, recovery, legacy compatibility, and upgrade/rollback requirements.
 
 ## Code organization
 

@@ -4,8 +4,8 @@ task_id: "20260930-python-research-core-8e12c4"
 title: "Incremental Python research execution and review refactor"
 branch: "refactor/python-research-core"
 base_commit: "920ee1d44aeee2d9b02bdd208dbf4abede343e67"
-work_status: in_progress
-updated_at: "2026-09-30T04:16:36.769628+00:00"
+work_status: completed
+updated_at: "2026-09-30T04:21:21.022069+00:00"
 pull_request: null
 ---
 
@@ -25,7 +25,7 @@ pull_request: null
   facade retains its request format and protocol validation; checkpoint `683efb1`.
 - Added command submission, source snapshots, a Docker backend over the existing process supervisor,
   project attachment, CLI/HTTP/MCP entrypoints and shared node lease admission. Integration hardening
-  is complete; whole-repository verification passed; documentation finalization is in progress.
+  is complete in implementation checkpoint `fd9f48b`; whole-repository verification passed.
 - Added a derived metrics index and provider-neutral native session capture with Codex compatibility
   and Claude parent/child identity. Project schema v6 migration, replay, metrics, resource and legacy
   catalog regressions pass. New catalog writes belong to Projects; old files stay read-only.
@@ -33,6 +33,10 @@ pull_request: null
   comparison, code/configuration review, explicit current-code reruns and native session views.
 - Made model proxy setup lazy for plain command use; preserved benchmark native protocols and
   separate external scheduler accounting. No production service or runtime data was changed.
+- Added [direct experiment usage](../operations/direct-experiments.md) and a
+  [maintainer walkthrough](../implementation/python-research-core.md), linked from README/docs.
+  Updated the refactor plan with delivered boundaries and condensed project status into the current
+  capabilities, evidence limits, gaps and next priorities; this branch proposes the post-merge view.
 
 ## Decisions
 
@@ -41,6 +45,12 @@ pull_request: null
 - Preserve historical data and the existing TS worktree. No real model calls are needed for
   deterministic implementation checks; any paid acceptance needs an explicit task budget.
 - Keep governance unchanged; document source-level and data compatibility with each checkpoint.
+- Local Docker acceptance used only task-owned disposable state/locks, an existing Python image,
+  at most 1 CPU and 256 MiB at a time, and no GPU or model calls. Short deterministic scripts had
+  1–30 second timeouts; fixture servers used ephemeral ports. The production Controller stayed up.
+- Keep legacy frozen Task/long-term Job semantics and all native benchmark adapters. The common
+  kernel and node ledger are shared; different benchmark units and historical storage roots remain
+  explicit. No cross-node scheduling or full GPU acceptance is claimed.
 
 ## Validation
 
@@ -60,16 +70,27 @@ pull_request: null
 | CPU direct-command example | current workspace, temporary output directory | passed | 21 metric rows, decreasing loss and matching final summary; no model/Docker. |
 | `make verify` | implementation workspace before final metric-overflow/UI polish | passed | 445 tests, 35 integration/e2e deselected; lint, format, imports, mypy, codegen drift, TypeScript, document links and both builds. One existing MCP/Pydantic deprecation warning. `/tmp/infra-refactor-verify-final.log`. |
 | Final metric-overflow and review regression; `pnpm check`; `pnpm build`; Ruff | final implementation snapshot | passed | 2 focused tests, frontend codegen/type/build, and final review browser. Non-finite oversized numbers skip safely; completed reviews stop polling; single-point chart coordinates use the shared scale. `/tmp/infra-refactor-final-polish.log`. |
+| `UV_OFFLINE=1 uv run --locked python scripts/ci/smoke_wheel.py` | `fd9f48b` code, rebuilt wheel | passed | Disposable installed wheel and CLI/project workflow, external SDK wheel and four synthetic protocol plans; no native runtime/model execution. `/tmp/infra-refactor-wheel.log`. |
+| Task-owned Docker cleanup audit | `fd9f48b` + real-test state | passed | Both retained E2E states contain only finished Runs; zero matching task-owned containers remain. |
+| Final `make verify` | `fd9f48b` + documentation workspace | passed | 445 tests passed, 35 deselected; all lint/format/import/type/codegen/link/build checks passed on final code. The existing MCP/Pydantic deprecation warning remains. `/tmp/infra-refactor-delivery-verify.log`. |
+| Paid Agent, full GPU training, multi-node and new benchmark batch execution | None | not_run | Outside this refactor's acceptance scope; anonymous transcripts and deterministic CPU containers are not presented as model/GPU evidence. |
+
+The first recovery run exposed a short supervisor-identity persistence race; the bounded grace
+period now keeps its lease without relaunch, and the real recovery check passes. Intermediate
+migration/tool-catalog tests expected schema v5/25 tools; they were updated to the actual v6/29-tool
+contract and pass. An early private-metric test used a nonexistent enum; the fixture was corrected.
+These were development failures, not hidden runtime fallbacks or successful real Agent executions.
 
 ## Open items and blockers
 
-- Complete the distribution smoke check and finalize the operation/implementation guides, overview and delivery record.
-- No Git permission blocker remains. Production state and services have not been modified.
+- None within the approved refactor and validation scope. No Git permission blocker remains.
+- The task branch is the delivery artifact; main integration, publication and production upgrade have
+  not been performed. Wider GPU, multi-node and native model acceptance gaps are listed in the overview.
 
 ## Next steps
 
-- Commit the reviewed implementation snapshot, then finalize documentation and record the exact tested commit.
-  Integration into main and production deployment remain separate actions.
+- None for the implementation task. Next release action: review/integrate the task branch, back up
+  state and drain old local leases before deploying the new version.
 
 ## Compatibility and rollback
 

@@ -1,98 +1,68 @@
 # 项目当前状态
 
-Updated at: 2026-09-28T22:33:24.076426+08:00
+Updated at: 2026-09-30T04:10:15.881378+00:00
 
-Basis: 以本文合并到 `main` 后的版本为集成依据；涵盖 A/B/C/D、H/E/I/W、模块整理、
-GPU 诊断与容器基础链、宿主机 Codex 会话采集，以及 BM00–BM07 的各工程阶段。
-BM05-B/BM06/BM07 已通过 PR #6/#7/#8 合并，集成维护经 PR #9 合并。集成与远端同步
-事实以 Git 历史为准，不表示已配置常驻部署。
-本机 GPU 诊断与容器计算已验收，完整 GPU Run 尚未验收。
-
-当前定位：本机、单管理员、小型 CPU 科研工作流已可试用。
-初始化、版本化规划、冻结 Task、容器执行、记录、分析和 Web 已有连接；GPU 基础容器链已局部验收，完整 GPU 科研任务、多节点及完整 benchmark 套件尚未验收；TB-Science 单 CPU Oracle 原生 trial 已有局部工程证据。
+Basis: 本文在 `refactor/python-research-core` 上提出合并后的状态，以 `main@920ee1d` 为基线。
+实现、验收、Git 集成与常驻部署是不同事实；是否已合并以 Git 为准。
+当前阶段：S2 与 S4 持续推进。定位为本机、单管理员的 CPU 科研与原生 benchmark 运行/复盘工具。
 
 ## 阶段概览
 
 | 阶段 | 状态 | 当前结论 |
 | --- | --- | --- |
-| S0：工程基础 | `accepted` | 锁文件、检查、依赖边界和协作规范建立，并有本机验证。 |
-| S1：模块契约与任务样例 | `in_progress` | 核心契约已有实现；ToolBinding、稳定任务目录与原生 benchmark 等价性未完成。 |
-| S2：完整单节点工作流 | `in_progress` | CPU 科研两条路径已有证据；GPU 容器基础链通过，完整 GPU Run 与完整 benchmark 套件等价性仍缺。 |
-| S3：两节点执行与故障处理 | `not_started` | Worker/Ray、节点加入、远程记录与故障恢复未实现。 |
-| S4：Web 与批量评测 | `in_progress` | 科研页面和 BM05-B/BM06/BM07 基础已实现；完整原生批量评测仍未验收。 |
+| S0：工程基础 | `accepted` | 锁文件、自动检查、依赖边界和协作规则已有验收。 |
+| S1：模块契约与任务样例 | `in_progress` | 核心模块、独立适配 SDK、直接命令和复盘契约已实现；ToolBinding 与完整原生等价性仍缺。 |
+| S2：完整单节点工作流 | `in_progress` | CPU 科研可试用，直接命令重启续查有真实证据；完整 GPU Run 与各类故障恢复仍未全部验收。 |
+| S3：两节点执行与故障处理 | `not_started` | Worker/Ray、远程执行和跨节点恢复未落地。 |
+| S4：Web 与批量评测 | `in_progress` | 科研实验比较、原生会话、benchmark 批次与证据复盘已实现；全部原生套件/官方提交仍未验收。 |
 
-## 已有能力与验证范围
+## 可用能力及证据范围
 
-- **A/B/C/D**：项目初始化、研究方案快照与精确确认、材料编译冻结，以及本机 Controller 的预检、幂等提交、取消和重启清理。
-  真实 Codex CPU 统计实验已有 D 验收；业务可恢复不等于恢复训练进程。
-- **H/E/I**：宿主机 CLI/MCP 控制长期 Docker 环境和 Job；Python CPU 环境准备、smoke、锁引用与有限修复；
-  基于真实产物的分析、用户决定、有限 Task 授权和可替换 Planner。各批已有真实模型证据，适用范围见任务记录。
-- **Agent/Tasks/Resources/Records**：三种 CLI Agent adapter、Task 可见视图、资源 YAML 与宿主机观测；本地原始流、事件、产物、轨迹与 JSONL 导出。
-  Python 执行内核支持求解与隔离评测；正式 Controller 提交仍限 Codex 和无评测科研 Task。
-- **G1/G2**：GPU 只读诊断、限定单卡的 CUDA smoke 命令与 Controller UUID 白名单；冻结 Task 的 GPU 请求复用既有资源租约和 Docker 设备映射。本机 Toolkit 1.20.1、CDI 指定卡 CUDA 计算和 DockerEnvironment 清理已验证；完整冻结 Task + Codex GPU Run 尚未验证。
-- **宿主机 Codex 采集**：项目目录发现候选会话、显式绑定真实 thread ID、原始 JSONL 与规范事件写入独立 Records Run，并支持轮次通知触发的断点续采；不启动模型或 Docker。
-- **BM00/BM01（本地 `main`）**：版本化 SDK、独立包显式启用、规划/检查与命令冻结；一个原子单位的本机受管进程、持久 operation/handle、重启续查、取消及 Records 归档。独立 wheel 和短时真实 CPU 进程已有验证；其普通进程后端不承担容器/GPU 配额或评分。
-- **BM02-A（本地 `main`）**：独立 TB-Science/Harbor 包、固定版本、独立 verifier、CPU/内存实际核验和 Records 原始证据。Oracle 单任务的原生同产物重评、重复提交、真实取消清理通过；不代表模型 Agent、整套任务、GPU 或正式榜单兼容。
-- **TB-Science Codex 扩展**：支持固定版本的原生 Harbor Codex、显式认证/模型、公开网络代理、资源准入、完整原始证据归档与批次离线检查。真实 Codex 已在原生容器中求解并归档会话、137 步 ATIF 和提交，工作台能读取其中 131 步工具调用；验收因既定时间上限在 verifier 前取消，无真实 Codex 评分证据。70 项任务的求解配置均为 `gpus=0`，这不证明全部实际无需 GPU；4 CPU/8 GiB 的静态准入仅覆盖 51 项。
-- **BM02-B 与 Codex OS 扩展**：独立 ASI-Bench 包固定 runner；已移除 fixture 入口与模拟执行，仅保留显式 `codex_cli` + Docker `--sandbox os` profile，公开 seed31415 单实例真实 Codex 运行、BenchFlow 本地评分、原生 JSONL/轨迹/错误流归档、Web 关联查询、子容器身份与采样、清理及租约释放均已本机验证。该分数非官方；seed42 bundle 仍只做本地生成，未认证、上传或取得官方分数。
-- **BM05-A**：Benchmark 请求可持久 FIFO 排队；Resources 保存幂等租约、owner epoch、原生 job ID、对账和释放历史。崩溃窗口、等待取消、清理后续跑以及独立 wheel 双任务验收通过；当前默认单活动租约，不代表 CPU/GPU 硬隔离或后台自动调度。
-- **BM05-B**：同一状态目录可配置并持久保存并发容量、运行轮询 worker 与墙钟预算组；受管进程采样 CPU/内存/I/O，结果区分申请、准入、实际分配证明及测量；本地产物支持中断续传与完整校验。默认仍为单槽，租约不实施硬限额。
-- **Benchmark 批量入口**：`benchmark batch prepare/submit/status/worker` 将单实例适配器组合为固定批次，复用队列和并发租约；逐项冻结模型兼容声明，生成每任务状态与指标汇总。声明不证明账号可用性，汇总不冒充原生套件或官方分数。支持模型/认证终止错误停止派发。首次失败定位到旧容器 Codex 0.153.4；固定为宿主机同版 0.157.1 后，同一认证调用 gpt-6-sol 成功。公开 seed31415 的 60 项 b3 批次有 60 项持久化本地数值评分，算术均分 35.43277818088395；全部清理并释放租约。只读复盘发现 19 题含 judge/评分依赖异常；原生 13 个 timeout 标签中 12 个有正常结束事件，另 1 个实际为额度耗尽。有分数不等于评测健康或求解正常完成；这不是官方总分或纯模型能力验收。
-- **BM06**：不可变候选、授权修改范围、公开指标投影、父子血缘、确定性提交、累计试验/墙钟预算和停止/选优。两候选合成结果通过工程测试；四个原生参考适配器尚未开放 optimizer 反馈，不等于已能自动优化官方成绩。
-- **BM07**：Benchmark 只读页面、精确元组及本地运行证据核对的兼容矩阵、可选原生提交交接和一次性发送保护；独立新包在隔离 venv 中复用现有 backend 完成 CPU 演练。未进行官方提交或真实模型/GPU 验收。
-- **BM03**：独立 PAST-Bench 包固定 v1.0.0 revision，把完整 family 的 persistence on/off 配对作为原子任务；冻结 episode 顺序、fresh session、history/state 策略和原生 runner，归档原生 evidence 与聚合结果。无模型 SM01 工程 profile 通过独立 wheel 验收；尚未运行真实 Agent/judge，不代表 Docker sandbox、官方复现或榜单提交。
-- **BM04**：独立 PostTrainBench 包将一个训练 trial 保持为原子 HTCondor job，持久绑定 native job ID；真实模式声明 H100/CPU/内存/磁盘和 GPU 可见性隔离，按 job ID 查询/取消。提交响应不确定时暂停自动重试，等待原生身份对账。final model 进入文件级校验的内容寻址私有存储，Records 保存 handoff manifest、指标、judge 和有界轨迹。无模型 wheel 与模拟 scheduler 生命周期通过；未进行真实 H100/Apptainer/Agent/judge 集群验收。
-- **Benchmark Web 工作台**：登记跨目录批次，查看全部任务与有效评分，比较同任务得分、完整批次描述性趋势，搜索/并排复盘归档轨迹，预览和导出产物、保存笔记与默认基线。运行日志读取已采集内容，取消操作保存意图供 worker 处理；不提供自动重跑、实时 token 流或官方总分聚合。合并后 417 项非集成/E2E 测试通过，已只读检查真实 TB 归档轨迹；浏览器流程在原工作分支通过。
-- **Web 易用性优化**：实验列表/批次/任务分层，真实结果摘要与分布、URL 保留筛选和分页、结果优先的任务详情、可读配置、比较差异筛选；科研项目可搜索筛选，旧 Records 与科研执行共用可读事件组件。已完成任务停止轮询；418 项 Python 测试、8 项前端逻辑测试、三套浏览器流程和真实 ASI 60 项只读页面检查通过。持久重跑仍未提供，设计、使用与验收见[本轮记录](changes/20260928-web-workbench-usability-9a2c6e.md)。
-- **复盘证据展示**：保留原始数值评分，独立显示评分异常、Codex 终止事件和状态冲突；批次与任务可导入绑定运行快照的署名复盘、跳转证据、查看和下载完整报告，结果变化后标为过期。真实 ASI 60 题只读检查识别 19 题评分异常、59 次正常结束/1 次额度中断及 13 处原生状态冲突；20 个案例/90 个证据链接已校验。实现与验证见[任务记录](changes/20260928-web-evidence-review-3fa821.md)。
-- **W**：Web 兼容旧 catalog 和新工作区，支持初始化、研究方案查看、实验编译/预检/提交/取消、产物下载和分析展示。
-- **模块整理**：修复 Web-first 启动权限、统一状态目录/研究运行上下文，以及事件/产物/轨迹可见性；拆分 Records 内部实现并保留兼容 API。
-  `make verify` 通过（272 项非 E2E）；18 项无模型真实 Docker 集成、两套浏览器流程和独立 wheel 安装通过。
-  包括真实 Web → Controller → Docker → Records → Analysis；浏览器执行后端是替身，模型能力沿用此前证据。
+- **科研短路径**：已有代码目录可直接通过 CLI/MCP 提交 Docker 命令，无需研究方案或 Task 编译；
+  记录代码/镜像、日志、部分产物和指标，支持排队、取消、超时、当前代码重跑和父子 Run 关联。
+  真实 CPU Docker 验证覆盖 Controller 强制重启后续查、失败产物及清理释放；不涉及模型或 GPU。
+- **共同执行与资源**：直接命令和原生 benchmark 复用持久执行内核；科研、旧 Task 与本机 benchmark
+  共用同一用户的节点租约库，包含 scope 配额、GPU UUID 互斥和观测准入。远程原生调度分域。
+  每个状态根 FIFO，尚无跨队列公平调度；旧 Task/长期环境仍在重启后中断清理。
+- **保留的科研工作流**：初始化、版本化方案/确认、冻结 Task、宿主机 MCP 长期环境、有限环境修复、
+  真实产物分析与有界迭代继续可用。A/B/C/D/H/E/I/W 的既有真实模型证据保留各批适用范围。
+- **记录与 Web**：原始流、规范事件、产物和文本分页读取；新增归档指标曲线、双实验配置/代码比较、
+  当前代码重跑及宿主机会话面板。Codex/Claude 显式绑定与增量采集共用存储，旧 Codex 命令兼容；
+  Claude 本轮以匿名录制样例验证。新增复盘响应生成 TypeScript，旧接口尚未全部迁移。
+- **Benchmark**：BM00–BM07 已建立独立包 SDK、显式启用、兼容检查、原生 job 对账、批次/预算、
+  证据归档及授权候选流程。ASI Codex Docker + 本地公开评分有真实验收；公开 b3 60 项持久数值评分
+  均分 **35.43277818088395**。只读复盘发现 19 项评分依赖/judge 异常，13 处原生状态冲突；
+  页面分别展示评分与健康证据，不能把这个均值称为官方成绩或纯模型能力结论。
+- **其他原生适配**：TB-Science 原生 CPU Oracle trial 有评分证据；Codex 已求解并归档轨迹，受预算限制
+  在 verifier 前取消，尚无完整 Codex 评分验收。70 项静态 `gpus=0` 不证明全部真实无需 GPU，
+  4 CPU/8 GiB 仅覆盖 51 项声明。PAST 无模型 family 对照、PostTrain 模拟外部 job 有工程验收，
+  尚无真实 Agent/judge 或 H100/HTCondor 集群验收。
+- **GPU**：本机 Toolkit、CDI 指定卡 CUDA 计算、DockerEnvironment 清理与 UUID 授权已有局部证据；
+  本轮新增资源共用不等于完成真实 GPU 训练验收。
 
 ## 主要缺口
 
-- **科研训练**：长期科研环境的 GPU 入口、CUDA/系统依赖模板、外部不可变数据与大权重传输；当前 HTTP 下载上限 16 MiB。真实 GPU 训练及完整冻结 Task 验收仍缺。
-- **执行与任务**：其他 provider 的完整容器链、ToolBinding、科研 Controller 的持久等待队列与训练 checkpoint 接续。Benchmark 已有最小持久队列，但尚未推广到所有执行入口；ASI 仍限公开单实例、PAST 真实 Agent/runtime 与 PostTrainBench H100/HTCondor/Apptainer/Agent/judge 组合仍待验收。
-- **自动研究**：科研主线仍仅能在冻结 Task 授权集合内迭代；BM06 可在明确范围内登记 benchmark 候选，但不会自动生成候选或判断科学真实性。
-- **评分解释**：ASI 公开评分的 judge 不可用/输入依赖错误可能仍显示 scored；原生结束状态受模型列表刷新错误干扰。Web 已独立展示分项异常和真实终止事件；仍需修复评分链、建立独立重评版本，再做候选能力比较。
-- **记录和界面**：其他 Agent 的平台外轨迹仍依赖显式导入；Codex 格式兼容需随 CLI 版本维护，尚无 Web 专门会话列表；benchmark 本地大文件可恢复，但缺跨节点传输/远端备份/token-logprob。Benchmark 已有结果复盘和单 Run 取消意图；Web 未覆盖 H/E/I 全部控制或 benchmark 提交/重跑，HTTP/TypeScript 契约仍手工维护。
-- **运维和扩展**：Web 资产需单独提供；单管理员服务未产品化为安装即用部署；无 Worker/Ray、多节点或多人在线权限。
+- 完整 GPU 科研训练、checkpoint 恢复、不可变外部数据版本、科研大权重远端存储/备份。
+- ASI 评分依赖修复与独立重评版本；TB-Science 完整模型评分、PAST 与 PostTrain 真实原生运行。
+- 跨用户/多节点资源控制、Worker/Ray、多人在线权限和安装即用部署。
+- Claude 后台持续采集、原生格式持续兼容、token/logprob 等 RL 数据；宿主机聊天不是完整操作审计。
+- 全部旧接口类型生成、benchmark 页面持久重跑；自动科研仍受显式预算与冻结任务/候选范围约束。
 
 ## 下一步优先级
 
-1. 根据 ASI 60 题复盘，优先修复评分依赖与 judge 调用，在独立评测版本中验证原提交；补齐持久重跑与尝试选择，再在明确模型预算下推进 TB-Science 求解→评分验收及候选对照。
-2. 准备 CUDA 训练镜像，完成冻结 Task + Codex 单 GPU Run 验收；随后补长期科研环境 GPU 入口及大数据/权重入口。
-3. 确定长期状态目录，补齐安装诊断和启动/备份指南，用一个真实科研项目试用完整流程。
+1. 审阅并集成本次 Python 重构；备份并排空旧活动租约后升级，用实际科研代码走直接实验与比较流程。
+2. 根据 ASI 60 题证据修复评测依赖、保留独立重评版本，再在明确预算下补 TB-Science 求解至评分验收。
+3. 准备训练镜像与不可变数据版本，完成单 GPU 科研 Run，并完善状态备份和安装诊断。
 
 ## 项目级阻塞与限制
 
-纯代码开发无外部阻塞。真实模型、完整 GPU 任务、两节点分别需要凭据与费用预算、训练镜像及明确资源范围、第二台节点和网络。BM04 原生验收还需要满足 GPU 可见性隔离的 HTCondor H100 队列、共享存储、Apptainer 镜像和 judge 认证；当前机器不能代替该集群条件。当前 Controller 已有实例独占主机锁，本轮未重启它或执行真实 Codex GPU Run。HTTP 仅限本机管理员；托管 CI/分支保护尚需平台核实，License 尚未确定。
+纯代码开发无外部阻塞。真实模型需要认证和明确费用预算；GPU 验收需训练镜像与资源范围，
+多节点需第二台机器与网络；PostTrain 原生验收还需 H100/HTCondor/Apptainer 和共享存储。
+当前 HTTP 面向本机管理员；托管 CI/分支保护仍需平台核实，License 尚未确定。
+本轮未切换生产服务、迁移真实运行数据或启动新模型批次。
 
-## 相关记录
+## 相关记录与入口
 
-- [ASI 60 题证据复盘](changes/20260928-asi-b3-review-e91c7a.md)：全量归档校验、20 个重点案例及待验证假设。
-
-- [本次分支集成](changes/20260927-local-branch-integration-2b8c9e.md)、[TB-Science Codex 扩展](changes/20260926-tb-science-codex-7ad3e1.md)
-- [Benchmark Web 工作台](changes/20260926-benchmark-web-4f82c1.md)、[使用说明](operations/benchmark-workspace.md)
-
-- [BM04 任务记录](changes/20260923-benchmark-posttrain-bm04-7b2e91.md)、[PostTrainBench 操作说明](operations/posttrain-bench-native-trial.md)
-- [Benchmark 集成整理](changes/20260923-benchmark-integration-cleanup-4e9b62.md)
-- [BM03 任务记录](changes/20260922-benchmark-past-bm03-5e8a2d.md)、[PAST-Bench 操作说明](operations/past-bench-native-trial.md)
-- [BM05-A 任务记录](changes/20260922-benchmark-reliability-bm05a-91d7c4.md)、[BM05-B 任务记录](changes/20260923-benchmark-batch-bm05b-6c2f91.md)、[队列操作说明](operations/benchmark-queue.md)
-- [BM06 任务记录](changes/20260923-benchmark-campaign-bm06-7a31d9.md)、[Campaign 参考](reference/benchmark-campaign.md)
-- [BM07 任务记录](changes/20260923-benchmark-delivery-bm07-8c6e41.md)、[使用与扩展验收](reference/benchmark-delivery.md)
-- [BM07 集成维护](changes/20260923-benchmark-integration-maintenance-35a9d2.md)
-- [当前代码与能力审阅](implementation/current-code-and-capability-review.md)
-- [BM02-B 任务记录](changes/20260922-benchmark-asi-bm02b-4d2c81.md)、[ASI-Bench 操作说明](operations/asi-bench-native-trial.md)
-- [ASI b3 批次入口与启动](changes/20260926-asi-batch-b3-6f98d2.md)、[原批次结果](changes/20260927-asi-b3-resume-35-6d51b9.md)、[60 项结果整理](changes/20260928-asi-b3-consolidate-retry-8c7d4e.md)、[批量操作](operations/asi-bench-batch.md)
-- [ASI fixture 移除](changes/20260926-remove-asi-fixture-d1a8c4.md)
-- [ASI Codex OS 真实验收与轨迹归档](changes/20260925-asi-codex-os-traces-7e4b2a.md)
-- [BM02-A 任务记录](changes/20260922-benchmark-tb-science-bm02a-6b91e3.md)、[TB-Science 操作说明](operations/tb-science-native-trial.md)
-- [BM00 SDK](changes/20260922-benchmark-sdk-bm00-c7e2a1.md)、[BM01 受管执行记录](changes/20260922-benchmark-execution-bm01-a4f8d2.md)、[执行使用参考](reference/benchmark-execution.md)
-- [本轮整理与验证](changes/20260920-integration-audit-r61c4e.md)、[代码检查与后续任务](development/20260920-integration-review.md)
-- [G1/G2 GPU 诊断和准入](changes/20260921-gpu-diagnostics-admission-f1d9c6.md)、[单机 GPU 操作说明](operations/gpu-local.md)
-- [Codex 宿主机会话采集](changes/20260921-codex-host-sessions-8d7a4e.md)、[使用说明](reference/codex-host-sessions.md)
-- [D 本机执行](changes/20260918-local-run-controller-d73a91.md)、[H 宿主机科研](changes/20260920-host-research-mcp-a81f2c.md)
-- [E 环境准备](changes/20260920-environment-preparation-e92b6a.md)、[I 分析迭代](changes/20260920-research-iteration-i73c9a.md)、[W Web](changes/20260920-web-workflow-w84d2a.md)
-- [文档导航](README.md)、[使用入口](../README.md)、[Web 使用说明](operations/web-console.md)
+- [本次重构与验收](changes/20260930-python-research-core-8e12c4.md)、[实现导读](implementation/python-research-core.md)、[直接实验操作](operations/direct-experiments.md)
+- [ASI 60 题证据复盘](changes/20260928-asi-b3-review-e91c7a.md)、[TB-Science Codex 验收](changes/20260926-tb-science-codex-7ad3e1.md)
+- [BM07 集成维护](changes/20260923-benchmark-integration-maintenance-35a9d2.md)、[GPU 操作](operations/gpu-local.md)、[文档导航](README.md)
