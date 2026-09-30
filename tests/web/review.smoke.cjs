@@ -23,6 +23,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByLabel('对照实验',{exact:true}).selectOption(info.first);
     await page.getByRole('columnheader',{name:'对照实验',exact:true}).waitFor();
     assert.equal(await page.locator('.metric-series').count(),2);
+    assert.equal(await page.locator('.metric-series polyline[stroke-dasharray]').count(),2);
     await page.getByRole('button',{name:/claude-code/}).click();
     await page.getByText('录制样例：查看两次实验的学习曲线',{exact:true}).waitFor();
     await page.screenshot({path:'/tmp/infra-refactor-review-desktop.png',fullPage:true});
