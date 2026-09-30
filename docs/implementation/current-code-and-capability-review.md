@@ -110,7 +110,7 @@ flowchart LR
 科研 Controller 正式提交目前接通的是容器内 Codex；Claude/DSH 的完整容器科研 Run、
 各 benchmark 原生工具/记忆/恢复组合需要按版本单独验收。宿主机 Codex 的本地会话采集另由
 [`bootstrap/codex_capture.py`](../../src/agent_infra/bootstrap/codex_capture.py) 和
-[`projects/codex_sessions.py`](../../src/agent_infra/projects/codex_sessions.py) 实现。
+[`projects/sessions.py`](../../src/agent_infra/projects/sessions.py) 实现（后续 Python 重构已统一为多 Agent 会话存储，原 Codex CLI 保持兼容）。
 
 [`resources/config.py`](../../src/agent_infra/resources/config.py) 严格解析资源 YAML；
 [`resources/monitor.py`](../../src/agent_infra/resources/monitor.py) 从 Linux/NVIDIA 读取 CPU、

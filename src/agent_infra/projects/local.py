@@ -144,7 +144,11 @@ class LocalProjectStore:
                 status=p.status if status is None else status,
                 revision=p.revision + 1,
                 updated_at=datetime.now(UTC).isoformat(),
-                initialization=InitializationStatus.PROJECTION_PENDING,
+                initialization=(
+                    InitializationStatus.READY
+                    if _decode(row).request.get("mode") == "attached"
+                    else InitializationStatus.PROJECTION_PENDING
+                ),
             )
             db.execute(
                 "UPDATE projects SET body=? WHERE id=?", (json.dumps(updated.to_dict()), project_id)

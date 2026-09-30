@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { type Project, request, useData } from "../api/console";
 import type { Capabilities, ProjectDetail } from "../api/workflow";
-import { Badge, Empty, Notice, Panel } from "../components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "../components/common";
 import { ExecutionList } from "./execution";
+import { ProjectExperiments } from "./experiment-review";
 import { ExperimentSubmit } from "./experiment-submit";
+import { ProjectSessions } from "./project-sessions";
 
 function WorkspaceBinding({
   token,
@@ -87,7 +95,9 @@ export function ProjectDetailPage({
         <>
           <Notice error={data.research_warning} />
           <Panel title="项目概况">
-            <Badge>项目：{data.project.status}</Badge>
+            <Badge variant={statusVariant(data.project.status)}>
+              项目：{data.project.status}
+            </Badge>
             <p className="prewrap">{data.project.goal}</p>
             <p className="break">
               工作区：{data.project.workspace ?? "未绑定"}
@@ -174,10 +184,16 @@ export function ProjectDetailPage({
           )}
           {data.project.workspace_project_id && !data.accepted && (
             <Empty>
-              尚无已采用方案。通过 Agent 或 CLI
-              保存研究方案并确认后，页面会显示实验提交入口。
+              可以直接用 run command
+              提交已有代码，无需先保存研究方案。研究方案、确认与 Task
+              编译仍可按需使用。
             </Empty>
           )}
+          <ProjectExperiments
+            token={token}
+            runs={data.runs}
+            canRun={capabilities.data?.run_control ?? false}
+          />
           <Panel title="项目运行">
             <ExecutionList runs={data.runs} />
             <p className="muted">
@@ -218,6 +234,12 @@ export function ProjectDetailPage({
               </article>
             ))}
           </Panel>
+          {data.project.workspace_project_id && (
+            <ProjectSessions
+              token={token}
+              projectId={data.project.workspace_project_id}
+            />
+          )}
         </>
       )}
     </>

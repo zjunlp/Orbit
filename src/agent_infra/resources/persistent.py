@@ -1,19 +1,20 @@
-"""SQLite-backed bounded leases for recoverable benchmark execution."""
+"""SQLite-backed node and external-domain leases with fencing and scoped quotas."""
 
 from __future__ import annotations
 
 import json
 import sqlite3
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
 from agent_infra.resources.api import (
     AllocationStatus,
+    HostResourceSnapshot,
     LeaseCapacity,
     PersistentLeaseDecision,
     PersistentLeaseState,
@@ -35,9 +36,17 @@ class PersistentLeaseStore:
     """
 
     def __init__(
-        self, root: Path, capacity: LeaseCapacity | None = None, *, read_only: bool = False
+        self,
+        root: Path,
+        capacity: LeaseCapacity | None = None,
+        *,
+        read_only: bool = False,
+        observe: Callable[[], HostResourceSnapshot] | None = None,
+        scope: str = "",
     ) -> None:
         self.read_only = read_only
+        self.observe = observe
+        self.scope = scope
         if read_only:
             if capacity is not None or not (root / "leases.sqlite3").is_file():
                 raise ValueError("read-only lease store requires an existing database")
@@ -46,12 +55,12 @@ class PersistentLeaseStore:
         self.path = root / "leases.sqlite3"
         if read_only:
             with closing(self._connect()) as db:
-                if db.execute("PRAGMA user_version").fetchone()[0] != 1:
+                if db.execute("PRAGMA user_version").fetchone()[0] not in (1, 2):
                     raise ValueError("unsupported persistent lease schema")
             return
         with closing(self._connect()) as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise ValueError("unsupported persistent lease schema")
             db.execute(
                 """CREATE TABLE IF NOT EXISTS settings (
@@ -72,6 +81,7 @@ class PersistentLeaseStore:
                     updated_at TEXT NOT NULL
                 )"""
             )
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT value FROM settings WHERE key='capacity'").fetchone()
             if row is None:
                 initial_capacity = capacity or LeaseCapacity()
@@ -79,11 +89,16 @@ class PersistentLeaseStore:
                 db.execute("INSERT INTO settings VALUES ('capacity', ?)", (encoded,))
             else:
                 persisted = LeaseCapacity(**json.loads(row[0]))
-                if capacity is not None and capacity != persisted:
+                if capacity is not None and capacity != persisted and not scope:
                     raise ValueError(
                         "lease capacity differs from persisted scheduler configuration"
                     )
-            db.execute("PRAGMA user_version=1")
+            db.execute("PRAGMA user_version=2")
+            if scope:
+                db.execute(
+                    "INSERT OR IGNORE INTO settings VALUES (?, ?)",
+                    ("scope:" + scope, json.dumps(asdict(LeaseCapacity()))),
+                )
             db.commit()
         self.path.chmod(0o600)
 
@@ -94,14 +109,20 @@ class PersistentLeaseStore:
         with closing(self._connect()) as db:
             db.execute("BEGIN IMMEDIATE")
             active = db.execute(
-                "SELECT COUNT(*) FROM leases WHERE state != ?",
+                "SELECT claim FROM leases WHERE state != ?",
                 (PersistentLeaseState.RELEASED.value,),
-            ).fetchone()[0]
-            if active:
-                raise ValueError("drain and reconcile all benchmark leases before capacity change")
+            ).fetchall()
+            if any(
+                not self.scope or json.loads(row[0]).get("scope", "") == self.scope
+                for row in active
+            ):
+                raise ValueError("drain and reconcile leases in this scope before capacity change")
             db.execute(
-                "UPDATE settings SET value=? WHERE key='capacity'",
-                (json.dumps(asdict(capacity), sort_keys=True),),
+                "UPDATE settings SET value=? WHERE key=?",
+                (
+                    json.dumps(asdict(capacity), sort_keys=True),
+                    "scope:" + self.scope if self.scope else "capacity",
+                ),
             )
             db.commit()
         return capacity
@@ -110,7 +131,10 @@ class PersistentLeaseStore:
     def capacity(self) -> LeaseCapacity:
         """Read the current setting so long-lived workers see administrator updates."""
         with closing(self._connect()) as db:
-            row = db.execute("SELECT value FROM settings WHERE key='capacity'").fetchone()
+            row = db.execute(
+                "SELECT value FROM settings WHERE key=?",
+                ("scope:" + self.scope if self.scope else "capacity",),
+            ).fetchone()
         assert row is not None
         return LeaseCapacity(**json.loads(row[0]))
 
@@ -127,7 +151,12 @@ class PersistentLeaseStore:
 
     @staticmethod
     def _claim_payload(claim: ResourceClaim) -> str:
-        return json.dumps(asdict(claim), sort_keys=True)
+        value = asdict(claim)
+        if not claim.gpu_device_ids:
+            value.pop("gpu_device_ids")  # Preserve version-1 request identities.
+        if not claim.scope:
+            value.pop("scope")
+        return json.dumps(value, sort_keys=True)
 
     @staticmethod
     def _lease(row: sqlite3.Row) -> PersistentResourceLease:
@@ -143,6 +172,7 @@ class PersistentLeaseStore:
         )
 
     def acquire(self, claim: ResourceClaim) -> PersistentLeaseDecision:
+        claim = replace(claim, scope=self.scope)
         payload = self._claim_payload(claim)
         with closing(self._connect()) as db:
             db.execute("BEGIN IMMEDIATE")
@@ -168,6 +198,25 @@ class PersistentLeaseStore:
                 (PersistentLeaseState.RELEASED.value,),
             ).fetchall()
             temporary = self._temporary_shortages(claim, active, capacity)
+            if self.scope:
+                scope_row = db.execute(
+                    "SELECT value FROM settings WHERE key=?", ("scope:" + self.scope,)
+                ).fetchone()
+                assert scope_row is not None
+                scope_capacity = LeaseCapacity(**json.loads(scope_row[0]))
+                scoped_active = [
+                    row for row in active if json.loads(row["claim"]).get("scope") == self.scope
+                ]
+                impossible = self._capacity_shortages(claim, scope_capacity)
+                if impossible:
+                    db.commit()
+                    return PersistentLeaseDecision(
+                        AllocationStatus.UNSATISFIABLE, shortages=impossible
+                    )
+                temporary += self._temporary_shortages(claim, scoped_active, scope_capacity)
+            if not temporary and self.observe is not None and claim.allocator != "external":
+                snapshot = self.observe()
+                temporary = self._observed_shortages(claim, snapshot)
             if temporary:
                 db.commit()
                 return PersistentLeaseDecision(AllocationStatus.WAITING, shortages=temporary)
@@ -204,7 +253,11 @@ class PersistentLeaseStore:
     def list(self) -> tuple[PersistentResourceLease, ...]:
         with closing(self._connect()) as db:
             rows = db.execute("SELECT * FROM leases ORDER BY created_at, lease_id").fetchall()
-        return tuple(self._lease(row) for row in rows)
+        return tuple(
+            self._lease(row)
+            for row in rows
+            if not self.scope or json.loads(row["claim"]).get("scope") == self.scope
+        )
 
     def bind_native(
         self, lease_id: str, owner_epoch: int, *, backend: str, native_id: str
@@ -306,6 +359,25 @@ class PersistentLeaseStore:
             )
         shortages = []
         claims = [ResourceClaim(**json.loads(row["claim"])) for row in active]
+        if claim.gpu_count:
+            requested_ids = set(claim.gpu_device_ids)
+            if any(
+                item.gpu_count
+                and (
+                    not requested_ids
+                    or not item.gpu_device_ids
+                    or requested_ids.intersection(item.gpu_device_ids)
+                )
+                for item in claims
+            ):
+                shortages.append(
+                    ResourceShortage(
+                        "gpu_devices",
+                        len(requested_ids),
+                        0,
+                        "GPU devices are held by durable leases",
+                    )
+                )
         for name, requested, available in (
             ("cpu_cores", claim.cpu_cores, capacity.cpu_cores),
             ("memory_bytes", claim.memory_bytes, capacity.memory_bytes),
@@ -322,6 +394,53 @@ class PersistentLeaseStore:
                         requested,
                         max(0, available - used),
                         "authorized capacity is held by durable leases",
+                    )
+                )
+        return tuple(shortages)
+
+    @staticmethod
+    def _observed_shortages(
+        claim: ResourceClaim, snapshot: HostResourceSnapshot
+    ) -> tuple[ResourceShortage, ...]:
+        age = (datetime.now(UTC) - snapshot.captured_at).total_seconds()
+        if not 0 <= age <= 15:
+            return (ResourceShortage("telemetry", "fresh", "stale", "host telemetry is stale"),)
+        shortages = []
+        if claim.memory_bytes and claim.memory_bytes > snapshot.memory_available_bytes:
+            shortages.append(
+                ResourceShortage(
+                    "memory_bytes",
+                    claim.memory_bytes,
+                    snapshot.memory_available_bytes,
+                    "host memory is busy",
+                )
+            )
+        observed = {gpu.device_id: gpu for gpu in snapshot.gpus}
+        if (
+            claim.gpu_count
+            and not claim.gpu_device_ids
+            and (
+                len(observed) < claim.gpu_count
+                or any(gpu.compute_process_count != 0 for gpu in observed.values())
+            )
+        ):
+            shortages.append(
+                ResourceShortage(
+                    "gpu_devices",
+                    claim.gpu_count,
+                    "unknown assignment",
+                    "unbound GPU claims require an idle inventory",
+                )
+            )
+        for device in claim.gpu_device_ids:
+            gpu = observed.get(device)
+            if gpu is None or gpu.compute_process_count != 0:
+                shortages.append(
+                    ResourceShortage(
+                        "gpu_devices",
+                        device,
+                        "unavailable",
+                        "requested GPU is missing or externally occupied",
                     )
                 )
         return tuple(shortages)

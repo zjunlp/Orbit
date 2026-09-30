@@ -15,16 +15,18 @@ from agent_infra.bootstrap.research import project_runs
 from agent_infra.gateways.cli.runs import ControllerClient
 from agent_infra.gateways.http.server import create_server
 from agent_infra.gateways.http.workflow import WorkflowGateway
+from agent_infra.projects.catalog import ProjectCatalogBridge
 from agent_infra.projects.console import ProjectConsole
 from agent_infra.projects.local import LocalProjectStore
-from agent_infra.records.catalog import LocalProjectCatalog
 from agent_infra.records.local import LocalRecordsStore
+from agent_infra.records.metrics import MetricIndex
 from agent_infra.resources.monitor import LinuxHostResourceMonitor
 from agent_infra.resources.sampling import ResourceSampler
 from agent_infra.runs.console import ConsoleService
 from agent_infra.runs.control_store import RunControlStore
 from agent_infra.runs.query import RunQueries
 from agent_infra.runs.research_store import ResearchStore
+from agent_infra.runs.review import ExperimentReviews
 
 
 class AgentDiagnostics:
@@ -82,7 +84,8 @@ def serve_console(
         raise ValueError("Web 构建不存在，请先执行 pnpm build 并设置 --web-root")
     state = state_root(state_dir)
     control_root = prepare_controller_root(state)
-    catalog = LocalProjectCatalog(console_dir / "projects.sqlite3")
+    projects = LocalProjectStore(state / "projects")
+    catalog = ProjectCatalogBridge(projects, console_dir / "projects.sqlite3")
     controller_records = LocalRecordsStore(control_root / "records")
     sampler = ResourceSampler(LinuxHostResourceMonitor().sample)
     service = ConsoleService(
@@ -96,18 +99,20 @@ def serve_console(
         controller_records, catalog, sampler.read, service.agents, task_paths
     )
     catalog.remember_tasks(service.tasks())
+    queries = RunQueries(RunControlStore(control_root), controller_records)
     workflow = WorkflowGateway(
         ProjectConsole(
-            LocalProjectStore(state / "projects"),
+            projects,
             catalog,
             run_references=lambda p: project_runs(state, p),
         ),
         workflow_console,
-        RunQueries(RunControlStore(control_root), controller_records),
+        queries,
         ResearchStore(control_root),
         lambda path, body: ControllerClient(state).request(
             path, body, timeout=3 if path == "health" else 120
         ),
+        reviews=ExperimentReviews(queries, MetricIndex(controller_records).read),
     )
     token = secrets.token_urlsafe(32)
     server = create_server(

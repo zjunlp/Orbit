@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { useData } from "../api/console";
-import { Badge, Empty, Notice, Panel } from "../components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "../components/common";
 
 import { BenchmarkTrajectoryPanel } from "./benchmark-trajectory";
 
@@ -138,7 +144,9 @@ export function BenchmarkDiagnostics({ token }: { token: string }) {
                           {run.protocol ?? "—"}
                         </td>
                         <td>
-                          <Badge>{run.state}</Badge>
+                          <Badge variant={statusVariant(run.state)}>
+                            {run.state}
+                          </Badge>
                           <small>
                             清理：
                             {run.cleanup_complete === true ? "确认" : "待确认"}
@@ -170,7 +178,9 @@ export function BenchmarkDiagnostics({ token }: { token: string }) {
                 <div className="event" key={campaign.campaign_id}>
                   <div className="section-line">
                     <strong>{campaign.campaign_id}</strong>
-                    <Badge>{campaign.state}</Badge>
+                    <Badge variant={statusVariant(campaign.state)}>
+                      {campaign.state}
+                    </Badge>
                   </div>
                   <p className="muted">
                     当前选择：{campaign.selected_candidate_id ?? "未选出"} ·

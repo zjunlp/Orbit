@@ -18,12 +18,37 @@ from agent_infra.benchmarks.registry import LoadedAdapter
 from agent_infra.benchmarks.submission_api import NativeSubmissionPlan, NativeSubmissionReceipt
 from agent_infra.bootstrap.benchmark_console import BenchmarkConsole
 from agent_infra.bootstrap.benchmark_execution import execution_action
+from agent_infra.bootstrap.node_resources import list_node_leases, node_leases
 from agent_infra.gateways.http.server import create_server
 from agent_infra.records.api import ArtifactRef, BlobRef, DataClass, Visibility
+from agent_infra.resources.api import LeaseCapacity, ResourceClaim
 from agent_infra.runs.benchmark_submission import BenchmarkSubmissionService
 from agent_infra.runs.control_store import RunControlStore
 
 EXAMPLE = Path(__file__).resolve().parents[3] / "examples/benchmark-execution"
+
+
+def test_console_counts_only_its_shared_leases_without_writing(tmp_path):
+    state = tmp_path / "state"
+    root = state / "benchmarks"
+    RunControlStore(root)
+    before = set(tmp_path.rglob("*"))
+    console = BenchmarkConsole(state)
+    assert console.snapshot()["active_leases"] == 0
+    assert list_node_leases(root) == ()
+    assert set(tmp_path.rglob("*")) == before
+    capacity = LeaseCapacity(2, 1, 1024**3, 0)
+    own = node_leases(root, capacity)
+    other = node_leases(tmp_path / "other/benchmarks", capacity)
+    own.observe = other.observe = None  # Deterministic admission; no jobs are launched.
+    first = own.acquire(ResourceClaim("one", "one", "fixture", 0.1, 1024, 0)).lease
+    second = other.acquire(ResourceClaim("two", "two", "fixture", 0.1, 1024, 0)).lease
+    assert first is not None and second is not None
+    database_before = own.path.read_bytes()
+    assert console.snapshot()["active_leases"] == 1
+    assert own.path.read_bytes() == database_before
+    own.release(first.lease_id, first.owner_epoch, cleanup_confirmed=True)
+    assert console.snapshot()["active_leases"] == 0
 
 
 @pytest.fixture

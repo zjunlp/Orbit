@@ -116,3 +116,15 @@ def add_codex_session_arguments(parser: argparse.ArgumentParser) -> None:
             entry.add_argument("--max-lines", type=int, default=2000)
         if action == "notify":
             entry.add_argument("notification", help="JSON argument supplied by Codex notify")
+
+
+def add_session_arguments(parser: argparse.ArgumentParser) -> None:
+    actions = parser.add_subparsers(dest="session_command", required=True)
+    for action in ("discover", "list", "bind", "sync"):
+        entry = actions.add_parser(action)
+        entry.add_argument("identifier", help="Project ID or workspace path")
+        entry.add_argument("--provider", choices=("codex", "claude-code"), default="codex")
+        entry.add_argument("--state-dir")
+        if action in {"bind", "sync"}:
+            entry.add_argument("session_id", help="Native session identity from discover")
+            entry.add_argument("--max-lines", type=int, default=2000)

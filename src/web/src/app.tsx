@@ -8,7 +8,23 @@ import {
   type Task,
   useData,
 } from "./api/console";
-import { Badge, Empty, Notice, Panel } from "./components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "./components/common";
+import {
+  IconAlert,
+  IconCheck,
+  IconCircleX,
+  IconCpu,
+  IconFlask,
+  IconFolder,
+  IconGauge,
+  IconGear,
+} from "./components/icons";
 import { BenchmarksPage } from "./features/benchmarks";
 import { ExecutionDetail } from "./features/execution";
 import { ProjectDetailPage } from "./features/project-detail";
@@ -17,18 +33,21 @@ import { ResourcesPage } from "./features/resources";
 import { RunsPage } from "./features/runs";
 
 const navigation = [
-  ["benchmarks", "实验", "▤"],
-  ["projects", "科研项目", "◇"],
-  ["resources", "资源", "▥"],
-  ["settings", "设置", "⚙"],
-];
-const secondaryPages: Record<string, string> = {
-  overview: "总览",
-  tasks: "注册任务",
-  runs: "科研运行",
-  execution: "科研运行",
-  agents: "Agent 配置",
-  records: "运行记录",
+  ["benchmarks", "实验", IconFlask],
+  ["projects", "科研项目", IconFolder],
+  ["resources", "资源", IconCpu],
+  ["settings", "设置", IconGear],
+] as const;
+const secondaryPages: Record<
+  string,
+  { title: string; section: "projects" | "settings" }
+> = {
+  overview: { title: "总览", section: "settings" },
+  tasks: { title: "注册任务", section: "settings" },
+  runs: { title: "科研运行", section: "projects" },
+  execution: { title: "科研运行", section: "projects" },
+  agents: { title: "Agent 配置", section: "settings" },
+  records: { title: "运行记录", section: "settings" },
 };
 function readToken() {
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
@@ -46,16 +65,20 @@ function Overview({ token }: { token: string }) {
   const projects = useData<{ items: Project[] }>(token, "projects", 10000);
   const runs = useData<{ items: Run[] }>(token, "runs", 5000);
   const tasks = useData<{ items: Task[] }>(token, "tasks");
+  const runItems = runs.data?.items ?? [];
+  const taskItems = tasks.data?.items ?? [];
+  const runningCount = runItems.filter(
+    (run) => statusVariant(run.status) === "info",
+  ).length;
+  const failedRuns = runItems.filter(
+    (run) => statusVariant(run.status) === "danger",
+  );
+  const brokenTasks = taskItems.filter((task) => task.error);
+  const attentionCount = failedRuns.length + brokenTasks.length;
   return (
     <>
-      <div className="hero">
-        <span className="eyebrow">YOUR RESEARCH WORKSPACE</span>
-        <h2>让每一次探索，都有迹可循。</h2>
-        <p>连接任务、Agent 与执行环境，集中查看研究进展和运行证据。</p>
-        <a href="#projects">管理科研项目 →</a>
-      </div>
       <Notice error={projects.error || runs.error || tasks.error} />
-      <div className="stats">
+      <div className="stats stats-4">
         <Panel title="科研项目">
           <strong className="metric">
             {projects.data?.items.length ?? "—"}
@@ -66,31 +89,93 @@ function Overview({ token }: { token: string }) {
           <strong className="metric">{tasks.data?.items.length ?? "—"}</strong>
           <p>启动时明确注册的任务包</p>
         </Panel>
-        <Panel title="最近运行">
-          <strong className="metric">{runs.data?.items.length ?? "—"}</strong>
-          <p>最近 100 条记录的窗口</p>
+        <Panel title="运行中">
+          <strong className="metric">{runs.data ? runningCount : "—"}</strong>
+          <p>排队或执行中的研究运行</p>
+        </Panel>
+        <Panel title="需要关注">
+          <strong className="metric">
+            {runs.data && tasks.data ? attentionCount : "—"}
+          </strong>
+          <p>失败运行与解析异常任务</p>
         </Panel>
       </div>
-      <Panel title="最近执行">
-        {runs.data?.items.slice(0, 5).map((run) => (
-          <div className="section-line" key={run.id}>
-            <a href={`#runs/${encodeURIComponent(run.id)}`}>{run.id}</a>
-            <Badge>{run.status}</Badge>
-          </div>
-        ))}
-        {runs.data?.items.length === 0 && (
-          <Empty>
-            暂无执行记录。先创建研究项目，或连接已有的 Records 目录。
-          </Empty>
-        )}
-      </Panel>
-      <Panel title="本机资源">
-        <p className="muted">
-          资源页持续显示 CPU、内存与 GPU
-          实测数据，并保留本次服务会话的短期趋势。
-        </p>
-        <a href="#resources">查看实时资源 →</a>
-      </Panel>
+      <div className="overview-grid">
+        <Panel title="最近执行">
+          {runItems.slice(0, 8).map((run) => (
+            <div className="run-row" key={run.id}>
+              <a href={`#runs/${encodeURIComponent(run.id)}`}>{run.id}</a>
+              <span className="run-row-meta">
+                <small className="muted">
+                  {new Date(run.created_at).toLocaleString()}
+                </small>
+                <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
+              </span>
+            </div>
+          ))}
+          {runs.data?.items.length === 0 && (
+            <Empty>
+              暂无执行记录。先创建研究项目，或连接已有的 Records 目录。
+            </Empty>
+          )}
+        </Panel>
+        <div className="overview-side">
+          <Panel title="需要关注">
+            {attentionCount === 0 && (runs.data || tasks.data) && (
+              <p className="attention-ok">
+                <IconCheck /> 暂无失败运行或异常任务。
+              </p>
+            )}
+            {attentionCount === 0 && !runs.data && !tasks.data && (
+              <p className="muted">正在读取运行与任务状态…</p>
+            )}
+            <div className="attention-list">
+              {failedRuns.slice(0, 5).map((run) => (
+                <div className="attention-row" key={run.id}>
+                  <span className="attention-danger">
+                    <IconCircleX />
+                  </span>
+                  <div>
+                    <a href={`#runs/${encodeURIComponent(run.id)}`}>{run.id}</a>
+                    <br />
+                    <small className="muted">
+                      运行失败 · {new Date(run.created_at).toLocaleString()}
+                    </small>
+                  </div>
+                </div>
+              ))}
+              {brokenTasks.slice(0, 5).map((task) => (
+                <div className="attention-row" key={task.key}>
+                  <span className="attention-warning">
+                    <IconAlert />
+                  </span>
+                  <div>
+                    <a href="#tasks">{task.task_id}</a>
+                    <br />
+                    <small className="muted">任务解析失败：{task.error}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="快捷入口">
+            <div className="quick-links">
+              <a href="#projects">
+                <IconFolder /> 管理科研项目
+              </a>
+              <a href="#benchmarks">
+                <IconFlask /> 浏览实验看板
+              </a>
+              <a href="#resources">
+                <IconGauge /> 查看实时资源
+              </a>
+              <a href="#agents">
+                <IconGear /> 检查 Agent 配置
+              </a>
+            </div>
+          </Panel>
+        </div>
+      </div>
     </>
   );
 }
@@ -110,7 +195,9 @@ function TasksPage({ token }: { token: string }) {
       {data?.items.map((task) => (
         <Panel key={task.key} title={task.task_id}>
           <Notice error={task.error} />
-          <Badge>{task.mode ?? "无法解析"}</Badge>
+          <Badge variant={task.error ? "danger" : "default"}>
+            {task.mode ?? "无法解析"}
+          </Badge>
           <p>评测配置：{task.evaluation ?? "未知"}</p>
           <details>
             <summary>Agent 可见描述、输入和工具声明</summary>
@@ -173,7 +260,6 @@ function Settings({ token }: { token: string }) {
       <div className="settings-links">
         {[
           ["agents", "Agent 配置", "查看安装版本与认证状态"],
-          ["runs", "科研运行", "查看执行、日志与结果"],
           ["records", "运行记录", "查询历史轨迹和产物"],
           ["tasks", "注册任务", "查看科研任务输入与资源要求"],
           ["overview", "项目总览", "查看项目、任务与近期执行"],
@@ -255,7 +341,7 @@ export function App() {
     );
   const [page, id] = route.split("?")[0].split("/");
   const active = navigation.find(
-    ([key]) => key === (page === "execution" ? "runs" : page),
+    ([key]) => key === (secondaryPages[page]?.section ?? page),
   );
   return (
     <div className="shell">
@@ -271,25 +357,25 @@ export function App() {
       </button>
       <aside className="sidebar">
         <a className="brand" href="#benchmarks">
-          <span className="brand-mark">ai</span>
+          <span className="brand-mark">
+            <IconFlask />
+          </span>
           <span>
             Agent Infra<small>RESEARCH CONSOLE</small>
           </span>
         </a>
         <p className="nav-label">工作空间</p>
         <nav aria-label="主导航">
-          {navigation.map(([key, label, icon]) => (
+          {navigation.map(([key, label, Icon]) => (
             <a
               key={key}
-              className={
-                key === page || (key === "settings" && secondaryPages[page])
-                  ? "active"
-                  : ""
-              }
-              aria-current={key === page ? "page" : undefined}
+              className={key === active?.[0] ? "active" : ""}
+              aria-current={key === active?.[0] ? "page" : undefined}
               href={`#${key}`}
             >
-              <span aria-hidden="true">{icon}</span>
+              <span aria-hidden="true">
+                <Icon />
+              </span>
               {label}
             </a>
           ))}
@@ -311,7 +397,9 @@ export function App() {
       <div className="workspace">
         <header>
           <div>
-            <h1>{active?.[1] ?? secondaryPages[page] ?? "页面不存在"}</h1>
+            <h1>
+              {secondaryPages[page]?.title ?? active?.[1] ?? "页面不存在"}
+            </h1>
           </div>
           <span className="muted">本机研究工作台</span>
         </header>

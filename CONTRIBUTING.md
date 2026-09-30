@@ -35,8 +35,10 @@ make dev-web
 
 The Web development server binds to 127.0.0.1:5173 and fails if the port is occupied.
 Use `make dev-web WEB_PORT=5174` for another worktree; use SSH forwarding when browsing
-from a remote workstation. Stop it with Ctrl-C. S0 has no HTTP, MCP, Worker, Docker,
-Ray or database service to launch.
+from a remote workstation. Stop it with Ctrl-C. This starts the frontend development server only.
+For the local Controller, built Web console and Docker experiments, follow
+[direct experiments](docs/operations/direct-experiments.md); use
+[the upgrade runbook](docs/operations/python-upgrade.md) before changing an existing deployment.
 
 ## Work isolation and review
 
@@ -54,9 +56,9 @@ Use a unique `AGENT_INFRA_STATE_DIR`, Web port and (when implemented) service na
 Worktrees do not reserve CPU/GPU resources. Check actual available resources before runtime tests.
 
 Create a significant-task record before implementing. Keep changes within the assigned module,
-its tests and docs. Public contracts belong in the provider module's future `api.py` or `api/`;
+its tests and docs. Public contracts belong in the provider module's `api.py` or `api/`;
 small shared references belong in `contracts/`. Agree changes with consumers before implementation.
-No business interfaces are defined in S0.
+Read the existing producer and consumer contracts before adding a new interface.
 
 The import-linter contract in pyproject.toml enforces dependency direction and independent peers:
 bootstrap → gateways → projects → runs → benchmarks → agents/tasks → environments/resources → records → contracts.
@@ -75,9 +77,11 @@ also builds and installs the independent example adapter in a disposable environ
 
 Tests follow `tests/unit/<module>/`, `tests/contracts/`, `tests/integration/` and `tests/e2e/`;
 the foundation tests currently sit directly in unit/contracts. Test doubles belong in
-`tests/fakes/`, small fixed inputs in `tests/fixtures/`. Future frontend behavior tests belong
-in `tests/web/` and require a test runner when that behavior is introduced. S0 Web checks cover
-formatting, lint, types and the production build, not browser interaction.
+`tests/fakes/`, small fixed inputs in `tests/fixtures/`. Frontend behavior tests live in
+`tests/web/`; the smoke scripts use Playwright and an available Chromium installation.
+They exercise real HTTP/browser code with explicitly fake execution, without model calls.
+`make verify` covers frontend lint, generated-contract drift, types and the production build;
+browser smoke and Docker E2E are separate checks.
 
 `make check` is read-only formatting/lint/types/import/docs verification.
 `make test` runs deterministic checks without external services.

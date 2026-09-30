@@ -29,6 +29,11 @@
 
 ## 当前阅读入口
 
+Python 渐进重构后的当前入口：[直接运行与比较实验](operations/direct-experiments.md)、
+[本机升级与回退](operations/python-upgrade.md)、
+[执行内核实现导读](implementation/python-research-core.md)、[重构执行方案](development/python-incremental-refactor.md)。
+它们描述新增直接命令路径和公共内核；较早的冻结 Task、长期 Job 与 benchmark 文档保留各自适用范围。
+
 1. [项目进度](project-status.md)：确认实际状态。
 2. [初始目标与需求](architecture/Agent_Infra_目标与架构设计_v0.1.md)、[仓库工程设计](architecture/repository-architecture.md)：理解项目背景与初始骨架。
 3. [Agent / Environment 模块设计](architecture/agent-environment-modules.md)：了解功能模块边界；一级目录已在 S0 落地，业务接口仍为草案。
@@ -56,14 +61,18 @@
 
 ## 当前代码检查
 
+- [Python 科研执行内核](implementation/python-research-core.md)：直接命令、共同生命周期、节点租约、源码快照、指标、原生会话、类型生成与历史兼容；本轮实现的首选导读。
+
 - [0926-1717 Benchmark 抽象与框架精简建议](architecture/0926-1717-benchmark-abstraction-and-framework-review.md)：对照现有 SDK、backend、监测和结果路径，说明新 bench 的独立接入、Codex 适配流程、模块边界、具体缺口和渐进方案；属于架构建议，未改变现有接口。
-- [0926 框架详解与 Benchmark 调度](implementation/0926-framework-and-benchmark-scheduling.md)：以 ASI 为例说明模块职责、计划冻结、FIFO/租约、原生执行、证据、恢复及当前边界。
+- [0926 框架详解与 Benchmark 调度](implementation/0926-framework-and-benchmark-scheduling.md)：0926 版本的 ASI 原生调度说明；公共执行与资源组装后续变化见上面的科研执行内核导读。
 
 - [当前代码结构、可用能力与目标差距](implementation/current-code-and-capability-review.md)：以 `main` 源码和分项验收为依据，梳理两条科研执行路径、benchmark 接入、Records/Web、验证边界与后续差距。
 - [模块衔接检查与下一步计划](development/20260920-integration-review.md)：实际调用链、已修复问题、维护入口、功能缺口与分步验收。
 - [科研与榜单基础设施六项优化计划](development/infra-six-optimizations-plan.md)：当前不足与三项故障复现，执行内核、持久调度、原生协议、大产物、雇主 Agent 和实验比较的实施步骤、迁移及验收；属于待实施计划。
 
 ## 单节点执行
+
+- [直接运行科研代码与比较实验](operations/direct-experiments.md)：已有目录、不创建规划 Agent 的短路径，含运行命令、指标格式、显式重跑、Codex/Claude 会话和升级边界。
 
 - [当前功能与首次科研任务试用](operations/first-research-trial.md)：从初始化、Codex MCP、Docker 实验到 Web 查看结果，并说明 GPU 已有基础与待接通边界。
 - [单机 GPU 诊断与准入](operations/gpu-local.md)：G1/G2 的诊断、自检、Controller UUID 授权、冻结 Task 请求及真实环境限制。

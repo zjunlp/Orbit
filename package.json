@@ -6,9 +6,10 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
-    "check": "biome check . && pnpm --filter @agent-infra/web typecheck",
+    "check": "node src/web/scripts/generate-review.mjs --check && biome check . && pnpm --filter @agent-infra/web typecheck",
     "format": "biome check --write .",
-    "build": "pnpm --filter @agent-infra/web build"
+    "build": "pnpm --filter @agent-infra/web build",
+    "contracts": "node src/web/scripts/generate-review.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13"

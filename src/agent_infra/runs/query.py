@@ -16,6 +16,29 @@ class RunQueries:
     def __init__(self, commands: RunControlStore, records: RecordsReader) -> None:
         self.commands, self.records = commands, records
 
+    def read(self, action: str, run_id: str, options: dict[str, Any]) -> dict[str, Any]:
+        """One read dispatch shared by project-bound tools and execution transports."""
+        if action == "status":
+            return self.status(run_id)
+        if action == "artifacts":
+            return {"items": self.artifacts(run_id)}
+        if action == "events":
+            return self.events(run_id, options.get("cursor"))
+        if action == "trajectory":
+            return self.trajectory(run_id)
+        if action == "artifact":
+            if "format" in options:
+                return self.artifact_view(
+                    run_id,
+                    options["artifact_id"],
+                    options.get("member"),
+                    format=options["format"],
+                    offset=options.get("offset", 0),
+                    limit=options.get("limit", DEFAULT_PAGE_BYTES),
+                )
+            return self.artifact(run_id, options["artifact_id"], options.get("member"))
+        raise ValueError("unsupported Run read action")
+
     def status(self, run_id: str) -> dict[str, Any]:
         entry = self.commands.get(run_id)
         entry["attempts"] = [asdict(item) for item in self.records.list_attempts(run_id)]

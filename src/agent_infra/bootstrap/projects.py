@@ -9,6 +9,7 @@ from agent_infra.bootstrap.codex_capture import codex_session_action
 from agent_infra.bootstrap.compilation import compilation_action
 from agent_infra.bootstrap.paths import state_root
 from agent_infra.bootstrap.research import research_action
+from agent_infra.bootstrap.session_capture import session_action
 from agent_infra.projects import InitRequest, ProjectError
 from agent_infra.projects.local import LocalProjectStore
 from agent_infra.projects.service import ProjectService
@@ -26,6 +27,10 @@ def project_action(action: str, options: dict[str, str]) -> dict[str, object]:
             result = compilation_action(store, action, options)
         elif action.startswith("codex-"):
             result = codex_session_action(action.removeprefix("codex-"), options)
+        elif action.startswith("session-"):
+            result = session_action(action.removeprefix("session-"), options)
+        elif action == "attach":
+            result = {"project": service.attach(Path(options["identifier"])).to_dict()}
         elif action.startswith("research-"):
             result = research_action(store, action.removeprefix("research-"), options)
         elif action in {"init", "preview"}:

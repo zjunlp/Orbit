@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import math
 import shutil
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +28,6 @@ from agent_infra.tasks.manifest import (
     canonical,
     content_digest,
     freeze_task,
-    load_task,
     mapping,
     only_keys,
     parse_task,
@@ -284,10 +282,3 @@ def verify_evaluation_inputs(task: TaskDefinition, plan: EvaluationPlan) -> None
         or content_digest(plan.submission_root) != plan.submission_digest
     ):
         raise ValueError("evaluation inputs changed; collect a new immutable submission")
-
-
-def inspect_task(path: Path, *, view: bool = False) -> dict[str, Any]:
-    task = load_task(path)
-    if view:
-        return asdict(build_agent_view(task))
-    return asdict(review_draft(task))

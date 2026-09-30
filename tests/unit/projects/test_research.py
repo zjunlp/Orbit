@@ -148,7 +148,7 @@ def test_old_database_migration_and_failed_transaction_rollback(tmp_path: Path) 
         assert db.execute("PRAGMA user_version").fetchone()[0] == 1
     service.save(identifier, draft(), expected_revision=0, reason="迁移")
     with sqlite3.connect(service.store.path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
         db.execute(
             "CREATE TRIGGER reject_head BEFORE UPDATE ON research_heads "
             "BEGIN SELECT RAISE(ABORT, 'injected'); END"

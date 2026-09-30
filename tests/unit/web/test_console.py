@@ -10,6 +10,8 @@ import pytest
 
 from agent_infra.agents.presentation import event_text
 from agent_infra.gateways.http.server import create_server
+from agent_infra.projects.catalog import ProjectCatalogBridge
+from agent_infra.projects.local import LocalProjectStore
 from agent_infra.records import (
     AttemptManifest,
     EventDraft,
@@ -18,7 +20,7 @@ from agent_infra.records import (
     RunManifest,
 )
 from agent_infra.records.api import DataClass, Visibility
-from agent_infra.records.catalog import CatalogConflict, LocalProjectCatalog
+from agent_infra.records.catalog import CatalogConflict
 from agent_infra.records.local import LocalRecordsStore
 from agent_infra.resources.api import HostResourceSnapshot
 from agent_infra.resources.sampling import ResourceSampler
@@ -34,7 +36,13 @@ def service(tmp_path):
     store.begin_run(RunManifest("run-fixture", now, {"credential_path": "HIDDEN"}))
     store.begin_attempt(AttemptManifest("attempt-fixture", "run-fixture", now, "task", "digest"))
     return ConsoleService(
-        store, LocalProjectCatalog(tmp_path / "projects.sqlite3"), lambda: {}, lambda: [], (TASK,)
+        store,
+        ProjectCatalogBridge(
+            LocalProjectStore(tmp_path / "projects"), tmp_path / "projects.sqlite3"
+        ),
+        lambda: {},
+        lambda: [],
+        (TASK,),
     )
 
 
@@ -56,7 +64,9 @@ def test_project_persistence_revision_conflict_and_links(service, tmp_path):
     assert service.save_project(draft | {"status": "active"})["revision"] == 2
     with pytest.raises(CatalogConflict):
         service.save_project(draft)
-    reopened = LocalProjectCatalog(tmp_path / "projects.sqlite3")
+    reopened = ProjectCatalogBridge(
+        LocalProjectStore(tmp_path / "projects"), tmp_path / "projects.sqlite3"
+    )
     assert reopened.list_projects()[0]["status"] == "active"
     with pytest.raises(KeyError):
         service.save_project({"name": "bad", "run_ids": ["missing"]})

@@ -7,7 +7,13 @@ import {
   useData,
 } from "../api/console";
 import type { Capabilities } from "../api/workflow";
-import { Badge, Empty, Notice, Panel } from "../components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "../components/common";
 import { ProjectCreate } from "./project-create";
 
 const blank = (): Project => ({
@@ -78,18 +84,21 @@ export function ProjectsPage({ token }: { token: string }) {
     <>
       <div className="section-line">
         <p className="muted">研究目标、里程碑与执行证据归档。进度由你确认。</p>
-        <button
-          type="button"
-          className="primary"
-          disabled={!capabilities.data}
-          onClick={() =>
-            capabilities.data?.project_workspaces
-              ? setCreating(true)
-              : edit(blank())
-          }
-        >
-          ＋ 新建项目
-        </button>
+        <div className="actions">
+          <a href="#runs">查看科研运行 →</a>
+          <button
+            type="button"
+            className="primary"
+            disabled={!capabilities.data}
+            onClick={() =>
+              capabilities.data?.project_workspaces
+                ? setCreating(true)
+                : edit(blank())
+            }
+          >
+            ＋ 新建项目
+          </button>
+        </div>
       </div>
       <Notice error={projects.error} loading={!projects.data} />
       {creating && (
@@ -315,7 +324,7 @@ export function ProjectsPage({ token }: { token: string }) {
           const done = project.milestones.filter((m) => m.done).length;
           return (
             <Panel key={project.id} title={project.name}>
-              <Badge>
+              <Badge variant={statusVariant(project.status)}>
                 {statuses[project.status as keyof typeof statuses] ??
                   project.status}
               </Badge>

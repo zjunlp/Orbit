@@ -4,6 +4,7 @@ import argparse
 import hashlib
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from agent_infra.gateways.cli.runs import ControllerClient
 
@@ -11,9 +12,36 @@ from agent_infra.gateways.cli.runs import ControllerClient
 class ResearchClient:
     def __init__(self, state: Path, project_id: str, session_id: str) -> None:
         self.client = ControllerClient(state)
-        self.binding = self.client.request(
+        binding = self.client.request(
             "research/bind", {"project_id": project_id, "session_id": session_id}
-        )["binding"]
+        )
+        self.binding = binding["binding"]
+        self.project_id = binding["project_id"]
+        self.session_id = session_id
+
+    def experiment(self, action: str, **options: Any) -> dict[str, Any]:
+        """Keep MCP actions within its bound project while using the common Run API."""
+        if action == "run":
+            context = self.call("context")
+            return self.client.request(
+                "runs/command",
+                options
+                | {
+                    "project": context["project"]["workspace"],
+                    "project_id": self.project_id,
+                    "session_id": self.session_id,
+                },
+            )
+        run_id = options.pop("run_id")
+        path = "runs/" + quote(run_id, safe="")
+        run = self.client.request(path)
+        if run["lineage"].get("project_id") != self.project_id:
+            raise ValueError("Run is outside this MCP project's binding")
+        if action == "status":
+            return run
+        if action in {"cancel", "rerun"}:
+            return self.client.request(path + "/" + action, options)
+        raise ValueError("unknown experiment action")
 
     def call(
         self, action: str, *, operation_id: str | None = None, **options: Any

@@ -6,6 +6,7 @@ from typing import Any
 
 from agent_infra.benchmarks.compatibility import read_matrix
 from agent_infra.bootstrap.benchmark_workspace import BenchmarkWorkspace
+from agent_infra.bootstrap.node_resources import list_node_leases
 from agent_infra.projects.benchmark_campaign import BenchmarkCampaignService, BenchmarkCampaignStore
 from agent_infra.records.local import LocalRecordsStore
 from agent_infra.resources.persistent import PersistentLeaseStore
@@ -79,12 +80,13 @@ class BenchmarkConsole:
             if matrix_path.is_file()
             else []
         )
+        observed_leases = (leases.list() if leases else ()) + list_node_leases(self.root)
         return {
             "available": True,
             "capacity": asdict(leases.capacity) if leases else None,
-            "active_leases": sum(item.state.value != "released" for item in leases.list())
-            if leases
-            else 0,
+            "active_leases": len(
+                {item.lease_id for item in observed_leases if item.state.value != "released"}
+            ),
             "queued": len(store.queued()),
             "runs": [self._run(item) for item in runs],
             "campaigns": campaigns,

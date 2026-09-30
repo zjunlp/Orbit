@@ -220,3 +220,41 @@ def test_cli_requires_opt_in_before_import_or_state_creation(tmp_path):
     with pytest.raises(ValueError, match="allow-host-process"):
         execution_action(args, Registry())
     assert not (tmp_path / "state").exists()
+
+
+def test_external_job_does_not_block_shared_local_admission(prepared, tmp_path, monkeypatch):
+    from agent_infra.bootstrap import benchmark_execution
+    from agent_infra.resources.api import LeaseCapacity, ResourceClaim
+    from agent_infra.resources.persistent import PersistentLeaseStore
+
+    execution, _, _ = prepared
+    path = tmp_path / "execution.json"
+    write_execution(execution, path)
+    root = tmp_path / "state/benchmarks"
+    legacy = PersistentLeaseStore(root / "leases", LeaseCapacity(3, 4, 1024**3, 0))
+    legacy.acquire(ResourceClaim("remote", "remote", "external", 1, 128 * 1024**2, 0, "external"))
+    monkeypatch.setattr(benchmark_execution, "_validate_submission", lambda *args: None)
+    domains = []
+
+    class NoLaunchService:
+        def __init__(self, *args, leases):
+            domains.append(leases.path)
+
+        def submit(self, *args, **kwargs):
+            return {"queued": True}
+
+    monkeypatch.setattr(benchmark_execution, "BenchmarkExecutionService", NoLaunchService)
+    args = argparse.Namespace(
+        benchmark_command="run",
+        state_dir=str(root.parent),
+        allow_host_process=True,
+        execution=path,
+        operation_id="new-local",
+        budget_group=None,
+        budget_wall_seconds=None,
+    )
+    assert execution_action(args, None)["queued"]
+    assert domains[0] != legacy.path
+    legacy.acquire(ResourceClaim("old-local", "old-local", "process", 1, 128 * 1024**2, 0, "local"))
+    with pytest.raises(ValueError, match="legacy leases"):
+        execution_action(args, None)

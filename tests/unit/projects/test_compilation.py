@@ -373,7 +373,7 @@ def test_schema_two_read_and_upgrade_and_unchanged_research_digest(tmp_path: Pat
         assert db.execute("PRAGMA user_version").fetchone()[0] == 2
     assert compile(service, identifier)["status"] == "compiled"
     with sqlite3.connect(service.store.path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
     assert research.context(identifier)["digest"] == digest
 
 

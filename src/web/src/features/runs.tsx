@@ -7,7 +7,13 @@ import {
   type Run,
   useData,
 } from "../api/console";
-import { Badge, Empty, Notice, Panel } from "../components/common";
+import {
+  Badge,
+  Empty,
+  Notice,
+  Panel,
+  statusVariant,
+} from "../components/common";
 import { ExecutionRecent } from "./execution";
 import { ExecutionEvents } from "./execution-events";
 
@@ -18,7 +24,9 @@ function AttemptView({ token, attempt }: { token: string; attempt: Attempt }) {
     <>
       <div className="stats">
         <Panel title="执行状态">
-          <Badge>{attempt.status}</Badge>
+          <Badge variant={statusVariant(attempt.status)}>
+            {attempt.status}
+          </Badge>
           <p>评测：{attempt.evaluation_status ?? "未记录"}</p>
         </Panel>
         <Panel title="清理状态">
@@ -150,7 +158,9 @@ export function RunsPage({
                       </a>
                     </td>
                     <td>
-                      <Badge>{run.status}</Badge>
+                      <Badge variant={statusVariant(run.status)}>
+                        {run.status}
+                      </Badge>
                     </td>
                     <td>{new Date(run.created_at).toLocaleString()}</td>
                   </tr>

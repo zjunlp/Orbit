@@ -75,6 +75,14 @@ class RunControlStore:
             )
         return dict(json.loads(row["document"]))
 
+    def find_operation(self, operation_id: str) -> dict[str, Any] | None:
+        """Read admission identity before doing expensive input resolution."""
+        with closing(self._connect()) as db:
+            row = db.execute(
+                "SELECT document FROM commands WHERE operation_id=?", (operation_id,)
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
     def create(
         self,
         operation_id: str,

@@ -312,7 +312,7 @@ def test_v3_read_does_not_migrate_and_first_write_preserves_research(tmp_path):
             assert db.execute("PRAGMA user_version").fetchone()[0] == 3
         analysis.save(project, "migrate", evidence(control, project, tmp_path))
         with sqlite3.connect(research.store.path) as db:
-            assert db.execute("PRAGMA user_version").fetchone()[0] == 5
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 6
         assert research.context(project) == before
     finally:
         control.close()

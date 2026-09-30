@@ -53,7 +53,10 @@ class LocalRunController:
         """Must run under the external host lock before accepting any commands."""
         self.quarantined = True
         recovered_containers = self.recover()
+        self.resources.reconcile_owned()
         for entry in self.store.unfinished():
+            if entry["request"].get("kind") == "command":
+                continue  # Durable command supervisors recover through the shared execution kernel.
             run_id = entry["run_id"]
             self._clean_credentials(run_id)
             attempts = self.records.list_attempts(run_id)
@@ -65,6 +68,8 @@ class LocalRunController:
             }
             if entry.get("lease_id"):
                 lease_ids.add(str(entry["lease_id"]))
+            for lease_id in lease_ids:
+                self.resources.release(lease_id)
             result: dict[str, Any] = {
                 "run_id": run_id,
                 "attempt_id": entry["attempt_id"],

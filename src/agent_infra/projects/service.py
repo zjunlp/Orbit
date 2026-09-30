@@ -36,6 +36,31 @@ class ProjectService:
     def __init__(self, store: LocalProjectStore) -> None:
         self.store = store
 
+    def attach(self, workspace: Path) -> Project:
+        """Register an existing directory without adding files or inventing a research plan."""
+        workspace = fs.absolute(workspace)
+        with fs.directory(workspace):
+            pass
+        if workspace.is_relative_to(self.store.root) or self.store.root.is_relative_to(workspace):
+            raise ProjectError("workspace and control state must not contain one another")
+        with self.store.writer():
+            old = self.store.find(workspace=str(workspace))
+            if old is not None:
+                return old.project
+            now = datetime.now(UTC).isoformat()
+            project = Project(
+                str(uuid4()),
+                "attach:" + str(uuid4()),
+                workspace.name[:200],
+                "Existing workspace; research goal not specified",
+                str(workspace),
+                now,
+                now,
+                initialization=InitializationStatus.READY,
+            )
+            self.store.reserve(StoredProject(project, {}, (), {"mode": "attached"}))
+            return project
+
     def _proposal(self, request: InitRequest) -> StoredProject:
         operation = request.operation_id or str(uuid4())
         project_id = str(uuid5(NAMESPACE_URL, "agent-infra/project/" + operation))
@@ -113,6 +138,11 @@ class ProjectService:
         else:
             return self.store.get(identifier).project
         workspace = fs.absolute(Path(identifier))
+        attached = self.store.find(workspace=str(workspace))
+        if attached is not None and attached.request.get("mode") == "attached":
+            with fs.directory(workspace):
+                pass
+            return attached.project
         with fs.directory(workspace) as parent:
             identity = _read_manifest(parent)
         project = self.store.get(identity.project_id).project
@@ -129,6 +159,8 @@ class ProjectService:
 
     def _recover(self, item: StoredProject) -> Project:
         p = item.project
+        if item.request.get("mode") == "attached":
+            return p
         workspace = Path(p.workspace)
         stage = ".agent-infra-init-" + p.project_id
         with fs.directory(workspace.parent) as parent:
@@ -164,6 +196,8 @@ class ProjectService:
             ):
                 raise ProjectConflict("workspace identity changed; inspect before recovering")
 
-    def projection_matches(self, project: Project) -> bool:
+    def projection_matches(self, project: Project) -> bool | None:
+        if self.store.get(project.project_id).request.get("mode") == "attached":
+            return None  # Existing workspaces deliberately have no managed manifest.
         with fs.directory(Path(project.workspace)) as parent:
             return fs.read_file(parent, "project.yaml") == manifest(project).encode("utf-8")
