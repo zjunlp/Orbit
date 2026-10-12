@@ -22,7 +22,7 @@ and `orbit resources` reports the real GPUs/CPU/memory of this machine.
 | Check | Revision | Result | Evidence |
 | --- | --- | --- | --- |
 | `pnpm verify` | workspace before R0 commit | passed | biome, tsc, boundaries ok; 4 + 7 vitest tests; tsdown build |
-| `orbit resources` / `doctor` (source and dist, temp `ORBIT_HOME`) | same | passed | 4× RTX 3090 with real UUIDs, 80 cores, 251.5 GB; docker 29.8.0, driver 535.309.01; daemon auto-start and stop |
+| `orbit resources` / `doctor` (source and dist, temp `ORBIT_HOME`) | same | passed | GPU/CPU/memory discovery; Docker/driver checks; daemon auto-start and stop |
 | CI on GitHub | — | not_run | branch not pushed |
 
 ## Next / open issues

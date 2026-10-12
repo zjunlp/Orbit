@@ -45,8 +45,7 @@ separate `orbit-bench` skill.
 | Real Docker + GPU | same | passed | 2 GB CUDA tensor + 2 GB RAM: usage RAM 2.242 GB (docker stats 2.24 GiB), GPU 2.289 GB, CPU peak 1.08 of 2 |
 | Process run with child container | same | passed | 300 MB host process + 700 MB child container → peak 0.807 GB |
 | Daemon restart mid-run | same | passed | sampling continued, usage recorded at the end |
-| RCB with the user's resources.json, `empty` | same | passed | Chemistry_000 got 1 GPU / 4 CPU / 32 GB / 300 min, Astronomy_000 default 0 / 4 / 16 / 240; both valid 0; `bench usage` skips empty |
-| Agent-method `bench usage` on real runs | — | not_run | no auth profile on this machine |
+| Agent-method `bench usage` on real runs | — | not_run | Requires configured test credentials |
 
 ## Follow-up: in-run Agent sessions
 

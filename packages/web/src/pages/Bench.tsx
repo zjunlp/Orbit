@@ -326,7 +326,19 @@ export function BenchJobDetail({ id }: { id: string }) {
     if (input === null) return;
     const sources = input.trim().split(/\s+/).filter(Boolean);
     try {
-      const body = { sources, pruneInvalid: false, dryRun: true };
+      const appendTasks = confirm(
+        "Also append new tasks, keeping their invalid results and artifacts?",
+      );
+      const allowTransportDifferences = confirm(
+        "Allow equivalent benchmark/auth profiles that differ only in proxy or host networking?",
+      );
+      const body = {
+        sources,
+        appendTasks,
+        allowTransportDifferences,
+        pruneInvalid: false,
+        dryRun: true,
+      };
       const plan = await api.benchConsolidate(job.id, body);
       if (
         prompt(

@@ -488,9 +488,48 @@ export class BenchService {
     return { jobs: ids, rows };
   }
 
+  private equivalentTransport(a: BenchJob, b: BenchJob): boolean {
+    const left = this.deps.registry.get(a.spec.benchmark);
+    const right = this.deps.registry.get(b.spec.benchmark);
+    if (!left || !right || !isDeepStrictEqual(a.source, b.source)) return false;
+    const env = (v: Record<string, string>) =>
+      Object.fromEntries(Object.entries(v).filter(([k]) => !/^(https?|all|no)_proxy$/i.test(k)));
+    const benchmark = (v: Benchmark) => ({
+      adapter: v.adapter,
+      path: v.path,
+      config: v.config,
+      env: env(v.env),
+      passEnv: v.passEnv,
+      resources: v.resources,
+    });
+    if (!isDeepStrictEqual(benchmark(left), benchmark(right))) return false;
+    if (a.spec.methods.length !== b.spec.methods.length) return false;
+    return a.spec.methods.every((m, i) => {
+      const n = b.spec.methods[i];
+      if (!n || !isDeepStrictEqual({ ...m, auth: undefined }, { ...n, auth: undefined }))
+        return false;
+      if (m.auth === n.auth) return true;
+      const x = m.auth ? this.deps.auth?.get(m.auth) : null;
+      const y = n.auth ? this.deps.auth?.get(n.auth) : null;
+      if (!x || !y || x.secret !== y.secret) return false;
+      const profile = (v: typeof x.profile) => ({
+        harness: v.harness,
+        kind: v.kind,
+        model: v.model,
+        baseUrl: v.baseUrl,
+        env: env(v.env),
+      });
+      return isDeepStrictEqual(profile(x.profile), profile(y.profile));
+    });
+  }
+
   /** Valid retries replace invalid slots; scores of valid trials are never selected or overwritten. */
   async consolidate(id: string, input: BenchConsolidateInput): Promise<BenchConsolidateResult> {
     const f = BenchConsolidate.parse(input);
+    if (f.appendTasks && f.pruneInvalid)
+      throw new UserError(
+        "appendTasks preserves invalid artifacts; do not combine it with pruneInvalid",
+      );
     const target = this.job(id);
     const sources = [...new Set(f.sources)];
     if (sources.includes(id)) throw new UserError("target cannot also be a source");
@@ -514,17 +553,43 @@ export class BenchService {
     const key = (t: Trial) => JSON.stringify([t.task, t.method, t.seed]);
     const trials = new Map(target.trials.map((t) => [key(t), structuredClone(t)]));
     const adopted: BenchConsolidateResult["adopted"] = [];
+    const taskIds = new Set(target.job.spec.tasks);
+    const originalTaskIds = new Set(taskIds);
+    const resources = { ...target.job.resources };
+    let next = target.trials.length;
+    const ids = new Set(target.trials.map((t) => t.id));
     for (const d of donors) {
       if (
-        d.job.spec.benchmark !== target.job.spec.benchmark ||
-        !isDeepStrictEqual(d.job.spec.methods, target.job.spec.methods) ||
+        (!(
+          d.job.spec.benchmark === target.job.spec.benchmark &&
+          isDeepStrictEqual(d.job.spec.methods, target.job.spec.methods)
+        ) &&
+          !(f.allowTransportDifferences && this.equivalentTransport(target.job, d.job))) ||
+        d.job.spec.seeds !== target.job.spec.seeds ||
+        d.job.spec.timeoutMin !== target.job.spec.timeoutMin ||
         !isDeepStrictEqual(d.job.spec.options, target.job.spec.options) ||
         !isDeepStrictEqual(d.job.metrics, target.job.metrics)
       )
         throw new UserError(`incompatible source job ${d.job.id}`);
       for (const t of d.trials) {
         const prev = trials.get(key(t));
-        if (!prev) throw new UserError(`source trial ${t.id} is not in the target matrix`);
+        if (!prev) {
+          if (!f.appendTasks || originalTaskIds.has(t.task))
+            throw new UserError(`source trial ${t.id} is not in the target matrix`);
+          let newId: string;
+          do {
+            newId = `${id}.${String(++next).padStart(5, "0")}`;
+          } while (ids.has(newId));
+          ids.add(newId);
+          taskIds.add(t.task);
+          const override = d.job.resources?.[t.task];
+          if (override) resources[t.task] = override;
+          trials.set(key(t), { ...t, id: newId, jobId: id });
+          adopted.push({ task: t.task, sourceJob: d.job.id, sourceTrial: t.id, trial: newId });
+          continue;
+        }
+        if (!originalTaskIds.has(t.task))
+          throw new UserError(`duplicate appended trial ${t.task} / ${t.method} / ${t.seed}`);
         if (isValid(t)) {
           if (isValid(prev) || prev.history.some((h) => h.outcome.evaluation === "valid"))
             throw new UserError(`refusing to replace valid trial ${prev.id}`);
@@ -571,6 +636,7 @@ export class BenchService {
           trial: t.id,
           source_job: a.sourceJob,
           source_trial: a.sourceTrial,
+          source_benchmark: donors.find((d) => d.job.id === a.sourceJob)?.job.spec.benchmark ?? "",
         };
         r.note = [
           r.note,
@@ -583,6 +649,8 @@ export class BenchService {
     }
     const job = {
       ...target.job,
+      spec: { ...target.job.spec, tasks: [...taskIds] },
+      resources: Object.keys(resources).length ? resources : null,
       state: "done" as const,
       endedAt:
         [...trials.values()]

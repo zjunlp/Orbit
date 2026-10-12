@@ -4,10 +4,8 @@
 
 ## Goal
 
-Carry over the evaluation-health lessons of the old Python `main` (ASI b3 review: 19 tasks with
-nested judge or scorer-dependency failures, 13 false "timeout" labels, one quota exhaustion) without
-changing Orbit's design: such trials must be `invalid`, not zeros in the mean. Applies to every
-adapter where possible, not per adapter.
+Treat Agent credential/quota errors and nested judge or scorer failures as `invalid`, not zeros
+in the mean. Apply shared rules across adapters and distinguish execution timeouts from warnings.
 
 ## Changes
 
@@ -26,7 +24,7 @@ adapter where possible, not per adapter.
 ## Decisions
 
 - Agent errors are read from the Agent's own session, not from logs: the old "timed out" grep
-  mislabelled 13 runs. Orbit already keeps the in-run Agent home, so no adapter work is needed.
+  could mislabel successful runs. Orbit already keeps the in-run Agent home, so no adapter work is needed.
 - A missing file in a scorer stays a note, not invalid: it may be the Agent's missing output.
 - Not carried over: TB resource file (task.toml already declares resources), proxy relay
   (`--host-network` suffices), Codex version pinning (Orbit mounts the host CLI), old docs (kept in
@@ -40,8 +38,7 @@ adapter where possible, not per adapter.
 | Unit tests (bench, sessions) | same | passed | rule set incl. negatives (`No module named`, model metadata warning), quota and retry order in `modelError`, hidden judge / file issues, classify invalid with kept score, Codex and Claude session endings |
 | Real Codex error output (throwaway `CODEX_HOME`, invalid key) | same | passed | without proxy: `Reconnecting...` + connection reset; with proxy: final `turn.failed` 401 `invalid_api_key` and `task_complete.error` in the rollout; both shapes are what the rules read |
 | ASI score report shape (ASI-Bench `38ab4b5`, `local_scoring.py`) | — | passed | items carry `gate_results` / `score_results` with `details.evaluator_unavailable` from `_judge_common.py` |
-| False positives on real runs | same | passed | 10 runs with an in-run Agent on this machine (RCB codex jobs): none flagged |
-| A real bench trial ending in quota / auth failure | — | not_run | no such run available |
+| A real bench trial ending in quota / auth failure | — | not_run | End-to-end failure scenario not exercised |
 | Claude Code API-error transcript | — | not_run | an invalid key still succeeded (host login used); shape taken from the CLI's `isApiErrorMessage` field |
 
 ## Next / open issues

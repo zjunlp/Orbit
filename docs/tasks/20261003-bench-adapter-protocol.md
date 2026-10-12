@@ -39,8 +39,7 @@ adapter. Orbit, not the adapter, turns "run the method's Agent on this instructi
 | RCB `tasks` on the real checkout | same | passed | 40/40 supported; nothing written into the checkout |
 | RCB empty, real Docker (separate daemon, `ORBIT_HOME=/tmp/...`, port 7718) | same | passed | Astronomy_000, Math_000: image build, `/task` mounts, collect, verify process, valid 0 "no report"; oracle refused with reason |
 | RCB container environment | same | passed | host uid; `data/` read-only; `/task` writable; `.venv-rcb-base` (numpy 1.26.4) and `.venv-rcb-ml` (torch 2.5.1+cu121) import in the container |
-| Judge parity (judge.py vs recorded `_score.json`) | same | passed | Information_003 (leaderboard-3, sol-skills0830): 22.75 vs recorded 26.5 / 25.1 / 25.6; same inputs per item (9 images), every item within its recorded spread (judge noise, e.g. item 0: 5 vs 40 / 10 / 46) |
-| Real Agent (codex / claude-code) on RCB | — | not_run | no auth profile on this machine (`orbit auth list` empty) |
+| Real Agent (codex / claude-code) on RCB | — | not_run | Requires configured test credentials |
 | Multi-node | — | not_run | bench runs stay on the submitting node; protocol changes nothing there |
 
 ## Next / open issues
@@ -49,6 +48,5 @@ adapter. Orbit, not the adapter, turns "run the method's Agent on this instructi
 - Agent-side secrets for tools (e.g. a search API key used by RCB skills) have no per-method channel yet:
   benchmark `passEnv` reaches only the verifier.
 - Judge aggregation is the mean of `attempts`; "best three of four" style aggregation is not offered.
-- First image build needs `ubuntu:22.04`; on this machine Docker Hub is reachable only through the
-  Docker daemon proxy (`docker pull` works, BuildKit's own pull timed out once).
+- First image build needs access to `ubuntu:22.04`; configure Docker/BuildKit network access if needed.
 - RCB `evaluation/config.py` creates `workspaces-*` / `records` dirs in the checkout on import if missing.

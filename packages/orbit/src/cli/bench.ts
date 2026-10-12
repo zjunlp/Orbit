@@ -415,6 +415,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
   bench
     .command("consolidate <job> [sources...]")
     .description("merge valid retries into invalid slots and remove consumed source jobs")
+    .option("--append-tasks", "append new tasks, keeping invalid outcomes and artifacts")
+    .option(
+      "--allow-transport-differences",
+      "allow proxy/network aliases of the same checkout and credentials",
+    )
     .option("--prune-invalid", "delete invalid run artifacts, keeping task outcomes")
     .option("--apply", "apply the plan (default: preview only)")
     .option("--yes", "confirm permanent deletion")
@@ -423,10 +428,23 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
       async (
         id: string,
         sources: string[],
-        o: { pruneInvalid?: boolean; apply?: boolean; yes?: boolean; json?: boolean },
+        o: {
+          appendTasks?: boolean;
+          allowTransportDifferences?: boolean;
+          pruneInvalid?: boolean;
+          apply?: boolean;
+          yes?: boolean;
+          json?: boolean;
+        },
       ) => {
         const c = await client();
-        const body = { sources, pruneInvalid: !!o.pruneInvalid, dryRun: true };
+        const body = {
+          sources,
+          appendTasks: !!o.appendTasks,
+          allowTransportDifferences: !!o.allowTransportDifferences,
+          pruneInvalid: !!o.pruneInvalid,
+          dryRun: true,
+        };
         const plan = await c.benchConsolidate(id, body);
         if (o.apply) {
           await confirmTyped(

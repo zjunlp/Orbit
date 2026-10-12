@@ -1067,8 +1067,12 @@ export function trialRunIds(t: Trial): string[] {
   );
 }
 
-/** Merge valid retries into invalid slots, optionally removing invalid run artifacts. */
+/** Merge completed retries or append new tasks, preserving their evaluation validity. */
 export const BenchConsolidate = z.strictObject({
+  /** Import previously absent tasks, including invalid outcomes and their artifacts. */
+  appendTasks: z.boolean().default(false),
+  /** Allow proxy/host-network aliases of the same checkout and credential. */
+  allowTransportDifferences: z.boolean().default(false),
   sources: z.array(z.string().min(1)).default([]),
   pruneInvalid: z.boolean().default(false),
   dryRun: z.boolean().default(true),

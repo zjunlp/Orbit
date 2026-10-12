@@ -17,9 +17,9 @@ the scanner and checks it, instead of setting the app up by hand in the develope
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
 | `pnpm verify` | working tree | passed | 13 tests in `feishu.test.ts` (fake registration and client) |
-| `orbit feishu check phone` on the real daemon | working tree | passed | connected, test card sent |
+| `orbit feishu check <name>` on the real daemon | working tree | passed | connected, test card sent |
 | `orbit feishu init` up to the QR code | working tree | passed | QR printed, aborted before scanning, nothing saved |
-| Scan and create a new app | 7ae06c3 | passed | by the user on a phone; `phone2` connected with 1 paired user |
+| Scan and create a new app | 7ae06c3 | passed | QR flow created a connected app paired with the scanner |
 
 ## Next / open issues
 - If new apps do not default to the long connection, `check` tells the user to switch it in the console.

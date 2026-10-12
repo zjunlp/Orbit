@@ -48,6 +48,13 @@ These rules apply to every change, including this file. `CLAUDE.md` imports this
 | `docs/tasks/<YYYYMMDD-slug>.md` | One per feature, substantive fix or design change | Use the template below; small fixes need only a good commit message |
 | `docs/guides/` | How to use a feature | Only for implemented behavior |
 
+Source-controlled records describe reusable product behavior, design decisions, bugs and development
+validation. Keep personal experiment results, batch progress, scores, retry/consolidation histories,
+private resource configurations and account or machine inventories outside the source checkout in
+user-owned notes. Do not copy them into task records, commit messages or PR descriptions. Mixed
+records must retain only the reusable technical content. Disposable test fixtures and reproducible
+development checks may be documented, with fakes and untested behavior identified honestly.
+
 Task record template:
 
 ```markdown

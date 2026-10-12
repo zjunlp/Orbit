@@ -25,7 +25,7 @@ or Orbit run, memory, and how long they have been running. Unreadable fields sho
 | --- | --- | --- | --- |
 | Unit tests (parsers, describe, classify) | working tree | passed | `test/probe.test.ts`, `test/allocate.test.ts` |
 | `pnpm verify` | working tree | passed | Biome, tsc, boundaries, 113 tests, build |
-| Real GPU, host process | this machine | passed | `python3` holding 1 GiB → `user wangxuehai, command python3, startedAt` correct, container/runId null |
+| Real GPU, host process | this machine | passed | `python3` holding 1 GiB → Process owner, command and start time correct, container/runId null |
 | Real GPU, container process | this machine | passed | `docker run --gpus all --label orbit.run=…` → container name and runId read from the cgroup + docker |
 
 ## Next / open issues

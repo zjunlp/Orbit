@@ -30,12 +30,12 @@ verify run per trial, no new solve run, and both the earlier and the new scoring
 | --- | --- | --- | --- |
 | Daemon test (rescore, history, refusals, job deletion with old verify run) | working tree | passed | `test/bench.daemon.test.ts`, process-backend external adapter |
 | `pnpm verify` | working tree | passed | |
-| Migration on a copy of the real `~/.orbit/orbit.db` | this machine | passed | 8 trials → 16 run links; lookup by verify run works |
+| Migration on an isolated database copy | working tree | passed | Trial/run links preserved; lookup by verify run works |
 | Real Harbor job + rescore (Docker) | this machine | passed | throwaway daemon; oracle 0.5 → grader changed → rescore 1, same solve run, history 0.5 |
 | Web job / trial page | this machine | passed | headless Chromium screenshots: Rescore buttons, earlier scorings row |
 
 ## Next / open issues
 
-- Not run on a real RCB job (its verify calls an LLM judge; costs money and needs the user's go).
+- RCB rescore with an LLM judge remains unverified.
 - No rescore while a job is still running; rescoring cannot be cancelled as a whole (cancel its
   verify runs instead).

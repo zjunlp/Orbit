@@ -21,13 +21,12 @@ cards with metric curves, and read-only `/gpu`, `/runs`, `/show <id>` for paired
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
 | `pnpm verify` | working tree | passed | 124 orbit tests (9 new in `feishu.test.ts`, fakes for SDK and OpenAPI) |
-| Probe: token, long connection, receive, send cards | /tmp scripts | passed | message "11" received; text, chart, table, column cards rendered on the phone |
+| Probe: token, long connection, receive, send cards | /tmp scripts | passed | Test message received; text, chart, table, column cards rendered on a phone |
 | Chart marks (`markPoint` / `markLine`) | /tmp scripts | failed | not rendered by Feishu; dropped, plain curves kept |
-| Real daemon: long connection, pairing by code | working tree | passed | `notify list`: connected, 1 user |
+| Real daemon: long connection, pairing by code | working tree | passed | `notify list` confirms connection and pairing |
 | Real daemon: `notify test`, run card after a real run with metrics | working tree | passed | sent without errors in the daemon log; seen on the phone by the user |
-| `/gpu` `/runs` `/show` on the phone | working tree | not_run | the user paired; replies to the commands were not reported back |
+| `/gpu` `/runs` `/show` on the phone | working tree | not_run | Phone command replies were not confirmed |
 
 ## Next / open issues
 - Dedup is in memory: a redelivery right after a daemon restart could answer twice (harmless for read-only commands).
 - No write commands (cancel, submit) by design for now.
-- The app secret used for the probe was pasted in a chat: rotate it in the Feishu console.

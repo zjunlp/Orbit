@@ -33,9 +33,8 @@ name runs, and allow deleting finished runs and jobs behind a typed confirmation
 | --- | --- | --- | --- |
 | `pnpm verify` | working tree on `d131e03` | passed | orbit 97 + 3 skipped, web 8 |
 | New tests | same | passed | naming rule cases; delete refuses active / trial runs, removes records and directories, deletes a job with its runs; report path join and choice |
-| Browser on a copy of the real `~/.orbit` (headless Chromium, port 7722) | same | passed | 3 job rows, trial rows on expand; Experiments hides jobs; trial page renders `report.md` with 10 figures; Grader shows 3 judged items; delete dialog disabled until the id is typed, run removed; no page errors |
-| CLI on the copy | same | passed | without a terminal refuses unless `--yes`; wrong typed text deletes nothing; group name deletes; `bench rm-job --yes` removes job and 4 runs |
-| Real `~/.orbit` | — | not_run | nothing deleted on the user's own records |
+| Browser on an isolated copy of records (headless Chromium) | same | passed | Job/trial expansion and filtering; report figures and grader items render; delete dialog disabled until the id is typed; no page errors |
+| CLI on the copy | same | passed | without a terminal refuses unless `--yes`; wrong typed text deletes nothing; group name deletes; `bench rm-job --yes` removes job and its runs |
 
 ## Follow-up: declared review, job deletion from the list, way back to the trial
 
@@ -53,8 +52,7 @@ name runs, and allow deleting finished runs and jobs behind a typed confirmation
 | Check | Result | Notes |
 | --- | --- | --- |
 | `pnpm verify` | passed | orbit 99 + 3 skipped, web 9 (review validation, path safety, fallback rules, kind list matches contracts) |
-| RCB adapter `score` on the real Chemistry_000 outputs | passed | 3 files, 3 items, details incl. attempts |
-| Browser on a copy of `~/.orbit` | passed | tabs from review; report 10 figures; Grader 3 rows; Details shows an unknown field; unknown kind shown with the fallback note; "← Trial" returns; job deleted from the run list after typing its id; no page errors |
+| Browser on an isolated copy of records | passed | tabs from review; report figures and grader rows; Details shows an unknown field; unknown kind shown with the fallback note; "← Trial" returns; job deleted from the run list after typing its id; no page errors |
 
 ## Next / open issues
 

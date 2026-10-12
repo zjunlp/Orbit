@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
+import { AuthStore } from "../src/auth/index.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { BenchService } from "../src/bench/service.ts";
 import { tryConnect } from "../src/client/index.ts";
@@ -35,11 +36,14 @@ function fixture() {
     paths,
     probe: () => probeNode(paths.data, { node: paths.node, gpus: paths.gpus }),
   });
+  const auth = new AuthStore(paths.auth);
+  const registry = new BenchmarkRegistry(paths.benchmarks);
   const bench = new BenchService({
     store,
     paths,
     runs,
-    registry: new BenchmarkRegistry(paths.benchmarks),
+    registry,
+    auth,
   });
   const job = (id: string, tasks = ["a"]) => {
     const j = BenchJob.parse({
@@ -75,6 +79,7 @@ function fixture() {
           lease: null,
           code: null,
           cleanup: "done",
+          sizeBytes: 0,
           note: "",
           folder: jobId,
           createdAt: at,
@@ -115,7 +120,7 @@ function fixture() {
   trial("target", "c", false);
   job("source");
   trial("source", "a", true);
-  return { paths, store, runs, bench, job, trial };
+  return { paths, store, runs, bench, job, trial, auth, registry };
 }
 
 it("previews without changes; merges zero scores over HTTP while retaining the target matrix and deleting only invalid artifacts", async () => {
@@ -214,4 +219,137 @@ it("prunes invalid scoring history but preserves valid histories and effective z
   expect(out.removedRuns).toContain(rid);
   expect(out.removedRuns).not.toContain("target.b-solve");
   expect(f.store.getTrial(old.id)?.history).toHaveLength(1);
+});
+
+it("appends completed tasks over HTTP, retaining invalid scores and artifacts without changing old trials", async () => {
+  const f = fixture();
+  f.job("extra", ["d", "e"]);
+  f.trial("extra", "d", true);
+  const invalid = f.trial("extra", "e", false);
+  if (!invalid.outcome) throw new Error("missing outcome");
+  f.store.putTrial({ ...invalid, outcome: { ...invalid.outcome, score: 1 } });
+  const before = f.bench.job("target");
+  f.store.close();
+  stores.splice(stores.indexOf(f.store), 1);
+  daemon = await startDaemon(f.paths, { port: 0 });
+  const c = await tryConnect(f.paths);
+  if (!c) throw new Error("daemon unreachable");
+  await expect(c.benchConsolidate("target", { sources: ["extra"] })).rejects.toThrow(
+    /target matrix/,
+  );
+  const body = { sources: ["extra"], appendTasks: true };
+  const plan = await c.benchConsolidate("target", body);
+  expect(plan.removedRuns).toEqual([]);
+  expect(plan.adopted.map((a) => a.task)).toEqual(["d", "e"]);
+  expect(await c.benchJob("target")).toEqual(before);
+  await c.benchConsolidate("target", { ...body, dryRun: false });
+  const after = await c.benchJob("target");
+  expect(after.job.spec.tasks).toEqual(["a", "b", "c", "d", "e"]);
+  expect(after.trials.filter((t) => before.trials.some((b) => b.id === t.id))).toEqual(
+    before.trials,
+  );
+  expect(after.summary[0]).toMatchObject({ trials: 5, valid: 2, invalid: 3 });
+  const imported = after.trials.find((t) => t.task === "e");
+  expect(imported).toMatchObject({
+    solveRunId: invalid.solveRunId,
+    outcome: { ...invalid.outcome, score: 1 },
+  });
+  expect(await c.get("extra.e-solve")).toMatchObject({
+    folder: "target",
+    spec: { group: "bench-target", tags: { source_job: "extra", source_benchmark: "fixture" } },
+  });
+  expect(readFileSync(join(f.paths.runs, "extra.e-solve", "orbit/output/answer"), "utf8")).toBe(
+    "retained artifact\n",
+  );
+  await expect(c.benchJob("extra")).rejects.toThrow(/not found/);
+});
+
+it("allows explicitly requested transport aliases only for the same checkout, credential and method", async () => {
+  const f = fixture();
+  const env = { HTTPS_PROXY: "http://localhost:8888", TASK_MODE: "fixed" };
+  f.registry.put({ name: "fixture", adapter: "harbor", path: f.paths.home, env });
+  f.registry.put({
+    name: "bridge",
+    adapter: "harbor",
+    path: f.paths.home,
+    env: { ...env, HTTPS_PROXY: "http://172.17.0.1:8888" },
+  });
+  const credential = {
+    harness: "codex" as const,
+    kind: "login" as const,
+    secret: JSON.stringify({ tokens: { access_token: "explicit-fixture-token" } }),
+  };
+  f.auth.put({ ...credential, name: "host", hostNetwork: true });
+  f.auth.put({ ...credential, name: "bridge", hostNetwork: false });
+  const method = {
+    name: "empty",
+    agent: "codex" as const,
+    auth: "host",
+    model: "fixture-model",
+    effort: "max",
+  };
+  const source = { commit: "same-snapshot", describe: null, dirty: false };
+  const a = f.job("aliases-target"),
+    b = f.job("aliases-source", ["b"]);
+  f.trial(a.id, "a", true);
+  f.trial(b.id, "b", false);
+  f.store.putJob({ ...a, source, spec: { ...a.spec, methods: [method] } });
+  const donor = {
+    ...b,
+    source,
+    spec: { ...b.spec, benchmark: "bridge", methods: [{ ...method, auth: "bridge" }] },
+  };
+  f.store.putJob(donor);
+  const body = { sources: [b.id], appendTasks: true, allowTransportDifferences: true };
+  await expect(
+    f.bench.consolidate(a.id, { ...body, allowTransportDifferences: false }),
+  ).rejects.toThrow(/incompatible/);
+  expect((await f.bench.consolidate(a.id, body)).adopted).toHaveLength(1);
+  for (const bad of [
+    { ...donor, source: { ...source, commit: "different" } },
+    { ...donor, spec: { ...donor.spec, seeds: 2 } },
+    {
+      ...donor,
+      spec: { ...donor.spec, methods: [{ ...method, auth: "bridge", model: "different" }] },
+    },
+  ]) {
+    f.store.putJob(bad);
+    await expect(f.bench.consolidate(a.id, body)).rejects.toThrow(/incompatible/);
+  }
+  f.store.putJob(donor);
+  f.auth.put({
+    ...credential,
+    name: "bridge",
+    secret: JSON.stringify({ tokens: { access_token: "different-fixture-token" } }),
+  });
+  await expect(f.bench.consolidate(a.id, body)).rejects.toThrow(/incompatible/);
+  f.auth.put({ ...credential, name: "bridge" });
+  f.registry.put({
+    name: "bridge",
+    adapter: "harbor",
+    path: f.paths.home,
+    env: { TASK_MODE: "different" },
+  });
+  await expect(f.bench.consolidate(a.id, body)).rejects.toThrow(/incompatible/);
+});
+
+it("refuses duplicate appended tasks and pruning during append without changing either job", async () => {
+  const f = fixture();
+  f.job("first", ["new"]);
+  f.trial("first", "new", false);
+  f.job("second", ["new"]);
+  f.trial("second", "new", true);
+  const before = f.bench.job("target");
+  await expect(
+    f.bench.consolidate("target", {
+      sources: ["first", "second"],
+      appendTasks: true,
+      dryRun: false,
+    }),
+  ).rejects.toThrow(/duplicate appended/);
+  await expect(
+    f.bench.consolidate("target", { sources: ["first"], appendTasks: true, pruneInvalid: true }),
+  ).rejects.toThrow(/preserves invalid/);
+  expect(f.bench.job("target")).toEqual(before);
+  expect(f.bench.job("first").trials).toHaveLength(1);
 });

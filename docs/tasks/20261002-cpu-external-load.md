@@ -4,8 +4,8 @@
 
 ## Goal
 
-Processes started outside Orbit kept 48 of 80 CPUs busy, but the Resources page showed `0 / 80`
-leased and the scheduler would have admitted runs as if all 80 were free. GPUs and memory already
+Processes started outside Orbit consumed CPUs, but the Resources page and scheduler counted only
+Orbit leases and could admit work beyond the remaining capacity. GPUs and memory already
 respected use outside Orbit; CPUs counted leases only. Acceptance: new runs wait (with a reason)
 while other processes keep CPUs busy; running runs are never stopped; CLI and Web show measured use
 next to leases.
@@ -35,7 +35,7 @@ next to leases.
 | --- | --- | --- | --- |
 | `pnpm verify` | 9b256f1 + this change (workspace) | passed | orbit 83 passed / 3 skipped, web 6 passed; biome, tsc, boundaries, builds |
 | `test/allocate.test.ts` (3 new cases) | same | passed | external CPU queueing and reason, noise tolerance, settled vs starting leases, `/proc/stat` parsing and meter rise/fall |
-| Real probe on this host (80 cores, ~47 busy from non-Orbit jobs) | same | passed | `busy` 46.9–47.6 over 4 probes; `top` showed 59.3% busy × 80 ≈ 47.4 |
+| Real CPU probe | same | passed | Measured external CPU use agreed with `top` |
 | Web Resources page in a browser | — | not_run | typecheck and build only |
 
 ## Next / open issues
