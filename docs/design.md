@@ -517,7 +517,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   适配器独立进程组运行；超时立即拒绝调用并向整组发 SIGTERM，250 ms 后 SIGKILL，关闭管道并解除子进程引用，
   不等待后代持有的 stdout 关闭。正常完成仍读到 stdout 末尾。
 - 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, solve?, verify? }`；`trial` =
-  `{ id, task, method, seed, options, timeoutMin?, staging, hostNetwork }`（`staging` 是 trial 私有的宿主目录，用于要挂进
+  `{ id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork }`（`resources` 为 job 固定的任务 solve 资源覆盖值，供原生 runner 同步设置子容器限制；`staging` 是 trial 私有的宿主目录，用于要挂进
   Run 的副本，trial 结束时删除）；`solve` / `verify` = `{ run, output }`（Run 记录与其 `$ORBIT_OUTPUT` 的宿主路径）。
 - 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[] }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
   `{ score, maxScore?, invalid?, issues?, review?, metrics? }`。`review`（可选）告诉 trial 页展示什么：
@@ -595,7 +595,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 cwd 默认为代码快照（有快照时），否则 `project`，再否则 Run 目录；HOME 为 Run 私有目录；环境包含 `spec.env`、`passEnv`、`ORBIT_OUTPUT`、
 `CUDA_VISIBLE_DEVICES`（租约中的 GPU）。PATH 最前面是 Run 私有的 `docker` shim（`orbit __docker-shim`，
 `runs/shim.ts`）：给 runner 启动的容器加 `orbit.parent=<run>` 标签，把 `--gpus` 换成租约中的 GPU（没有租到 GPU 则拒绝），
-有 auth 时注入 Agent CLI 与凭据挂载，`hostNetwork` 时 build 用宿主网络，其余参数原样传给真实 docker。
+有 auth 时注入 Agent CLI 与凭据挂载；Agent home 参数位于 runner 参数之后、镜像之前，使原生 runner 的 home 设置不会覆盖 Orbit 的认证与会话目录；其他 profile 环境默认值仍可被 runner 覆盖。`hostNetwork` 时 build 用宿主网络，其余参数原样传给真实 docker。
 取消 / 超时向进程组发 SIGTERM（宽限后 SIGKILL）并停止子容器；只有进程组与带标签的子容器都消失才释放租约。
 daemon 重启后按 pid + 启动时间重新接管进程。运行中的 process Run 日志通过 API 读取时按 §5 脱敏，结束后在磁盘上统一脱敏。
 
@@ -611,6 +611,12 @@ CLI `orbit bench add|ls|rm|tasks|run|jobs|show|cancel|rescore|compare [--metric]
   任务 workspace 在 `/task`（`data/`、`related_work/` 只读，其余可写，结束时采集），原版指令模板，RCB 的 venv 按宿主路径
   只读挂载；verify 为 process Run，在 RCB `.venv` 中调用原版 `evaluation.score.score_run`。没有 report 为有效 0 分，
   judge 调用失败为 invalid；分数 0–100（50 ≈ 原论文水平），多次 judge 取均值。RCB 没有参考解，oracle 不可用。
+- **LongDS-Bench 示例**（`examples/bench-adapters/longds/`）：process solve 调用 DataMind 原版 Codex / Claude runner，
+  一任务一容器、原生会话按顺序发送全部轮次；任务定义与参考答案保留在宿主，不挂入 Agent 容器。CPU/内存请求与
+  native Docker 限制使用同一已解析资源覆盖。完整任务与原版 judge 源码随 solve 保存，独立 process verify 使用保存的
+  `judge_one` 和输出函数重建评分输入；空答案有效零分，参考答案回放仅供 oracle 校准，缺轮/失败 turn/judge 错误均 invalid。
+  每任务为全部 turn 正确率，Orbit 对任务均值等权汇总，对齐原版 `task_avg_score`；支持保存产物重评。
+  版本/split 使用独立任务列表，缺数据明确 unsupported；GPU 请求拒绝。此 native process 路线尚不支持失败断点恢复。
 - **PostTrainBench 示例**（`examples/bench-adapters/posttrainbench/`）：native 方法从采集到的
   `home/ben/task/final_model` 验证和评分，其他方法使用 `task/final_model`；仅 `native=empty` 挂载完整 checkout
   和 dotenv 并设置 `AGENT_ENV`，其他方法只挂载 `src/`，避免通过 `/repo/.env` 暴露凭据。

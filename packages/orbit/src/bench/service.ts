@@ -580,6 +580,7 @@ export class BenchService {
         seed: t.seed,
         options: job.spec.options,
         timeoutMin: job.spec.timeoutMin ?? job.resources?.[t.task]?.timeoutMin,
+        resources: job.resources?.[t.task],
         staging: join(this.deps.paths.bench, job.id, t.id),
         hostNetwork: method.auth
           ? Boolean(this.deps.auth?.get(method.auth)?.profile.hostNetwork)

@@ -280,6 +280,7 @@ Compare methods under the same resource rules, keeping execution, evaluation val
 | --- | --- | --- |
 | **Harbor format** | [TB-Science](https://github.com/harbor-framework/terminal-bench-science), Terminal-Bench and other Harbor datasets; `bench tasks` lists supported tasks | [Adapter guide](docs/guides/bench-adapter.md) |
 | **ASI native wrapper** | ASI’s own runner, with known compatibility issues checked before launch | [Compatibility](docs/guides/bench-adapter.md#asi-bench-版本兼容) |
+| **LongDS native CLI** | DataMind's sequential Codex / Claude Code sessions and original judge, via an external adapter | [LongDS setup](examples/bench-adapters/longds/README.md) |
 | **External adapters** | Other benchmarks via a JSON protocol, without rebuilding Orbit | [ResearchClawBench example](examples/bench-adapters/researchclawbench/README.md) |
 
 ```bash
@@ -301,6 +302,9 @@ orbit bench add tb ~/datasets/terminal-bench --adapter harbor
 orbit bench add asi ../ASI-Bench --adapter asi -c python=/path/to/venv/bin/python --pass-env JUDGE_KEY
 orbit bench add rcb ../ResearchClawBench --adapter ./examples/bench-adapters/researchclawbench/adapter.py \
   --pass-env OPENAI_API_KEY --pass-env OPENAI_BASE_URL
+orbit bench add longds ../DataMind/longds --adapter ./examples/bench-adapters/longds/adapter.py \
+  -c image=orbit-longds -c python=/path/to/longds-venv/bin/python \
+  --pass-env JUDGE_API_KEY --pass-env JUDGE_BASE_URL --pass-env JUDGE_MODEL
 orbit bench tasks tbs           # tasks, and why unsupported ones cannot run
 orbit bench run tbs -t symbolic-regression -m oracle -m empty \
   -m gpt=codex,auth=gpt,model=gpt-5,effort=high --seeds 3 -n first-try

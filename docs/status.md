@@ -1,8 +1,8 @@
 # Orbit status
 
-- **Updated at:** 2026-10-17
-- **Basis:** Bounded failure checkpoints; real Docker offline restore and native Codex continuation checked after injected upstream failures.
-- **Stage:** R0–R2 validated here; R3 bench smoke-tested with oracle/empty only; R4 only as two daemons on one machine.
+- **Updated at:** 2026-10-21
+- **Basis:** LongDS native multi-turn runner and original judge; bounded failure checkpoints with real Docker offline restore and native Codex continuation.
+- **Stage:** R0–R2 validated here; R3 LongDS checked with a complete native Codex task, Harbor with oracle/empty samples; R4 only as two daemons on one machine.
 - **Blockers:** none for the current release.
 
 ## Available
@@ -17,7 +17,7 @@
 - Data directory apart from `~/.orbit` (`orbit config data`, `ORBIT_DATA`), doctor disk warnings; owned home symlink targets and existing private files checked/tightened; logical folders (`--folder`, `mv`, `folders`, `export`).
 - Auth profiles for Codex and Claude Code; notifications (Feishu, DingTalk, WeCom, Slack, webhook; `feishu-app` bot: `orbit feishu init` QR setup, pairing, read-only `/gpu` `/runs` `/show`, curve cards).
 - Bench: solve + verify run per trial, valid-only means (OOM solves invalid); one JSON adapter protocol
-  for built-ins and external executables (e.g. ResearchClawBench); per-task resources and timeout resolved before adapter planning; `bench usage`
+  for built-ins and external executables ([LongDS native multi-turn runner/judge](../examples/bench-adapters/longds/), ResearchClawBench); per-task resources and timeout resolved before adapter planning; `bench usage`
   suggestions; solves whose Agent could not use its model are invalid without a verify run; `bench consolidate` checks preview digests and preserves newly invalid evidence; startup repairs stale trial cleanup; completed invalid retries and task append retain validity; `orbit-bench` skill; `bench rescore` re-verifies from saved solve outputs (history kept). Measured peak memory / CPU / GPU memory on every run. Adapter-declared
   metrics (`score` built in): per-task then over-task means, task-clustered 95% CI, paired Δ in compare. ASI checks known runner incompatibilities before Agent launch, propagates failures, and shows latest attempt status separately from score validity.
 - Harbor format: direct flat-task lookup with nested ID compatibility; separate/shared verifiers share the executable test command and stdout capture; compose services, collect hooks, Harbor's network/image rules; TB-Science 70/70 and TB 4.0 56/66 supported (oracle/empty checked on samples incl. all 5 compose tasks); jobs record the benchmark commit.
@@ -25,9 +25,9 @@
 
 ## Main gaps
 
-- ASI / TB-Science scores not yet compared with official Harbor runs (only oracle-level); codex lacks Harbor's `unified_exec`; no GPU-type placement, allowlist networks, multi-step tasks or MCP servers for Harbor tasks. R4 not run on two real machines; no bundle cache eviction. Checkpoint Claude Code continuation is not yet checked with a real model.
+- ASI / TB-Science scores not yet compared with official Harbor runs (only oracle-level); codex lacks Harbor's `unified_exec`; no GPU-type placement, allowlist networks, multi-step tasks or MCP servers for Harbor tasks. R4 not run on two real machines; no bundle cache eviction. LongDS's native process runner has no failure checkpoint; real Claude execution/continuation remains unchecked.
 - Per-user daemons on one machine (busy 7717 → free port) can lease the same free GPU at once; fix when needed with a shared per-GPU lock.
-- Bench metrics: tests and fake adapters only; group notifications may fire between solve and verify. Untried: some auth kinds, real IM webhooks (the Feishu app was checked on a phone). No MCP server or dsh/pi session capture/in-container harnesses; no overcommit.
+- Additional bench metrics: tests and fake adapters only; group notifications may fire between solve and verify. Untried: some auth kinds, real IM webhooks (the Feishu app was checked on a phone). No MCP server or dsh/pi session capture/in-container harnesses; no overcommit.
 
 ## Next priorities
 1. Real Agent bench jobs (RCB first), Web `/bench`, R4 on two machines.

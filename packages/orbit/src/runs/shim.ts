@@ -160,15 +160,19 @@ export function rewriteDockerArgs(
     "--label",
     `${LABEL_HOME}=${cfg.homeLabel}`,
   ];
+  const agentHome: string[] = [];
   if (cfg.auth) {
     for (const m of cfg.auth.mounts) inject.push("-v", `${m.source}:${m.target}:${m.mode}`);
     inject.push("-v", `${cfg.auth.agentDir}:${AGENT_HOME}`);
-    for (const [k, v] of Object.entries(cfg.auth.env)) inject.push("-e", `${k}=${v}`);
+    for (const [k, v] of Object.entries(cfg.auth.env)) {
+      const target = k === "CODEX_HOME" || k === "CLAUDE_CONFIG_DIR" ? agentHome : inject;
+      target.push("-e", `${k}=${v}`);
+    }
     if (cfg.auth.envFile) inject.push("--env-file", cfg.auth.envFile);
     if (!pathSet && image && cfg.auth.pathDirs.length > 0)
       inject.push("-e", `PATH=${containerPath(cfg.auth.pathDirs, imagePath(image))}`);
   }
-  return [...head, ...inject, ...out, ...rest.slice(i)];
+  return [...head, ...inject, ...out, ...agentHome, ...rest.slice(i)];
 }
 
 /** Entry point: `orbit __docker-shim <config.json> <docker args...>`. */

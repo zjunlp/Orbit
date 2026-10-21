@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BenchTask, Method, MetricSpec, Review } from "./bench.ts";
+import { BenchTask, Method, MetricSpec, ResourceOverride, Review } from "./bench.ts";
 import { Run } from "./runs.ts";
 
 const MetricSpecs = z
@@ -76,9 +76,11 @@ export const AdapterRequest = z.object({
       task: z.string(),
       method: Method,
       seed: z.number().int(),
-      /** Job options (`orbit bench run -o key=value`). */
+      /** Job options (`orbit bench run --option key=value`). */
       options: z.record(z.string(), z.string()),
       timeoutMin: z.number().positive().optional(),
+      /** Resolved solve overrides, also needed by native runners that launch containers. */
+      resources: ResourceOverride.optional(),
       /** Private per-trial host directory for files mounted into the runs; removed with the trial. */
       staging: z.string(),
       /** The method's auth profile uses the host network (for runners that start containers). */

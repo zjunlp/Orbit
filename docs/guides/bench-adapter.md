@@ -11,7 +11,8 @@
 | 其他任何形态 | 写一个外部适配器（任意语言的可执行文件），登记时 `--adapter /path/to/adapter` | 否 |
 
 外部适配器和内置适配器走同一套协议，Orbit 不需要重新构建或重启。适配器文件放在 benchmark 仓库或任意目录。
-示例：[examples/bench-adapters/researchclawbench](../../examples/bench-adapters/researchclawbench/)。
+示例：[ResearchClawBench](../../examples/bench-adapters/researchclawbench/) ·
+[LongDS-Bench](../../examples/bench-adapters/longds/)（原生 Codex / Claude 多轮 runner、独立原版 judge）。
 
 ### ASI-Bench 版本兼容
 
@@ -87,7 +88,7 @@ stdin 是一个 JSON 请求，stdout 必须是一个 JSON 回复；出错时写 
 | op | 请求中有 | 回复 |
 | --- | --- | --- |
 | `tasks` | `benchmark: {name, path, config}` | `{"tasks": [{"id", "title", "supported", "reason", "tags"}], "metrics"?: [...]}`；不能跑的任务 `supported: false` 并写原因；`metrics` 见下文 |
-| `solve` | + `trial: {id, task, method, seed, options, timeoutMin?, staging, hostNetwork}` | `{"spec": <Run 描述>, "issues"?: []}` |
+| `solve` | + `trial: {id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork}` | `{"spec": <Run 描述>, "issues"?: []}` |
 | `verify` | + `solve: {run, output}`（`output` 是 solve 的 `$ORBIT_OUTPUT` 宿主路径） | `{"spec": <Run 描述>, "issues"?: []}` |
 | `score` | + `verify: {run, output}` | `{"score": 数或 null, "maxScore": 1, "invalid": false, "issues": [], "metrics"?: {"name": 数}}` |
 
@@ -97,6 +98,7 @@ Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`re
 - **Agent 交给 Orbit**：`trial.method.agent` 是 `codex` / `claude-code` 时，solve 给 `"agentTask": {"instruction": "..."}`
   而不是 `command`。Orbit 生成对应 CLI 命令并注入 auth、方法 bundle 和网络；适配器不要拼 `codex exec` 之类的参数。
   `oracle` / `empty` 给 `command`（没有参考解时对 oracle 报错即可，trial 会记为 invalid 并写明原因）。
+  原生 runner 自己调用 Agent 时可以给 process `command`，Orbit 仍通过 Docker shim 注入 CLI、auth 和 bundle。
 - **不要写 Orbit 管的字段**：`name group params project snapshot auth agentBundle agent parentId priority passEnv`。
   benchmark 的 `env` 会加到两个 Run，`--pass-env` 的密钥只给 verify Run。
 
@@ -110,6 +112,8 @@ Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`re
 - 分数可信才算 `invalid: false`：评审 / scorer 内部出错、模型不可用导致的 0 分要标 `invalid` 并写 issue；
   "方法没有产出"是方法的结果，应是有效的 0 分。取消、超时、未启动由 Orbit 判定，不用处理。
 - 原生 runner 自己起容器时用 `backend: "process"`，容器经过 PATH 中的 `docker`（Orbit shim）才会被标记、限 GPU 与清理。
+- `trial.resources` 是提交 job 时解析的任务资源覆盖值（不是完整默认资源）；原生 runner 将其与适配器默认值合并，
+  同时设置子容器限制。`trial.timeoutMin` 已按 CLI > 任务资源 > 默认资源解析，只控制 solve；verify 单独设预算。
 
 调试循环：
 

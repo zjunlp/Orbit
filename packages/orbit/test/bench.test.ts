@@ -69,8 +69,8 @@ describe("docker shim", () => {
       ["run", "--rm", "-v", "/a:/b", "--gpus", "all", "img", "--gpus", "x"],
       cfg,
     );
-    expect(out.slice(0, 5)).toEqual([
-      "run",
+    const label = out.indexOf("--label");
+    expect(out.slice(label, label + 4)).toEqual([
       "--label",
       "orbit.parent=r1",
       "--label",
@@ -117,6 +117,44 @@ describe("docker shim", () => {
     expect(out).toContain("/run/env");
     expect(out.find((a) => a.startsWith("PATH="))).toMatch(
       /^PATH=\/orbit\/cli\/bin.*\/usr\/bin:\/bin$/,
+    );
+  });
+
+  it("keeps Orbit's Agent home when a native runner sets its own home", () => {
+    const out = rewriteDockerArgs(
+      [
+        "run",
+        "-e",
+        "CODEX_HOME=/codex-home",
+        "--env=CLAUDE_CONFIG_DIR=/claude-home",
+        "-e",
+        "CLAUDE_CODE_EFFORT_LEVEL=low",
+        "img",
+      ],
+      {
+        ...cfg,
+        auth: {
+          mounts: [],
+          agentDir: "/run/agent",
+          env: {
+            CODEX_HOME: "/orbit/agent/codex",
+            CLAUDE_CONFIG_DIR: "/orbit/agent/claude",
+            CLAUDE_CODE_EFFORT_LEVEL: "high",
+          },
+          envFile: null,
+          pathDirs: [],
+        },
+      },
+    );
+    expect(out.indexOf("CODEX_HOME=/orbit/agent/codex")).toBeGreaterThan(
+      out.indexOf("CODEX_HOME=/codex-home"),
+    );
+    expect(out.indexOf("CLAUDE_CONFIG_DIR=/orbit/agent/claude")).toBeGreaterThan(
+      out.indexOf("--env=CLAUDE_CONFIG_DIR=/claude-home"),
+    );
+    expect(out.at(-1)).toBe("img");
+    expect(out.indexOf("CLAUDE_CODE_EFFORT_LEVEL=low")).toBeGreaterThan(
+      out.indexOf("CLAUDE_CODE_EFFORT_LEVEL=high"),
     );
   });
 });

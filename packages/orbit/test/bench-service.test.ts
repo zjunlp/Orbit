@@ -327,7 +327,7 @@ process.stdin.on("data", c => input += c);
 process.stdin.on("end", () => {
   const req = JSON.parse(input);
   console.log(JSON.stringify(req.op === "tasks" ? { tasks: [{ id: "${task}", title: null, supported: true, reason: null }] } : {
-    spec: { backend: "process", command: ["echo", String(req.trial.timeoutMin ?? "adapter")], timeoutMin: 17 }
+    spec: { backend: "process", command: ["echo", String(req.trial.timeoutMin ?? "adapter"), String(req.trial.resources?.cpus), String(req.trial.resources?.memGB)], timeoutMin: 17 }
   }));
 });
 `,
@@ -339,8 +339,8 @@ process.stdin.on("end", () => {
       resources,
       JSON.stringify({
         version: 1,
-        default: { timeoutMin: defaults },
-        tasks: { [task]: { timeoutMin: taskTimeout } },
+        default: { timeoutMin: defaults, cpus: 2, memGB: 3 },
+        tasks: { [task]: { timeoutMin: taskTimeout, cpus: 3 } },
       }),
     );
     f.registry.put({ name: "fixture", path: f.source, adapter: executable, resources });
@@ -363,7 +363,8 @@ process.stdin.on("end", () => {
         expect(spec?.command?.[index + 1]).toBe(String(effective * 60));
       }
     } else if (adapter === "external") {
-      expect(spec?.command).toEqual(["echo", String(effective ?? "adapter")]);
+      expect(spec?.command).toEqual(["echo", String(effective ?? "adapter"), "3", "3"]);
+      expect(spec?.resources).toMatchObject({ cpus: 3, memGB: 3 });
     }
   });
 });
