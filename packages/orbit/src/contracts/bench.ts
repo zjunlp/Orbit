@@ -72,12 +72,12 @@ export type MetricSpecInput = z.input<typeof MetricSpec>;
 
 /**
  * An AgentProfile: harness (with the host CLI version recorded per run) + model + auth + method
- * bundle. `oracle` runs the reference solution and `empty` submits nothing; both check an adapter.
+ * bundle, or an adapter-owned external policy. `oracle` and `empty` calibrate an adapter.
  */
 export const Method = z
   .object({
     name: ProfileName,
-    agent: z.enum(["codex", "claude-code", "oracle", "empty"]),
+    agent: z.enum(["codex", "claude-code", "external", "oracle", "empty"]),
     auth: ProfileName.optional(),
     model: z.string().optional(),
     /** Reasoning effort, e.g. `high`. */
@@ -87,9 +87,21 @@ export const Method = z
       .optional(),
     /** Method bundle directory (AGENTS.md / CLAUDE.md, skills) copied into the Agent home. */
     bundle: z.string().optional(),
+    /** External policy entrypoint, interpreted by its benchmark adapter. */
+    entrypoint: z.string().trim().min(1).optional(),
+    /** Non-secret external policy settings; persisted with the method. */
+    config: z.record(z.string(), z.string()).optional(),
+    /** Variable names copied from the daemon environment into solve only. */
+    passEnv: z.array(EnvName).optional(),
   })
-  .refine((m) => !isAgentMethod(m) || Boolean(m.auth), {
-    message: "agent methods need an auth profile",
+  .refine((m) => !isCliMethod(m) || Boolean(m.auth), {
+    message: "CLI agent methods need an auth profile",
+  })
+  .refine((m) => m.agent !== "external" || (Boolean(m.entrypoint) && !m.auth && !m.bundle), {
+    message: "external methods need an entrypoint and take no auth profile or CLI bundle",
+  })
+  .refine((m) => m.agent === "external" || (!m.entrypoint && !m.config && !m.passEnv), {
+    message: "entrypoint, config and passEnv are only for external methods",
   });
 export type Method = z.infer<typeof Method>;
 
@@ -429,5 +441,9 @@ export const BenchUsage = z.object({ jobs: z.array(z.string()), rows: z.array(Be
 export type BenchUsage = z.infer<typeof BenchUsage>;
 
 export function isAgentMethod(m: { agent: string }): boolean {
+  return isCliMethod(m) || m.agent === "external";
+}
+
+export function isCliMethod(m: { agent: string }): boolean {
   return m.agent === "codex" || m.agent === "claude-code";
 }

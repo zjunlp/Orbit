@@ -12,7 +12,8 @@
 
 外部适配器和内置适配器走同一套协议，Orbit 不需要重新构建或重启。适配器文件放在 benchmark 仓库或任意目录。
 示例：[ResearchClawBench](../../examples/bench-adapters/researchclawbench/) ·
-[LongDS-Bench](../../examples/bench-adapters/longds/)（原生 Codex / Claude 多轮 runner、独立原版 judge）。
+[LongDS-Bench](../../examples/bench-adapters/longds/)（原生 Codex / Claude 多轮 runner、独立原版 judge） ·
+[BrowserGym/MiniWoB](../../examples/bench-adapters/browsergym/)（外部 GUI 策略、实时原版奖励、截图与轨迹）。
 
 ### ASI-Bench 版本兼容
 
@@ -101,6 +102,10 @@ Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`re
   原生 runner 自己调用 Agent 时可以给 process `command`，Orbit 仍通过 Docker shim 注入 CLI、auth 和 bundle。
 - **不要写 Orbit 管的字段**：`name group params project snapshot auth agentBundle agent parentId priority passEnv`。
   benchmark 的 `env` 会加到两个 Run，`--pass-env` 的密钥只给 verify Run。
+- **外部 Agent 方法**：`agent: "external"` 必须给 `entrypoint`，可带 `model`、`effort`、非密钥 `config`、
+  `passEnv: ["MODEL_KEY"]`，不接受 auth/bundle。适配器解释入口并给 `command`；Orbit 只把方法的 passEnv 注入 solve，
+  不生成 CLI 命令。复杂配置用 `--methods-file` JSON 数组。内置 Harbor/ASI 不支持此方法时明确拒绝。
+  GUI 评分需要活环境时，应在 runtime 中调用原版 grader 并保存结果，不能把离线证据检查描述为原环境重评。
 
 约定：
 

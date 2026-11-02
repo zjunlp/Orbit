@@ -14,7 +14,7 @@ import {
   AdapterTasksResponse,
   type Benchmark,
   BUILTIN_ADAPTERS,
-  isAgentMethod,
+  isCliMethod,
   type Method,
   RunSpec,
   type RunSpecInput,
@@ -175,7 +175,7 @@ export function toRunSpec(
   phase: "solve" | "verify",
 ): RunSpecInput {
   const { agentTask, command, ...rest } = s;
-  if (agentTask && (phase === "verify" || !isAgentMethod(method)))
+  if (agentTask && (phase === "verify" || !isCliMethod(method)))
     throw new AdapterError(
       phase === "verify"
         ? "verify runs cannot ask for an Agent"
@@ -187,11 +187,14 @@ export function toRunSpec(
     env: { ...b.env, ...((rest.env as Record<string, string> | undefined) ?? {}) },
     snapshot: false,
   } as RunSpecInput;
-  if (phase === "solve" && isAgentMethod(method)) {
+  if (phase === "solve" && isCliMethod(method)) {
     // The Agent reaches its model API; native runners get the auth to inject into their containers.
     spec.auth = method.auth;
     spec.agentBundle = method.bundle;
     spec.network = true;
+  }
+  if (phase === "solve" && method.agent === "external") {
+    spec.passEnv = method.passEnv ?? [];
   }
   if (phase === "solve" && spec.after) {
     // A verifier in the solve container (after the Agent) gets the grader secrets for its phase only.

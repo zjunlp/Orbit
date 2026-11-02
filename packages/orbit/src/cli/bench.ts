@@ -26,7 +26,7 @@ const statText = (s: MethodSummary["metrics"][string] | undefined, m: MetricSpec
   s ? `${fmtMetric(s.mean, m)}${fmtCi(s, m) ? ` ${fmtCi(s, m)}` : ""}` : "-";
 
 /**
- * `name=agent[,auth=P][,model=M][,effort=E][,bundle=DIR]`; a bare `oracle` / `empty` names itself.
+ * `name=agent[,key=value...]`; a bare `oracle` / `empty` names itself.
  */
 export function parseMethod(text: string): Record<string, string> {
   if (text === "oracle" || text === "empty") return { name: text, agent: text };
@@ -35,8 +35,8 @@ export function parseMethod(text: string): Record<string, string> {
   if (!head || i <= 0) throw new Error(`--method must be name=agent[,key=value...]: ${text}`);
   const m: Record<string, string> = { name: head.slice(0, i), agent: head.slice(i + 1) };
   for (const [k, v] of Object.entries(kv(rest, "--method option"))) {
-    if (!["auth", "model", "effort", "bundle"].includes(k))
-      throw new Error(`unknown --method key ${k} (auth, model, effort, bundle)`);
+    if (!["auth", "model", "effort", "bundle", "entrypoint"].includes(k))
+      throw new Error(`unknown --method key ${k} (auth, model, effort, bundle, entrypoint)`);
     m[k] = k === "bundle" ? resolve(v) : v;
   }
   return m;
@@ -313,11 +313,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .description("start a job: every task × method × seed becomes a trial")
     .option(
       "-m, --method <spec>",
-      "name=agent[,auth=P,model=M,effort=E,bundle=DIR]; agent: codex | claude-code | oracle | empty",
+      "name=agent[,auth=P,model=M,effort=E,bundle=DIR,entrypoint=E]; agent: codex | claude-code | external | oracle | empty",
       (v, p: string[]) => [...p, v],
       [],
     )
-    .option("--methods-file <file>", "JSON array of methods")
+    .option("--methods-file <file>", "JSON array of methods (including external config/passEnv)")
     .option(
       "-t, --task <id>",
       "task id (repeatable; default: all supported)",

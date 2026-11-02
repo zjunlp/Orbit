@@ -426,6 +426,8 @@ export function harborSolveSpec(
   staging: string,
   timeoutMin?: number,
 ): RunDescription {
+  if (method.agent === "external")
+    throw new Error("Harbor does not support external methods; use a compatible adapter");
   const mounts: RunDescription["mounts"] = [];
   // Harbor layers the task's variables over those of the compose file's `main`.
   const base = { ...t.compose?.env, ...t.env.vars };

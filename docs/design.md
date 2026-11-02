@@ -427,16 +427,18 @@ Agent 的 home 放在 `/orbit/agent/{codex,claude}`（`CODEX_HOME`、`CLAUDE_CON
 ## 7. 刷榜（bench）
 
 ```
-AgentProfile = harness + version + model + auth + method bundle (directory)   → contracts.Method
+Method       = CLI harness + model + auth + bundle, or external policy entrypoint + config
 Benchmark    = tasks + per-task environment + instruction + verifier + aggregation
-Trial        = task × AgentProfile × seed → solve Run (Agent inside) + verify Run (separate)
+Trial        = task × Method × seed → solve Run (Agent inside) + verify Run (separate)
 Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore, metrics?, issues[], cleanup }
 ```
 
-- **Method**（`contracts.Method`）：`{ name, agent: codex | claude-code | oracle | empty, auth?, model?, effort?, bundle? }`。
-  `oracle` 运行参考解、`empty` 什么都不交，用于检验适配器；Agent 方法必须有 harness 匹配的 auth profile。
+- **Method**（`contracts.Method`）：`{ name, agent: codex | claude-code | external | oracle | empty, auth?, model?, effort?, bundle?, entrypoint?, config?, passEnv? }`。
+  `oracle` 运行参考解、`empty` 不作答，用于检验适配器；CLI Agent 方法必须有 harness 匹配的 auth profile。
   `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；harness 版本由 Run 的
-  `harness` 事件记录。
+  `harness` 事件记录。`external` 必须有 adapter 解释的 `entrypoint`，可带非密钥 `config`、`model`、`effort`，
+  不接受 CLI 的 auth/bundle；其 `passEnv` 只把 daemon 环境中的指定变量注入 solve，变量值不进入 Method。
+  `entrypoint/config/passEnv` 仅用于 external；这些方法计入 Agent 资源用量统计。核心不实现新的 Agent 循环。
 - **Benchmark 登记**：`~/.orbit/benchmarks.json`（0600，daemon 写）存 `{ name, adapter, path, config, env, passEnv[] }`。
   `adapter` 为内置名（`harbor`、`asi`）或适配器可执行文件的绝对路径；`config` 是适配器自己的非密钥设置（如 asi 的
   `python`、`instances`）；`env` 进入两个 Run；`passEnv` 只记变量名（如评审模型的 API key），只给 verify Run，启动时
@@ -530,7 +532,8 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   parentId priority passEnv`），且 `command` 与 `agentTask: { instruction }` 二选一。Agent 方法（codex / claude-code）的
   solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，参数只在这里维护），并设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
-  `command`，verify 不能请求 Agent。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
+  `command`；external 也给 adapter 自己的 `command`，Orbit 只加方法的 solve `passEnv`，不注入 CLI 或强改网络。
+  verify 不能请求 Agent。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
   `snapshot = false`，最后按 RunSpec 校验。
 - **任务资源文件**（`contracts.BenchResources`，`bench/resources.ts`）：`orbit bench add --resources <file>` 登记一个
   JSON：`{ version: 1, default, tasks: { <task>: { cpus?, memGB?, gpus?, gpuMemGB?, timeoutMin?, evidence?, confidence?,
@@ -621,6 +624,12 @@ CLI `orbit bench add|ls|rm|tasks|run|jobs|show|cancel|rescore|compare [--metric]
   `home/ben/task/final_model` 验证和评分，其他方法使用 `task/final_model`；仅 `native=empty` 挂载完整 checkout
   和 dotenv 并设置 `AGENT_ENV`，其他方法只挂载 `src/`，避免通过 `/repo/.env` 暴露凭据。
 - **接入验收（任意新 benchmark）**：oracle 满分（没有参考解时省略）、空答案零分、抽样与原版结果一致。
+- **GUI 第一阶段**（[BrowserGym/MiniWoB](../examples/bench-adapters/browsergym/README.md)）：外部 Python adapter/runtime，
+  固定 BrowserGym 0.14.3 与 MiniWoB commit，五个 CPU 浏览器任务；单容器内完成原版 reset/step/validate。
+  external 工厂接收截图、目标、动作错误（bid 模式另有 accessibility tree），返回原版高层动作；empty 为 noop 后停止。
+  不新增资源账本或 GUI 状态机。原版奖励在 solve 期间产生；独立 verify 仅检查完整轨迹、奖励与哈希，
+  rescore 是保存证据重查，不是原环境重评或动作回放。截图、JSONL、Markdown 复用现有 Trial review。
+  策略与环境同进程，面向可信研究代码；无通用 oracle、GPU 策略、桌面/Android 或 GUI 状态恢复。
 - **已知限制**：verify Run 在 solve 结束后才提交，group 通知可能在 job 中途（某一时刻组内无排队/运行 Run）提前发出；
   ASI 包装每个 trial 调一次原生 runner，不复用其并行调度。
 
