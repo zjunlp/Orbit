@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AdapterRequest, BenchTask, Method } from "../contracts/index.ts";
-import { isAgentMethod } from "../contracts/index.ts";
+import { isCliMethod } from "../contracts/index.ts";
 import { agentErrorKind } from "../harness/index.ts";
 import type { AdapterHandlers, RunDescription, ScoreReply, TrialRequest } from "./adapter.ts";
 
@@ -142,7 +142,7 @@ export function oracleTemplate(instances: string, outputs: string[]): string {
 }
 
 function agentArgs(method: Method): string[] {
-  if (!isAgentMethod(method)) return [];
+  if (!isCliMethod(method)) return [];
   const config: Record<string, string> = {};
   if (method.model) config.model = method.model;
   if (method.effort) config.effort = method.effort;
@@ -217,7 +217,7 @@ print(check())
 `;
 
 function requireCompatibleRunner(b: Bench, method: Method): void {
-  if (!isAgentMethod(method)) return;
+  if (!isCliMethod(method)) return;
   const adapter = method.agent === "codex" ? "codex_cli" : "claude_code_cli";
   const result = spawnSync(
     b.config.python ?? "python3",
@@ -238,6 +238,7 @@ function requireCompatibleRunner(b: Bench, method: Method): void {
 }
 
 export function asiSolveSpec(b: Bench, ctx: Trial): RunDescription {
+  if (ctx.method.agent === "external") throw new Error("ASI does not support external methods");
   const meta = taskMeta(b, ctx.task);
   const level = ctx.options.promptLevel ?? "b1";
   if (!PROMPT_LEVELS.includes(level)) throw new Error(`unknown ASI prompt level: ${level}`);

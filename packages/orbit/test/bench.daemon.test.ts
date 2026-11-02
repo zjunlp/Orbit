@@ -135,6 +135,32 @@ afterAll(async () => {
 });
 
 describe("bench jobs", () => {
+  it("accepts external policy methods without CLI auth through the HTTP client", async () => {
+    const method = {
+      name: "policy",
+      agent: "external" as const,
+      entrypoint: "fixture:make_agent",
+      model: "fixture",
+      config: { test: "yes" },
+      passEnv: ["ORBIT_TEST_MODEL_KEY"],
+    };
+    const job = await client.benchSubmit({ benchmark: "ext", methods: [method] });
+    let detail = await client.benchJob(job.id);
+    for (let i = 0; i < 300 && detail.job.state === "running"; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      detail = await client.benchJob(job.id);
+    }
+    expect(detail.job.state).toBe("done");
+    expect(detail.job.spec.methods).toEqual([method]);
+    const trial = detail.trials[0];
+    expect(trial?.outcome).toMatchObject({ evaluation: "valid", score: 0 });
+    if (!trial?.solveRunId || !trial.verifyRunId) throw new Error("missing runs");
+    const solve = await client.get(trial.solveRunId);
+    expect(solve.spec.passEnv).toEqual(method.passEnv);
+    expect(solve.spec.auth).toBeUndefined();
+    expect((await client.get(trial.verifyRunId)).spec.passEnv).toEqual([]);
+  }, 45_000);
+
   it("retains benchmark input defaults and rejects malformed registrations", async () => {
     const registered = await client.benchmarkPut({
       name: "defaults",

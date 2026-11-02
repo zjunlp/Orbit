@@ -26,6 +26,7 @@ export function MethodCard({
           <span className="mono">
             {" "}
             · {method.agent}
+            {method.entrypoint ? ` · ${method.entrypoint}` : ""}
             {method.model ? ` · ${method.model}` : ""}
             {method.effort ? ` · ${method.effort}` : ""}
           </span>

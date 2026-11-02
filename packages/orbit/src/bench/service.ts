@@ -26,7 +26,7 @@ import {
   Folder,
   type FolderExportResult,
   type FolderMoveResult,
-  isAgentMethod,
+  isCliMethod,
   isTerminal,
   type Method,
   type Outcome,
@@ -215,7 +215,8 @@ export class BenchService {
   }
 
   private checkMethod(m: Method): void {
-    if (!isAgentMethod(m)) {
+    if (m.agent === "external") return;
+    if (!isCliMethod(m)) {
       if (m.auth || m.bundle || m.model)
         throw new UserError(`${m.name}: ${m.agent} takes no auth, model or bundle`);
       return;

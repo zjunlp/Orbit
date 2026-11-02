@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { it } from "vitest";
 
-it.each(["posttrainbench", "researchclawbench", "longds"])(
+it.each(["posttrainbench", "researchclawbench", "longds", "browsergym"])(
   "checks the %s Python adapter",
   (name) => {
     const dir = fileURLToPath(

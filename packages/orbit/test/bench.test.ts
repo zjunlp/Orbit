@@ -35,7 +35,10 @@ import {
   AdapterRunSpec,
   type BenchJob,
   type Benchmark,
+  isAgentMethod,
+  isCliMethod,
   leaseRequest,
+  Method,
   type Run,
   RunSpec,
   type ServiceSpec,
@@ -1287,6 +1290,45 @@ describe("aggregation", () => {
 });
 
 describe("methods", () => {
+  it("keeps external policies separate from CLI harnesses and baseline methods", () => {
+    const method = Method.parse({
+      name: "gui",
+      agent: "external",
+      entrypoint: "policy:make_agent",
+      model: "vision",
+      config: { temperature: "0" },
+      passEnv: ["MODEL_KEY"],
+    });
+    expect(isAgentMethod(method)).toBe(true);
+    expect(isCliMethod(method)).toBe(false);
+    expect(parseMethod("gui=external,entrypoint=policy:make_agent,model=vision")).toEqual({
+      name: "gui",
+      agent: "external",
+      entrypoint: "policy:make_agent",
+      model: "vision",
+    });
+    for (const bad of [
+      { ...method, entrypoint: undefined },
+      { ...method, auth: "p" },
+      { ...method, bundle: "/bundle" },
+      { ...method, passEnv: ["INVALID=ENV"] },
+      { ...method, agent: "codex", auth: "p" },
+      { ...method, agent: "empty" },
+    ])
+      expect(Method.safeParse(bad).success).toBe(false);
+    expect(Method.parse({ name: "old", agent: "empty" })).toEqual({ name: "old", agent: "empty" });
+    const benchmark = { env: {}, passEnv: ["GRADER_KEY"] } as Benchmark;
+    const spec = { image: "gui", command: ["python", "runtime.py"], network: false };
+    const solve = toRunSpec(spec, method, benchmark, "solve");
+    expect(solve).toMatchObject({ passEnv: ["MODEL_KEY"], network: false, snapshot: false });
+    expect(solve.auth).toBeUndefined();
+    expect(solve.agentBundle).toBeUndefined();
+    expect(toRunSpec(spec, method, benchmark, "verify")).toMatchObject({ passEnv: ["GRADER_KEY"] });
+    expect(() =>
+      toRunSpec({ image: "gui", agentTask: { instruction: "go" } }, method, benchmark, "solve"),
+    ).toThrow(/asked for an Agent/);
+  });
+
   it("parses --method and builds Agent CLI commands", () => {
     expect(parseMethod("oracle")).toEqual({ name: "oracle", agent: "oracle" });
     expect(parseMethod("gpt=codex,auth=p,model=m,effort=high")).toEqual({
