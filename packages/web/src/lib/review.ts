@@ -4,7 +4,7 @@
 import type { ReviewFile } from "./api.ts";
 
 /** Must match `REVIEW_KINDS` in the contracts (checked by a test). */
-export const KNOWN_KINDS = ["markdown", "image", "text", "json", "table"] as const;
+export const KNOWN_KINDS = ["markdown", "image", "text", "json", "table", "trajectory"] as const;
 export type Kind = (typeof KNOWN_KINDS)[number];
 
 const isKnown = (k: string | undefined): k is Kind =>

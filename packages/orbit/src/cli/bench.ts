@@ -97,6 +97,12 @@ function formatJob(d: BenchJobDetail): string {
           `benchmark at ${job.source.describe ?? job.source.commit.slice(0, 12)}${job.source.dirty && !job.source.describe?.endsWith("-dirty") ? " (dirty)" : ""}`,
         ]
       : []),
+    ...(job.capabilities
+      ? [
+          `environment: ${job.capabilities.kind} · recheck: ${job.capabilities.rescore}`,
+          ...Object.entries(job.capabilities.conditions).map(([key, value]) => `${key}: ${value}`),
+        ]
+      : []),
     "",
     table([
       ["METHOD", "VALID", ...metrics.map((m) => m.label.toUpperCase())],

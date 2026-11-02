@@ -1,0 +1,206 @@
+.gui-review {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+.gui-trajectory {
+  padding: 20px 24px;
+  overflow: auto;
+}
+.gui-goal {
+  margin-bottom: 18px;
+}
+.gui-goal p {
+  margin: 5px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gui-trajectory-grid {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 240px;
+  gap: 18px;
+  align-items: start;
+}
+.gui-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 540px;
+  overflow-y: auto;
+}
+.gui-step-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.gui-step-list .gui-step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  white-space: normal;
+  text-align: left;
+  padding: 8px 10px;
+  height: auto;
+  min-height: 48px;
+  line-height: 1.4;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.gui-step small {
+  font-size: 11px;
+  color: var(--text-2);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.gui-observation {
+  min-width: 0;
+}
+.gui-screen-toolbar,
+.gui-screen-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gui-screen-toolbar {
+  margin-bottom: 10px;
+}
+.gui-screen-toolbar fieldset {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.gui-screen {
+  min-height: 260px;
+  max-height: 65vh;
+  overflow: auto;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.gui-screen img {
+  display: block;
+  max-width: 100%;
+  max-height: 65vh;
+  height: auto;
+  object-fit: contain;
+}
+.gui-screen.original {
+  justify-content: flex-start;
+}
+.gui-screen.original img {
+  max-width: none;
+  max-height: none;
+  flex-shrink: 0;
+}
+.gui-screen-footer {
+  margin-top: 10px;
+}
+.gui-step-detail {
+  border-left: 1px solid var(--border);
+  padding-left: 18px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.gui-step-detail p,
+.gui-step-detail pre {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.gui-action-error {
+  color: var(--st-failed);
+}
+.gui-step-detail pre {
+  font: 12px / 1.6 var(--font-mono);
+  max-height: 260px;
+  overflow: auto;
+}
+.gui-step-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.gui-step-controls input {
+  flex: 1;
+  min-width: 100px;
+  accent-color: var(--accent);
+}
+.gui-trace-note {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 18px;
+  font-size: 12px;
+}
+.trial-config .kv dd {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.trial-head .meta .chip {
+  max-width: 100%;
+  height: auto;
+  min-height: 22px;
+  padding: 3px 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.trial-head .phase {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+@media (max-width: 1200px) {
+  .gui-trajectory-grid {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+  .gui-step-detail {
+    grid-column: 2;
+    border-left: 0;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .gui-trajectory {
+    padding: 12px;
+  }
+  .gui-trajectory-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .gui-step-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 180px;
+  }
+  .gui-step-heading {
+    grid-column: 1 / -1;
+  }
+  .gui-step-detail {
+    grid-column: 1;
+  }
+  .gui-step-controls {
+    gap: 8px;
+  }
+  .gui-step-controls input {
+    flex-basis: 100%;
+    order: 5;
+  }
+  .gui-screen {
+    min-height: 200px;
+  }
+}

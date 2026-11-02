@@ -152,6 +152,8 @@ export class BenchService {
     for (const m of spec.methods) {
       if (names.has(m.name)) throw new UserError(`duplicate method name: ${m.name}`);
       names.add(m.name);
+      if (info.capabilities && !info.capabilities.methods.includes(m.agent))
+        throw new UserError(`${b.name} does not support ${m.agent} methods`);
       this.checkMethod(m);
     }
     if (spec.tasks.length === 0) spec.tasks = all.filter((t) => t.supported).map((t) => t.id);
@@ -176,6 +178,8 @@ export class BenchService {
     const job: BenchJob = {
       id: newId(),
       spec,
+      benchmarkSnapshot: structuredClone(b),
+      ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
       resources,
       folder: folder.data,
       metrics: resolveMetrics(info.metrics),
@@ -474,6 +478,8 @@ export class BenchService {
     if (!job) throw new NotFoundError(`bench job not found: ${id}`);
     if (job.state === "running")
       throw new UserError(`bench job ${id} is running; rescore it once it has ended`);
+    if (job.capabilities?.rescore === "none")
+      throw new UserError(`bench job ${id} does not support rescoring`);
     const f = BenchRescore.parse(input);
     const all = this.deps.store.trials(id);
     const unknown = [
@@ -573,7 +579,7 @@ export class BenchService {
     const method = job.spec.methods.find((m) => m.name === t.method);
     if (!method) throw new Error(`method ${t.method} not in job ${job.id}`);
     return {
-      b: this.benchmark(job.spec.benchmark),
+      b: job.benchmarkSnapshot ?? this.benchmark(job.spec.benchmark),
       trial: {
         id: t.id,
         task: t.task,

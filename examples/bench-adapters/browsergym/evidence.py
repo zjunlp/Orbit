@@ -24,6 +24,17 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def trajectory_review(rows, result):
+    return {"version": 1, "goal": rows[0].get("goal", ""),
+            "steps": [{"step": row["step"], "screenshot": row["screenshot"],
+                       "action": row["action"], "reward": row["reward"],
+                       "actionError": row.get("last_action_error") or "",
+                       "terminated": row["terminated"], "truncated": row["truncated"],
+                       "observation": row.get("axtree_txt", "")} for row in rows],
+            "stopReason": result.get("stop_reason") or
+            f"{result.get('error_stage', 'unknown')}: {result.get('error_type', 'incomplete')}"}
+
+
 def validate(root):
     result = read(root / "result.json")
     if result.get("status") != "completed":
@@ -81,6 +92,10 @@ def validate(root):
     else:
         raise ValueError("Unknown episode end reason")
     hashes = result["sha256"]
+    if (root / "trajectory-review.json").is_file():
+        required.add("trajectory-review.json")
+        if read(root / "trajectory-review.json") != trajectory_review(rows, result):
+            raise ValueError("Trajectory review disagrees with the recorded observations")
     if set(hashes) != required or any(digest(root / name) != hashes[name] for name in required):
         raise ValueError("Saved evidence is missing or changed")
     return {"valid": True, "reward": result["reward"], "steps": steps,

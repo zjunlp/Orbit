@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { BenchTask, Method, MetricSpec, ResourceOverride, Review } from "./bench.ts";
+import {
+  BenchCapabilities,
+  BenchTask,
+  Method,
+  MetricSpec,
+  ResourceOverride,
+  Review,
+} from "./bench.ts";
 import { Run } from "./runs.ts";
 
 const MetricSpecs = z
@@ -95,6 +102,7 @@ export type AdapterRequest = z.infer<typeof AdapterRequest>;
 export const AdapterTasksResponse = z.object({
   tasks: z.array(BenchTask),
   metrics: MetricSpecs.default([]),
+  capabilities: BenchCapabilities.optional(),
 });
 export type AdapterTasksResponse = z.infer<typeof AdapterTasksResponse>;
 export const AdapterSpecResponse = z.object({

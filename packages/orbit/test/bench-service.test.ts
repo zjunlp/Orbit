@@ -1,5 +1,5 @@
 // Real store and adapter planning with explicit submission/scoring fakes; no runs are executed.
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,6 +91,132 @@ function fixture(adapter = "harbor") {
   });
   return { home, paths, source, store, runs, registry, bench, run, job, trial, submit };
 }
+
+it("retains registration settings through removal, restart and saved-output rescoring", async () => {
+  const f = fixture();
+  const executable = join(f.home, "adapter.cjs");
+  const requests = join(f.home, "requests.jsonl");
+  write(
+    executable,
+    `#!${process.execPath}
+const fs = require("node:fs");
+let input = "";
+process.stdin.on("data", c => input += c);
+process.stdin.on("end", () => {
+  const req = JSON.parse(input), say = value => console.log(JSON.stringify(value));
+  fs.appendFileSync(${JSON.stringify(requests)}, JSON.stringify(req) + "\\n");
+  if (req.op === "tasks") return say({
+    tasks: [{ id: ${JSON.stringify(task)}, title: "Fixture", supported: true, reason: null }],
+    capabilities: { kind: "browser", methods: ["empty"], conditions: { actionSet: req.benchmark.config.actionSet }, scoreKind: "binary", rescore: "evidence" }
+  });
+  if (req.op === "score") return say({ score: req.benchmark.config.actionSet === "coord" ? 1 : 0 });
+  say({ spec: { backend: "process", command: ["echo", req.benchmark.config.actionSet] } });
+});
+`,
+  );
+  chmodSync(executable, 0o755);
+  f.registry.put({
+    name: "fixture",
+    path: f.source,
+    adapter: executable,
+    config: { actionSet: "coord" },
+  });
+  await expect(
+    f.bench.submit({ benchmark: "fixture", methods: [{ name: "bad", agent: "oracle" }] }),
+  ).rejects.toThrow("does not support oracle");
+  expect(f.store.listJobs()).toHaveLength(0);
+  const submitted = await f.bench.submit({
+    benchmark: "fixture",
+    methods: [{ name: "empty", agent: "empty" }],
+  });
+  await expect.poll(() => f.submit.mock.calls.length).toBe(1);
+  await expect.poll(() => f.store.trials(submitted.id)[0]?.state).toBe("solving");
+  expect(submitted.capabilities?.conditions).toEqual({ actionSet: "coord" });
+  if (!submitted.benchmarkSnapshot) throw new Error("missing snapshot");
+  submitted.benchmarkSnapshot.config.actionSet = "caller mutation";
+  expect(f.store.getJob(submitted.id)?.benchmarkSnapshot?.config.actionSet).toBe("coord");
+  f.registry.put({
+    name: "fixture",
+    path: f.source,
+    adapter: executable,
+    config: { actionSet: "bid" },
+  });
+  f.registry.remove("fixture");
+  const trial = f.store.trials(submitted.id)[0];
+  const solve = trial?.solveRunId ? f.store.getRun(trial.solveRunId) : null;
+  if (!trial || !solve) throw new Error("missing solve");
+  f.store.putRun({
+    ...solve,
+    state: "succeeded",
+    cleanup: "done",
+    exitCode: 0,
+    startedAt: at,
+    endedAt: at,
+  });
+  mkdirSync(f.runs.dirs(solve.id).output, { recursive: true });
+  f.store.close();
+  stores.splice(stores.indexOf(f.store), 1);
+
+  const store = new Store(f.paths.db);
+  stores.push(store);
+  const runs = new RunService({ store, paths: f.paths, probe: vi.fn() });
+  let count = 0;
+  vi.spyOn(runs, "submit").mockImplementation(async (spec) => {
+    const queued = Run.parse({
+      ...f.run,
+      id: `verify-${++count}`,
+      spec,
+      state: "queued",
+      startedAt: null,
+    });
+    store.putRun(queued);
+    return queued;
+  });
+  const bench = new BenchService({
+    store,
+    runs,
+    paths: f.paths,
+    registry: new BenchmarkRegistry(f.paths.benchmarks),
+  });
+  bench.start();
+  const finishVerification = async () => {
+    await expect.poll(() => store.getTrial(trial.id)?.state).toBe("verifying");
+    const id = store.getTrial(trial.id)?.verifyRunId;
+    const verify = id ? store.getRun(id) : null;
+    if (!verify) throw new Error("missing verifier");
+    expect(verify.spec.command).toEqual(["echo", "coord"]);
+    const complete = {
+      ...verify,
+      state: "succeeded" as const,
+      cleanup: "done" as const,
+      exitCode: 0,
+      startedAt: at,
+      endedAt: at,
+    };
+    store.putRun(complete);
+    runs.emit("change", { run: complete });
+    await expect.poll(() => store.getTrial(trial.id)?.state).toBe("done");
+    expect(store.getTrial(trial.id)?.outcome?.score).toBe(1);
+  };
+  await finishVerification();
+  await expect.poll(() => store.getJob(submitted.id)?.state).toBe("done");
+  bench.rescore(submitted.id);
+  await finishVerification();
+  expect(store.getTrial(trial.id)?.history).toHaveLength(1);
+  const recorded = readFileSync(requests, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  expect(
+    recorded.filter((r) => r.op !== "tasks").map((r) => [r.op, r.benchmark.config.actionSet]),
+  ).toEqual([
+    ["solve", "coord"],
+    ["verify", "coord"],
+    ["score", "coord"],
+    ["verify", "coord"],
+    ["score", "coord"],
+  ]);
+});
 
 it("finishes a job only after its last open trial without loading all its trials", async () => {
   const f = fixture();

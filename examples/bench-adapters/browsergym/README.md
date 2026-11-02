@@ -107,10 +107,11 @@ class MyPolicy:
 - 停止、步数耗尽、任务完成是正常 episode 结束；empty 做一次 noop 后停止，得到原版零奖励。
   策略/模型异常、浏览器异常、缺失或不完整证据为 invalid；取消为 unknown。
   外层 Run 超时若未留下完整终态证据，也记为 invalid，不从最后一张截图推断分数。
-- solve 保存 `plan.json`、`result.json`、`trajectory.jsonl`、`trajectory.md` 和 `screenshots/*.png`。
-  Web Trial 页面直接显示截图与动作；无需新的播放器。
+- solve 保存 `plan.json`、`result.json`、`trajectory.jsonl`、`trajectory-review.json`、`trajectory.md` 和 `screenshots/*.png`。
+  Web Trial 的 Trajectory 支持步骤导航、动作前后画面和步骤链接；Markdown 保留用于旧版或降级查看。结构化视图与原始 JSONL 一起核验。
 - verify 在独立、无网络的容器里检查记录完整性、奖励一致性与文件哈希；`bench rescore` 只重新检查这些保存的证据。
   **它不会重新运行原环境、回放动作或重新评分网页状态**。重新评估策略需要新 job。
+- Web 的 **New evaluation** 可选择已登记环境与任务，配置 external/empty 方法并提交；`actionSet`、`maxSteps` 是只读环境预设。新 job 固定登记配置，复制新评测时提示当前登记的变化。见 [Web 指南](../../../docs/guides/gui-bench-web.md)。
 - 固定依赖和任务版本写入 plan；Run 记录镜像 ID。保留自己的策略源码版本/镜像，避免运行期间修改挂载目录。
 
 ## 开发验证

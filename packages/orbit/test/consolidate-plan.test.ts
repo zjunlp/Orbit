@@ -120,6 +120,43 @@ const flags = Array.from({ length: 16 }, (_, bits) => ({
   allowTransportDifferences: Boolean(bits & 8),
 }));
 
+it("compares saved benchmark conditions even when the registration has since changed", () => {
+  const f = fixture();
+  const registration = f.transport.benchmarks.get("fixture");
+  if (!registration) throw new Error("missing fixture registration");
+  f.target.job.benchmarkSnapshot = structuredClone(registration);
+  f.donor.job.benchmarkSnapshot = { ...registration, config: { actionSet: "bid" } };
+  const plan = () =>
+    planConsolidation({
+      ...f,
+      donors: [f.donor],
+      flags: { sources: [f.donor.job.id], allowTransportDifferences: true },
+    });
+  expect(plan).toThrow("incompatible source job");
+  f.donor.job.benchmarkSnapshot = { ...registration, updatedAt: "2026-11-02" };
+  expect(plan().adopted).toHaveLength(1);
+  delete f.donor.job.benchmarkSnapshot;
+  expect(plan).toThrow("incompatible source job");
+});
+
+it("allows explicit proxy-only differences using saved settings after registrations are removed", () => {
+  const f = fixture();
+  f.target.job.benchmarkSnapshot = f.transport.benchmarks.get("fixture");
+  f.donor.job.benchmarkSnapshot = f.transport.benchmarks.get("alias");
+  f.donor.job.spec.benchmark = "alias";
+  const input = {
+    ...f,
+    transport: { ...f.transport, benchmarks: new Map() },
+    donors: [f.donor],
+    flags: { sources: [f.donor.job.id] },
+  };
+  expect(() => planConsolidation(input)).toThrow("incompatible source job");
+  expect(
+    planConsolidation({ ...input, flags: { ...input.flags, allowTransportDifferences: true } })
+      .adopted,
+  ).toHaveLength(1);
+});
+
 describe.each(flags)("planner flags %o", (flags) => {
   it("retains compatible retries and rejects conflicting artifact policies without mutating inputs", () => {
     const { target, donor, oldRuns, failures, transport } = fixture();

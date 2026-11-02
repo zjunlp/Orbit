@@ -20,8 +20,32 @@ import { isValid } from "./summary.ts";
 /** Group of a job's runs, so the run list and notifications see a job as one group. */
 export const benchGroup = (jobId: string) => `bench-${jobId}`;
 
-export const sameMethodSetup = (a: BenchJob, b: BenchJob) =>
-  a.spec.benchmark === b.spec.benchmark && isDeepStrictEqual(a.spec.methods, b.spec.methods);
+function benchmarkSettings(b: Benchmark) {
+  return {
+    adapter: b.adapter,
+    path: b.path,
+    config: b.config,
+    env: b.env,
+    passEnv: b.passEnv,
+    resources: b.resources,
+  };
+}
+
+export const sameMethodSetup = (a: BenchJob, b: BenchJob) => {
+  if (a.spec.benchmark !== b.spec.benchmark || !isDeepStrictEqual(a.spec.methods, b.spec.methods))
+    return false;
+  if (!a.benchmarkSnapshot && !b.benchmarkSnapshot) return true;
+  return Boolean(
+    a.benchmarkSnapshot &&
+      b.benchmarkSnapshot &&
+      isDeepStrictEqual(
+        benchmarkSettings(a.benchmarkSnapshot),
+        benchmarkSettings(b.benchmarkSnapshot),
+      ) &&
+      isDeepStrictEqual(a.source, b.source) &&
+      isDeepStrictEqual(a.capabilities, b.capabilities),
+  );
+};
 
 export function consolidateOptions(id: string, input: BenchConsolidateInput) {
   const f = BenchConsolidate.parse(input);
@@ -39,19 +63,14 @@ export function consolidateOptions(id: string, input: BenchConsolidateInput) {
 }
 
 export function equivalentTransport(a: BenchJob, b: BenchJob, transport: Transport): boolean {
-  const left = transport.benchmarks.get(a.spec.benchmark);
-  const right = transport.benchmarks.get(b.spec.benchmark);
+  if (Boolean(a.benchmarkSnapshot) !== Boolean(b.benchmarkSnapshot)) return false;
+  const left = a.benchmarkSnapshot ?? transport.benchmarks.get(a.spec.benchmark);
+  const right = b.benchmarkSnapshot ?? transport.benchmarks.get(b.spec.benchmark);
   if (!left || !right || !isDeepStrictEqual(a.source, b.source)) return false;
+  if (!isDeepStrictEqual(a.capabilities, b.capabilities)) return false;
   const env = (v: Record<string, string>) =>
     Object.fromEntries(Object.entries(v).filter(([k]) => !/^(https?|all|no)_proxy$/i.test(k)));
-  const benchmark = (v: Benchmark) => ({
-    adapter: v.adapter,
-    path: v.path,
-    config: v.config,
-    env: env(v.env),
-    passEnv: v.passEnv,
-    resources: v.resources,
-  });
+  const benchmark = (v: Benchmark) => ({ ...benchmarkSettings(v), env: env(v.env) });
   if (!isDeepStrictEqual(benchmark(left), benchmark(right))) return false;
   if (a.spec.methods.length !== b.spec.methods.length) return false;
   return a.spec.methods.every((m, i) => {

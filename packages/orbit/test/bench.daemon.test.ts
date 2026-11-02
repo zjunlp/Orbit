@@ -62,6 +62,7 @@ process.stdin.on("end", () => {
     return say({
       tasks: [{ id: "t1", title: "one", supported: true, reason: null }],
       metrics: [{ name: "answer", label: "Answer", unit: "pts", primary: true }],
+      capabilities: req.benchmark.config.gui ? { kind: "browser", methods: ["empty"], conditions: { actionSet: "coord" }, scoreKind: "binary", rescore: "evidence" } : undefined,
     });
   const node = ${JSON.stringify(process.execPath)};
   if (req.op === "solve") {
@@ -135,6 +136,33 @@ afterAll(async () => {
 });
 
 describe("bench jobs", () => {
+  it("exposes optional adapter capabilities without changing the tasks-only client", async () => {
+    const registration = await client.benchmarkPut({
+      name: "gui",
+      adapter: join(home, "adapter.cjs"),
+      path: home,
+      config: { gui: "1" },
+    });
+    const info = await client.benchInfo(registration.name);
+    expect(info.capabilities).toEqual({
+      kind: "browser",
+      methods: ["empty"],
+      conditions: { actionSet: "coord" },
+      scoreKind: "binary",
+      rescore: "evidence",
+    });
+    expect(info.metrics[0]?.name).toBe("answer");
+    expect(await client.benchTasks(registration.name)).toEqual(info.tasks);
+    await expect(
+      client.benchSubmit({
+        benchmark: registration.name,
+        methods: [{ name: "oracle", agent: "oracle" }],
+      }),
+    ).rejects.toThrow("does not support oracle");
+    await client.benchmarkRemove(registration.name);
+    expect((await client.benchInfo("ext")).capabilities).toBeUndefined();
+  });
+
   it("accepts external policy methods without CLI auth through the HTTP client", async () => {
     const method = {
       name: "policy",

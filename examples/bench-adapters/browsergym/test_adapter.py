@@ -67,6 +67,33 @@ class AdapterTests(unittest.TestCase):
         self.assertFalse(rows["miniwob.enter-text"]["supported"])
         self.assertFalse(rows["miniwob.unsupported-fixture"]["supported"])
 
+    def test_catalog_declares_supported_methods_and_fixed_conditions(self):
+        self.req["benchmark"]["config"].update(actionSet="bid", maxSteps="7")
+        caps = adapter.tasks(self.req)["capabilities"]
+        self.assertEqual(caps["methods"], ["external", "empty"])
+        self.assertEqual(caps["rescore"], "evidence")
+        self.assertEqual(caps["conditions"]["Step limit"], "7")
+        self.assertEqual(caps["conditions"]["Observation"], "Screenshot + accessibility tree")
+
+    def test_review_preserves_post_action_frames_and_is_verified(self):
+        out = self.episode()
+        self.rows[0]["goal"] = "Click the button"
+        self.save()
+        review = evidence.trajectory_review(self.rows, self.result)
+        evidence.write(out / "trajectory-review.json", review)
+        self.result["sha256"]["trajectory-review.json"] = evidence.digest(out / "trajectory-review.json")
+        evidence.write(out / "result.json", self.result)
+        report = evidence.validate(out)
+        evidence.write(Path(self.req["verify"]["output"]) / "validation.json", report)
+        self.assertIsNone(review["steps"][0]["action"])
+        self.assertEqual(review["steps"][1]["action"], "click('1')")
+        self.assertEqual(review["steps"][1]["screenshot"], "screenshots/0001.png")
+        self.assertEqual(adapter.score(self.req)["review"]["files"][0]["kind"], "trajectory")
+        review["steps"][1]["screenshot"] = "screenshots/0000.png"
+        evidence.write(out / "trajectory-review.json", review)
+        with self.assertRaisesRegex(ValueError, "review disagrees"):
+            evidence.validate(out)
+
     def test_plan_uses_official_files_seed_and_resolved_resources(self):
         self.req["trial"].update(resources={"cpus": 3, "memGB": 6}, timeoutMin=2)
         spec, plan = self.plan()

@@ -70,6 +70,18 @@ export const MetricSpec = z.object({
 export type MetricSpec = z.infer<typeof MetricSpec>;
 export type MetricSpecInput = z.input<typeof MetricSpec>;
 
+export const METHOD_AGENTS = ["codex", "claude-code", "external", "oracle", "empty"] as const;
+export type MethodAgent = (typeof METHOD_AGENTS)[number];
+
+export const BenchCapabilities = z.object({
+  kind: z.enum(["browser", "desktop", "mobile", "other"]),
+  methods: z.array(z.enum(METHOD_AGENTS)).min(1),
+  conditions: z.record(z.string().max(80), z.string().max(2000)),
+  scoreKind: z.enum(["binary", "scalar"]),
+  rescore: z.enum(["evidence", "score", "none"]),
+});
+export type BenchCapabilities = z.infer<typeof BenchCapabilities>;
+
 /**
  * An AgentProfile: harness (with the host CLI version recorded per run) + model + auth + method
  * bundle, or an adapter-owned external policy. `oracle` and `empty` calibrate an adapter.
@@ -77,7 +89,7 @@ export type MetricSpecInput = z.input<typeof MetricSpec>;
 export const Method = z
   .object({
     name: ProfileName,
-    agent: z.enum(["codex", "claude-code", "external", "oracle", "empty"]),
+    agent: z.enum(METHOD_AGENTS),
     auth: ProfileName.optional(),
     model: z.string().optional(),
     /** Reasoning effort, e.g. `high`. */
@@ -130,8 +142,50 @@ export type Evaluation = z.infer<typeof Evaluation>;
  * an adapter picks a kind, it never sends markup or styles. Unknown kinds are kept and shown with
  * their `fallback` kind, else by file extension, else as text.
  */
-export const REVIEW_KINDS = ["markdown", "image", "text", "json", "table"] as const;
+export const REVIEW_KINDS = ["markdown", "image", "text", "json", "table", "trajectory"] as const;
 export type ReviewKind = (typeof REVIEW_KINDS)[number];
+
+/** Row zero is the initial observation; later rows contain each action's resulting observation. */
+export const GuiTrajectory = z
+  .object({
+    version: z.literal(1),
+    goal: z.string().max(100_000),
+    steps: z
+      .array(
+        z.object({
+          step: z.number().int().nonnegative(),
+          screenshot: z
+            .string()
+            .min(1)
+            .refine(
+              (p) =>
+                !/^[a-z][a-z\d+.-]*:/i.test(p) &&
+                !p.includes("\\") &&
+                !Array.from(p).some((char) => char.charCodeAt(0) < 32) &&
+                p.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+              "screenshot must stay in the run output",
+            ),
+          action: z
+            .string()
+            .refine((action) => action.trim().length > 0, "action must not be blank")
+            .nullable(),
+          reward: z.number().nullable(),
+          actionError: z.string().optional(),
+          terminated: z.boolean().optional(),
+          truncated: z.boolean().optional(),
+          observation: z.string().optional(),
+        }),
+      )
+      .min(1)
+      .max(10001),
+    stopReason: z.string().optional(),
+  })
+  .refine(
+    (t) =>
+      t.steps.every((s, i) => s.step === i && (i === 0 ? s.action === null : s.action !== null)),
+    "trajectory must start with an initial observation and contain consecutive action steps",
+  );
+export type GuiTrajectory = z.infer<typeof GuiTrajectory>;
 const LIMIT_TEXT = 20_000;
 const clipText = (max: number) =>
   z.string().transform((s) => (s.length > max ? `${s.slice(0, max)}…` : s));
@@ -327,6 +381,9 @@ export type ResourceOverride = z.infer<typeof ResourceOverride>;
 export const BenchJob = z.object({
   id: z.string(),
   spec: BenchJobSpec,
+  /** Non-secret registration fixed at submission; absent only for legacy jobs. */
+  benchmarkSnapshot: Benchmark.optional(),
+  capabilities: BenchCapabilities.optional(),
   /** Per-task overrides read from the benchmark's resources file at submit (null without one). */
   resources: z.record(z.string(), ResourceOverride).nullable().default(null),
   /** Folder for organizing; the job's runs follow it. */
@@ -379,7 +436,12 @@ export const BenchJobList = z.object({
 export type BenchJobList = z.infer<typeof BenchJobList>;
 
 export const BenchmarkList = z.object({ benchmarks: z.array(Benchmark) });
-export const BenchTaskList = z.object({ tasks: z.array(BenchTask) });
+export const BenchTaskList = z.object({
+  tasks: z.array(BenchTask),
+  metrics: z.array(MetricSpec).default([]),
+  capabilities: BenchCapabilities.optional(),
+});
+export type BenchTaskList = z.infer<typeof BenchTaskList>;
 
 /** Methods from several jobs side by side; columns are `<job>/<method>`. */
 export const BenchCompare = z.object({

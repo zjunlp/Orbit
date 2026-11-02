@@ -13,26 +13,29 @@ import { api } from "../../lib/api.ts";
 import { jobPath } from "../../lib/format.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
-
+import { Conditions } from "./Conditions.tsx";
 import { jobLabel } from "./common.tsx";
+import { comparisonChange, withBaseline } from "./conditions.ts";
+import "./workflow.css";
 export function BenchComparePage() {
   const loc = useLocation();
   const ids = (loc.query.get("jobs") ?? "").split(",").filter(Boolean);
   const key = ids.join(",");
-  const jobs = useAsync(() => api.benchJobs(), []);
-  // Results change only while a selected job runs (unknown jobs count as running).
-  const live = ids.some(
-    (id) => (jobs.data?.find((j) => j.id === id)?.state ?? "running") === "running",
+  const jobs = useAsync(() => api.benchJobs(), [], { poll: true, pollMs: 5000 });
+  const cmp = useAsync(
+    async () => ({ key, value: ids.length ? await api.benchCompare(ids) : null }),
+    [key],
+    { poll: ids.length > 0, pollMs: 5000 },
   );
-  const cmp = useAsync(() => (ids.length ? api.benchCompare(ids) : Promise.resolve(null)), [key], {
-    poll: live,
-    pollMs: 5000,
-  });
+  const selected = useAsync(
+    () => Promise.all(ids.map((id) => api.benchJob(id).then((detail) => detail.job))),
+    [key],
+  );
   const toggle = (id: string) => {
     const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
     setQuery({ jobs: next.join(",") || null });
   };
-  const c = cmp.data;
+  const c = cmp.data?.key === key ? cmp.data.value : null;
 
   return (
     <>
@@ -64,7 +67,18 @@ export function BenchComparePage() {
           ) : !c ? (
             <Loading />
           ) : (
-            <CompareView c={c} />
+            <>
+              {selected.error ? (
+                <div className="callout">
+                  Could not load evaluation conditions: {selected.error}
+                </div>
+              ) : selected.data?.map((job) => job.id).join(",") === key ? (
+                <Conditions jobs={selected.data} />
+              ) : (
+                <Loading what="Loading evaluation conditions" />
+              )}
+              <CompareView c={c} />
+            </>
           )}
         </div>
       </div>
@@ -75,15 +89,89 @@ export function BenchComparePage() {
 type Compare = NonNullable<Awaited<ReturnType<typeof api.benchCompare>>>;
 
 /** One metric of a comparison: task matrix, means, paired Δ to the first column, ranking bars. */
-function CompareView({ c }: { c: Compare }) {
+function CompareView({ c: original }: { c: Compare }) {
+  const { query } = useLocation();
+  const c = withBaseline(original, query.get("baseline") ?? "");
   const [metric, setMetric] = useMetric(c.metrics);
   const st = c.stats[metric.name];
   const paired = st?.pairedTasks ?? 0;
   const base = c.columns[0]?.key;
   const col = (k: string) => st?.columns[k];
+  const change = query.get("change") ?? "all";
+  const target =
+    c.columns.find((x) => x.key === query.get("target") && x.key !== base)?.key ??
+    c.columns[1]?.key;
+  const shown = c.rows.filter(
+    (row) =>
+      change === "all" ||
+      comparisonChange(
+        base ? row.values[metric.name]?.[base] : null,
+        target ? row.values[metric.name]?.[target] : null,
+        metric.higherIsBetter,
+      ) === change,
+  );
   const better = (a: number, b: number) => (metric.higherIsBetter ? a > b : a < b);
   return (
     <>
+      <div className="bench-filters">
+        <label>
+          Baseline
+          <select
+            className="input"
+            value={base ?? ""}
+            onChange={(e) => setQuery({ baseline: e.target.value })}
+          >
+            {c.columns.map((column) => (
+              <option key={column.key} value={column.key}>
+                {column.key}
+              </option>
+            ))}
+          </select>
+        </label>
+        {c.columns.length > 1 && (
+          <>
+            <label>
+              Compare with
+              <select
+                className="input"
+                value={target ?? ""}
+                onChange={(e) => setQuery({ target: e.target.value })}
+              >
+                {c.columns
+                  .filter((x) => x.key !== base)
+                  .map((column) => (
+                    <option key={column.key} value={column.key}>
+                      {column.key}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Tasks
+              <select
+                className="input"
+                value={change}
+                onChange={(e) => setQuery({ change: e.target.value })}
+              >
+                {[
+                  ["all", "All"],
+                  ["improved", "Improved"],
+                  ["regressed", "Regressed"],
+                  ["unchanged", "Unchanged"],
+                  ["unavailable", "No paired result"],
+                ].map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+        <span className="faint">
+          {shown.length}/{c.rows.length} tasks · filters do not change summary statistics
+        </span>
+      </div>
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
         <MetricSwitch metrics={c.metrics} value={metric} onChange={setMetric} />
         <span className="faint">
@@ -106,7 +194,7 @@ function CompareView({ c }: { c: Compare }) {
               </tr>
             </thead>
             <tbody>
-              {c.rows.map((r) => {
+              {shown.map((r) => {
                 const vals = r.values[metric.name] ?? {};
                 const present = Object.values(vals).filter((v): v is number => v !== null);
                 const best =
@@ -127,6 +215,7 @@ function CompareView({ c }: { c: Compare }) {
                               metric={metric}
                               evaluation={v === null ? "unknown" : "valid"}
                               note={n}
+                              href={`${jobPath(x.jobId)}?view=list&task=${encodeURIComponent(r.task)}&method=${encodeURIComponent(x.method)}`}
                               title={
                                 v === null
                                   ? "no valid trial with this metric"

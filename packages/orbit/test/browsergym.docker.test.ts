@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { OrbitClient } from "../src/client/index.ts";
 import { orbitPaths, runDirs } from "../src/config/paths.ts";
+import { GuiTrajectory } from "../src/contracts/index.ts";
 import { type StartedDaemon, startDaemon } from "../src/daemon/server.ts";
 
 const adapter = fileURLToPath(
@@ -121,6 +122,11 @@ def waiting(context):
     });
     const detail = await finish(job.id);
     expect(detail.trials).toHaveLength(5);
+    expect(detail.job.capabilities).toMatchObject({
+      kind: "browser",
+      scoreKind: "binary",
+      rescore: "evidence",
+    });
     for (const trial of detail.trials)
       expect(trial.outcome, `${trial.task}: ${JSON.stringify(trial.outcome)}`).toMatchObject({
         evaluation: "valid",
@@ -152,6 +158,13 @@ def waiting(context):
     expect(broken?.outcome).toMatchObject({ evaluation: "invalid", score: null });
     if (!scripted?.solveRunId || !scripted.verifyRunId) throw new Error("missing runs");
     const output = runDirs(paths, scripted.solveRunId).output;
+    const trajectory = GuiTrajectory.parse(
+      JSON.parse(readFileSync(join(output, "trajectory-review.json"), "utf8")),
+    );
+    expect(trajectory.steps).toHaveLength(2);
+    expect(trajectory.steps[0]?.action).toBeNull();
+    expect(trajectory.steps[1]?.screenshot).toBe("screenshots/0001.png");
+    expect(scripted.outcome?.review?.files[0]?.kind).toBe("trajectory");
     const before = readFileSync(join(output, "result.json"), "utf8");
     expect(JSON.parse(before)).toMatchObject({ status: "completed", reward: 1, steps: 1 });
     const rows = readFileSync(join(output, "trajectory.jsonl"), "utf8")
