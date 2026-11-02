@@ -3,3 +3,4 @@
 export { BenchComparePage } from "./bench/Compare.tsx";
 export { BenchJobDetail } from "./bench/JobDetail.tsx";
 export { BenchJobs } from "./bench/Jobs.tsx";
+export { NewBenchJob } from "./bench/NewJob.tsx";

@@ -1,0 +1,79 @@
+.bench-conditions summary {
+  cursor: pointer;
+}
+.bench-condition-list {
+  margin: 0;
+}
+.bench-condition-list > div {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bench-condition-list dt {
+  color: var(--text-2);
+}
+.bench-condition-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.bench-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+.bench-progress progress {
+  flex: 1;
+  min-width: 100px;
+  height: 8px;
+  accent-color: var(--accent);
+}
+.bench-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.bench-filters label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bench-more {
+  position: relative;
+}
+.bench-more summary {
+  list-style: none;
+  cursor: pointer;
+}
+.bench-more-actions {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  min-width: 160px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 6px;
+}
+.bench-trial-table {
+  overflow-x: auto;
+}
+.bench-trial-table .task-cell {
+  max-width: 380px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+@media (max-width: 640px) {
+  .bench-condition-list > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+}

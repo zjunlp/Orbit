@@ -44,7 +44,7 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
     return c.json({ ok: true });
   });
   api.get("/benchmarks/:name/tasks", async (c) =>
-    c.json({ tasks: await bench.tasks(c.req.param("name")) }),
+    c.json(await bench.infoOf(bench.benchmark(c.req.param("name")))),
   );
   api.get("/bench/jobs", (c) => c.json(bench.jobs(num(c.req.query("limit"), 200))));
   api.post("/bench/jobs", async (c) =>

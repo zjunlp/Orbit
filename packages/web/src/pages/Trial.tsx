@@ -11,6 +11,7 @@ import { TopBar } from "../components/TopBar.tsx";
 import { Empty, Link, Loading, StateBadge, toast, useNow } from "../components/ui.tsx";
 import {
   api,
+  type BenchJob,
   fileUrl,
   type Outcome,
   type Review,
@@ -37,6 +38,7 @@ import { upsertRun, useRun } from "../lib/runs-store.ts";
 import { useAsync } from "../lib/use.ts";
 import { ArtifactsTab, Csv } from "./run/Artifacts.tsx";
 import { SessionTab } from "./run/Session.tsx";
+import { TrajectoryFile } from "./trial/Trajectory.tsx";
 
 interface TabDef {
   key: string;
@@ -83,10 +85,14 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const solve = useRunOnce(trial?.solveRunId ?? null);
   const verify = useRunOnce(trial?.verifyRunId ?? null);
   const loc = useLocation();
-  const review = trial?.outcome?.review ?? null;
+  const review = trial?.outcome
+    ? trial.outcome.review
+    : (trial?.history.at(-1)?.outcome.review ?? null);
   const tabs: TabDef[] = useMemo(() => {
     if (!review) return LEGACY_TABS;
-    const out: TabDef[] = review.files.map((f, i) => ({ key: `f${i}`, label: f.label }));
+    const out: TabDef[] = review.files
+      .map((f, i) => ({ key: `f${i}`, label: f.label, trajectory: f.kind === "trajectory" }))
+      .sort((a, b) => Number(b.trajectory) - Number(a.trajectory));
     if (review.items.length) out.push({ key: "grader", label: "Grader" });
     if (Object.keys(review.details).length || extraFields(review, REVIEW_FIELDS).length)
       out.push({ key: "details", label: "Details" });
@@ -95,7 +101,10 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const tab = tabs.some((t) => t.key === loc.query.get("tab"))
     ? (loc.query.get("tab") as string)
     : (tabs[0]?.key as string);
-  const now = useNow(1000, Boolean(solve && isActive(solve.state)));
+  const now = useNow(
+    1000,
+    Boolean((solve && isActive(solve.state)) || (verify && isActive(verify.state))),
+  );
   const crumbs = [
     { label: "Bench", href: "/bench" },
     { label: job?.spec.name ?? jobId, href: jobPath(jobId) },
@@ -119,16 +128,27 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
     );
   const o = trial.outcome;
   const method = job.spec.methods.find((m) => m.name === trial.method);
+  const evidence = job.capabilities?.rescore === "evidence";
+  const gui = review?.files.some((f) => f.kind === "trajectory") ?? false;
+  const rescoreLabel = evidence ? "Recheck evidence" : "Rescore";
   const rescore = async () => {
     if (
       !confirm(
-        "Score this trial again? A new verify run is started from the saved solve output; the Agent is not rerun and the current score is kept in the history.",
+        evidence
+          ? "Check the saved evidence again? This does not rerun the Agent or restore the browser. The previous result remains in the history."
+          : "Score this trial again? A new verify run is started from the saved solve output; the Agent is not rerun and the current score is kept in the history.",
       )
     )
       return;
     try {
       const r = await api.benchRescore(jobId, { trials: [trial.id] });
-      toast(r.trials.length ? "Rescoring" : (r.skipped[0]?.reason ?? "Not rescored"));
+      toast(
+        r.trials.length
+          ? evidence
+            ? "Rechecking evidence"
+            : "Rescoring"
+          : (r.skipped[0]?.reason ?? "Not rescored"),
+      );
       d.reload();
     } catch (e) {
       toast((e as Error).message);
@@ -137,24 +157,33 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
 
   return (
     <>
-      <TopBar crumbs={crumbs}>
-        {job.state !== "running" && trial.state === "done" && (
-          <button
-            type="button"
-            className="btn sm"
-            onClick={rescore}
-            title="Verify and score again from the saved solve output"
-          >
-            Rescore
-          </button>
-        )}
+      <TopBar crumbs={crumbs} className="topbar-wrap">
+        <Link className="btn sm" href={`/bench/new?from=${encodeURIComponent(job.id)}`}>
+          Copy configuration
+        </Link>
+        {job.state !== "running" &&
+          trial.state === "done" &&
+          job.capabilities?.rescore !== "none" && (
+            <button
+              type="button"
+              className="btn sm"
+              onClick={rescore}
+              title={
+                evidence
+                  ? "Check saved evidence without rerunning the environment"
+                  : "Verify and score again from the saved solve output"
+              }
+            >
+              {rescoreLabel}
+            </button>
+          )}
         <Link className="btn sm" href={jobPath(jobId)}>
           <IconFlask size={13} /> Job
         </Link>
       </TopBar>
-      <div className="run-head">
-        <div className="row" style={{ gap: 12 }}>
-          <EvalChip t={trial} />
+      <div className="run-head trial-head">
+        <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+          <TrialResult t={trial} binary={job.capabilities?.scoreKind === "binary"} />
           <h1 className="ellipsis">
             {trial.task} <span className="faint">·</span> {trial.method}
             {job.spec.seeds > 1 && <span className="faint"> #{trial.seed}</span>}
@@ -179,8 +208,21 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
             </span>
           )}
           {o && <span className="chip mono">execution {o.execution}</span>}
-          {o && o.cleanup !== "done" && <span className="chip warn">cleanup {o.cleanup}</span>}
-          <span className="chip">{trial.state}</span>
+          {o && (
+            <span className={`chip ${evalClass(o.evaluation)}`}>evaluation {o.evaluation}</span>
+          )}
+          {o && (
+            <span className={`chip${o.cleanup !== "done" ? " warn" : ""}`}>
+              cleanup {o.cleanup}
+            </span>
+          )}
+          <span className="chip">
+            {trial.state !== "done" && trial.history.length
+              ? evidence
+                ? "rechecking evidence"
+                : "rescoring"
+              : trial.state}
+          </span>
           <span className="faint">created {dateTime(trial.createdAt)}</span>
         </div>
         {(o?.issues ?? trial.issues).length > 0 && (
@@ -189,11 +231,14 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
             <span>{(o?.issues ?? trial.issues).join(" · ")}</span>
           </div>
         )}
-        <div className="trial-timeline">
-          <PhaseCard label="Solve" run={solve} id={trial.solveRunId} now={now} />
-          <span className="faint">→</span>
-          <PhaseCard label="Verify" run={verify} id={trial.verifyRunId} now={now} />
-        </div>
+        <details open={!gui}>
+          <summary>Execution details</summary>
+          <div className="trial-timeline">
+            <PhaseCard label="Solve" run={solve} id={trial.solveRunId} now={now} />
+            <span className="faint">→</span>
+            <PhaseCard label="Verify" run={verify} id={trial.verifyRunId} now={now} />
+          </div>
+        </details>
         {trial.history.length > 0 && <ScoringHistory history={trial.history} />}
       </div>
       <nav className="tabs">
@@ -213,13 +258,14 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
         ))}
       </nav>
       <div className="page" style={{ display: "flex", flexDirection: "column" }}>
-        <TabBody tab={tab} trial={trial} review={review} solve={solve} verify={verify} />
+        <TabBody tab={tab} trial={trial} job={job} review={review} solve={solve} verify={verify} />
       </div>
     </>
   );
 }
 
 const ALWAYS_TABS: TabDef[] = [
+  { key: "config", label: "Configuration" },
   { key: "session", label: "Agent session" },
   { key: "outputs", label: "Outputs" },
 ];
@@ -233,11 +279,12 @@ const REVIEW_FIELDS = ["files", "items", "details"] as const;
 function TabBody(props: {
   tab: string;
   trial: Trial;
+  job: BenchJob;
   review: Review | null;
   solve: Run | undefined;
   verify: Run | undefined;
 }) {
-  const { tab, trial, review, solve, verify } = props;
+  const { tab, trial, job, review, solve, verify } = props;
   const notStarted = (phase: string) => (
     <Empty title={`No ${phase} run`}>
       {trial.state === "done" ? `This trial has no ${phase} run.` : `Waiting for the ${phase} run.`}
@@ -248,10 +295,26 @@ function TabBody(props: {
     const f = review.files[Number(file[1])];
     if (!f) return <Empty title="No such file" />;
     const run = f.phase === "solve" ? solve : verify;
+    const resolved = resolveKind(f);
+    if (resolved.kind === "trajectory" && run) {
+      const fallback = review.files.findIndex(
+        (item) => item.phase === f.phase && resolveKind(item).kind === "markdown",
+      );
+      return (
+        <TrajectoryFile
+          key={`${run.id}/${f.path}`}
+          run={run}
+          file={f}
+          note={resolved.note}
+          fallback={fallback >= 0 ? `?tab=f${fallback}` : undefined}
+        />
+      );
+    }
     return run ? <ReviewFileView key={tab} run={run} f={f} /> : notStarted(f.phase);
   }
   if (tab === "grader" && review) return <GraderItems items={review.items} />;
   if (tab === "details" && review) return <DetailsView review={review} />;
+  if (tab === "config") return <TrialConfiguration job={job} trial={trial} />;
   if (tab === "report") return solve ? <ReportView run={solve} /> : notStarted("solve");
   if (tab === "judge") return verify ? <GraderView run={verify} /> : notStarted("verify");
   if (tab === "session") return solve ? <SessionTab run={solve} /> : notStarted("solve");
@@ -260,14 +323,78 @@ function TabBody(props: {
 }
 
 const evalClass = (e: string | undefined) =>
-  e === "valid" ? "good" : e === "invalid" ? "bad" : e === "unknown" ? "warn" : "";
+  e === "invalid" ? "bad" : e === "unknown" ? "warn" : "";
 
-function EvalChip({ t }: { t: Trial }) {
-  const e = t.outcome?.evaluation;
+function TrialResult({ t, binary }: { t: Trial; binary: boolean }) {
+  const o = t.outcome;
+  const binaryResult = binary && o?.evaluation === "valid" && o.score !== null && o.maxScore > 0;
+  const success = binaryResult && o.score === o.maxScore;
   return (
-    <span className={`chip ${evalClass(e)}`}>
-      {e ?? (t.history.length ? "rescoring" : t.state)}
+    <span
+      className={`chip ${binaryResult ? (success ? "good" : "warn") : evalClass(o?.evaluation)}`}
+    >
+      {binaryResult
+        ? success
+          ? "Task completed"
+          : "Task not completed"
+        : o?.evaluation === "invalid"
+          ? "Evaluation invalid"
+          : o?.evaluation === "unknown"
+            ? "Result unknown"
+            : o?.evaluation === "valid"
+              ? "Scored"
+              : "Awaiting result"}
     </span>
+  );
+}
+
+function TrialConfiguration({ job, trial }: { job: BenchJob; trial: Trial }) {
+  const method = job.spec.methods.find((m) => m.name === trial.method);
+  const saved = job.benchmarkSnapshot;
+  const rows: [string, unknown][] = [
+    ["Benchmark", job.spec.benchmark],
+    ["Task", trial.task],
+    ["Seed", trial.seed],
+    ["Method", method?.name],
+    ["Agent", method?.agent],
+    ["Model", method?.model],
+    ["Entrypoint", method?.entrypoint],
+    ["Method settings", method?.config],
+    ["Reasoning effort", method?.effort],
+    ["Solve timeout (minutes)", job.spec.timeoutMin ?? job.resources?.[trial.task]?.timeoutMin],
+    ["Solve resources", job.resources?.[trial.task]],
+    ["Job options", job.spec.options],
+    ["Source", job.source],
+    ["Environment conditions", job.capabilities?.conditions],
+    ["Adapter", saved?.adapter],
+    ["Environment settings", saved?.config],
+  ];
+  return (
+    <div className="page-pad trial-config">
+      <section className="card">
+        <div className="card-h">Saved configuration</div>
+        <div className="card-b">
+          {!saved && (
+            <p className="faint">
+              This older job has no saved environment configuration. Current registration settings
+              are not used to fill the gap.
+            </p>
+          )}
+          <dl className="kv">
+            {rows
+              .filter(([, v]) => v !== undefined)
+              .map(([label, value]) => (
+                <Fragment key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
+                  </dd>
+                </Fragment>
+              ))}
+          </dl>
+        </div>
+      </section>
+    </div>
   );
 }
 

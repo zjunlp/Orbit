@@ -9,7 +9,7 @@ import shutil
 import sys
 import time
 
-from evidence import BROWSERGYM_VERSION, digest, read, write
+from evidence import BROWSERGYM_VERSION, digest, read, trajectory_review, write
 
 
 def observation(obs, action_set):
@@ -47,6 +47,7 @@ def run(plan_path, output):
     result = {"status": "error", "steps": 0}
     phase = "environment_setup"
     env = policy = None
+    rows = []
     start = time.monotonic()
     try:
         if any(version(p) != BROWSERGYM_VERSION for p in ("browsergym-miniwob", "browsergym-core")):
@@ -66,7 +67,7 @@ def run(plan_path, output):
             f"# {plan['task']} · seed {plan['seed']}\n\n"
             "Reward is computed by the original live BrowserGym environment.\n\n"
             + "    " + obs["goal"].replace("\n", "\n    ") + "\n", encoding="utf-8")
-        capture(output, obs, plan["action_set"], 0, None, 0, False, False, info)
+        rows.append(capture(output, obs, plan["action_set"], 0, None, 0, False, False, info))
         method = plan["method"]
         if method["agent"] == "external":
             phase = "policy_setup"
@@ -92,7 +93,8 @@ def run(plan_path, output):
             phase = "environment_step"
             obs, reward, terminated, truncated, info = env.step(action)
             phase = "capture"
-            capture(output, obs, plan["action_set"], step, action, reward, terminated, truncated, info)
+            rows.append(capture(output, obs, plan["action_set"], step, action, reward,
+                                terminated, truncated, info))
             result["steps"] = step
             if terminated or truncated:
                 reason = "terminated"
@@ -113,8 +115,12 @@ def run(plan_path, output):
             except Exception as exc:
                 result.update(status="error", error_type=type(exc).__name__, error_stage="cleanup")
         result["elapsed_sec"] = time.monotonic() - start
+        if rows:
+            write(output / "trajectory-review.json", trajectory_review(rows, result))
         paths = [output / "plan.json", output / "trajectory.jsonl",
                  *sorted((output / "screenshots").glob("*.png"))]
+        if (output / "trajectory-review.json").is_file():
+            paths.append(output / "trajectory-review.json")
         result["sha256"] = {str(p.relative_to(output)): digest(p) for p in paths if p.is_file()}
         write(output / "result.json", result)
     return 0 if result["status"] == "completed" else 1

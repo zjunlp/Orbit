@@ -1,0 +1,28 @@
+@media (max-width: 700px) {
+  .topbar.topbar-wrap {
+    height: auto;
+    min-height: 48px;
+    flex-wrap: wrap;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .topbar-wrap .crumbs {
+    flex: 1 1 100%;
+    overflow: hidden;
+  }
+  .topbar-wrap .crumbs a {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .topbar-wrap .crumbs > .row:first-child {
+    flex-shrink: 0;
+  }
+  .topbar-wrap > .spacer {
+    display: none;
+  }
+  .topbar-wrap > .btn {
+    flex: none;
+  }
+}

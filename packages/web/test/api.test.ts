@@ -3,6 +3,38 @@ import { api } from "../src/lib/api.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("submits the reviewed evaluation with its folder and preserves adapter capabilities", async () => {
+  const metadata = {
+    tasks: [],
+    metrics: [],
+    capabilities: {
+      kind: "browser",
+      methods: ["empty"],
+      conditions: { maxSteps: "20" },
+      scoreKind: "binary",
+      rescore: "evidence",
+    },
+  };
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(metadata)))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: "job-id" })));
+  vi.stubGlobal("fetch", fetch);
+  expect(await api.benchInfo("mini/wob")).toEqual(metadata);
+  expect(fetch.mock.calls[0]?.[0]).toBe("/api/v1/benchmarks/mini%2Fwob/tasks");
+  const spec = {
+    benchmark: "miniwob",
+    tasks: ["click"],
+    methods: [{ name: "empty", agent: "empty" as const }],
+    seeds: 3,
+    options: {},
+  };
+  await api.benchSubmit(spec, "gui/checks");
+  expect(fetch.mock.calls[1]?.[0]).toBe("/api/v1/bench/jobs?folder=gui%2Fchecks");
+  expect(fetch.mock.calls[1]?.[1].method).toBe("POST");
+  expect(JSON.parse(fetch.mock.calls[1]?.[1].body)).toEqual(spec);
+});
+
 it("carries the consolidation preview digest through the Web API", async () => {
   const plan = {
     digest: "a".repeat(64),

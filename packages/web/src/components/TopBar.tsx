@@ -1,13 +1,22 @@
 import { Link } from "./ui.tsx";
+import "./topbar.css";
 
 export interface Crumb {
   label: React.ReactNode;
   href?: string;
 }
 
-export function TopBar({ crumbs, children }: { crumbs: Crumb[]; children?: React.ReactNode }) {
+export function TopBar({
+  crumbs,
+  children,
+  className,
+}: {
+  crumbs: Crumb[];
+  children?: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <header className="topbar">
+    <header className={className ? `topbar ${className}` : "topbar"}>
       <div className="crumbs">
         {crumbs.map((c, i) => (
           <span key={String(i)} className="row" style={{ gap: 6, minWidth: 0 }}>

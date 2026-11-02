@@ -41,7 +41,7 @@ def checkout_revision(root):
 
 
 def tasks(req):
-    root, _, _ = settings(req)
+    root, config, steps = settings(req)
     available = {p.stem for p in (root / "miniwob/html/miniwob").glob("*.html")}
     rows = []
     for task in sorted(available | TASKS):
@@ -49,7 +49,15 @@ def tasks(req):
                   "Missing original task HTML" if task not in available else None)
         rows.append({"id": f"miniwob.{task}", "title": task, "supported": reason is None,
                      "reason": reason, "tags": {"environment": "browsergym-miniwob"}})
-    return {"tasks": rows, "metrics": [
+    return {"tasks": rows, "capabilities": {
+        "kind": "browser", "methods": ["external", "empty"],
+        "scoreKind": "binary", "rescore": "evidence", "conditions": {
+            "Environment": f"BrowserGym {BROWSERGYM_VERSION}",
+            "Task revision": MINIWOB_COMMIT,
+            "Observation": "Screenshot + accessibility tree" if config.get("actionSet") == "bid"
+                           else "Screenshot",
+            "Actions": config.get("actionSet", "coord"), "Step limit": str(steps),
+            "Coverage": "Five-task integration subset"}}, "metrics": [
         {"name": "score", "label": "Success", "unit": "%", "primary": True,
          "description": "Original BrowserGym MiniWoB binary reward, averaged over tasks"}]}
 
@@ -117,6 +125,9 @@ def score(req):
         {"label": "Actions", "phase": "solve", "kind": "text", "path": "trajectory.jsonl"},
         {"label": "Official reward", "phase": "solve", "kind": "json", "path": "result.json"},
         {"label": "Evidence validation", "phase": "verify", "kind": "json", "path": "validation.json"}]}
+    if (Path(req["solve"]["output"]) / "trajectory-review.json").is_file():
+        review["files"].insert(0, {"label": "Trajectory", "phase": "solve", "kind": "trajectory",
+                                   "path": "trajectory-review.json", "fallback": "json"})
     try:
         report = validate(Path(req["solve"]["output"]))
         verified = read(Path(req["verify"]["output"]) / "validation.json")

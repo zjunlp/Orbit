@@ -149,10 +149,20 @@ orbit logs <solve 或 verify run>
 ```
 
 - `path` 相对对应 Run 的 `$ORBIT_OUTPUT`（即请求里的 `solve.output` / `verify.output`），不能以 `/` 开头或含 `..`。
-- `kind` 只能选 `markdown`、`image`、`text`、`json`、`table`（CSV / TSV）。样式由 Orbit 决定，不要也不能传 HTML 或 CSS。
-  将来新增的 kind，旧版 Orbit 会用 `fallback`（上述五种之一）、再按扩展名、再按纯文本显示，并标注“未知类型”。
+- `kind` 只能选 `markdown`、`image`、`text`、`json`、`table`（CSV / TSV）、`trajectory`。样式由 Orbit 决定，不要也不能传 HTML 或 CSS。
+  新增的 kind，旧版 Orbit 会用 `fallback`、再按扩展名、再按纯文本显示，并标注“未知类型”。轨迹应声明 `fallback: "json"` 并保留 Markdown 文件。
 - 其他字段不会丢：Details 标签按键值列出。文本过长会截断，条目数有上限（文件 20、items 500、details 50）。
 - 不给 `review` 时，trial 页退回通用猜测（solve 中的 Markdown 报告、verify 中的 JSON），Outputs 标签始终可看全部文件。
+
+### GUI 轨迹与能力声明
+
+GUI 轨迹使用 `GuiTrajectory` 版本 1：`{ version: 1, goal, steps, stopReason? }`。
+每步包含 `step`、相对输出目录的 `screenshot`、`action`、`reward`，可带 `actionError`、`terminated`、`truncated`、`observation`。
+step 从 0 连续递增；第 0 行的 action 必须为 null，后续行保存动作执行后的截图。Web 负责前后帧配对；不接受外部 URL 或向上跳转的截图路径。
+
+`tasks` 回复还可带 `capabilities: { kind, methods, conditions, scoreKind, rescore }`。
+kind 为 browser/desktop/mobile/other，methods 为支持的方法类型数组，conditions 为非敏感字符串字典，scoreKind 为 binary/scalar，rescore 为 evidence/score/none。
+它决定 Web 的方法选择、条件展示、二元任务筛选和重查文案；未声明时使用通用界面。该信息不是环境或模型连通性检查。
 
 ### 指标（`metrics`，可选）
 

@@ -16,7 +16,7 @@ import { authState } from "./lib/api.ts";
 import { useHotkeys } from "./lib/hotkeys.ts";
 import { navigate, safeDecode, useLocation } from "./lib/router.ts";
 import { startRunsStore, useRunsState } from "./lib/runs-store.ts";
-import { BenchComparePage, BenchJobDetail, BenchJobs } from "./pages/Bench.tsx";
+import { BenchComparePage, BenchJobDetail, BenchJobs, NewBenchJob } from "./pages/Bench.tsx";
 import { Compare } from "./pages/Compare.tsx";
 import { Resources } from "./pages/Resources.tsx";
 import { RunDetail } from "./pages/RunDetail.tsx";
@@ -83,6 +83,7 @@ export function App() {
       />
     );
   else if (loc.path === "/bench/compare") page = <BenchComparePage />;
+  else if (loc.path === "/bench/new") page = <NewBenchJob />;
   else if (bj) page = <BenchJobDetail key={bj[1]} id={safeDecode(bj[1] as string)} />;
   else if (loc.path === "/bench" || loc.path === "/bench/") page = <BenchJobs />;
   else if (loc.path === "/compare") page = <Compare />;

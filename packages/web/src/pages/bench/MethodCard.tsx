@@ -42,8 +42,11 @@ export function MethodCard({
       )}
       <EvalBar s={s} />
       <span className="l">
-        {s.valid} valid · {s.invalid} invalid · {s.unknown} unknown
+        {s.valid}/{s.trials} valid · {s.invalid} invalid · {s.unknown} unknown
         {s.pending ? ` · ${s.pending} pending` : ""}
+      </span>
+      <span className="l">
+        {st?.tasks ?? 0} tasks with this metric · mean over tasks{s.pending ? " · provisional" : ""}
       </span>
       {others.length > 0 && (
         <div className="stat-more">

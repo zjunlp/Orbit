@@ -445,6 +445,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   从 daemon 环境读取，不落盘。登记时先调用一次适配器的 `tasks`，失败则不保存。
   registry 按文件 mtime 缓存解析结果；替换、删除与 daemon 自己的写入也使缓存失效，返回值仍与缓存隔离。
 - **Job / Trial**：sqlite 表 `bench_jobs`、`trials`。每个 trial 独立推进：`pending → solving → verifying → done`；
+  新 job 保存登记配置快照 `benchmarkSnapshot` 和适配器的可选 `capabilities`，执行、重启恢复及重查使用同一快照；旧 job 仍回退当前登记。快照不包含凭据值，也不冻结路径下的文件或镜像标签内容。
   job 和全部 trial 在同一事务内提交；`BenchService` 监听 Run 变化推进，daemon 重启后从库中恢复未完成的 trial。
   trial 结束时 staging 删除失败只记日志，继续完成 job 状态更新。solve 与 verify 都是普通 Run
   （同一租约、队列、记录、Web 详情），`group = bench-<job>`，tags `{bench, job, trial, phase}`；verify Run
@@ -495,7 +496,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   不可和 `--prune-invalid` 同用。拒绝来源之间重复的新任务位置。新增 Run 记录保留 source_benchmark 与原 auth。
   `--allow-transport-differences` 显式允许同 checkout 路径、adapter、config、已记录 git source、指标与方法的代理配置别名：
   只允许 HTTP(S)/ALL/NO_PROXY 和 hostNetwork 差异，auth 别名必须使用相同凭据及模型端点；其他环境变量不放宽。
-  旧 job 未记录 git source 时双方都须为空；注册配置不是不可变快照，调用方仍需确认没有改过 benchmark 内容。
+  旧 job 未记录 git source 时双方都须为空；新 job 还比较保存的登记配置和能力声明，新旧记录之间不能归并；路径下的 benchmark 内容仍须由调用方保持一致。
   不碰镜像与下载缓存；文件删除失败通过 leftovers 返回。Web job 页的 Merge retries 提供预览和确认。
 - **指标**（`contracts.MetricSpec`，规则只在 `contracts/metrics.ts`，daemon、CLI、Web 共用）：适配器在 `tasks` 回复里声明
   `metrics[{ name, label, description?, unit?, range?, higherIsBetter, primary, reference? }]`（至多 20 个，至多一个 primary），
@@ -521,13 +522,15 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 - 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, solve?, verify? }`；`trial` =
   `{ id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork }`（`resources` 为 job 固定的任务 solve 资源覆盖值，供原生 runner 同步设置子容器限制；`staging` 是 trial 私有的宿主目录，用于要挂进
   Run 的副本，trial 结束时删除）；`solve` / `verify` = `{ run, output }`（Run 记录与其 `$ORBIT_OUTPUT` 的宿主路径）。
-- 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[] }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
+- 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[], capabilities?: BenchCapabilities }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
   `{ score, maxScore?, invalid?, issues?, review?, metrics? }`。`review`（可选）告诉 trial 页展示什么：
   `files[{ label, phase: solve|verify, path(相对该 Run 输出目录), kind?, fallback? }]`、`items[{ criterion, score?,
   maxScore?, weight?, type?, reasoning? }]`、`details{ key: 短值 }`。`kind` 是封闭集合 `markdown | image | text | json |
-  table`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
+  table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
+- `capabilities` 描述环境类别、支持的 method 类型、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；daemon 在提交时检查 method，Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
+- `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
   parentId priority passEnv`），且 `command` 与 `agentTask: { instruction }` 二选一。Agent 方法（codex / claude-code）的
   solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，参数只在这里维护），并设置 auth、bundle 与
@@ -609,6 +612,8 @@ CLI `orbit bench add|ls|rm|tasks|run|jobs|show|cancel|rescore|compare [--metric]
 `/bench/<job>`（方法均分、有效性分布、任务 × 方法分数矩阵、问题列表与 solve/verify Run 链接）、
 `/bench/compare?jobs=`（逐任务对比、全部与配对均值 ± 95% CI、相对第一列的配对差、带参考线的排名条；`?metric=` 切换指标）。接入新 benchmark 见
 [guides/bench-adapter.md](guides/bench-adapter.md)。
+
+Web `/bench/new` 支持环境/任务选择、方法配置或导入、复制已有 job、运行数量预览与提交。固定环境条件只读，复制使用当前登记并提示与原快照的差异。详情区分有效零分和评测异常，支持任务/方法/seed 筛选；重查期间根据 trial 刷新，不因 job 已结束停止更新。Compare 可选择任意方法为基线，复用共享统计函数重算配对差，按任务改善/退步筛选并链接到 seed 列表；筛选不改变整体统计。Trial 的 trajectory 查看器提供动作前后画面、步骤链接、键盘导航、原图/缩放和缺失记录提示，默认仅加载选中截图，保留 Markdown 与非 GUI review。指南：[GUI Web](guides/gui-bench-web.md)。
 
 - **外部适配器示例**：ResearchClawBench（`examples/bench-adapters/researchclawbench/`）。solve 为 Ubuntu 22.04 容器，
   任务 workspace 在 `/task`（`data/`、`related_work/` 只读，其余可写，结束时采集），原版指令模板，RCB 的 venv 按宿主路径

@@ -3,7 +3,7 @@ import type { BenchJob, MethodSummary } from "../../lib/api.ts";
 export const jobLabel = (j: BenchJob) => j.spec.name ?? j.id;
 
 export function JobState({ state }: { state: BenchJob["state"] }) {
-  const cls = state === "done" ? "good" : state === "cancelled" ? "warn" : "";
+  const cls = state === "cancelled" ? "warn" : "";
   return <span className={`chip ${cls}`}>{state}</span>;
 }
 

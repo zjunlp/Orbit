@@ -1,37 +1,29 @@
 import { resolveMetrics } from "@zjunlp/orbit/metrics";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { CiBars, useMetric } from "../../components/BenchMetrics.tsx";
-import { IconAlert, IconCompare } from "../../components/icons.tsx";
+import { IconCompare } from "../../components/icons.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { ConfirmDialog, Empty, Link, Loading, toast } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
-import { dateTime, duration, trialPath } from "../../lib/format.ts";
+import { dateTime, duration } from "../../lib/format.ts";
 import { navigate } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
+import { Conditions } from "./Conditions.tsx";
 import { ConsolidateDialog } from "./ConsolidateDialog.tsx";
-
 import { JobState, jobLabel } from "./common.tsx";
-import { JobMatrix } from "./JobMatrix.tsx";
+import { TrialBrowser } from "./TrialBrowser.tsx";
+import "./workflow.css";
 import { MethodCard } from "./MethodCard.tsx";
-import { RunLinks } from "./TrialCell.tsx";
 export function BenchJobDetail({ id }: { id: string }) {
-  const [running, setRunning] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [merging, setMerging] = useState(false);
-  const d = useAsync(() => api.benchJob(id), [id], { poll: running, pollMs: 3000 });
+  const d = useAsync(() => api.benchJob(id), [id], { poll: true, pollMs: 5000 });
   const job = d.data?.job;
-  // A finished job no longer changes: stop polling it.
-  useEffect(() => {
-    if (job) setRunning(job.state === "running");
-  }, [job]);
   const trials = d.data?.trials ?? [];
   const methods = job?.spec.methods.map((m) => m.name) ?? [];
   const tasks = useMemo(() => [...new Set(trials.map((t) => t.task))], [trials]);
   const metrics = useMemo(() => resolveMetrics(job?.metrics ?? []), [job]);
   const [metric, setMetric] = useMetric(metrics);
-  const problems = trials.filter(
-    (t) => (t.outcome && t.outcome.evaluation !== "valid") || (t.outcome?.issues.length ?? 0) > 0,
-  );
 
   if (d.error && !d.data)
     return (
@@ -48,6 +40,8 @@ export function BenchJobDetail({ id }: { id: string }) {
       </>
     );
 
+  const evidence = job.capabilities?.rescore === "evidence";
+  const active = trials.filter((t) => t.state !== "done").length;
   const cancel = async () => {
     try {
       await api.benchCancel(job.id);
@@ -61,14 +55,14 @@ export function BenchJobDetail({ id }: { id: string }) {
     const n = trials.filter((t) => t.state === "done").length;
     if (
       !confirm(
-        `Score the ${n} finished trial(s) of this job again? Each gets a new verify run from its saved solve output; the Agent is not rerun and earlier scores are kept.`,
+        `${evidence ? "Recheck saved evidence for" : "Rescore"} ${n} finished trial(s)? Each gets a new verify run from saved solve output. The Agent is not rerun; earlier results remain in history.`,
       )
     )
       return;
     try {
       const r = await api.benchRescore(job.id);
       toast(
-        `Rescoring ${r.trials.length} trial(s)${r.skipped.length ? `; ${r.skipped.length} skipped` : ""}`,
+        `Verifying ${r.trials.length} trial(s)${r.skipped.length ? `; ${r.skipped.length} skipped` : ""}`,
       );
       d.reload();
     } catch (e) {
@@ -79,12 +73,18 @@ export function BenchJobDetail({ id }: { id: string }) {
 
   return (
     <>
-      <TopBar crumbs={[{ label: "Bench", href: "/bench" }, { label: jobLabel(job) }]}>
+      <TopBar
+        className="topbar-wrap"
+        crumbs={[{ label: "Bench", href: "/bench" }, { label: jobLabel(job) }]}
+      >
         <Link className="btn sm ghost" href={`/?q=bench-${job.id}`}>
           Runs
         </Link>
         <Link className="btn sm" href={`/bench/compare?jobs=${job.id}`}>
           <IconCompare size={14} /> Compare
+        </Link>
+        <Link className="btn sm" href={`/bench/new?from=${encodeURIComponent(job.id)}`}>
+          Copy and create
         </Link>
         {job.state === "running" ? (
           <button type="button" className="btn sm danger" onClick={cancel}>
@@ -92,20 +92,38 @@ export function BenchJobDetail({ id }: { id: string }) {
           </button>
         ) : (
           <>
-            <button
-              type="button"
-              className="btn sm"
-              onClick={rescore}
-              title="Verify and score again from the saved solve outputs"
-            >
-              Rescore
-            </button>
-            <button type="button" className="btn sm" onClick={() => setMerging(true)}>
-              Merge retries
-            </button>
-            <button type="button" className="btn sm danger" onClick={() => setDeleting(true)}>
-              Delete job
-            </button>
+            {job.capabilities?.rescore !== "none" && (
+              <button
+                type="button"
+                className="btn sm"
+                onClick={rescore}
+                disabled={active > 0}
+                title="Verify and score again from the saved solve outputs"
+              >
+                {evidence ? "Recheck evidence" : "Rescore"}
+              </button>
+            )}
+            <details className="bench-more">
+              <summary className="btn sm">More</summary>
+              <div className="bench-more-actions">
+                <button
+                  type="button"
+                  className="btn sm"
+                  disabled={active > 0}
+                  onClick={() => setMerging(true)}
+                >
+                  Merge retries
+                </button>
+                <button
+                  type="button"
+                  className="btn sm danger"
+                  disabled={active > 0}
+                  onClick={() => setDeleting(true)}
+                >
+                  Delete job
+                </button>
+              </div>
+            </details>
           </>
         )}
       </TopBar>
@@ -154,6 +172,26 @@ export function BenchJobDetail({ id }: { id: string }) {
             ))}
           </div>
 
+          {d.error && <div className="callout">{d.error}</div>}
+          <div className="card card-b bench-progress">
+            <span>
+              {trials.length - active}/{trials.length} trials finished
+            </span>
+            <progress
+              max={trials.length || 1}
+              value={trials.length - active}
+              aria-label="Evaluation progress"
+            />
+            <span className="faint">
+              {trials.filter((t) => t.state === "pending").length} queued ·{" "}
+              {trials.filter((t) => t.state === "solving").length} solving ·{" "}
+              {trials.filter((t) => t.state === "verifying").length} verifying
+            </span>
+            {job.state !== "running" && active > 0 && (
+              <span className="chip">Rechecking saved output</span>
+            )}
+          </div>
+          <Conditions jobs={[job]} />
           <div className="stats">
             {d.data.summary.map((s) => (
               <MethodCard
@@ -166,7 +204,7 @@ export function BenchJobDetail({ id }: { id: string }) {
             ))}
           </div>
 
-          <JobMatrix
+          <TrialBrowser
             job={job}
             trials={trials}
             summary={d.data.summary}
@@ -190,53 +228,6 @@ export function BenchJobDetail({ id }: { id: string }) {
                   }))}
                 />
               </div>
-            </section>
-          )}
-
-          {problems.length > 0 && (
-            <section className="card">
-              <div className="card-h">
-                <IconAlert size={14} /> Issues <span className="sub">{problems.length} trials</span>
-              </div>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Task</th>
-                    <th>Method</th>
-                    <th>Evaluation</th>
-                    <th>Execution</th>
-                    <th>Issues</th>
-                    <th>Runs</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {problems.map((t) => (
-                    <tr key={t.id}>
-                      <td className="mono">
-                        <Link href={trialPath(t.jobId, t.id)}>{t.task}</Link>
-                      </td>
-                      <td>
-                        {t.method}
-                        {job.spec.seeds > 1 && <span className="faint"> #{t.seed}</span>}
-                      </td>
-                      <td>
-                        <span
-                          className={`chip ${t.outcome?.evaluation === "valid" ? "good" : t.outcome?.evaluation === "invalid" ? "bad" : "warn"}`}
-                        >
-                          {t.outcome?.evaluation}
-                        </span>
-                      </td>
-                      <td className="mono">{t.outcome?.execution}</td>
-                      <td className="muted" style={{ whiteSpace: "normal" }}>
-                        {t.outcome?.issues.join("; ")}
-                      </td>
-                      <td>
-                        <RunLinks t={t} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </section>
           )}
         </div>

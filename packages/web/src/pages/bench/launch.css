@@ -1,0 +1,118 @@
+.bench-launch {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1280px;
+}
+.bench-launch-steps,
+.bench-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bench-launch-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: start;
+  gap: 20px;
+}
+.bench-launch-grid > *,
+.bench-field {
+  min-width: 0;
+}
+.bench-launch-summary {
+  position: sticky;
+  top: 16px;
+}
+.bench-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bench-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.bench-launch .kv dd {
+  overflow-wrap: anywhere;
+}
+.bench-task-picker {
+  max-height: 380px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+.bench-task-choice {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 3px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.bench-task-choice .check {
+  flex: none;
+}
+.bench-task-reason {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-2);
+}
+.bench-preset {
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.bench-preset > p {
+  margin-top: 0;
+}
+.bench-review-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.bench-launch-actions {
+  padding-bottom: 16px;
+}
+.bench-home-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.bench-home-toolbar .input[type="search"] {
+  flex: 1;
+  min-width: 180px;
+}
+.bench-home-table {
+  overflow-x: auto;
+}
+.bench-job-progress {
+  display: block;
+  width: 110px;
+  height: 5px;
+  margin-top: 6px;
+  accent-color: var(--accent);
+}
+.bench-environment-details {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .bench-launch-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bench-launch-summary {
+    position: static;
+    grid-row: 1;
+  }
+}
+@media (max-width: 520px) {
+  .bench-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bench-launch-steps .btn {
+    justify-content: start;
+    width: 100%;
+  }
+}
