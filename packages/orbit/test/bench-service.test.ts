@@ -237,6 +237,8 @@ it("finishes a job only after its last open trial without loading all its trials
   f.bench.start();
   await expect.poll(() => f.store.getTrial(f.trial.id)?.state).toBe("done");
   expect(f.store.getJob(f.job.id)?.state).toBe("running");
+  // Finishing a trial while others are open reads no trial list.
+  expect(trials).not.toHaveBeenCalled();
   f.store.putTrial({ ...f.trial, id: "other.1", jobId: "other" });
   const cancelled = { ...second, state: "cancelled" as const };
   f.store.putRun(cancelled);
@@ -244,7 +246,10 @@ it("finishes a job only after its last open trial without loading all its trials
   await expect.poll(() => f.store.getJob(f.job.id)?.state).toBe("done");
   expect(f.store.hasOpenTrials(f.job.id)).toBe(false);
   expect(f.store.hasOpenTrials("other")).toBe(true);
-  expect(trials).not.toHaveBeenCalled();
+  // Only the job's last finish reads its trials, once, to write the report revision.
+  expect(trials).toHaveBeenCalledTimes(1);
+  expect(trials).toHaveBeenCalledWith(f.job.id);
+  expect(f.store.reports(f.job.id).map((r) => r.reason)).toEqual(["finished"]);
 });
 
 it("lists jobs with one trial aggregate query and the same counts and task-weighted metrics", () => {

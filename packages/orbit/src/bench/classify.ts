@@ -3,7 +3,7 @@
 // (cancelled or lost), `invalid` means the environment or verifier failed to produce a real score,
 // the solve run was killed for exceeding its memory request, a service of its environment broke, or
 // its Agent could not work (credentials, model access, quota, endpoint).
-import type { Outcome, Run, ScoreResult } from "../contracts/index.ts";
+import type { FailureKind, Outcome, Run, ScoreResult } from "../contracts/index.ts";
 import type { AgentFailure } from "../sessions/index.ts";
 
 export const cleanupOf = (...runs: (Run | null)[]): Outcome["cleanup"] => {
@@ -25,6 +25,7 @@ export function solveVerdict(solve: Run): {
   verify: boolean;
   evaluation?: Outcome["evaluation"];
   issue?: string;
+  failure?: FailureKind;
 } {
   if (solve.state === "cancelled")
     return { verify: false, evaluation: "unknown", issue: "solve cancelled" };
@@ -35,10 +36,16 @@ export function solveVerdict(solve: Run): {
       verify: false,
       evaluation: "invalid",
       issue: `environment failed: ${solve.reason ?? "not started"}`,
+      failure: "infra",
     };
   // The Agent CLI could not be installed in the container: the environment failed, not the method.
   if (solve.reason?.startsWith("Agent install failed"))
-    return { verify: false, evaluation: "invalid", issue: `environment failed: ${solve.reason}` };
+    return {
+      verify: false,
+      evaluation: "invalid",
+      issue: `environment failed: ${solve.reason}`,
+      failure: "agent_install",
+    };
   // Timeouts and failures are the method's result; whatever it left behind is verified.
   return { verify: true };
 }
@@ -73,6 +80,7 @@ export function classify(
     evaluation: Outcome["evaluation"],
     s: number | null,
     extra: string[] = [],
+    failure?: FailureKind,
   ): Outcome => ({
     ...base,
     evaluation,
@@ -82,28 +90,51 @@ export function classify(
     // Whatever the grader produced stays reviewable, also when the score is not trusted.
     review: score?.review ?? null,
     ...(score?.metrics ? { metrics: score.metrics } : {}),
+    ...(score?.episode ? { episode: score.episode } : {}),
+    ...(evaluation === "invalid" && failure ? { failure } : {}),
   });
+  // The first setup problem decides the failure kind: memory, the Agent's model, then a service.
+  const setupFailure: FailureKind | undefined = oom
+    ? "budget_exceeded"
+    : agentIssue
+      ? "model_unavailable"
+      : serviceIssues.length
+        ? "infra"
+        : undefined;
   const sv = solveVerdict(solve);
-  if (!sv.verify) return out(sv.evaluation ?? "unknown", null, sv.issue ? [sv.issue] : []);
+  if (!sv.verify)
+    return out(sv.evaluation ?? "unknown", null, sv.issue ? [sv.issue] : [], sv.failure);
   const setup = [oom, agentIssue, ...serviceIssues].filter((x): x is string => x !== null);
   // The Agent could not work, so its leftovers are not verified (a rescore still can).
-  if (!verify && agentIssue) return out("invalid", null, [...setup, "verify skipped"]);
+  if (!verify && agentIssue)
+    return out("invalid", null, [...setup, "verify skipped"], "model_unavailable");
   if (!verify) return out("unknown", null, ["verify not run"]);
   // Verified in the solve run's container (its after phase), as Harbor's shared verifier mode.
   if (verify.id === solve.id && solve.spec.after) {
     const a = solve.after;
     if (!a || a.state === "running") return out("unknown", null, ["verify did not finish"]);
     if (a.state === "skipped" || a.state === "error")
-      return out("invalid", null, [`verifier did not run: ${a.reason ?? a.state}`]);
-    if (a.state === "timeout") return out("invalid", null, ["verify timed out"]);
+      return out("invalid", null, [`verifier did not run: ${a.reason ?? a.state}`], "scorer_error");
+    if (a.state === "timeout") return out("invalid", null, ["verify timed out"], "scorer_error");
   } else if (verify.state === "cancelled" || verify.state === "lost")
     return out("unknown", null, [`verify ${verify.state}`]);
   else if (verify.startedAt === null)
-    return out("invalid", null, [`verifier environment failed: ${verify.reason ?? "not started"}`]);
-  else if (timedOut(verify)) return out("invalid", null, ["verify timed out"]);
-  else if (verify.usage?.oomKilled) return out("invalid", null, [`verify ${oomIssue(verify)}`]);
-  if (!score) return out("invalid", null, ["no score", ...setup]);
+    return out(
+      "invalid",
+      null,
+      [`verifier environment failed: ${verify.reason ?? "not started"}`],
+      "infra",
+    );
+  else if (timedOut(verify)) return out("invalid", null, ["verify timed out"], "scorer_error");
+  else if (verify.usage?.oomKilled)
+    return out("invalid", null, [`verify ${oomIssue(verify)}`], "scorer_error");
+  if (!score) return out("invalid", null, ["no score", ...setup], setupFailure ?? "scorer_error");
   if (score.invalid || score.score === null || setup.length)
-    return out("invalid", score.score, [...score.issues, ...setup]);
+    return out(
+      "invalid",
+      score.score,
+      [...score.issues, ...setup],
+      setupFailure ?? score.failure ?? "scorer_error",
+    );
   return out("valid", score.score, score.issues);
 }

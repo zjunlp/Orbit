@@ -2,8 +2,11 @@ import { z } from "zod";
 import {
   BenchCapabilities,
   BenchTask,
+  Episode,
+  FailureKind,
   Method,
   MetricSpec,
+  OfficialRule,
   ResourceOverride,
   Review,
 } from "./bench.ts";
@@ -103,6 +106,8 @@ export const AdapterTasksResponse = z.object({
   tasks: z.array(BenchTask),
   metrics: MetricSpecs.default([]),
   capabilities: BenchCapabilities.optional(),
+  /** The benchmark's own aggregation rule, reported next to Orbit's valid-only view. */
+  official: OfficialRule.optional(),
 });
 export type AdapterTasksResponse = z.infer<typeof AdapterTasksResponse>;
 export const AdapterSpecResponse = z.object({
@@ -121,5 +126,9 @@ export const ScoreResult = z.object({
   review: Review.optional(),
   /** Values of declared metrics (other than `score`); undeclared names are kept but not shown. */
   metrics: MetricValues.optional(),
+  /** Why the score is not trustworthy (with `invalid`), from the closed set. */
+  failure: FailureKind.optional(),
+  /** How an interactive episode ended. */
+  episode: Episode.optional(),
 });
 export type ScoreResult = z.infer<typeof ScoreResult>;

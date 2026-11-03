@@ -22,6 +22,7 @@ import {
   Benchmark,
   type BenchmarkInput,
   BenchmarkList,
+  BenchReport,
   type BenchRescoreInput,
   BenchRescoreResult,
   BenchTaskList,
@@ -234,6 +235,10 @@ export class OrbitClient {
   benchJobs = (limit = 200) =>
     this.call(BenchJobList, `/bench/jobs?limit=${limit}`).then((r) => r.jobs);
   benchJob = (id: string) => this.call(BenchJobDetail, `/bench/jobs/${enc(id)}`);
+  benchReports = (id: string) =>
+    this.call(z.object({ reports: z.array(BenchReport) }), `/bench/jobs/${enc(id)}/reports`).then(
+      (r) => r.reports,
+    );
   benchCancel = (id: string) =>
     this.call(BenchJob, `/bench/jobs/${enc(id)}/cancel`, { method: "POST" });
   benchCompare = (ids: string[]) =>

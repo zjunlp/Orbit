@@ -264,6 +264,57 @@ export const Review = z.looseObject({
 export type Review = z.infer<typeof Review>;
 
 /** Execution, evaluation and cleanup are separate: only `valid` scores enter means. */
+/**
+ * Why a trial produced no trustworthy result, as a closed set (design §9.7). Free-text issues keep
+ * the detail; this field is for counting and filtering.
+ */
+export const FAILURE_KINDS = [
+  "infra",
+  "agent_install",
+  "env_start",
+  "env_step",
+  "reset_failed",
+  "policy_start",
+  "policy_act",
+  "server_unreachable",
+  "call_watchdog",
+  "resume_failed",
+  "scorer_error",
+  "judge_unavailable",
+  "model_unavailable",
+  "budget_exceeded",
+] as const;
+export const FailureKind = z.enum(FAILURE_KINDS);
+export type FailureKind = z.infer<typeof FailureKind>;
+
+/** How an interactive episode ended, when the adapter knows (GUI and embodied benchmarks). */
+export const Episode = z.object({
+  steps: z.number().int().nonnegative().optional(),
+  terminated: z.boolean().optional(),
+  truncated: z.boolean().optional(),
+  /** Who or what ended it, e.g. `agent`, `step_limit`, `time_limit`, `success`. */
+  endedBy: z.string().max(80).optional(),
+  /** How success was signalled, e.g. `early_stop`, `hidden`, `final_state`. */
+  successSignal: z.string().max(80).optional(),
+});
+export type Episode = z.infer<typeof Episode>;
+
+/**
+ * A benchmark's own aggregation rule (design §9.7), declared by its adapter and fixed per job.
+ * `errors`: whether invalid trials are left out (`exclude`) or count as a failed sample with
+ * `failValue` (`fail`, as harnesses that put infrastructure errors in the denominator).
+ * `unit`: the mean over all samples (`sample`) or the mean of per-task means (`task`).
+ */
+export const OfficialRule = z.object({
+  name: z.string().min(1).max(80),
+  version: z.string().max(40).optional(),
+  metric: z.string().optional(),
+  errors: z.enum(["exclude", "fail"]),
+  unit: z.enum(["sample", "task"]),
+  failValue: z.number().default(0),
+});
+export type OfficialRule = z.infer<typeof OfficialRule>;
+
 export const Outcome = z.object({
   /** How the solve run ended (RunState, or `skipped`). */
   execution: z.string(),
@@ -276,6 +327,9 @@ export const Outcome = z.object({
   review: Review.nullable().default(null),
   /** Adapter metrics of the trial (besides `score`); kept also when the score is not trusted. */
   metrics: z.record(z.string(), z.number()).optional(),
+  /** Why the result is not trustworthy, when the classification or the adapter knows. */
+  failure: FailureKind.optional(),
+  episode: Episode.optional(),
 });
 export type Outcome = z.infer<typeof Outcome>;
 
@@ -412,6 +466,8 @@ export const BenchJob = z.object({
   /** Non-secret registration fixed at submission; absent only for legacy jobs. */
   benchmarkSnapshot: Benchmark.optional(),
   capabilities: BenchCapabilities.optional(),
+  /** The benchmark's own aggregation rule at submission, when its adapter declares one. */
+  official: OfficialRule.optional(),
   /** Per-task overrides read from the benchmark's resources file at submit (null without one). */
   resources: z.record(z.string(), ResourceOverride).nullable().default(null),
   /** Folder for organizing; the job's runs follow it. */
@@ -439,6 +495,18 @@ export const MetricStat = z.object({
 });
 export type MetricStat = z.infer<typeof MetricStat>;
 
+/** The benchmark's own aggregate of one method (design §9.7), next to Orbit's valid-only view. */
+export const OfficialValue = z.object({
+  metric: z.string(),
+  value: z.number().nullable(),
+  /** Samples in the denominator under the rule. */
+  samples: z.number().int(),
+  /** Planned samples not finished (pending, cancelled or lost): the value is then partial. */
+  missing: z.number().int(),
+  partial: z.boolean(),
+});
+export type OfficialValue = z.infer<typeof OfficialValue>;
+
 export const MethodSummary = z.object({
   method: z.string(),
   trials: z.number().int(),
@@ -448,8 +516,59 @@ export const MethodSummary = z.object({
   pending: z.number().int(),
   /** Per metric name: mean over tasks of the per-task mean of valid trials; null without any. */
   metrics: z.record(z.string(), MetricStat.nullable()),
+  /** Under the benchmark's own rule; absent when the adapter declares none. */
+  official: OfficialValue.optional(),
 });
 export type MethodSummary = z.infer<typeof MethodSummary>;
+
+/** One planned sample in a report: the trial (attempt) whose result was used and its value. */
+export const ReportEntry = z.object({
+  trial: z.string(),
+  /** `<task>#<seed>`: the logical sample, stable across retries and merges. */
+  sample: z.string(),
+  task: z.string(),
+  seed: z.number().int(),
+  solveRunId: z.string().nullable(),
+  verifyRunId: z.string().nullable(),
+  /** `pending` when the trial has no outcome yet. */
+  evaluation: z.enum(["valid", "invalid", "unknown", "pending"]),
+  failure: FailureKind.optional(),
+  /** The primary metric (Orbit's view uses valid entries only). */
+  value: z.number().nullable(),
+});
+export type ReportEntry = z.infer<typeof ReportEntry>;
+
+/**
+ * An immutable result of a job at one point (design §9.7): the plan it covers, the attempts it used
+ * and both views. A rescore, merge or append writes a new revision; earlier ones are kept.
+ */
+export const BenchReport = z.object({
+  jobId: z.string(),
+  revision: z.number().int().min(1),
+  createdAt: z.string(),
+  reason: z.enum(["finished", "cancelled", "rescore", "consolidate", "backfill"]),
+  /** sha256 of the planned samples (tasks × seeds × methods); appending tasks changes it. */
+  planDigest: z.string(),
+  aggregator: z.string(),
+  metric: z.string(),
+  official: OfficialRule.nullable(),
+  methods: z.array(
+    z.object({
+      method: z.string(),
+      planned: z.number().int(),
+      completed: z.number().int(),
+      valid: z.number().int(),
+      invalid: z.number().int(),
+      unknown: z.number().int(),
+      missing: z.number().int(),
+      failures: z.record(z.string(), z.number().int()),
+      orbit: MetricStat.nullable(),
+      official: OfficialValue.nullable(),
+      entries: z.array(ReportEntry),
+    }),
+  ),
+});
+export type BenchReport = z.infer<typeof BenchReport>;
 
 export const BenchJobDetail = z.object({
   job: BenchJob,
@@ -468,6 +587,7 @@ export const BenchTaskList = z.object({
   tasks: z.array(BenchTask),
   metrics: z.array(MetricSpec).default([]),
   capabilities: BenchCapabilities.optional(),
+  official: OfficialRule.optional(),
 });
 export type BenchTaskList = z.infer<typeof BenchTaskList>;
 

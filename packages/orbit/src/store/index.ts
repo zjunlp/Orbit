@@ -2,6 +2,8 @@ import { closeSync, openSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
   BenchJob,
+  type BenchReport,
+  BenchReport as BenchReportSchema,
   type FolderStat,
   Lease,
   type MethodSummary,
@@ -75,6 +77,12 @@ const MIGRATIONS = [
    INSERT OR IGNORE INTO trial_runs SELECT solve_run, id FROM trials WHERE solve_run IS NOT NULL;
    INSERT OR IGNORE INTO trial_runs SELECT verify_run, id FROM trials WHERE verify_run IS NOT NULL;`,
   `CREATE INDEX trials_open_job ON trials(job_id) WHERE state != 'done';`,
+  `CREATE TABLE bench_reports (
+     job_id TEXT NOT NULL,
+     revision INTEGER NOT NULL,
+     doc TEXT NOT NULL,
+     PRIMARY KEY (job_id, revision)
+   );`,
 ];
 
 /** Mirroring progress of a run placed on another node (primary only). */
@@ -503,8 +511,25 @@ export class Store {
         )
         .run(id);
       this.db.prepare("DELETE FROM trials WHERE job_id = ?").run(id);
+      this.db.prepare("DELETE FROM bench_reports WHERE job_id = ?").run(id);
       this.db.prepare("DELETE FROM bench_jobs WHERE id = ?").run(id);
     });
+  }
+
+  /** Report revisions of a job, oldest first. Reports are immutable: only `addReport` writes. */
+  reports(jobId: string): BenchReport[] {
+    return (
+      this.db
+        .prepare("SELECT doc FROM bench_reports WHERE job_id = ? ORDER BY revision")
+        .all(jobId) as { doc: string }[]
+    ).map((r) => BenchReportSchema.parse(JSON.parse(r.doc)));
+  }
+
+  /** Append a revision; fails if that revision already exists (no overwrite). */
+  addReport(r: BenchReport): void {
+    this.db
+      .prepare("INSERT INTO bench_reports (job_id, revision, doc) VALUES (?, ?, ?)")
+      .run(r.jobId, r.revision, JSON.stringify(r));
   }
 
   /** Atomically replace a finished job's trial records and remove consumed source jobs. */
@@ -518,7 +543,10 @@ export class Store {
           .run(id);
         this.db.prepare("DELETE FROM trials WHERE job_id = ?").run(id);
       }
-      for (const id of sources) this.db.prepare("DELETE FROM bench_jobs WHERE id = ?").run(id);
+      for (const id of sources) {
+        this.db.prepare("DELETE FROM bench_reports WHERE job_id = ?").run(id);
+        this.db.prepare("DELETE FROM bench_jobs WHERE id = ?").run(id);
+      }
       for (const t of trials) {
         this.db
           .prepare(

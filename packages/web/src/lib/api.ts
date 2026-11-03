@@ -13,6 +13,7 @@ import type {
   BenchJobList,
   BenchJobSpecInput,
   Benchmark,
+  BenchReport,
   BenchRescoreInput,
   BenchRescoreResult,
   BenchTaskList,
@@ -153,6 +154,8 @@ export const api = {
     }),
   benchJobs: () => req<BenchJobList>("/bench/jobs").then((r) => r.jobs),
   benchJob: (id: string) => req<BenchJobDetail>(`/bench/jobs/${enc(id)}`),
+  benchReports: (id: string) =>
+    req<{ reports: BenchReport[] }>(`/bench/jobs/${enc(id)}/reports`).then((r) => r.reports),
   benchCancel: (id: string) => req<BenchJob>(`/bench/jobs/${enc(id)}/cancel`, { method: "POST" }),
   /** Pass the preview digest as `expect` when applying. */
   benchConsolidate: (id: string, body: BenchConsolidateInput) =>
