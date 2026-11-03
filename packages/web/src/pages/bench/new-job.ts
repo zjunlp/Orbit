@@ -9,6 +9,11 @@ import type {
 } from "@zjunlp/orbit/contracts";
 import { stableValue } from "./conditions.ts";
 
+/** Method kinds that are not Agent CLIs. */
+export const SPECIAL_TYPES = ["empty", "external", "oracle"] as const;
+const RESERVED = [...SPECIAL_TYPES, "policy"];
+
+/** Default list before the daemon's Agent registry has loaded. */
 export const METHOD_TYPES: Method["agent"][] = [
   "empty",
   "external",
@@ -16,6 +21,21 @@ export const METHOD_TYPES: Method["agent"][] = [
   "claude-code",
   "oracle",
 ];
+
+/** Method types for a registry: the special kinds around every registered Agent name. */
+export function methodTypes(agents: string[]): Method["agent"][] {
+  return ["empty", "external", ...agents.filter((a) => !RESERVED.includes(a)), "oracle"];
+}
+
+/** Whether a method runs an Agent CLI (any name that is not a reserved kind). */
+export function isCliAgent(agent: string): boolean {
+  return !RESERVED.includes(agent);
+}
+
+/** Same rule as the daemon: concrete names keep their meaning; `cli` admits every Agent CLI. */
+export function capabilityAllows(methods: readonly string[], agent: string): boolean {
+  return methods.includes(agent) || (methods.includes("cli") && isCliAgent(agent));
+}
 
 export interface MethodDraft {
   id: string;
@@ -79,11 +99,12 @@ export function buildMethods(
       );
     if (names.has(name)) throw new Error(`Duplicate method name: ${name}.`);
     names.add(name);
-    if (!METHOD_TYPES.includes(d.agent)) throw new Error(`${name}: unknown method type.`);
-    if (capabilities && !capabilities.methods.includes(d.agent))
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(d.agent) || d.agent === "policy")
+      throw new Error(`${name}: unknown method type.`);
+    if (capabilities && !capabilityAllows(capabilities.methods, d.agent))
       throw new Error(`${name}: ${d.agent} is not supported by this environment.`);
     const m: Method = { name, agent: d.agent };
-    const cli = d.agent === "codex" || d.agent === "claude-code";
+    const cli = isCliAgent(d.agent);
     if (cli) {
       if (!d.auth || !profileName.test(d.auth)) throw new Error(`${name}: select an auth profile.`);
       if (profiles && !profiles.some((p) => p.name === d.auth && p.harness === d.agent))

@@ -70,12 +70,40 @@ export const MetricSpec = z.object({
 export type MetricSpec = z.infer<typeof MetricSpec>;
 export type MetricSpecInput = z.input<typeof MetricSpec>;
 
-export const METHOD_AGENTS = ["codex", "claude-code", "external", "oracle", "empty"] as const;
-export type MethodAgent = (typeof METHOD_AGENTS)[number];
+/**
+ * Method kinds that are not Agent CLIs. They cannot be registered as Agent names (`policy` is
+ * reserved for model-service methods and not runnable yet).
+ */
+export const RESERVED_METHOD_AGENTS = ["external", "oracle", "empty", "policy"] as const;
+/** Runnable non-CLI method kinds. */
+export const SPECIAL_METHOD_AGENTS = ["external", "oracle", "empty"] as const;
+/** Kept for older imports: the method kinds Orbit shipped with before the Agent registry. */
+export const METHOD_AGENTS = ["codex", "claude-code", ...SPECIAL_METHOD_AGENTS] as const;
+
+/**
+ * A method's `agent`: a special kind, or the name of a registered Agent (checked against the
+ * registry when a job is submitted, not here).
+ */
+export const MethodAgent = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, "agent must be an Agent name or external/oracle/empty")
+  .refine((a) => a !== "policy", "policy methods are reserved and not supported yet");
+export type MethodAgent = z.infer<typeof MethodAgent>;
+
+/**
+ * What an adapter accepts. Concrete names keep their meaning (`codex` means only Codex); `cli`
+ * explicitly admits every registered Agent CLI.
+ */
+export const CapabilityMethod = z.union([MethodAgent, z.literal("cli")]);
+
+/** Whether a capability list admits a method's agent. */
+export function capabilityAllows(methods: readonly string[], agent: string): boolean {
+  return methods.includes(agent) || (methods.includes("cli") && isCliMethod({ agent }));
+}
 
 export const BenchCapabilities = z.object({
   kind: z.enum(["browser", "desktop", "mobile", "other"]),
-  methods: z.array(z.enum(METHOD_AGENTS)).min(1),
+  methods: z.array(CapabilityMethod).min(1),
   conditions: z.record(z.string().max(80), z.string().max(2000)),
   scoreKind: z.enum(["binary", "scalar"]),
   rescore: z.enum(["evidence", "score", "none"]),
@@ -89,7 +117,7 @@ export type BenchCapabilities = z.infer<typeof BenchCapabilities>;
 export const Method = z
   .object({
     name: ProfileName,
-    agent: z.enum(METHOD_AGENTS),
+    agent: MethodAgent,
     auth: ProfileName.optional(),
     model: z.string().optional(),
     /** Reasoning effort, e.g. `high`. */
@@ -506,6 +534,7 @@ export function isAgentMethod(m: { agent: string }): boolean {
   return isCliMethod(m) || m.agent === "external";
 }
 
+/** Any method whose agent is not a reserved kind runs an Agent CLI from the registry. */
 export function isCliMethod(m: { agent: string }): boolean {
-  return m.agent === "codex" || m.agent === "claude-code";
+  return !(RESERVED_METHOD_AGENTS as readonly string[]).includes(m.agent);
 }

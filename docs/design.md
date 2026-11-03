@@ -466,8 +466,10 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 
 - **Method**（`contracts.Method`）：`{ name, agent, auth?, model?, effort?, bundle?, entrypoint?, config?, passEnv? }`。
   `agent` 是一个已注册的 Agent 名（§6；`codex`、`claude-code`、`pi`、`opencode`…），或 `external`（adapter 自己的策略）、
-  `oracle`（跑参考解）、`empty`（不作答，用于检验适配器）。CLI Agent 方法必须有 harness 与该 Agent 匹配的 auth profile；
-  [Agent 名不再固定为两个]，新 Agent 只需一份定义，`agentCommand` 由该定义的模板渲染。
+  `oracle`（跑参考解）、`empty`（不作答，用于检验适配器）；`policy` 为保留名，尚不可运行，保留名也不能注册为 Agent。
+  提交 job 前检查 Agent 已注册、auth profile 的 harness 与之一致且 kind 受该 Agent 支持；`agentCommand` 由定义的模板渲染。
+  `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`），安装失败记为环境失败、不 verify；
+  process Run 拒绝 `install` 型 Agent。ASI 与 LongDS 的原生 runner 只启动 codex / claude-code，其他 Agent 明确拒绝。
   `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；Agent 版本由 Run 的
   `harness` 事件记录。`external` 必须有 adapter 解释的 `entrypoint`，可带非密钥 `config`、`model`、`effort`，
   不接受 CLI 的 auth/bundle；其 `passEnv` 只把 daemon 环境中的指定变量注入 solve，变量值不进入 Method。
@@ -562,7 +564,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
-- `capabilities` 描述环境类别、支持的 method 类型、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；daemon 在提交时检查 method，Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
+- `capabilities` 描述环境类别、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；daemon 在提交时检查 method，Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
   parentId priority passEnv`），且 `command` 与 `agentTask: { instruction }` 二选一。Agent 方法（codex / claude-code）的
@@ -730,8 +732,11 @@ worker 不可达时返回 502。终态且 worker 已完成清理后同步结束�
 | — | hub 自带内部并发（shard、Ray、多进程队列、`-n`），与 Orbit 各自扩张会超卖 | 内部并发必须由 Orbit 预算：一个 trial 一个 episode，或 adapter 声明 `slots` 由 Orbit 一次租齐 |
 | 统一 Web 一个页面 | 好用的界面各有专长：MobileWorld 可提交/取消/补跑，AgentLab X-Ray 逐步看 DOM/a11y，OSWorld/Gym-Anything 看截图与录像，静态 HTML 导出便于分享；实时 VNC 与历史回放是两件事 | 按场景设计 trial 视图 + 实时画面 + 静态导出（§9.9） |
 
-所有 hub 都有自己的队列或状态库（SQLite、Redis/Postgres、内存 master、结果目录续跑）。**都不引入 Orbit**：Orbit daemon
-仍是唯一写者，hub 的结果作为产物导入。
+所有 hub 都有自己的队列或状态库（SQLite、Redis/Postgres、内存 master、结果目录续跑）。**Orbit 是跨 trial 的作业状态、
+资源分配与清理的唯一权威**；runner 可以在 Orbit 给定的租约和固定样本清单内维护私有执行记录（如 vla-eval 的 SQLite），
+作为产物单向导入，不成为第二个状态源。每个样本的分派与重试由谁负责必须明确，避免双重调度。
+
+本节经过一轮设计审查（[design-review.md](design-review.md)，R1–R8 及复审）后修订。
 
 ### 9.1 三层职责
 
@@ -744,7 +749,21 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 ```
 
 原则：语义尽量交给原生实现（不重新解释同一个仿真器）；资源与状态只在 Orbit；每个 hub 先以 `native` 方式包装跑通、对齐，
-再视需要把内循环收回 Orbit（以获得统一的 Agent 桥与轨迹）。
+再按需增加工具桥与轨迹转换。Orbit 不自研 Agent 或 episode 循环（§1）。
+
+### 9.1a 评测身份
+
+| 对象 | 含义 |
+| --- | --- |
+| Run | 一次资源分配与执行生命周期 |
+| 逻辑样本 | task、variant、初始状态、seed 等确定的评测单位 |
+| 执行尝试 | 某个样本的一次执行；重试产生新尝试，保留前次证据 |
+| slot | 并行容量，不是统计样本 |
+
+默认一个 Trial 对应一个逻辑样本、一个 solve Run（现状）。adapter 显式声明批量执行时，一个 Run 才可执行固定样本集合，
+score 回复返回逐样本明细（或经校验的明细文件引用），每个样本独立带有效性；当前 `trial_runs.run_id` 唯一、`trialByRun`
+只返回一个 Trial，所以多个 Trial 共享一个 Run 还需先定义取消、清理、删除与产物归属，列为后续工作。
+轨迹事件带 sample / attempt / source / step 身份；计划数、完成数、有效数注明计数单位。
 
 ### 9.2 Bench 家族与接入路径
 
@@ -777,9 +796,15 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 ### 9.4 被评测对象：Agent 与 Policy
 
 - **Agent**：已实现的注册表（§6），任意 CLI，含自定义 harness。
-- **Policy**（新增 `Method.agent = "policy"` + `PolicySpec`）：`{ image | dockerfile, command, port, protocol, health, resources(GPU), env, weights(dataset) }`，
+- **Policy**（`policy` 已作为保留名，尚不可运行；实现时新增 `PolicySpec`）：`{ image | dockerfile, command, port, protocol, health, resources(GPU), env, weights(dataset) }`，
   `protocol ∈ vla-eval-ws | openpi-ws | gr00t-zmq | lite-http | custom`。policy 作为 trial 的 GPU service 启动，与 sim 一起**整组准入**
   （gang lease：全部资源同时满足才启动，避免一半占着 GPU 等另一半）。模型权重走命名 dataset 只读挂载。
+- **按角色分配**：租约持久化 `main / sim / policy → gpuIds / devices / limits`，满足异构要求（如 sim 需 RTX、policy 需大显存）；
+  首阶段同节点原子分配，逐组件核对设备映射，启动失败整组清理，清理确认前保留租约。
+- **native 的承载**：`native` 表示保留上游语义，不绑定宿主 process 后端。首个 vla-eval 接入采用：上游仿真镜像作为 Orbit Docker
+  main，运行原版 `vla-eval run --no-docker`，Policy 为 Orbit service。adapter 必须完整映射上游 Docker wrapper 原本设置的镜像、
+  env、volume、GPU、shm、输出路径，网络寻址变化记为条件偏差。process + services 与"按角色分配的 docker shim"是后续候选，
+  须先定义子资源的创建前登记、容量限制、取消后禁止新建、重启对账与清理确认，不能只删除现有校验开放。
 - 能力匹配：bench 声明 `requires`（`multiTurn`、`policyProtocol`、`gui`、`obs: rgb|depth|proprio`、`action: joint|ee|chunk`），提交前与
   Agent / Policy 声明比对，不匹配直接拒绝。
 
@@ -792,11 +817,14 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 | Policy × 仿真 | 原生协议直连（vla-eval HELLO/EPISODE_START/OBS/ACTION，sync/live） | Orbit 不在每步路径上，避免延迟 |
 | VLM agent × GUI | hub 原生 rollout | 先对齐官方分数 |
 
-桥的协议规则（来自 CUA-Lite / EFE）：step 非幂等，响应丢失时**按 operation id 查询**而不重发；容量不足用可重试错误（503 + Retry-After）
-与真实失败区分；读超时 → 关闭重建实例，不盲目重试。
+桥的协议规则（来自 CUA-Lite / EFE）：step 非幂等，不盲目重发。协议支持操作查询（如 EFE `eai-standard/2.4` 的 operation id）时
+按 id 查询；不支持时（如 RoboTwin 样例的 2.1）记录"动作结果未知"，终止本次尝试并确认清理；重建实例后以新尝试身份继续，
+不续接原 episode，且不额外授予重试次数。容量不足用可重试错误（503 + Retry-After）与真实失败区分。
 
 ### 9.6 资源与环境生命周期
 
+0. **兼容清单先行**：接入一个固定版本任务前，先列出它用到的全部能力（容器、网络、卷、设备、监控、restart、变量模板、namespace
+   语义），实现范围按清单定；删掉 monitor、放宽网络等改动的运行单独记为偏差，不算原版对齐。
 1. **资源契约**：`ServiceSpec` 增加 `gpus`、`gpuMemGB`、`gpuFeatures`（rtx/egl/vulkan）、`devices`（kvm、dri、net/tun）、
    `volumes`（命名缓存卷，如 OSWorld qcow2、仿真资产）、`ipc`/`shmGB`、`stopGraceSec`、`capAdd`；`leaseRequest` 把 service 的 GPU/设备计入。
    compose 翻译补齐 `devices`、`deploy.resources.reservations`、命名卷、`x-gpu-memory-gb`；仍不支持的键继续报 unsupported。
@@ -808,7 +836,10 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
    复位确认后才释放，失败进 `quarantined`。共享后端用 `shared_state` 组串行或分实例（AgentLab 依赖图）。
 6. **对账回收**：周期比对"账本中的实例"与"实际带 Orbit 标签的容器/VM"，处理 tracked-but-gone 与 live-but-untracked；查询失败跳过本轮而非全部释放。
 7. **阶段时长**：agent 截止 ≠ 释放。sim finalize、视频渲染、verifier 仍占资源（EFE 样例：agent 30 min，sim collect 最多约 38 min）；租约覆盖整段。
-   停止顺序固定：先阻止 agent 继续发动作 → sidecar 在线判定落盘 → 再渲染视频 → 再收集与清理。
+   停止顺序固定：先阻止 agent 继续发动作（quiesce）→ sidecar 在线判定落盘（finalize）→ 再渲染视频（render）→ 再收集与清理（collect）。
+8. **结束阶段持久化**：扩展现有 Run 阶段记录，逐阶段保存进度、独立 deadline 与幂等或查询机制；daemon 重启后从记录继续，不重复
+   finalize；取消时可跳过 render，但不跳过 finalize 的落盘。服务按依赖顺序停止，而不是现在的并行停止。评分有效性与媒体完整性分别记录。
+   验收覆盖 finalize 中重启、取消、丢失 verdict、视频失败。
 
 ### 9.7 结果、有效性与可复现
 
@@ -816,6 +847,10 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
   `failure`（封闭枚举：`env_start`、`env_step`、`reset_failed`、`policy_start`、`policy_act`、`server_unreachable`、`call_watchdog`、
   `resume_failed`、`scorer_error`、`judge_unavailable`、`model_unavailable`、`budget_exceeded`）。执行 / 评测有效性 / 清理三态不变。
 - **两个口径**：官方聚合（照 bench 规则，如 vla-eval 把 error 计入分母）与 Orbit 有效口径（valid-only，任务聚类 CI）。Web 并列显示并命名。
+  官方聚合在 **job × method** 层计算，不对 native summary 再求平均（两批 1/1 与 1/9 的批次均值 55.6%，episode 成功率 20%）。
+- **报告修订**：计划集合（样本清单 + digest）固定，追加任务或 seed 产生新集合版本；报告不可原地覆盖，每版记录采用的
+  attempt/result 清单、错误与缺项的分母规则、聚合器版本；补跑产生新修订，旧报告与原始失败保留。只有遵循上游的结果选择、
+  重试与缺项规则，才继续称为官方口径。
 - **attempts 与 retries 分开**（Cua Bench）：attempt 进入 pass@k 统计；retry 只修复基础设施失败，最多一次且条件完全相同（EFE `SAME`）。
 - 完整性：计划数 / 完成数 / 有效数 / `partial`；hub 结果缺项时标 partial，不当全量。
 - **指纹**：源码 SHA、任务 digest、镜像 digest（解析后）、协议版本、模式、seed、观测/动作权限、网络、资源、时钟；跨指纹比较给出警告（OSWorld release manifest、EFE `effective_config`）。
@@ -844,13 +879,14 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 
 ### 9.10 保真度与 catalog
 
-级别：`L0 实验性` → `L1 对照通过`（oracle 满分、empty 零分）→ `L2 样例对齐`（与原生 runner 抽样一致）→ `L3 真实 Agent/Policy 对照` →
+级别：`L0 实验性` → `L1 校准通过`（benchmark 声明的正负校准符合预期：可以是 oracle、官方 baseline、脚本正例或固定证据，
+期望值或范围由 benchmark 指定；脚本正例只算校准，不冒充通用 oracle 或真实模型；是否存在 oracle 单独记录）→ `L2 样例对齐`（与原生 runner 抽样一致）→ `L3 真实 Agent/Policy 对照` →
 `L4 持续维护`。另记 `hub-claimed`（上游矩阵声称复现，本机未验证）。`deviations` 列出所有改动；不可复现就 `refused`。
 catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kind、资源、保真度、最近验证日期），Web 与 `orbit bench search` 读取。
 
 ### 9.11 具身两阶段
 
-- **第一阶段（仿真）**：EFE（coding agent，workspace + GPU sidecar）与 vla-eval / Arena（policy，episode / native）两条线并行；先补 §9.6 第 1 条的 service GPU 契约与 gang lease。
+- **第一阶段（仿真）**：EFE（coding agent，workspace + GPU sidecar）与 vla-eval / Arena（policy，episode / native）两条线并行；EFE 先跑 CPU 任务（P3），GPU sidecar 与按角色分配随 Policy 路线（P4）交付。
 - **第二阶段（真机）**：设备作为资源类（`robot:<class>`、独占），设备提供者实现 `reserve / health / reset / stop / release`；
   `reset` 支持 `operator_confirmed`；cancel 先 `stop()` 并确认停稳；`operator` 事件入轨迹；校准指纹入结果；控制循环留在设备侧。
   第一阶段 episode 协议与证据结构不变，第二阶段只换"环境提供者"。
@@ -862,15 +898,18 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 
 ### 9.13 路线与验收
 
+按审查 R6 重排：正确性前提（共享实例互斥、标脏、复位确认、dedicated 实例优先）随首次接入交付；最小接入包、版本固定、
+依赖检查与 smoke 随第一个新 hub 交付；暖池、多节点、复杂分层准入与公开 catalog 后置。
+
 | 阶段 | 内容 | 验收 |
 | --- | --- | --- |
-| P1 Agent 注册表 | 已完成 | §6；12 个内置定义，codex/claude 验证 |
-| P2 资源与证据底座 | service GPU/设备/卷、gang lease、能力探测、内部 slots、阶段租约、Outcome 两口径与指纹、产物信任级、轨迹索引 v1 + ATIF 导入导出 | EFE RoboTwin standard 样例 oracle/empty 在 Orbit 跑通（GPU sidecar）；故障注入四类分类正确 |
-| P3 GUI 广度 | CUA-Lite env-server 家族、Cua Bench、BrowserGym 全套、OSWorld（KVM + 缓存卷）、MobileWorld；GUI trial 视图与实时画面 | 每家族至少一个套件 L1、一个 L2；OSWorld 20 任务跑通 |
-| P4 具身广度 | vla-eval native（LIBERO / SimplerEnv 起步）、PolicySpec、Arena native；具身视图 | LIBERO 官方 baseline policy 复现上游成功率（同版本）；policy + sim 整组准入无超卖 |
-| P5 CLI Agent 桥 | computer-use 工具（CLI + MCP）、EFE 客户端集成、能力检查 | Claude Code 在 MiniWoB / OSWorld 子集与 EFE CPU 任务跑通并有统一轨迹 |
-| P6 规模与环境池 | 分层准入、pooled/singleton 实例、对账回收、多节点能力路由 | 长批次无泄漏；复位失败进 quarantine；两台真机验证 |
-| P7 生态 | catalog、`bench search`、静态导出、answer kind + HarnessGrad 数据集 | 外部作者无改核心接入一个 bench |
+| P1 Agent 注册表 | 已完成；bench 契约断点已修复（R1） | §6；codex、claude-code 与容器内安装的 dsh 经真实 bench trial 验证 |
+| P2 样本身份与官方聚合 | 评测身份（§9.1a）、Outcome 两口径、报告修订、attempt/retry 规则 | 契约与统计测试；现有 bench 结果不变 |
+| P3 两个小而完整的接入 | 扩展 BrowserGym 全套；一个保持原条件的 EFE CPU 任务（先列兼容清单） | 准备、检查、执行、评分、查看、取消与清理全部走通；偏差逐项记录 |
+| P4 Policy 路线 | 按角色分配、service GPU、gang lease、PolicySpec；vla-eval 固定任务/episode 集合（`--no-docker` 于 main） | 原版指标、预算与故障行为对齐；policy + sim 无超卖 |
+| P5 扩大覆盖 | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
+| P6 CLI Agent 桥 | computer-use 工具（CLI + MCP）、EFE 客户端集成、能力检查 | Claude Code 在 MiniWoB / OSWorld 子集与 EFE CPU 任务跑通并有统一轨迹 |
+| P7 规模优化 | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |
 
 ## 10. 路线

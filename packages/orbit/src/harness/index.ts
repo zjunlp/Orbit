@@ -139,6 +139,8 @@ export async function prepareAgent(
     mounts.push({ source: cli.source, target: cli.target, mode: "ro" });
   } else if (def.install.kind === "install") {
     setup = def.install.script;
+    // Global npm installs go to the Agent home, which the (non-root) run user can write.
+    env.NPM_CONFIG_PREFIX = `${home}/.prefix`;
   }
 
   return { mounts, env, secretEnv, secrets: secretValues(entry), cli, setup };

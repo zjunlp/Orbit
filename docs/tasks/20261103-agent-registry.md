@@ -1,5 +1,5 @@
 # Agent 注册表与自定义 Agent
-branch: feat/agent-registry · status: in_progress · updated: 2026-11-03
+branch: feat/agent-registry, fix/agent-bench-contract · status: in_progress · updated: 2026-11-03
 
 ## Goal
 
@@ -48,6 +48,33 @@ Agent 走同一套安装、认证、argv 与会话路径。
 | Real run with a non-built-in Agent | — | not_run | needs a host CLI; none of pi/opencode/kimi/gemini/aider/goose/qwen/copilot/mini-swe/dsh is installed here |
 | Bench trial with a non-built-in Agent | — | not_run | follows the Agent run check |
 
+## Correction (fix/agent-bench-contract)
+
+Review ([design-review.md](../design-review.md) R1) found the first change incomplete: `Method.agent` and
+`BenchCapabilities.methods` were still a five-value enum, so bench jobs rejected every new Agent; the install
+script returned by `prepareAgent` was never executed; and ASI mapped every non-Codex CLI to Claude. The earlier
+claim that bench methods could name any registered Agent was wrong. Fixed:
+
+- `Method.agent` accepts any Agent name; `external/oracle/empty` stay special, `policy` is reserved and refused;
+  the registry refuses reserved names; jobs check registration and auth kind before submission.
+- Capabilities keep concrete names exact (`["codex"]` still means only Codex); `cli` explicitly admits all CLIs.
+  Daemon and Web share the rule (`capabilityAllows`); the Web method list comes from `GET /agents`.
+- Docker runs execute the `install` script before the command (`NPM_CONFIG_PREFIX` in the Agent home,
+  `~/.local/bin` on PATH, log in `orbit/agent/setup.log`); a failed install sets reason `Agent install failed`,
+  which bench classifies as an environment failure without verify. Process runs refuse `install` Agents.
+- Preflight requires a host CLI only for `host` Agents. ASI and LongDS refuse Agents they do not adapt.
+- dsh resume uses `--session-id` (checked against `dsh headless --help`).
+
+| Check | Revision | Result | Notes |
+| --- | --- | --- | --- |
+| `pnpm verify` | working tree | passed | 410 orbit tests (17 skipped) + 51 web; new `agent-bench.test.ts` |
+| Contract: pi, kimi-cli, my-agent accepted; policy and reserved names refused | working tree | passed | unit tests |
+| Install wrapper success/failure exit codes | working tree | passed | test caught `if !` losing the exit code; fixed |
+| Real Harbor-format trial: empty / oracle / dsh | working tree | passed | empty 0, oracle 1, dsh 1/1 valid; dsh 0.2.1-rc.5 installed in the container (host has rc.2); no key in the log; cleanup done |
+| First dsh attempt with the default npm registry | working tree | failed | install still running after 19 min from this network; cancelled. Retried with `-e NPM_CONFIG_REGISTRY=…` on the auth profile |
+| Real install failure in Docker | — | not_run | covered by the shell-level unit test only |
+| Other install Agents (pi, opencode, kimi-cli, …) | — | not_run | |
+
 ## Next / open issues
 
 1. Ten built-in definitions are transcribed from the CLIs' own flags and Harbor's adapters, not run here.
@@ -55,7 +82,8 @@ Agent 走同一套安装、认证、argv 与会话路径。
    package range (`@mariozechner/pi-coding-agent`, ≥0.74).
 2. Session parsing is still codex/claude-code only. Other Agents record `transcript.glob` + `format: jsonl`
    but no parser reads it yet, so their Web Session page stays empty and `runAgentFailure` sees only logs.
-3. `install` Agents need network and a toolchain in the task image; a failing install currently fails the run
-   as an environment error (correct, but the message should name the install step).
+3. `install` Agents need network and a toolchain in the task image, and install `latest` each run (versions drift;
+   recorded only in the Agent home). Slow registries need `NPM_CONFIG_REGISTRY` / `UV_INDEX_URL` on the auth
+   profile. Pinning versions and caching installs are open.
 4. The next step of the expansion plan (Env kind + `orbit-env` tool bridge) depends on this registry: it is what
    lets a CLI Agent drive a GUI or simulator environment. The workspace/answer/session kinds come after.

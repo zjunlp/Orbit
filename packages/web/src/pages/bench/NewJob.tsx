@@ -15,23 +15,27 @@ import { useAsync } from "../../lib/use.ts";
 import { jobLabel } from "./common.tsx";
 import {
   buildMethods,
+  capabilityAllows,
   evaluationSpec,
   importMethods,
+  isCliAgent,
   METHOD_TYPES,
   type MethodDraft,
   methodDraft,
+  methodTypes,
   registrationChanged,
   taskSubset,
 } from "./new-job.ts";
 import "./launch.css";
 
-const TYPE_LABEL: Record<Method["agent"], string> = {
+const TYPE_LABEL: Record<string, string> = {
   empty: "Empty baseline",
   external: "External policy",
   codex: "Codex",
   "claude-code": "Claude Code",
   oracle: "Oracle baseline",
 };
+const typeLabel = (agent: string) => TYPE_LABEL[agent] ?? agent;
 const STEPS = ["Environment & tasks", "Methods", "Review & start"];
 
 export function NewBenchJob() {
@@ -41,6 +45,7 @@ export function NewBenchJob() {
   const benchmarks = useAsync(() => api.benchmarks(), []);
   const jobs = useAsync(() => api.benchJobs(), []);
   const profiles = useAsync(() => api.authProfiles(), []);
+  const agents = useAsync(() => api.agents(), []);
   const preset = loc.query.get("benchmark") ?? "";
   const subset = taskSubset(loc.query);
   const loadedSource = source.data?.job.id === from ? source.data.job : undefined;
@@ -81,6 +86,7 @@ export function NewBenchJob() {
               subset={subset}
               jobs={jobs.data ?? []}
               profiles={profiles.data ?? []}
+              agentNames={agents.data?.map((a) => a.definition.name) ?? null}
               profilesError={profiles.error}
             />
           )}
@@ -98,6 +104,7 @@ function NewJobForm({
   jobs,
   profiles,
   profilesError,
+  agentNames,
 }: {
   benchmarks: Benchmark[];
   source?: BenchJob;
@@ -106,6 +113,8 @@ function NewJobForm({
   jobs: BenchJob[];
   profiles: AuthProfile[];
   profilesError: string | null;
+  /** Registered Agent names; null until the daemon answers. */
+  agentNames: string[] | null;
 }) {
   const [stage, setStage] = useState(0);
   const [benchmark, setBenchmark] = useState(source?.spec.benchmark ?? preset);
@@ -143,7 +152,10 @@ function NewJobForm({
     drafts.length *
     (Number.isInteger(Number(seeds)) && Number(seeds) > 0 ? Number(seeds) : 0);
   const fields = { benchmark, tasks: selected, name, seeds, timeout, options };
-  const methodAllowed = capabilities?.methods ?? METHOD_TYPES;
+  const types = agentNames ? methodTypes(agentNames) : METHOD_TYPES;
+  const methodAllowed = capabilities
+    ? types.filter((a) => capabilityAllows(capabilities.methods, a))
+    : types;
   const updateMethod = (index: number, patch: Partial<MethodDraft>) =>
     setDrafts((all) => all.map((m, i) => (i === index ? { ...m, ...patch } : m)));
 
@@ -394,10 +406,9 @@ function NewJobForm({
                       </button>
                     </div>
                   </details>
-                  {profilesError &&
-                    drafts.some((d) => d.agent === "codex" || d.agent === "claude-code") && (
-                      <div className="callout">Could not load auth profiles: {profilesError}</div>
-                    )}
+                  {profilesError && drafts.some((d) => isCliAgent(d.agent)) && (
+                    <div className="callout">Could not load auth profiles: {profilesError}</div>
+                  )}
                 </div>
               </section>
               {drafts.map((draft, i) => (
@@ -487,7 +498,7 @@ function NewJobForm({
                       <b>{d.name}</b>
                       <span className="muted">
                         {" "}
-                        · {TYPE_LABEL[d.agent]}
+                        · {typeLabel(d.agent)}
                         {d.model ? ` · ${d.model}` : ""}
                       </span>
                       {d.entrypoint && <div className="mono muted">{d.entrypoint}</div>}
@@ -650,7 +661,7 @@ function MethodEditor({
   onChange: (patch: Partial<MethodDraft>) => void;
   onRemove: () => void;
 }) {
-  const cli = d.agent === "codex" || d.agent === "claude-code";
+  const cli = isCliAgent(d.agent);
   return (
     <section className="card">
       <div className="card-h">
@@ -679,12 +690,12 @@ function MethodEditor({
             >
               {!allowed.includes(d.agent) && (
                 <option value={d.agent} disabled>
-                  {TYPE_LABEL[d.agent]} (unsupported)
+                  {typeLabel(d.agent)} (unsupported)
                 </option>
               )}
               {allowed.map((agent) => (
                 <option key={agent} value={agent}>
-                  {TYPE_LABEL[agent]}
+                  {typeLabel(agent)}
                 </option>
               ))}
             </select>

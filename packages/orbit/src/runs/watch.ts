@@ -12,6 +12,7 @@ import * as docker from "../executor/docker.ts";
 import { safeJoin } from "../records/index.ts";
 import type { RunContext } from "./context.ts";
 import { DOCKER_RETRY_MS, LOG_DRAIN_TIMEOUT_MS, outcome, sleep } from "./execution.ts";
+import { AGENT_INSTALL_FAILED, AGENT_SETUP_FAILED } from "./launch.ts";
 import { keepsContainer } from "./phases.ts";
 
 type Context = Pick<
@@ -129,6 +130,9 @@ export async function watch(
   await ctx.stopUsage(run, oom);
   let reason = exitCode === 0 ? null : `exit code ${exitCode}`;
   if (oom) reason = `out of memory (limit ${run.spec.resources.memGB} GB)`;
+  const setupFailed = join(dirs.agent, AGENT_SETUP_FAILED);
+  if (existsSync(setupFailed))
+    reason = `${AGENT_INSTALL_FAILED} (exit ${readFileSync(setupFailed, "utf8").trim()}); see orbit/agent/setup.log`;
   await ctx.finalize(run, ...outcome(run, ctl, exitCode, reason));
 }
 

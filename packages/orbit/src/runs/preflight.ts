@@ -187,7 +187,9 @@ export async function localBlocker(ctx: Context, spec: RunSpec): Promise<string 
     if (!entry) return `auth profile not found: ${spec.auth}`;
     const def = ctx.deps.agents?.get(entry.profile.harness);
     if (!def) return `unknown Agent: ${entry.profile.harness}`;
-    if (!(await ctx.deps.agents?.host(def))) return `${def.name} CLI not found on this node`;
+    // Only Agents mounted from the host need a CLI here; others install in or come with the image.
+    if (def.install.kind === "host" && !(await ctx.deps.agents?.host(def)))
+      return `${def.name} CLI not found on this node`;
   }
   return infeasible(leaseRequest(spec), await ctx.resources());
 }
