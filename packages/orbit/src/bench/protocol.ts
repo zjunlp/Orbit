@@ -4,6 +4,7 @@
 // verifier's pass-through secrets.
 import { spawn } from "node:child_process";
 import type { z } from "zod";
+import type { AgentDefinition } from "../contracts/index.ts";
 import {
   ADAPTER_PROTOCOL,
   type AdapterOp,
@@ -173,6 +174,7 @@ export function toRunSpec(
   method: Method,
   b: Benchmark,
   phase: "solve" | "verify",
+  agentDef: () => AgentDefinition,
 ): RunSpecInput {
   const { agentTask, command, ...rest } = s;
   if (agentTask && (phase === "verify" || !isCliMethod(method)))
@@ -183,7 +185,7 @@ export function toRunSpec(
     );
   const spec = {
     ...rest,
-    command: agentTask ? agentCommand(method, agentTask.instruction) : command,
+    command: agentTask ? agentCommand(agentDef(), method, agentTask.instruction) : command,
     env: { ...b.env, ...((rest.env as Record<string, string> | undefined) ?? {}) },
     snapshot: false,
   } as RunSpecInput;

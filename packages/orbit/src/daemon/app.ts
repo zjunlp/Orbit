@@ -10,6 +10,7 @@ import type { ClusterService } from "../cluster/service.ts";
 import type { OrbitPaths } from "../config/paths.ts";
 import { API_PREFIX, type Health, type LoginCode } from "../contracts/index.ts";
 import type { FeishuBots } from "../feishu/index.ts";
+import type { AgentRegistry } from "../harness/registry.ts";
 import { sameSecret, tokenMatches } from "../lib/tokens.ts";
 import { VERSION } from "../lib/version.ts";
 import type { Notifier, NotifyStore } from "../notify/index.ts";
@@ -28,6 +29,7 @@ export interface AppDeps {
   startedAt: string;
   runs: RunService;
   auth: AuthStore;
+  agents: AgentRegistry;
   notifyStore: NotifyStore;
   notifier: Notifier;
   feishu: FeishuBots;

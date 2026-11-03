@@ -23,6 +23,10 @@ export const ProfileName = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, "use letters, digits, '.', '_' or '-'");
 
+/** How an Agent authenticates: an interactive login, an API key, or a relay endpoint with a key. */
+export const AuthKind = z.enum(["login", "api-key", "relay"]);
+export type AuthKind = z.infer<typeof AuthKind>;
+
 export const EnvName = z
   .string()
   .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "invalid environment variable name");

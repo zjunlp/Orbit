@@ -1,7 +1,7 @@
 # Orbit status
 
 - **Updated at:** 2026-11-03
-- **Basis:** Snapshot index timestamps preserve same-size edit detection; GUI benchmark Web workflow and BrowserGym/MiniWoB phase one retained.
+- **Basis:** Agent registry (12 built-in Agents, user definitions, `orbit agent`); snapshot index timestamps preserve same-size edit detection; GUI benchmark Web workflow and BrowserGym/MiniWoB phase one retained.
 - **Stage:** R0–R2 validated here; R3 LongDS checked with a complete native Codex task, Harbor with oracle/empty samples; R4 only as two daemons on one machine.
 - **Blockers:** none for the current release.
 
@@ -15,7 +15,8 @@
 - Who holds each GPU (user, command, PID, container/Run, memory, runtime; else unknown) in Web and CLI.
 - Pre-flight `orbit run|sweep --check` (data, output disk, image, placement); `--smoke '<cmd>'` gates submission.
 - Data directory apart from `~/.orbit` (`orbit config data`, `ORBIT_DATA`), doctor disk warnings; owned home symlink targets and existing private files checked/tightened; logical folders (`--folder`, `mv`, `folders`, `export`).
-- Auth profiles for Codex and Claude Code; notifications (Feishu, DingTalk, WeCom, Slack, webhook; `feishu-app` bot: `orbit feishu init` QR setup, pairing, read-only `/gpu` `/runs` `/show`, curve cards).
+- Agent registry: one declaration per Agent (`codex`, `claude-code`, `pi`, `opencode`, `kimi-cli`, `gemini-cli`, `aider`, `goose`, `qwen-code`, `copilot-cli`, `mini-swe-agent`, `dsh`), user definitions in `agents.json`, `orbit agent ls|show|add|rm|check`, per-Agent install/credentials/argv/transcript; bench methods name any registered Agent. Only codex and claude-code ran on this machine; the other ten follow their CLIs and Harbor's adapters but are `unverified`.
+- Auth profiles per Agent (kinds depend on the definition); notifications (Feishu, DingTalk, WeCom, Slack, webhook; `feishu-app` bot: `orbit feishu init` QR setup, pairing, read-only `/gpu` `/runs` `/show`, curve cards).
 - Bench: solve + verify run per trial, valid-only means (OOM solves invalid); one JSON adapter protocol
   for built-ins and external executables ([LongDS native multi-turn runner/judge](../examples/bench-adapters/longds/), ResearchClawBench); per-task resources and timeout resolved before adapter planning; `bench usage`
   suggestions; solves whose Agent could not use its model are invalid without a verify run; `bench consolidate` checks preview digests and preserves newly invalid evidence; startup repairs stale trial cleanup; completed invalid retries and task append retain validity; `orbit-bench` skill; `bench rescore` re-verifies from saved solve outputs (history kept). Measured peak memory / CPU / GPU memory on every run. Adapter-declared

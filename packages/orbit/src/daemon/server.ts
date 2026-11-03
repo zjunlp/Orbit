@@ -16,7 +16,7 @@ import {
   type NodeResources,
 } from "../contracts/index.ts";
 import { FeishuBots } from "../feishu/index.ts";
-import { hostCli } from "../harness/index.ts";
+import { AgentRegistry } from "../harness/registry.ts";
 import { acquireProcessLock } from "../lib/lock.ts";
 import { Notifier, NotifyStore } from "../notify/index.ts";
 import { readMetrics } from "../records/index.ts";
@@ -112,12 +112,14 @@ async function startLockedDaemon(
 ): Promise<StartedDaemon> {
   const token = randomBytes(24).toString("hex");
   const auth = new AuthStore(paths.auth);
+  const agents = new AgentRegistry(paths.agents);
   const datasets = new DatasetRegistry(paths.datasets);
   const self = opts.self ?? detectSelf();
   const runs = new RunService({
     store,
     paths,
     auth,
+    agents,
     datasets,
     probe: opts.probe ?? (() => probeNode(paths.data, { node: paths.node, gpus: paths.gpus })),
     tickMs: opts.tickMs,
@@ -130,13 +132,15 @@ async function startLockedDaemon(
     datasets,
     profiles: () =>
       Promise.all(
-        auth.list().map(
-          async (p): Promise<NodeProfile> => ({
+        auth.list().map(async (p): Promise<NodeProfile> => {
+          const def = agents.get(p.harness);
+          return {
             name: p.name,
             harness: p.harness,
-            cli: Boolean(await hostCli(p.harness)),
-          }),
-        ),
+            // An Agent that installs in the run needs nothing from this node.
+            cli: def ? def.install.kind !== "host" || Boolean(await agents.host(def)) : false,
+          };
+        }),
       ),
     files: { nodes: paths.nodes, cluster: paths.cluster, bundles: paths.bundles },
     heartbeatMs: opts.heartbeatMs,
@@ -196,6 +200,7 @@ async function startLockedDaemon(
     startedAt: new Date().toISOString(),
     runs,
     auth,
+    agents,
     notifyStore,
     notifier,
     feishu,

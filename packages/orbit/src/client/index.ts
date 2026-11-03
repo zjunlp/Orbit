@@ -3,6 +3,10 @@ import { type DaemonInfo, readDaemonInfo } from "../config/daemon-info.ts";
 import type { OrbitPaths } from "../config/paths.ts";
 import type { RunCursor } from "../contracts/index.ts";
 import {
+  AgentDefinition,
+  type AgentDefinitionInput,
+  AgentInfo,
+  AgentList,
   API_PREFIX,
   Artifacts,
   AuthProfile,
@@ -154,6 +158,12 @@ export class OrbitClient {
     this.call(z.object({ profiles: z.array(AuthProfile) }), "/auth").then((r) => r.profiles);
   authPut = (p: AuthProfileInput) => this.call(AuthProfile, "/auth", { method: "POST", body: p });
   authRemove = (name: string) => this.call(Ok, `/auth/${enc(name)}`, { method: "DELETE" });
+  agentList = () => this.call(AgentList, "/agents").then((r) => r.agents);
+  agentGet = (name: string) => this.call(AgentInfo, `/agents/${enc(name)}`);
+  agentPut = (d: AgentDefinitionInput) =>
+    this.call(AgentDefinition, "/agents", { method: "POST", body: d });
+  agentRemove = (name: string) => this.call(Ok, `/agents/${enc(name)}`, { method: "DELETE" });
+
   authTest = (name: string, image?: string) =>
     this.call(AuthTestResult, `/auth/${enc(name)}/test`, {
       method: "POST",

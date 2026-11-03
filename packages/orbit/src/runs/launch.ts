@@ -11,9 +11,15 @@ import {
 import { userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import type { RunDirs } from "../config/paths.ts";
-import type { Run } from "../contracts/index.ts";
+import type { AgentDefinition, Run } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
-import { containerPath, type Prepared, prepareHarness } from "../harness/index.ts";
+import {
+  agentCommand,
+  containerPath,
+  type Prepared,
+  prepareAgent,
+  resumeAgentCommand,
+} from "../harness/index.ts";
 import { nowIso } from "../lib/ids.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, containerName, GENERIC_DIRS, usesRunNetworks } from "./execution.ts";
@@ -89,10 +95,8 @@ export async function launch(ctx: Context, id: string): Promise<void> {
     const secretEnv = ctx.passEnv(run);
     if (run.spec.auth) {
       const h = await ctx.prepareAuth(run, dirs);
-      h.env.PATH = containerPath(
-        h.cli.pathDirs,
-        run.spec.env.PATH ?? (await docker.imagePath(image)),
-      );
+      const imagePath = run.spec.env.PATH ?? (await docker.imagePath(image));
+      if (h.cli) h.env.PATH = containerPath(h.cli.pathDirs, imagePath);
       spec.mounts.push(...h.mounts);
       Object.assign(spec.env, h.env);
       Object.assign(secretEnv, h.secretEnv);
@@ -150,15 +154,19 @@ export async function prepareAuth(ctx: Context, run: Run, dirs: RunDirs): Promis
   const name = run.spec.auth as string;
   const entry = ctx.deps.auth?.get(name);
   if (!entry) throw new Error(`auth profile not found: ${name}`);
-  const h = await prepareHarness(entry, dirs.agent);
+  const agents = ctx.deps.agents;
+  if (!agents) throw new Error("no Agent registry; restart the daemon");
+  const def = agents.get(entry.profile.harness);
+  if (!def) throw new Error(`unknown Agent: ${entry.profile.harness}`);
+  const h = await prepareAgent(def, entry, dirs.agent, { hostCli: (d) => agents.host(d) });
   if (run.spec.agentBundle) {
-    installBundle(run.spec.agentBundle, dirs.agent, entry.profile.harness);
+    installBundle(run.spec.agentBundle, dirs.agent, def);
     ctx.store.addEvent(run.id, "bundle", `method bundle ${run.spec.agentBundle}`);
   }
   ctx.store.addEvent(
     run.id,
     "harness",
-    `${h.cli.version} · auth ${name} (${entry.profile.kind})${run.spec.hostNetwork ? " · host network" : ""}`,
+    `${h.cli?.version ?? def.name} · auth ${name} (${entry.profile.kind})${run.spec.hostNetwork ? " · host network" : ""}`,
   );
   return h;
 }
@@ -281,16 +289,20 @@ export function containerSpec(
 
 /**
  * Copy a method bundle into the Agent home. AGENTS.md and CLAUDE.md stand in for each other, so one
- * bundle serves both harnesses.
+ * bundle serves every Agent; each home gets both names.
  */
-export function installBundle(bundle: string, agentDir: string, harness: "codex" | "claude-code") {
-  const home = join(agentDir, harness === "codex" ? "codex" : "claude");
+export function installBundle(bundle: string, agentDir: string, def: AgentDefinition) {
+  const home = join(agentDir, def.name);
   mkdirSync(home, { recursive: true });
   cpSync(bundle, home, { recursive: true, dereference: true });
-  const want = harness === "codex" ? "AGENTS.md" : "CLAUDE.md";
-  const other = harness === "codex" ? "CLAUDE.md" : "AGENTS.md";
-  if (!existsSync(join(home, want)) && existsSync(join(home, other)))
-    cpSync(join(home, other), join(home, want));
+  const names = ["AGENTS.md", "CLAUDE.md"];
+  for (const [from, to] of [
+    ["AGENTS.md", "CLAUDE.md"],
+    ["CLAUDE.md", "AGENTS.md"],
+  ] as const)
+    if (!existsSync(join(home, to)) && existsSync(join(home, from)))
+      cpSync(join(home, from), join(home, to));
+  void names;
 }
 
 export const realOr = (p: string) => {

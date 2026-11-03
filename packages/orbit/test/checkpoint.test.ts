@@ -19,6 +19,7 @@ import * as docker from "../src/executor/docker.ts";
 import { resumeAgentCommand } from "../src/harness/index.ts";
 import { Redactor } from "../src/lib/redact.ts";
 import { capture, checkpointDir, restore, resumeSpec } from "../src/runs/checkpoint.ts";
+import { requireAgent } from "../test-support/agents.ts";
 
 vi.mock("../src/executor/docker.ts", async (original) => ({
   ...(await original<typeof docker>()),
@@ -199,9 +200,16 @@ it("can continue an already resumed native session without accumulating resume a
     ],
     [["claude", "-p", "--model", "fixture", "--effort", "low", "solve"], "claude-code"],
   ] as const) {
-    const session = { harness, sessionId: "11111111-1111-1111-1111-111111111111" };
-    const first = resumeAgentCommand([...command], session);
-    expect(resumeAgentCommand(first, session)).toEqual(first);
+    const session = { sessionId: "11111111-1111-1111-1111-111111111111" };
+    void command;
+    const first = resumeAgentCommand(
+      requireAgent(harness),
+      { model: "fixture", effort: "low" },
+      session,
+    );
+    expect(
+      resumeAgentCommand(requireAgent(harness), { model: "fixture", effort: "low" }, session),
+    ).toEqual(first);
     expect(first.join(" ")).toContain("low");
   }
 });

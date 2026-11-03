@@ -46,6 +46,7 @@ import {
 } from "../src/contracts/index.ts";
 import { agentCommand, agentErrorKind } from "../src/harness/index.ts";
 import { rewriteDockerArgs, type ShimConfig } from "../src/runs/shim.ts";
+import { requireAgent } from "../test-support/agents.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "orbit-bench-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -367,7 +368,13 @@ command = "true"
     expect(spec.mounts).toEqual([]);
     expect(spec.mkdirs).toEqual(["/logs/agent", "/logs/verifier", "/logs/artifacts"]);
     const b = { name: "x", adapter: "harbor", path: root, config: {}, env: {}, passEnv: ["K"] };
-    const rs = toRunSpec(spec, { name: "e", agent: "empty" }, b as unknown as Benchmark, "solve");
+    const rs = toRunSpec(
+      spec,
+      { name: "e", agent: "empty" },
+      b as unknown as Benchmark,
+      "solve",
+      () => requireAgent("codex"),
+    );
     expect(rs.after?.passEnv).toEqual(["K"]);
     expect(rs.passEnv ?? []).toEqual([]);
     expect(RunSpec.safeParse(rs).success).toBe(true);
@@ -612,14 +619,18 @@ timeout_sec = 120
     const codex = { name: "c", agent: "codex" as const, auth: "p", bundle: "/m", model: "m" };
     const oracle = { name: "oracle", agent: "oracle" as const };
 
-    const agent = toRunSpec(harborSolveSpec(t, codex, staging), codex, b, "solve");
+    const agent = toRunSpec(harborSolveSpec(t, codex, staging), codex, b, "solve", () =>
+      requireAgent("codex"),
+    );
     expect(agent.command?.slice(0, 2)).toEqual(["codex", "exec"]);
     expect(agent.command?.at(-1)).toBe("x\n");
     expect(agent).toMatchObject({ auth: "p", agentBundle: "/m", network: true, snapshot: false });
     expect(agent.env).toEqual({ B: "1" });
     expect(agent.passEnv ?? []).toEqual([]);
 
-    const solve = toRunSpec(harborSolveSpec(t, oracle, staging), oracle, b, "solve");
+    const solve = toRunSpec(harborSolveSpec(t, oracle, staging), oracle, b, "solve", () =>
+      requireAgent("codex"),
+    );
     expect(solve.auth).toBeUndefined();
     expect(solve.env).toEqual({ B: "1", SEED: "1" });
     const verify = toRunSpec(
@@ -627,13 +638,20 @@ timeout_sec = 120
       oracle,
       b,
       "verify",
+      () => requireAgent("codex"),
     );
     expect(verify).toMatchObject({ passEnv: ["GRADER_KEY"], priority: 1 });
 
     const task = { agentTask: { instruction: "go" }, image: "x" };
-    expect(() => toRunSpec(task, oracle, b, "solve")).toThrow(/asked for an Agent/);
-    expect(() => toRunSpec(task, codex, b, "verify")).toThrow(/cannot ask for an Agent/);
-    expect(() => toRunSpec({ command: ["true"] }, oracle, b, "solve")).toThrow(/image/);
+    expect(() => toRunSpec(task, oracle, b, "solve", () => requireAgent("codex"))).toThrow(
+      /asked for an Agent/,
+    );
+    expect(() => toRunSpec(task, codex, b, "verify", () => requireAgent("codex"))).toThrow(
+      /cannot ask for an Agent/,
+    );
+    expect(() =>
+      toRunSpec({ command: ["true"] }, oracle, b, "solve", () => requireAgent("codex")),
+    ).toThrow(/image/);
     expect(AdapterRunSpec.safeParse({ command: ["true"], auth: "p" }).success).toBe(false);
     expect(AdapterRunSpec.safeParse({ image: "x" }).success).toBe(false);
   });
@@ -1319,13 +1337,21 @@ describe("methods", () => {
     expect(Method.parse({ name: "old", agent: "empty" })).toEqual({ name: "old", agent: "empty" });
     const benchmark = { env: {}, passEnv: ["GRADER_KEY"] } as Benchmark;
     const spec = { image: "gui", command: ["python", "runtime.py"], network: false };
-    const solve = toRunSpec(spec, method, benchmark, "solve");
+    const solve = toRunSpec(spec, method, benchmark, "solve", () => requireAgent("codex"));
     expect(solve).toMatchObject({ passEnv: ["MODEL_KEY"], network: false, snapshot: false });
     expect(solve.auth).toBeUndefined();
     expect(solve.agentBundle).toBeUndefined();
-    expect(toRunSpec(spec, method, benchmark, "verify")).toMatchObject({ passEnv: ["GRADER_KEY"] });
+    expect(toRunSpec(spec, method, benchmark, "verify", () => requireAgent("codex"))).toMatchObject(
+      { passEnv: ["GRADER_KEY"] },
+    );
     expect(() =>
-      toRunSpec({ image: "gui", agentTask: { instruction: "go" } }, method, benchmark, "solve"),
+      toRunSpec(
+        { image: "gui", agentTask: { instruction: "go" } },
+        method,
+        benchmark,
+        "solve",
+        () => requireAgent("codex"),
+      ),
     ).toThrow(/asked for an Agent/);
   });
 
@@ -1340,11 +1366,12 @@ describe("methods", () => {
     });
     expect(() => parseMethod("codex")).toThrow();
     expect(() => parseMethod("a=codex,foo=1")).toThrow(/unknown --method key/);
+    const claude = requireAgent("claude-code");
     expect(
-      agentCommand({ name: "c", agent: "claude-code", auth: "p", model: "opus" }, "do"),
+      agentCommand(claude, { name: "c", agent: "claude-code", auth: "p", model: "opus" }, "do"),
     ).toEqual(["claude", "-p", "--dangerously-skip-permissions", "--model", "opus", "do"]);
     expect(
-      agentCommand({ name: "c", agent: "claude-code", auth: "p", effort: "max" }, "do"),
+      agentCommand(claude, { name: "c", agent: "claude-code", auth: "p", effort: "max" }, "do"),
     ).toEqual(["claude", "-p", "--dangerously-skip-permissions", "--effort", "max", "do"]);
   });
 });

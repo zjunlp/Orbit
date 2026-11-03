@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import type { AgentRef } from "../contracts/index.ts";
+import type { Command } from "commander";
+import type { OrbitClient } from "../client/index.ts";
+import type { AgentDefinitionInput, AgentInfo, AgentRef } from "../contracts/index.ts";
+import type { Print } from "./auth.ts";
+import { compactTable as table } from "./format.ts";
 
 /** Parent process names, nearest first (Linux /proc). */
 function ancestors(max = 12): string[] {
@@ -54,4 +58,89 @@ export function detectAgent(
   }
   if (harness === "codex") return { harness, sessionId: codexId || undefined, cwd };
   return undefined;
+}
+
+function formatAgents(agents: AgentInfo[]): string {
+  return table([
+    ["NAME", "ORIGIN", "CAPABILITIES", "ON THIS NODE", "DESCRIPTION"],
+    ...agents.map((a) => [
+      a.definition.name,
+      a.definition.origin,
+      [
+        a.definition.capabilities.oneShot ? "one-shot" : "",
+        a.definition.capabilities.multiTurn ? "multi-turn" : "",
+        a.definition.capabilities.gui ? "gui" : "",
+        a.definition.capabilities.mcp ? "mcp" : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      a.available ? (a.version ?? "ready") : "missing",
+      a.definition.description ?? "",
+    ]),
+  ]);
+}
+
+/**
+ * `orbit agent` — the Agent definitions Orbit can drive. Built-ins ship with the package; a user
+ * definition is a JSON file shaped like `contracts.AgentDefinitionInput`, so adding a CLI needs no
+ * code change.
+ */
+export function registerAgent(program: Command, client: () => Promise<OrbitClient>, print: Print) {
+  const agent = program
+    .command("agent")
+    .description("Agents Orbit can run (codex, claude-code, pi, opencode, … and your own)");
+
+  agent
+    .command("ls")
+    .description("list definitions and whether this node can run them")
+    .option("--json", "print JSON")
+    .action(async (o: { json?: boolean }) => {
+      const agents = await (await client()).agentList();
+      print(o.json, agents, () => formatAgents(agents));
+    });
+
+  agent
+    .command("show <name>")
+    .description("print one definition")
+    .option("--json", "print JSON")
+    .action(async (name: string, o: { json?: boolean }) => {
+      const a = await (await client()).agentGet(name);
+      print(o.json, a, () => JSON.stringify(a.definition, null, 2));
+    });
+
+  agent
+    .command("add <file>")
+    .description("register a definition from a JSON file (built-in names cannot be replaced)")
+    .option("--json", "print JSON")
+    .action(async (file: string, o: { json?: boolean }) => {
+      const input = JSON.parse(readFileSync(file, "utf8")) as AgentDefinitionInput;
+      const d = await (await client()).agentPut(input);
+      print(o.json, d, () => `saved ${d.name}`);
+    });
+
+  agent
+    .command("rm <name>")
+    .description("delete a user definition")
+    .action(async (name: string) => {
+      await (await client()).agentRemove(name);
+      console.log(`removed ${name}`);
+    });
+
+  agent
+    .command("check <name>")
+    .description("show whether this node can run the Agent, and its version")
+    .option("--json", "print JSON")
+    .action(async (name: string, o: { json?: boolean }) => {
+      const a = await (await client()).agentGet(name);
+      print(o.json, a, () =>
+        [
+          `${a.definition.name}: ${a.available ? "ready" : "missing"}`,
+          a.detail,
+          a.version ? `version ${a.version}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+      if (!a.available) process.exitCode = 1;
+    });
 }

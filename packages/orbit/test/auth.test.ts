@@ -5,7 +5,7 @@ import { Readable } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
 import { AuthStore } from "../src/auth/index.ts";
 import type { Run } from "../src/contracts/index.ts";
-import { codexConfig, containerPath, finishHarness, prepareHarness } from "../src/harness/index.ts";
+import { codexConfig, containerPath, finishHarness, prepareAgent } from "../src/harness/index.ts";
 import { maskSecret, REDACTED, Redactor } from "../src/lib/redact.ts";
 import {
   groupMessage,
@@ -15,6 +15,7 @@ import {
   runMessage,
   urlHint,
 } from "../src/notify/index.ts";
+import { requireAgent, testAgents } from "../test-support/agents.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "orbit-auth-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -111,6 +112,8 @@ describe("harness", () => {
   writeFileSync(claude, "#!/bin/sh\necho 1.0.0 (Claude Code)\n", { mode: 0o755 });
   process.env.ORBIT_CODEX_DIR = cli;
   process.env.ORBIT_CLAUDE_BIN = claude;
+  /** The registry's own lookup, so the test covers the shipped definitions and version probe. */
+  const agentCli = (def: { name: string }) => testAgents().host(def as never);
   const now = "2026-01-01T00:00:00Z";
   const profile = (over: object) => ({
     env: {},
@@ -132,9 +135,11 @@ describe("harness", () => {
         model: "gpt-x",
       }),
       secret: "sk-relay-codex-123",
-    } as Parameters<typeof prepareHarness>[0];
-    const h = await prepareHarness(entry, agent);
-    expect(h.cli.version).toBe("codex-cli 9.9.9");
+    } as Parameters<typeof prepareAgent>[1];
+    const h = await prepareAgent(requireAgent(entry.profile.harness), entry, agent, {
+      hostCli: agentCli,
+    });
+    expect(h.cli?.version).toBe("codex-cli 9.9.9");
     expect(h.mounts).toEqual([{ source: cli, target: "/opt/orbit/codex/bin/codex", mode: "ro" }]);
     expect(h.env.CODEX_HOME).toBe("/orbit/agent/codex");
     expect(JSON.stringify(h.env)).not.toContain("sk-relay");
@@ -150,14 +155,16 @@ describe("harness", () => {
     const entry = {
       profile: profile({ name: "l", harness: "codex", kind: "login" }),
       secret: LOGIN("2026-01-01"),
-    } as Parameters<typeof prepareHarness>[0];
-    const h = await prepareHarness(entry, agent);
+    } as Parameters<typeof prepareAgent>[1];
+    const h = await prepareAgent(requireAgent(entry.profile.harness), entry, agent, {
+      hostCli: agentCli,
+    });
     const file = join(agent, "codex", "auth.json");
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(h.secrets).toContain("refresh-token-12345678");
     expect(finishHarness(entry, agent).refreshed).toBeUndefined();
     expect(existsSync(file)).toBe(false);
-    await prepareHarness(entry, agent);
+    await prepareAgent(requireAgent(entry.profile.harness), entry, agent, { hostCli: agentCli });
     writeFileSync(file, LOGIN("2026-02-01"));
     expect(finishHarness(entry, agent).refreshed).toContain("2026-02-01");
     expect(existsSync(file)).toBe(false);
@@ -174,8 +181,10 @@ describe("harness", () => {
           model: "m1",
         }),
         secret: "tok-0123456789",
-      }) as Parameters<typeof prepareHarness>[0];
-    const relay = await prepareHarness(mk("relay"), join(dir, "run3"));
+      }) as Parameters<typeof prepareAgent>[1];
+    const relay = await prepareAgent(requireAgent("claude-code"), mk("relay"), join(dir, "run3"), {
+      hostCli: agentCli,
+    });
     expect(relay.env).toMatchObject({
       ANTHROPIC_BASE_URL: "https://a.example",
       ANTHROPIC_MODEL: "m1",
@@ -187,11 +196,19 @@ describe("harness", () => {
     });
     expect(relay.secretEnv).toEqual({ ANTHROPIC_AUTH_TOKEN: "tok-0123456789" });
     expect(relay.mounts[0]?.target).toBe("/opt/orbit/claude/claude");
-    const login = await prepareHarness(mk("login"), join(dir, "run4"));
+    const login = await prepareAgent(requireAgent("claude-code"), mk("login"), join(dir, "run4"), {
+      hostCli: agentCli,
+    });
     expect(login.secretEnv).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: "tok-0123456789" });
     // Only a relay pins the aliases; the official API keeps Claude Code's own tiers.
     expect(login.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBeUndefined();
-    expect((await prepareHarness(mk("api-key"), join(dir, "run5"))).secretEnv).toEqual({
+    expect(
+      (
+        await prepareAgent(requireAgent("claude-code"), mk("api-key"), join(dir, "run5"), {
+          hostCli: agentCli,
+        })
+      ).secretEnv,
+    ).toEqual({
       ANTHROPIC_API_KEY: "tok-0123456789",
     });
   });

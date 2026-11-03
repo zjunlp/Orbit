@@ -30,7 +30,8 @@ export const Mount = z
 export type Mount = z.infer<typeof Mount>;
 
 export const AgentRef = z.object({
-  harness: z.enum(["claude-code", "codex", "other"]),
+  /** An Agent name (`contracts/agent.ts`), or `other` for an unrecognized submitter. */
+  harness: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
   sessionId: z.string().optional(),
   cwd: z.string().optional(),
 });
@@ -166,9 +167,7 @@ export const RunCheckpoint = z.object({
   sizeBytes: z.number().nullable(),
   /** Command execution only; snapshot and artifact collection time is excluded. */
   executionMin: z.number().nonnegative().optional(),
-  session: z
-    .object({ harness: z.enum(["codex", "claude-code"]), sessionId: z.string() })
-    .nullable(),
+  session: z.object({ harness: z.string(), sessionId: z.string() }).nullable(),
   createdAt: z.string(),
   reason: z.string().nullable(),
 });

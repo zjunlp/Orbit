@@ -7,7 +7,7 @@ import {
   type RunSpec,
 } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
-import { hostCli } from "../harness/index.ts";
+
 import { allocate, infeasible } from "../resources/allocate.ts";
 import { diskCheck, lowFreeGB } from "../resources/disk.ts";
 import type { RunContext } from "./context.ts";
@@ -185,8 +185,9 @@ export async function localBlocker(ctx: Context, spec: RunSpec): Promise<string 
   if (spec.auth) {
     const entry = ctx.deps.auth?.get(spec.auth);
     if (!entry) return `auth profile not found: ${spec.auth}`;
-    if (!(await hostCli(entry.profile.harness)))
-      return `${entry.profile.harness} CLI not found on this node`;
+    const def = ctx.deps.agents?.get(entry.profile.harness);
+    if (!def) return `unknown Agent: ${entry.profile.harness}`;
+    if (!(await ctx.deps.agents?.host(def))) return `${def.name} CLI not found on this node`;
   }
   return infeasible(leaseRequest(spec), await ctx.resources());
 }

@@ -33,10 +33,10 @@ orbit daemon (one per node; single writer of local state)
   ├─ executor    docker backend (process backend for native benchmark runners)
   ├─ workspace   code snapshot (commit + diff), mounts, named datasets/weights
   ├─ images      base images, project Dockerfile build cache
-  ├─ auth        credential profiles for harnesses (login / API key / relay base URL)
-  ├─ harness     how each Agent CLI is installed, configured and parsed inside containers
+  ├─ auth        credential profiles per Agent (login / API key / relay base URL)
+  ├─ harness     Agent registry: definitions, install, credentials, argv, transcripts
   ├─ records     logs, metrics, artifacts, events, notes
-  ├─ sessions    host Agent session capture (Codex, Claude Code) linked to runs
+  ├─ sessions    host Agent session capture (Codex / Claude Code parsers) linked to runs
   ├─ bench       adapters, agent profiles + method bundles, trials, outcomes
   └─ cluster     node join, heartbeat, code bundles, remote placement and mirroring (R4)
   ▼
@@ -60,7 +60,7 @@ Cordis patch 挂载薄入口，委托宿主的 filesystem provider；本地包�
 profile 外解析不到宿主依赖。pi 通过 npm 包的 `pi.skills` 发现 skills；本地目录注册需保留该目录。
 dsh / pi 默认安装与当前 CLI 相同版本的 npm 包，不引用 npx 临时缓存。各平台只有
 `plugin/skills/` 一份源文件，构建时复制入包；无全局 CLI 时使用 npx。安装器不改 daemon 状态或凭据。
-插件支持不扩展容器内 harness、auth 或会话解析（目前仍只有 Codex / Claude）；MCP 独立待实现。
+插件支持不扩展容器内 Agent 定义、auth 或会话解析（内置 12 个 Agent，其中只有 Codex / Claude Code 有会话解析器）；MCP 独立待实现。
 维护者可登录 npm 发布已验证的 tarball；配置 npm trusted publisher 后，也可通过 GitHub Release 的
 `v<version>` 标签触发发布工作流。两条路径都要求使用未发布过的新版本号，见[发布指南](guides/releasing.md)。
 
@@ -245,7 +245,7 @@ NVIDIA spec 时），否则 `--gpus device=<UUID>`；启动后核对 `nvidia-smi
 `docker pull`（输出写入 Run 日志），拉取失败记为环境失败。daemon 重启后重新附着容器时，日志截回启动时记录的
 偏移再重新跟随，避免重复。
 
-**会话关联**：CLI 提交时识别调用它的 Agent：`ORBIT_AGENT=<harness>[:<id>]` 优先；否则祖先进程中最近的
+**会话关联**：CLI 提交时识别调用它的 Agent：`ORBIT_AGENT=<name>[:<id>]` 优先（`name` 是已注册的 Agent 名）；否则祖先进程中最近的
 `claude` / `codex` 决定 harness（Agent 相互嵌套时子进程会继承父 Agent 的环境变量），会话 ID 取
 `CLAUDE_CODE_SESSION_ID` / `CODEX_THREAD_ID`；Codex 无 ID 时按 cwd 找最近的会话文件。daemon 读取
 `~/.claude/projects/**/<id>.jsonl` 或 `~/.codex/sessions/YYYY/MM/DD/rollout-*-<id>.jsonl`，
@@ -355,20 +355,46 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 - **Settings**：容器内 Agent 版本、auth profile（掩码、测试、删除）、通知目标（发测试、删除）、浏览器通知开关。
   Web 不录入密钥：添加 profile / 目标只走 CLI。
 
-## 6. 认证（auth）、harness 与通知
+## 6. 认证（auth）、Agent 注册表与通知
+
+**Agent 定义**（`contracts.AgentDefinition`）：Orbit 能驱动的每个 Agent 都是一份声明，见 `harness/definitions.ts`
+（内置）与 `~/.orbit/agents.json`（用户，0600）。Agent 名同时是 auth profile 的 `harness`、bench method 的
+`agent` 和会话的 `harness`，因此是稳定标识而不是显示名。
+
+```
+{ name, description?, install, auth, command, env, capabilities, verified, origin }
+```
+
+- `install`：`host`（挂载宿主已有的 CLI：`binary`、`mount`、`pathDirs`、`pathEnv`，`withNode` 时同时挂载 daemon 的
+  Node 运行时供 Node 脚本使用）| `install`（在容器内跑 `script`，要求镜像有对应工具链与网络）| `image`（任务镜像自带）。
+- `auth`：`kinds`（login / api-key / relay）、`secretEnv`（每种 kind 的密钥变量名）、`env`（可含 `{model}` /
+  `{baseUrl}` / `{home}`）、`baseUrlEnv`、`modelEnv`、`home` + `homeEnv`（CLI 自己的状态目录，位于 `/orbit/agent/<name>`）。
+- `command`：`run` 与可选 `resume` 的 argv 模板（不是 shell 字符串），占位符 `{instruction}` `{model}` `{effort}`
+  `{session}` `{home}`，可选参数写成 `{when:model} … {end}` 组；`transcript` 给出 CLI 自己的会话轨迹 glob 与格式。
+- `capabilities`：`oneShot` / `multiTurn` / `mcp` / `gui`，在提交 bench trial 前与 benchmark 的要求比对。
+- `verified`：该定义在本机真实跑出过预期结果。内置的 codex 与 claude-code 为 true，其余为 false，直到
+  `orbit agent test` 验证。
+
+内置定义：`codex`、`claude-code`（带专属配置写法的代码路径），以及 `pi`、`opencode`、`kimi-cli`、`gemini-cli`、
+`aider`、`goose`、`qwen-code`、`copilot-cli`、`mini-swe-agent`、`dsh`（纯数据，走通用启动路径）。命令行、安装方式与
+会话位置对照 Harbor 的 `agents/installed/`（`f6cf2e2`，2026-11-03）核对；除 codex / claude-code 外均未在本机运行过。
+内置名不能被用户定义覆盖或删除。
+
+HTTP：`GET/POST /agents`、`GET/DELETE /agents/:name`（模板占位符、`{when:…}` 配对、`resume` 是否带 `{instruction}` 在写入前校验）。
+CLI：`orbit agent ls|show|add|rm|check`。`orbit doctor` 为每个定义报告本机是否可用与版本。
 
 **Auth profile**（`contracts.AuthProfile`，公开字段不含密钥）：
 
 ```
-{ name, harness: codex | claude-code, kind: login | api-key | relay, baseUrl?, model?,
+{ name, harness: <Agent 名>, kind: login | api-key | relay, baseUrl?, model?,
   env(非密钥附加变量，如 HTTPS_PROXY), hostNetwork, secretHint, createdAt, updatedAt }
 ```
 
 - 保存在 `~/.orbit/auth.json`（0600，只有 daemon 写），codex 登录态（Codex 的 `auth.json` 内容）也内联在其中。
   API 与 Web 只返回公开字段和掩码提示；密钥只经本机 HTTP 提交一次，CLI 从 stdin 或环境变量读取，不走 argv。
-- 注入方式：
+- 注入由 profile 的 `kind` 与该 Agent 定义的 `auth` 决定；密钥变量名不在代码里硬编码：
 
-| harness / kind | 容器内 |
+| Agent / kind | 容器内 |
 | --- | --- |
 | codex login | `$CODEX_HOME/auth.json` 为 profile 登录态的副本；run 结束后若 token 已刷新则写回 profile |
 | codex api-key | `$CODEX_HOME/auth.json` = `{ OPENAI_API_KEY }` |
@@ -376,18 +402,21 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 | claude-code login | `CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token` 生成的长期 token） |
 | claude-code api-key | `ANTHROPIC_API_KEY` |
 | claude-code relay | `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` |
+| 其他 Agent | 定义里的 `secretEnv[kind]`，加上 `env` / `baseUrlEnv` / `modelEnv` 与 `home` / `homeEnv` |
 
 - 密钥环境变量通过 0600 的 `--env-file` 传给 `docker run`，启动后删除（`docker inspect` 仍可见，仅限本机
-  docker 用户）。run 结束后删除容器内写下的凭据文件；日志写入前按当前所有密钥脱敏（`[redacted]`）。
+  docker 用户）。run 结束后删除容器内写下的凭据文件（内置两个 Agent 的已知路径，以及其他 Agent home 顶层的
+  常见凭据文件名）；日志写入前按当前所有密钥脱敏（`[redacted]`）。
 - `orbit auth test <name>` 用该 profile 提交一个真实的小 Run（`auth-test` 组），让 Agent 回复固定口令并检查日志；
   结果作为 Run 保留。
 
-**Harness**：`RunSpec.auth = <profile>` 时，Orbit 把宿主机上已安装的 Agent CLI 只读挂载进容器
+**Harness**：`RunSpec.auth = <profile>` 时，`prepareAgent` 按定义准备那次 Run：`host` 定义把宿主 CLI 只读挂载进容器
 （codex 为静态 musl 二进制，挂到 `/opt/orbit/codex`；Claude Code 原生二进制需 glibc，挂到 `/opt/orbit/claude`），
-按镜像的 `PATH` 追加这些目录，并在事件中记录版本。版本固定 = 宿主机当前版本；`orbit doctor` 显示两者版本。
-Agent 的 home 放在 `/orbit/agent/{codex,claude}`（`CODEX_HOME`、`CLAUDE_CONFIG_DIR`），会话轨迹随 Run 记录保留。
+`install` 定义在执行前跑安装脚本，`image` 定义依赖任务镜像。按镜像的 `PATH` 追加这些目录，并在事件中记录版本。
+Agent 的 home 放在 `/orbit/agent/<name>`，会话轨迹随 Run 记录保留。
 容器本身就是沙箱：容器内 codex 用 `--dangerously-bypass-approvals-and-sandbox`，claude 用
-`--dangerously-skip-permissions`。profile 设置 `hostNetwork` 时 Run 使用宿主网络（例如代理只监听 127.0.0.1）。
+`--dangerously-skip-permissions`；其他 Agent 的免确认参数写在各自定义里。profile 设置 `hostNetwork` 时 Run 使用
+宿主网络（例如代理只监听 127.0.0.1）。方法 bundle 复制到 `/orbit/agent/<name>`，`AGENTS.md` 与 `CLAUDE.md` 互相补齐。
 
 与 Harbor 内置 Agent 的对照（本地 harbor `09f5b964`）：
 - claude-code：方法的 `effort` → `--effort`；设 `IS_SANDBOX=1`（Harbor 任务以 root 运行，否则 Claude Code 拒绝跳过权限）
@@ -428,15 +457,17 @@ Agent 的 home 放在 `/orbit/agent/{codex,claude}`（`CODEX_HOME`、`CLAUDE_CON
 ## 7. 刷榜（bench）
 
 ```
-Method       = CLI harness + model + auth + bundle, or external policy entrypoint + config
+Method       = Agent definition + model + auth + bundle, or external policy entrypoint + config
 Benchmark    = tasks + per-task environment + instruction + verifier + aggregation
 Trial        = task × Method × seed → solve Run (Agent inside) + verify Run (separate)
 Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore, metrics?, issues[], cleanup }
 ```
 
-- **Method**（`contracts.Method`）：`{ name, agent: codex | claude-code | external | oracle | empty, auth?, model?, effort?, bundle?, entrypoint?, config?, passEnv? }`。
-  `oracle` 运行参考解、`empty` 不作答，用于检验适配器；CLI Agent 方法必须有 harness 匹配的 auth profile。
-  `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；harness 版本由 Run 的
+- **Method**（`contracts.Method`）：`{ name, agent, auth?, model?, effort?, bundle?, entrypoint?, config?, passEnv? }`。
+  `agent` 是一个已注册的 Agent 名（§6；`codex`、`claude-code`、`pi`、`opencode`…），或 `external`（adapter 自己的策略）、
+  `oracle`（跑参考解）、`empty`（不作答，用于检验适配器）。CLI Agent 方法必须有 harness 与该 Agent 匹配的 auth profile；
+  [Agent 名不再固定为两个]，新 Agent 只需一份定义，`agentCommand` 由该定义的模板渲染。
+  `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；Agent 版本由 Run 的
   `harness` 事件记录。`external` 必须有 adapter 解释的 `entrypoint`，可带非密钥 `config`、`model`、`effort`，
   不接受 CLI 的 auth/bundle；其 `passEnv` 只把 daemon 环境中的指定变量注入 solve，变量值不进入 Method。
   `entrypoint/config/passEnv` 仅用于 external；这些方法计入 Agent 资源用量统计。核心不实现新的 Agent 循环。
@@ -534,7 +565,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
   parentId priority passEnv`），且 `command` 与 `agentTask: { instruction }` 二选一。Agent 方法（codex / claude-code）的
-  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，参数只在这里维护），并设置 auth、bundle 与
+  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染），并设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
   `command`；external 也给 adapter 自己的 `command`，Orbit 只加方法的 solve `passEnv`，不注入 CLI 或强改网络。
   verify 不能请求 Agent。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），

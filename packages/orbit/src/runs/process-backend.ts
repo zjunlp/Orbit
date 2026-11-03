@@ -87,7 +87,7 @@ export async function launchProcess(
         agentDir: dirs.agent,
         env: h.env,
         envFile: Object.keys(h.secretEnv).length > 0 ? envFile : null,
-        pathDirs: h.cli.pathDirs,
+        pathDirs: h.cli?.pathDirs ?? [],
       };
     }
     writeShim(binDir, join(dirs.root, "shim.json"), ctx.deps.shim as string[], cfg);

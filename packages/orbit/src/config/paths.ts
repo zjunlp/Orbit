@@ -46,6 +46,8 @@ export interface OrbitPaths {
   auth: string;
   /** Notification targets (0600). */
   notify: string;
+  /** User Agent definitions (agents.json, 0600); built-ins live in the package. */
+  agents: string;
   /** Short-lived private files such as `docker run --env-file` inputs (0700). */
   tmp: string;
   /** Registered benchmarks (benchmarks.json). */
@@ -114,6 +116,7 @@ export function orbitPaths(env: NodeJS.ProcessEnv = process.env): OrbitPaths {
     runs: join(data, "runs"),
     auth: join(home, "auth.json"),
     notify: join(home, "notify.json"),
+    agents: join(home, "agents.json"),
     tmp: join(home, "tmp"),
     benchmarks: join(home, "benchmarks.json"),
     bench: join(data, "bench"),
