@@ -29,11 +29,13 @@
 
 - ASI / TB-Science scores not yet compared with official Harbor runs (only oracle-level); codex lacks Harbor's `unified_exec`; no GPU-type placement, allowlist networks, multi-step tasks or MCP servers for Harbor tasks. R4 not run on two real machines; no bundle cache eviction. LongDS's native process runner has no failure checkpoint; real Claude execution/continuation remains unchecked.
 - Per-user daemons on one machine (busy 7717 → free port) can lease the same free GPU at once; fix when needed with a shared per-GPU lock.
+- The §9 kind specs (answer/workspace/session/env/native), unified trajectory, environment instances and embodied support are designed but not implemented; only the harbor `workspace` shape and external adapters exist today.
 - Additional bench metrics: tests and fake adapters only; group notifications may fire between solve and verify. Untried: some auth kinds, real IM webhooks (the Feishu app was checked on a phone). No MCP server or dsh/pi session capture/in-container harnesses; no overcommit.
 
 ## Next priorities
-1. Real Agent bench jobs (RCB first), Web `/bench`, R4 on two machines.
-2. Paired Agent runs Orbit vs `harbor run` on sampled TB-Science tasks; LLM-judge / pairwise scoring for non-Harbor benchmarks.
+1. Scenario expansion (design §9): P2 answer kind + Python SDK, then P3 env kind with the `orbit-env` bridge. P1 (Agent registry) is done.
+2. Real Agent bench jobs (RCB first), Web `/bench`, R4 on two machines.
+3. Paired Agent runs Orbit vs `harbor run` on sampled TB-Science tasks; LLM-judge / pairwise scoring for non-Harbor benchmarks.
 
 ## Records
 
