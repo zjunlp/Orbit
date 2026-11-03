@@ -7,6 +7,7 @@ import {
   type BenchJobDetail,
   type BenchJobList,
   type Benchmark,
+  type BenchReport,
   type BenchTask,
   type BenchUsage,
   type MethodSummary,
@@ -87,6 +88,49 @@ function formatJobs(jobs: Job[]): string {
   return table(rows);
 }
 
+function formatReport(r: BenchReport): string {
+  const v = (x: number | null | undefined) => (x === null || x === undefined ? "-" : x.toFixed(2));
+  const lines = [
+    `${r.jobId} revision ${r.revision} (${r.reason}, ${r.createdAt})`,
+    `plan ${r.planDigest} · ${r.aggregator} · metric ${r.metric}`,
+    r.official
+      ? `official rule ${r.official.name}${r.official.version ? ` ${r.official.version}` : ""}: errors ${r.official.errors}, unit ${r.official.unit}`
+      : "official rule: none declared by the adapter",
+    "",
+    table([
+      ["METHOD", "PLANNED", "DONE", "VALID", "INVALID", "UNKNOWN", "ORBIT", "OFFICIAL", "FAILURES"],
+      ...r.methods.map((m) => [
+        m.method,
+        String(m.planned),
+        String(m.completed),
+        String(m.valid),
+        String(m.invalid),
+        String(m.unknown),
+        v(m.orbit?.mean),
+        m.official ? `${v(m.official.value)}${m.official.partial ? " (partial)" : ""}` : "-",
+        Object.entries(m.failures)
+          .map(([k, n]) => `${k}:${n}`)
+          .join(" "),
+      ]),
+    ]),
+    "",
+    table([
+      ["METHOD", "SAMPLE", "EVAL", "VALUE", "TRIAL", "SOLVE"],
+      ...r.methods.flatMap((m) =>
+        m.entries.map((e) => [
+          m.method,
+          e.sample,
+          e.evaluation + (e.failure ? ` (${e.failure})` : ""),
+          v(e.value),
+          e.trial,
+          e.solveRunId ?? "-",
+        ]),
+      ),
+    ]),
+  ];
+  return lines.join("\n");
+}
+
 function formatJob(d: BenchJobDetail): string {
   const { job } = d;
   const metrics = resolveMetrics(job.metrics);
@@ -113,6 +157,19 @@ function formatJob(d: BenchJobDetail): string {
       ]),
     ]),
     "Means over tasks of the per-task mean of valid trials; ± is the 95% CI clustered by task.",
+    ...(job.official
+      ? [
+          `Official (${job.official.name}${job.official.version ? ` ${job.official.version}` : ""}; errors ${job.official.errors === "fail" ? "count as failures" : "excluded"}, mean over ${job.official.unit}s): ` +
+            d.summary
+              .map((s) => {
+                const o = s.official;
+                if (!o) return `${s.method} -`;
+                const m = metrics.find((x) => x.name === o.metric);
+                return `${s.method} ${o.value === null ? "-" : m ? fmtMetric(o.value, m) : String(o.value)}${o.partial ? ` (partial, ${o.missing} missing)` : ""}`;
+              })
+              .join(" · "),
+        ]
+      : []),
     "",
   ];
   const rows = [["TASK", "METHOD", "SEED", "STATE", "EVAL", "SCORE", "SOLVE", "VERIFY", "ISSUES"]];
@@ -405,6 +462,42 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .action(async (id: string, o: { json?: boolean }) => {
       const d = await (await client()).benchJob(id);
       print(o.json, d, () => formatJob(d));
+    });
+
+  bench
+    .command("report <job>")
+    .description(
+      "report revisions of a job: planned samples, attempts used, Orbit and official values",
+    )
+    .option("-r, --revision <n>", "show one revision in full (default: list all)")
+    .option("--json", "print JSON")
+    .action(async (id: string, o: { revision?: string; json?: boolean }) => {
+      const reports = await (await client()).benchReports(id);
+      if (o.revision) {
+        const r = reports.find((x) => x.revision === Number(o.revision));
+        if (!r) throw new Error(`no revision ${o.revision} of ${id}`);
+        print(o.json, r, () => formatReport(r));
+        return;
+      }
+      print(o.json, reports, () =>
+        reports.length
+          ? table([
+              ["REV", "CREATED", "REASON", "PLAN", "METHOD RESULTS"],
+              ...reports.map((r) => [
+                String(r.revision),
+                r.createdAt,
+                r.reason,
+                r.planDigest.slice(7, 19),
+                r.methods
+                  .map(
+                    (m) =>
+                      `${m.method} ${m.valid}/${m.planned} valid${m.missing ? `, ${m.missing} missing` : ""}`,
+                  )
+                  .join(" · "),
+              ]),
+            ])
+          : "no report yet (the job is still running)",
+      );
     });
 
   bench

@@ -9,12 +9,19 @@ export function MethodCard({
   method,
   metric,
   others,
+  official,
 }: {
   s: MethodSummary;
   method: BenchJob["spec"]["methods"][number] | undefined;
   metric: MetricDef;
   others: MetricDef[];
+  /** The benchmark's own rule, to label the official value; absent when none is declared. */
+  official?: BenchJob["official"];
 }) {
+  const off = s.official;
+  const offMetric = off
+    ? (others.find((m) => m.name === off.metric) ?? (metric.name === off.metric ? metric : null))
+    : null;
   const st = s.metrics[metric.name] ?? null;
   const gap = st && metric.reference !== undefined ? st.mean - metric.reference : null;
   const good = gap !== null && gap !== 0 && gap > 0 === metric.higherIsBetter;
@@ -46,8 +53,25 @@ export function MethodCard({
         {s.pending ? ` · ${s.pending} pending` : ""}
       </span>
       <span className="l">
-        {st?.tasks ?? 0} tasks with this metric · mean over tasks{s.pending ? " · provisional" : ""}
+        Orbit: valid trials only · {st?.tasks ?? 0} tasks · mean over tasks
+        {s.pending ? " · provisional" : ""}
       </span>
+      {off && official && (
+        <span
+          className="l"
+          title={`${official.name}${official.version ? ` ${official.version}` : ""}: invalid trials ${official.errors === "fail" ? `count as ${official.failValue}` : "are left out"}; mean over ${official.unit}s. Cancelled or unfinished samples are missing.`}
+        >
+          Official ({official.name}):{" "}
+          <b>
+            {off.value === null
+              ? "—"
+              : offMetric
+                ? fmtMetric(off.value, offMetric)
+                : off.value.toFixed(2)}
+          </b>{" "}
+          over {off.samples} samples{off.partial ? ` · partial, ${off.missing} missing` : ""}
+        </span>
+      )}
       {others.length > 0 && (
         <div className="stat-more">
           {others.map((m) => (

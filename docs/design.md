@@ -557,8 +557,8 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 - 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, solve?, verify? }`；`trial` =
   `{ id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork }`（`resources` 为 job 固定的任务 solve 资源覆盖值，供原生 runner 同步设置子容器限制；`staging` 是 trial 私有的宿主目录，用于要挂进
   Run 的副本，trial 结束时删除）；`solve` / `verify` = `{ run, output }`（Run 记录与其 `$ORBIT_OUTPUT` 的宿主路径）。
-- 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[], capabilities?: BenchCapabilities }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
-  `{ score, maxScore?, invalid?, issues?, review?, metrics? }`。`review`（可选）告诉 trial 页展示什么：
+- 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[], capabilities?: BenchCapabilities, official?: OfficialRule }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
+  `{ score, maxScore?, invalid?, issues?, review?, metrics?, failure?, episode? }`。`official` 与报告修订见 §9.7（已实现部分）。`review`（可选）告诉 trial 页展示什么：
   `files[{ label, phase: solve|verify, path(相对该 Run 输出目录), kind?, fallback? }]`、`items[{ criterion, score?,
   maxScore?, weight?, type?, reasoning? }]`、`details{ key: 短值 }`。`kind` 是封闭集合 `markdown | image | text | json |
   table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
@@ -848,6 +848,12 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   `resume_failed`、`scorer_error`、`judge_unavailable`、`model_unavailable`、`budget_exceeded`）。执行 / 评测有效性 / 清理三态不变。
 - **两个口径**：官方聚合（照 bench 规则，如 vla-eval 把 error 计入分母）与 Orbit 有效口径（valid-only，任务聚类 CI）。Web 并列显示并命名。
   官方聚合在 **job × method** 层计算，不对 native summary 再求平均（两批 1/1 与 1/9 的批次均值 55.6%，episode 成功率 20%）。
+- **已实现（P2）**：`Outcome.failure`（封闭枚举，classify 与 adapter 填写）与 `Outcome.episode`；adapter 声明的 `OfficialRule`
+  （`errors: exclude|fail`、`unit: sample|task`、`failValue`、`metric`）在提交时存入 `BenchJob.official`，`MethodSummary.official`
+  给出官方值、样本数、missing 与 partial；`bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
+  在 job 结束、取消、重新评分或归并后、且结果与上一修订不同时写入，旧 job 首次读取时补一份 `backfill`；计划 digest 由
+  benchmark、tasks、seeds、methods、options 计算。API `GET /bench/jobs/:id/reports`，CLI `orbit bench report`，Web job 页 Reports。
+  尚未实现：多个 Trial 共享一个 Run 的批量执行、attempt/retry 的显式计数与规则（目前 attempt 即报告中引用的 trial 与 Run）。
 - **报告修订**：计划集合（样本清单 + digest）固定，追加任务或 seed 产生新集合版本；报告不可原地覆盖，每版记录采用的
   attempt/result 清单、错误与缺项的分母规则、聚合器版本；补跑产生新修订，旧报告与原始失败保留。只有遵循上游的结果选择、
   重试与缺项规则，才继续称为官方口径。
@@ -904,7 +910,7 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | 阶段 | 内容 | 验收 |
 | --- | --- | --- |
 | P1 Agent 注册表 | 已完成；bench 契约断点已修复（R1） | §6；codex、claude-code 与容器内安装的 dsh 经真实 bench trial 验证 |
-| P2 样本身份与官方聚合 | 评测身份（§9.1a）、Outcome 两口径、报告修订、attempt/retry 规则 | 契约与统计测试；现有 bench 结果不变 |
+| P2 样本身份与官方聚合 | 已实现：failure / episode、OfficialRule 与官方值、报告修订；attempt/retry 计数与批量 Run 后置 | 契约与统计测试；fixture adapter 真实 job 与重新评分验证 |
 | P3 两个小而完整的接入 | 扩展 BrowserGym 全套；一个保持原条件的 EFE CPU 任务（先列兼容清单） | 准备、检查、执行、评分、查看、取消与清理全部走通；偏差逐项记录 |
 | P4 Policy 路线 | 按角色分配、service GPU、gang lease、PolicySpec；vla-eval 固定任务/episode 集合（`--no-docker` 于 main） | 原版指标、预算与故障行为对齐；policy + sim 无超卖 |
 | P5 扩大覆盖 | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |

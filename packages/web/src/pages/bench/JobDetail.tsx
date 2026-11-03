@@ -200,9 +200,12 @@ export function BenchJobDetail({ id }: { id: string }) {
                 method={job.spec.methods.find((x) => x.name === s.method)}
                 metric={metric}
                 others={metrics.filter((x) => x.name !== metric.name)}
+                official={job.official}
               />
             ))}
           </div>
+
+          {job.state !== "running" && <Reports id={job.id} version={trials.length - active} />}
 
           <TrialBrowser
             job={job}
@@ -233,5 +236,68 @@ export function BenchJobDetail({ id }: { id: string }) {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * Report revisions (design §9.7): each is an immutable record of the plan, the attempts used and
+ * both views. A rescore or merge adds one; earlier ones stay.
+ */
+function Reports({ id, version }: { id: string; version: number }) {
+  const r = useAsync(() => api.benchReports(id), [id, version]);
+  const reports = r.data ?? [];
+  if (!reports.length) return null;
+  const last = reports[reports.length - 1];
+  return (
+    <details className="card">
+      <summary className="card-h">
+        Reports{" "}
+        <span className="sub">
+          revision {last?.revision} · {last?.reason} · plan {last?.planDigest.slice(7, 19)}
+        </span>
+      </summary>
+      <div className="card-b">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Rev</th>
+              <th>Created</th>
+              <th>Reason</th>
+              <th>Plan</th>
+              <th>Per method</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...reports].reverse().map((x) => (
+              <tr key={x.revision}>
+                <td>{x.revision}</td>
+                <td>{dateTime(x.createdAt)}</td>
+                <td>{x.reason}</td>
+                <td className="mono">{x.planDigest.slice(7, 19)}</td>
+                <td>
+                  {x.methods
+                    .map(
+                      (m) =>
+                        `${m.method}: ${m.valid}/${m.planned} valid` +
+                        (m.missing ? `, ${m.missing} missing` : "") +
+                        (m.orbit ? `, Orbit ${m.orbit.mean.toFixed(2)}` : "") +
+                        (m.official?.value != null
+                          ? `, official ${m.official.value.toFixed(2)}`
+                          : ""),
+                    )
+                    .join(" · ")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="faint">
+          Full entries (sample, attempt, runs):{" "}
+          <code>
+            orbit bench report {id} -r {last?.revision}
+          </code>
+        </p>
+      </div>
+    </details>
   );
 }

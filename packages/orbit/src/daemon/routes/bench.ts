@@ -1,6 +1,7 @@
 import { accessSync, constants, existsSync, statSync } from "node:fs";
 import type { Hono } from "hono";
 import { loadResources, resolveResources } from "../../bench/resources.ts";
+import type { BenchReport } from "../../contracts/index.ts";
 import { type Benchmark, BenchmarkInput } from "../../contracts/index.ts";
 import { NotFoundError, UserError } from "../../runs/service.ts";
 import type { AppDeps } from "../app.ts";
@@ -51,6 +52,9 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
     c.json(await bench.submit(await c.req.json(), { folder: c.req.query("folder") }), 201),
   );
   api.get("/bench/jobs/:id", (c) => c.json(bench.job(c.req.param("id"))));
+  api.get("/bench/jobs/:id/reports", (c) =>
+    c.json<{ reports: BenchReport[] }>({ reports: bench.reports(c.req.param("id")) }),
+  );
   api.post("/bench/jobs/:id/cancel", async (c) => c.json(await bench.cancel(c.req.param("id"))));
   api.post("/bench/jobs/:id/consolidate", async (c) =>
     c.json(await bench.consolidate(c.req.param("id"), await c.req.json())),

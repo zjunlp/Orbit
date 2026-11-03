@@ -19,6 +19,7 @@ import {
   BenchJobSpec,
   type BenchJobSpecInput,
   type Benchmark,
+  type BenchReport,
   BenchRescore,
   type BenchRescoreInput,
   type BenchRescoreResult,
@@ -63,6 +64,7 @@ import { asiMethodProblem } from "./asi.ts";
 import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { applyOverride, loadResources, resolveResources, usageRows } from "./resources.ts";
+import { buildReport, sameReport } from "./summary.ts";
 
 export interface BenchServiceDeps {
   store: Store;
@@ -191,6 +193,7 @@ export class BenchService {
       spec,
       benchmarkSnapshot: structuredClone(b),
       ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
+      ...(info.official ? { official: structuredClone(info.official) } : {}),
       resources,
       folder: folder.data,
       metrics: resolveMetrics(info.metrics),
@@ -268,6 +271,7 @@ export class BenchService {
         job.spec.methods.map((m) => m.name),
         trials,
         job.metrics,
+        job.official,
       ),
     };
   }
@@ -461,6 +465,7 @@ export class BenchService {
     if (f.dryRun) return out;
     // No await between validation and this transaction: concurrent HTTP mutations cannot interleave.
     this.deps.store.consolidateJob(job, trials, sources, moved);
+    this.writeReport(id, "consolidate");
     const deleted = await this.deps.runs.delete(out.removedRuns);
     out.leftovers = deleted.leftovers;
     for (const source of sources) {
@@ -660,12 +665,56 @@ export class BenchService {
       } catch (e) {
         this.deps.log?.(`bench trial ${t.id}: staging cleanup: ${(e as Error).message}`);
       }
-      if (job.state === "running" && !this.deps.store.hasOpenTrials(job.id)) {
-        job.state = "done";
-        job.endedAt = nowIso();
-        this.deps.store.putJob(job);
+      if (!this.deps.store.hasOpenTrials(job.id)) {
+        let reason: BenchReport["reason"] =
+          job.state === "cancelled" ? "cancelled" : t.history.length ? "rescore" : "finished";
+        if (job.state === "running") {
+          job.state = "done";
+          job.endedAt = nowIso();
+          this.deps.store.putJob(job);
+          reason = "finished";
+        }
+        this.writeReport(job.id, reason);
       }
     }
+  }
+
+  /**
+   * Append a report revision when the job's results changed since the last one (design §9.7).
+   * Earlier revisions are never rewritten. Failures only log: a report is derived evidence.
+   */
+  private writeReport(jobId: string, reason: BenchReport["reason"]): BenchReport | null {
+    try {
+      const job = this.deps.store.getJob(jobId);
+      if (!job) return null;
+      const last = this.deps.store.reports(jobId).at(-1);
+      const next = buildReport(
+        job,
+        this.deps.store.trials(jobId),
+        reason,
+        (last?.revision ?? 0) + 1,
+        nowIso(),
+      );
+      if (last && sameReport(last, next)) return null;
+      this.deps.store.addReport(next);
+      return next;
+    } catch (e) {
+      this.deps.log?.(`bench job ${jobId}: report: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Report revisions of a job, oldest first. A finished job from before reports existed gets one
+   * (`backfill`) on first read.
+   */
+  reports(id: string): BenchReport[] {
+    const job = this.deps.store.getJob(id);
+    if (!job) throw new NotFoundError(`bench job not found: ${id}`);
+    const all = this.deps.store.reports(id);
+    if (all.length === 0 && job.state !== "running" && !this.deps.store.hasOpenTrials(id))
+      this.writeReport(id, "backfill");
+    return this.deps.store.reports(id);
   }
 
   /**

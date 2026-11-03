@@ -187,6 +187,25 @@ kind 为 browser/desktop/mobile/other，methods 为支持的方法类型数组�
 
 内置适配器：harbor 主指标为 `resolved`（reward 为 1 的 trial 比例）并显示平均 Reward；asi 主指标为 `score`，另有 `fullMarks`。
 
+### 官方口径、失败类型与 episode（可选）
+
+Orbit 的统计只用 valid trial。很多 benchmark 自己的统计不同（例如把基础设施错误算作失败计入分母，或对全部 episode
+直接求均值）。在 `tasks` 回复里声明它，Orbit 会在 job 层按这条规则另算一个“官方”值，与 Orbit 口径并列显示：
+
+```json
+"official": { "name": "vla-eval", "version": "1", "errors": "fail", "unit": "sample", "failValue": 0 }
+```
+
+- `errors`：`exclude` 不计 invalid trial；`fail` 把 invalid trial 当作失败样本，值为 `failValue`（默认 0）。
+- `unit`：`sample` 对全部样本求均值；`task` 先对任务内求均值再对任务求均值。`metric` 缺省为主指标。
+- 取消、丢失和未完成的样本记为 missing，此时值标为 partial，不当作全量结果。
+
+`score` 回复可以带 `failure`（封闭集合，见 design §9.7，例如 `judge_unavailable`、`scorer_error`、`env_step`）说明 invalid 的原因，
+以及 `episode { steps, terminated, truncated, endedBy, successSignal }`。
+
+job 结束、重新评分或归并后，Orbit 写一份不可修改的报告修订：计划 digest、每个样本使用的 trial 与 Run、两种口径与失败计数。
+`orbit bench report <job>` 列出全部修订，`-r <n>` 看某一修订的逐样本明细；Web job 页底部有 Reports 列表。
+
 ## 4. 任务资源文件
 
 不同任务需要的资源差别很大（有的要 GPU 训练，有的只做表格分析）。不要在适配器里硬编码，也不要每次让 Agent

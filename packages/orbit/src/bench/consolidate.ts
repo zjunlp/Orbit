@@ -125,6 +125,7 @@ export function planConsolidation(input: {
       for (const outcome of [t.outcome, ...t.history.map((h) => h.outcome)]) {
         if (outcome?.evaluation !== "valid" && outcome?.evaluation !== "unknown") continue;
         outcome.evaluation = "invalid";
+        outcome.failure = "model_unavailable";
         outcome.issues = [...new Set([...outcome.issues, issue])];
         changed = true;
       }

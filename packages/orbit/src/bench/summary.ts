@@ -1,20 +1,102 @@
+import { createHash } from "node:crypto";
 import type {
   BenchCompare,
   BenchJob,
+  BenchReport,
   MethodSummary,
   MetricSpec,
+  OfficialRule,
+  OfficialValue,
   Outcome,
+  ReportEntry,
   Trial,
 } from "../contracts/index.ts";
-import { aggregate, pairedDiff, resolveMetrics, taskMeans } from "../contracts/metrics.ts";
+import {
+  aggregate,
+  metricValue,
+  pairedDiff,
+  primaryMetric,
+  resolveMetrics,
+  taskMeans,
+} from "../contracts/metrics.ts";
 
 export const isValid = (t: Trial) => t.outcome?.evaluation === "valid";
+
+/** Version of the report computation; recorded in every report. */
+export const REPORT_AGGREGATOR = "orbit-report/1";
+
+/**
+ * Digest of a job's planned samples: benchmark, tasks, seeds and methods (name + agent). Appending
+ * tasks or seeds yields a new digest, i.e. a new plan version.
+ */
+export function planDigest(job: Pick<BenchJob, "spec">): string {
+  const s = job.spec;
+  const plan = {
+    benchmark: s.benchmark,
+    tasks: [...s.tasks].sort(),
+    seeds: s.seeds,
+    methods: s.methods.map((m) => [m.name, m.agent]).sort(),
+    options: Object.entries(s.options).sort(),
+  };
+  return `sha256:${createHash("sha256").update(JSON.stringify(plan)).digest("hex")}`;
+}
+
+export const sampleKey = (t: Pick<Trial, "task" | "seed">) => `${t.task}#${t.seed}`;
+
+/** One trial as a report entry; `value` is the given metric. */
+function entry(t: Trial, metric: string): ReportEntry {
+  return {
+    trial: t.id,
+    sample: sampleKey(t),
+    task: t.task,
+    seed: t.seed,
+    solveRunId: t.solveRunId,
+    verifyRunId: t.verifyRunId,
+    evaluation: t.outcome?.evaluation ?? "pending",
+    ...(t.outcome?.failure ? { failure: t.outcome.failure } : {}),
+    value: t.outcome ? metricValue(t.outcome, metric) : null,
+  };
+}
+
+/**
+ * A method's value under the benchmark's own rule (design §9.7). Pending, cancelled and lost
+ * samples are missing (the value is then partial); invalid ones are left out or count as
+ * `failValue`, as the rule says; valid ones without a value of the metric are left out.
+ */
+export function officialValue(
+  entries: ReportEntry[],
+  rule: OfficialRule,
+  metric: string,
+): OfficialValue {
+  const used: { task: string; v: number }[] = [];
+  let missing = 0;
+  for (const e of entries) {
+    if (e.evaluation === "pending" || e.evaluation === "unknown") missing++;
+    else if (e.evaluation === "invalid") {
+      if (rule.errors === "fail") used.push({ task: e.task, v: rule.failValue });
+    } else if (e.value !== null) used.push({ task: e.task, v: e.value });
+  }
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  let value: number | null;
+  if (rule.unit === "sample") value = mean(used.map((u) => u.v));
+  else {
+    const by = new Map<string, number[]>();
+    for (const u of used) by.set(u.task, [...(by.get(u.task) ?? []), u.v]);
+    value = mean([...by.values()].map((xs) => mean(xs) as number));
+  }
+  return { metric, value, samples: used.length, missing, partial: missing > 0 };
+}
+
+/** The metric a job's official rule is about: the rule's own, else the job's primary metric. */
+export const officialMetric = (rule: OfficialRule, metrics: MetricSpec[]) =>
+  rule.metric ?? primaryMetric(resolveMetrics(metrics)).name;
 
 /** Per method: trial counts and every metric over its valid trials (per task first, then tasks). */
 export function summarize(
   methods: string[],
   trials: Trial[],
   metrics: MetricSpec[] = [],
+  official?: OfficialRule,
 ): MethodSummary[] {
   const specs = resolveMetrics(metrics);
   return methods.map((method) => {
@@ -31,8 +113,78 @@ export function summarize(
       unknown: count("unknown"),
       pending: ts.length - done.length,
       metrics: Object.fromEntries(specs.map((m) => [m.name, aggregate(taskMeans(valid, m.name))])),
+      ...(official
+        ? {
+            official: officialValue(
+              ts.map((t) => entry(t, officialMetric(official, metrics))),
+              official,
+              officialMetric(official, metrics),
+            ),
+          }
+        : {}),
     };
   });
+}
+
+/**
+ * A report of a job's current results (design §9.7): per method, every planned sample with the
+ * attempt used, counts, failures, Orbit's valid-only view of the primary metric and the official
+ * value. Pure; the caller assigns the revision and stores it.
+ */
+export function buildReport(
+  job: BenchJob,
+  trials: Trial[],
+  reason: BenchReport["reason"],
+  revision: number,
+  at: string,
+): BenchReport {
+  const metric = primaryMetric(resolveMetrics(job.metrics)).name;
+  const rule = job.official ?? null;
+  return {
+    jobId: job.id,
+    revision,
+    createdAt: at,
+    reason,
+    planDigest: planDigest(job),
+    aggregator: REPORT_AGGREGATOR,
+    metric,
+    official: rule,
+    methods: job.spec.methods.map(({ name }) => {
+      const ts = trials
+        .filter((t) => t.method === name)
+        .sort((a, b) => a.task.localeCompare(b.task) || a.seed - b.seed);
+      const entries = ts.map((t) => entry(t, metric));
+      const count = (e: ReportEntry["evaluation"]) =>
+        entries.filter((x) => x.evaluation === e).length;
+      const failures: Record<string, number> = {};
+      for (const e of entries) if (e.failure) failures[e.failure] = (failures[e.failure] ?? 0) + 1;
+      const officialEntries = rule
+        ? ts.map((t) => entry(t, officialMetric(rule, job.metrics)))
+        : [];
+      return {
+        method: name,
+        planned: entries.length,
+        completed: entries.length - count("pending"),
+        valid: count("valid"),
+        invalid: count("invalid"),
+        unknown: count("unknown"),
+        missing: count("pending") + count("unknown"),
+        failures,
+        orbit: aggregate(taskMeans(ts.filter(isValid), metric)),
+        official: rule
+          ? officialValue(officialEntries, rule, officialMetric(rule, job.metrics))
+          : null,
+        entries,
+      };
+    }),
+  };
+}
+
+/** Whether two reports say the same thing (plan, rule and every entry); then no new revision. */
+export function sameReport(a: BenchReport, b: BenchReport): boolean {
+  const body = (r: BenchReport) =>
+    JSON.stringify([r.planDigest, r.aggregator, r.metric, r.official, r.methods]);
+  return body(a) === body(b);
 }
 
 /** Metrics shared by all jobs, as the first job declares them; its primary stays primary. */
