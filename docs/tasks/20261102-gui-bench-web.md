@@ -1,5 +1,5 @@
 # GUI benchmark Web workflow
-branch: feat/gui-bench-web · status: completed · updated: 2026-11-02
+branch: feat/gui-bench-web · status: completed · updated: 2026-11-03
 
 ## Goal
 Make registered GUI evaluations runnable and reviewable through the existing Bench workflow, using English UI and Orbit's existing visual style.
@@ -21,5 +21,5 @@ Make registered GUI evaluations runnable and reviewable through the existing Ben
 | General VLM policy evaluation | feature tree | not_run | Validation used explicit scripted/empty policies; no model calls |
 
 ## Next / open issues
-- Track the intermittent existing snapshot test separately if it recurs; this change does not claim to fix it.
+- The later main-branch CI reproduced the snapshot issue; see the [index timestamp fix](20261103-snapshot-index-race.md).
 - Live streaming, GUI state restoration, and multi-user accounts remain outside this change.

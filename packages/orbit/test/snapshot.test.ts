@@ -1,5 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,6 +52,39 @@ function repo(): string {
 }
 
 describe("snapshotProject", () => {
+  it.each([false, true])(
+    "records same-size edits when file and index timestamps match (linked worktree: %s)",
+    async (linked) => {
+      const original = repo();
+      const out = temp("orbit-snap-");
+      const d = linked ? join(out, "worktree") : original;
+      if (linked) git(original, "worktree", "add", "--detach", d);
+      git(d, "config", "core.trustctime", "false");
+      git(d, "config", "core.checkStat", "minimal");
+      const file = join(d, "src/a.py");
+      const timestamp = new Date("2020-01-01T00:00:00Z");
+      utimesSync(file, timestamp, timestamp);
+      git(d, "add", "src/a.py");
+      const indexPath = git(d, "rev-parse", "--path-format=absolute", "--git-path", "index").trim();
+      // Model a same-tick, same-size edit; Git must compare content for a racily clean entry.
+      utimesSync(indexPath, timestamp, timestamp);
+      writeFileSync(file, "print(2)\n");
+      utimesSync(file, timestamp, timestamp);
+      const index = readFileSync(indexPath);
+      const objects = git(d, "count-objects", "-v");
+
+      const snap = await snapshotProject(d, join(out, "ws"), join(out, "code.diff"));
+
+      expect(snap.changedFiles).toEqual(["src/a.py"]);
+      expect(snap.dirty).toBe(true);
+      expect(readFileSync(join(out, "ws/src/a.py"), "utf8")).toBe("print(2)\n");
+      expect(readFileSync(join(out, "code.diff"), "utf8")).toContain("+print(2)");
+      expect(readFileSync(indexPath)).toEqual(index);
+      expect(statSync(indexPath).mtime).toEqual(timestamp);
+      expect(git(d, "count-objects", "-v")).toBe(objects);
+    },
+  );
+
   it("copies tracked + untracked files, skips ignored ones, and records the diff", async () => {
     const d = repo();
     writeFileSync(join(d, "src/a.py"), "print(2)\n");

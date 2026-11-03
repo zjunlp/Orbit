@@ -6,7 +6,9 @@ import {
   mkdtemp,
   readlink,
   rm,
+  stat,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -116,7 +118,17 @@ export async function snapshotProject(
     const tmpIndex = join(temp, "index");
     const objects = join(temp, "objects");
     await mkdir(objects);
-    if (realIndex) await copyFile(realIndex, tmpIndex).catch(() => undefined);
+    if (realIndex) {
+      const indexStat = await stat(realIndex).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (indexStat) {
+        await copyFile(realIndex, tmpIndex);
+        // Git uses the index timestamp to detect same-size edits with matching cached stats.
+        await utimes(tmpIndex, indexStat.atime, indexStat.mtime);
+      }
+    }
     const alternates = process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
     const env = {
       ...process.env,

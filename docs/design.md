@@ -234,6 +234,7 @@ network?, collect }`，在 `command` 结束（或到时被停）后于**同一�
 **代码快照**：记录 `HEAD` commit、未提交 diff 与未跟踪文件列表；复制 `git ls-files -co --exclude-standard`
 的文件到快照目录。生成 diff 的临时 index 与新 blob 都放在临时目录，以原仓库的绝对 objects 路径作为
 alternate（兼容 linked worktree），结束或失败后删除，不向用户仓库的对象库写入。
+临时 index 保留复制前原 index 的修改时间，维持 Git 对同时间戳、同大小文件改写的内容复核，避免变更清单和 diff 漏项；复制或设置时间失败时直接报错。
 子模块 gitlink 和 `ls-files` 返回的目录不递归复制，路径记入 `CodeSnapshot.skippedSubmodules`（旧记录默认 `[]`）；
 提交时发出 warning 事件，CLI show 与 Web Code 页提示子模块内容未被快照。数据和权重不进快照，用命名 dataset 只读挂载。
 

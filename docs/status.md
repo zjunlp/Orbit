@@ -1,7 +1,7 @@
 # Orbit status
 
-- **Updated at:** 2026-11-02
-- **Basis:** GUI benchmark Web creation/review, saved configuration and capability metadata; BrowserGym/MiniWoB phase one retained.
+- **Updated at:** 2026-11-03
+- **Basis:** Snapshot index timestamps preserve same-size edit detection; GUI benchmark Web workflow and BrowserGym/MiniWoB phase one retained.
 - **Stage:** R0–R2 validated here; R3 LongDS checked with a complete native Codex task, Harbor with oracle/empty samples; R4 only as two daemons on one machine.
 - **Blockers:** none for the current release.
 
