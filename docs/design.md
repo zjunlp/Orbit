@@ -713,141 +713,165 @@ worker 不可达时返回 502。终态且 worker 已完成清理后同步结束�
 
 ## 9. 跨场景评测规范（规划）
 
-目标：容纳尽可能多的 benchmark，用同一套资源、轨迹与证据去比较**任意 Agent**（含自定义 harness）。
+目标：让用户在自己的机器上**丝滑地**评测任意 Agent / Policy：bench 足够多、Web 能按场景看懂实验、轨迹形式统一、
+资源管理可靠。本节在 [docs/research](research/) 对 12 个 GUI / 具身项目的源码调研基础上修订（`gui-bench/`、`embodied-bench/`）；
+除 Agent 注册表（§6）外均为规划。
 
-Harbor 的做法是把一切压成"容器 + 指令 + test.sh"一种形状；这在 GPQA 这类答题任务上要改写评分形态，
-在 OSWorld 上要重写一个原版 Agent，在具身上根本不适用。Orbit 不追求单一形状，而是把三件事分开：
+### 9.0 调研后的修正
+
+| 原规划 | 调研事实 | 修正 |
+| --- | --- | --- |
+| Harbor 形状"在具身上根本不适用" | Embodied First Exam（EFE）用 Harbor task + 可信仿真 sidecar 承载 35 个 benchmark / 1,154 个任务，评测 coding agent | 错误判断。**workspace + 可信 sidecar** 是"CLI Agent × 交互环境"的主路径，不需要先造新环境协议 |
+| 先定义 Orbit 自己的 HTTP+JSON 环境协议 | 已有成熟协议：CUA-Lite `LiteBaseEnv`（GUI，canonical tool call，坐标 `[0,1000]`）、vla-eval WebSocket+MsgPack（policy，sync/live，action chunk）、EFE `eai-standard/2.x` + RCB1 二进制封包、BrowserGym Gymnasium | Orbit 只管生命周期、资源、证据与轨迹索引；**episode 内语义透传原生协议**，按需写桥，不再造轮子 |
+| 被评测对象 = Agent | 具身有两类对象：会写代码的 coding agent（EFE）与逐帧出动作的 VLA policy（vla-eval、Isaac Lab-Arena） | Method 增加 **policy**：一个 GPU 模型服务，与仿真共同调度（Arena 的 evaluator + server 同组） |
+| 一个个写 adapter 扩充数量 | Hub 已聚合大量 bench：CUA-Lite 18 套、Cua Bench 11、BrowserGym/AgentLab 10–12、vla-eval 20+ 目录、EFE 35、Harbor 80+ | 先接 **hub**，一次得到一族 bench；每条按保真度如实标注（hub 声称 ≠ 本机验证） |
+| valid-only 均值是唯一口径 | vla-eval 把基础设施 error 计入成功率分母；Gym-Anything 的 reward 尺度随 `reward_type` 变化；OSWorld 部分 evaluator 异常转 0 | 同时保存**官方原始指标与官方聚合**和 Orbit 有效性口径，命名区分，不以重算值冒充官方 |
+| 环境资源 ≈ 暖池 | 需分层准入（CUA-Lite）、能力探测与创建中预留（Gym-Anything）、setup 前标脏（OSWorld）、设备/后端/任务对象三层复位（MobileWorld）、实际资源对账回收（CUA-Lite reaper）、非幂等 step（CUA-Lite、EFE operation id） | 见 §9.6 |
+| — | hub 自带内部并发（shard、Ray、多进程队列、`-n`），与 Orbit 各自扩张会超卖 | 内部并发必须由 Orbit 预算：一个 trial 一个 episode，或 adapter 声明 `slots` 由 Orbit 一次租齐 |
+| 统一 Web 一个页面 | 好用的界面各有专长：MobileWorld 可提交/取消/补跑，AgentLab X-Ray 逐步看 DOM/a11y，OSWorld/Gym-Anything 看截图与录像，静态 HTML 导出便于分享；实时 VNC 与历史回放是两件事 | 按场景设计 trial 视图 + 实时画面 + 静态导出（§9.9） |
+
+所有 hub 都有自己的队列或状态库（SQLite、Redis/Postgres、内存 master、结果目录续跑）。**都不引入 Orbit**：Orbit daemon
+仍是唯一写者，hub 的结果作为产物导入。
+
+### 9.1 三层职责
 
 ```
-Benchmark 规范（任务 + 评分 + 保真度）      Agent 注册表（§6）      Infra（资源、调度、记录、Web）
-                    └────────── 交互形态（kind）× Agent 接口 → 桥接 ──────────┘
-                                        统一轨迹 + 统一结果 + 有效性
+Orbit（唯一状态）  资源账本与租约、Run/Trial、排队、节点、清理确认、证据归档、轨迹索引、Web、统计
+  │  adapter 协议（现有，§7）
+Hub / 原生 runner  episode 循环、环境 reset/step、动作语义、原版 evaluator（CUA-Lite、vla-eval、EFE、BrowserGym…）
+  │
+Benchmark 语义     任务、初始状态、成功判定、官方指标与聚合规则
 ```
 
-原则：原版语义优先（尽量调用官方 scorer，偏差必须声明）；规范是数据不是代码；大数据集用 loader 动态产出而不强制物化；
-现有 adapter 协议保留为最底层逃生口。**五个 kind 都实现为内置适配器，跑在现有 adapter 协议、Run 与 Trial 之上，
-不新增第二条执行路径、第二个状态机或第二套记录。**
+原则：语义尽量交给原生实现（不重新解释同一个仿真器）；资源与状态只在 Orbit；每个 hub 先以 `native` 方式包装跑通、对齐，
+再视需要把内循环收回 Orbit（以获得统一的 Agent 桥与轨迹）。
 
-### 9.1 五类任务
+### 9.2 Bench 家族与接入路径
 
-| kind | 适用 | 例子 | Agent 怎么接触 | 评分 |
+| 家族 | 规模（上游口径） | 被评测对象 | Orbit 接入 | 关键资源 |
 | --- | --- | --- | --- | --- |
-| `answer` | 输入题目、输出答案 | gsm8k、math、hotpotqa、gpqa、hle、bfcl | 题目与附件，交一个答案 | 官方函数或固定 judge |
-| `workspace` | 在环境里改文件、跑命令 | SWE-bench、Terminal-Bench、ds1000、RCB、PostTrainBench | 容器内工作 | 测试脚本（同 Harbor） |
-| `session` | 多轮指令、上下文延续 | LongDS、tau、MemoryAgentBench | 同一会话依次收多轮消息 | 逐轮或最终 |
-| `env` | reset/step 循环 | alfworld、scienceworld、jericho、appworld、BrowserGym、OSWorld、AndroidWorld、具身仿真/真机 | 观测 → 动作 → 观测 | 环境给 reward 或 `evaluate()` |
-| `native` | 原生 runner 拆不开 | ASI、部分官方 harness | 原生 runner 经 `{agent_cmd}` 垫片调用任意 Agent | 原生 scorer |
+| **CUA-Lite** | 18 套：桌面 6（OSWorld、OSWorld-V2、WAA、Cua×3）、浏览器 6（WebArena、VisualWebArena、MiniWoB++、WebVoyager、Online-Mind2Web、WebGym）、移动 4（AndroidWorld、AndroidLab、MobileWorld、MobileGym）、grounding 2 | VLM agent；可桥接 CLI Agent | 其 env-server 作为 service；agent 侧用原生 rollout 或 Orbit 桥 | VM/KVM、AVD、浏览器池、共享网站后端 |
+| **Cua Bench** | 3 registry taskset + 8 外部适配 | VLM agent；`--agent harness` 可在环境内跑 CLI Agent | native；结果已含 Harbor 字段 + ATIF，直接导入 | 容器 / VM（gVisor、QEMU） |
+| **BrowserGym + AgentLab** | 10 浏览器套件 + OSWorld/GAIA | agent × task × seed | 现有 external adapter 扩展到全套；依赖图交给 Orbit 共享状态组 | 网站后端实例 |
+| **OSWorld-V2 / MobileWorld / Gym-Anything** | 各 1 个旗舰 benchmark（108 / 201 / CUAWorld） | VLM agent | native 单任务调用；或经 CUA-Lite 统一 | KVM、快照、后端数据库 |
+| **Harbor 生态** | 80+（含 OSWorld-Verified） | CLI Agent | workspace（已有），补 compose 缺口 | 容器、compose sidecar |
+| **EFE** | 35 benchmark、1,154 任务、2,260 模式目录 | coding agent | workspace + 可信 GPU sidecar；`standard` / `privileged` / `standard-realtime` 分别登记 | GPU sim service、monitor、named volume |
+| **vla-eval harness** | LIBERO、SimplerEnv、CALVIN、ManiSkill2、RoboCasa、RoboTwin、BEHAVIOR-1K… | VLA policy | native（一 trial = 一组 episode）；policy 作为 GPU service | sim 容器 + 模型服务 GPU |
+| **Isaac Lab-Arena** | Isaac Lab 生态任务 | VLA policy（OpenPI / GR00T 等） | native 包装 Experiment Runner；不引入 OSMO/K8s | RTX GPU，evaluator + server 两张卡 |
+| 科研 / 代码 / 答题 | ASI、LongDS、RCB、HarnessGrad 59 个数据集… | CLI Agent | 现有 native / external；answer kind | CPU 为主 |
 
-具身不是单独的 kind，而是 `env` 的 `profile`（`text` / `gui` / `embodied`）；`workspace` 是 Harbor task 目录的超集。
-同一 benchmark 可同时提供多种 kind（拆分模式 + 原生模式），两者之间做 parity 对照。
+"规模"是上游声明的口径（套件数 ≠ 任务数 ≠ 已验证数），Web 与 CLI 显示时必须带保真度级别（§9.10）。
 
-### 9.2 Benchmark 包
+### 9.3 任务形态（kind）
 
-一个目录加 `orbit-bench.toml`：`[benchmark]`（name、version、kind、profile）、`[source]`（repo、commit、license）、
-`[data]`（artifacts + sha256）、`[tasks]`（`loader = "tasks.py:load"` 或 `dir =`）、`[scoring]`（official_metric、metrics）、
-`[fidelity]`（deviations、oracle 来源、level）、`[conditions]`、`[resources.default]`。
-`orbit bench add <path|git-url>` 读它并按 kind 交给内置运行器；只有 `native` 与自定义情况才需要写可执行 adapter。
-`workspace` 直接读 Harbor 的 `task.toml` 目录，Orbit 的扩展放在 `[orbit]` 表（devices、gpu_features、shared_state、reuse）。
+| kind | 适用 | Orbit 负责 | 原生负责 |
+| --- | --- | --- | --- |
+| `answer` | 题目 → 答案 | 容器、答案收集、oracle/empty | 官方评分函数 / 固定 judge |
+| `workspace` | Agent 在容器内工作；**可带可信 sidecar**（仿真器、桌面 VM、网站） | Run + services + after/hooks、GPU/设备、停止顺序、证据 | 任务、sidecar 内在线判定、verifier |
+| `session` | 多轮对话、模拟用户 | 按轮驱动、续接、轨迹 | 轮次、评分 |
+| `episode` | policy / VLM agent 的 reset-step 循环 | sim service + policy service 共同调度、生命周期、轨迹导入 | 协议（vla-eval、LiteEnv、Gymnasium）与 evaluator |
+| `native` | hub runner 整体包装 | 资源预算（含内部 slots）、产物、结果导入 | 全部内层 |
 
-### 9.3 各类的约定
+原规划的 `env` 拆成两条：**CLI Agent 驱动交互环境 → `workspace` + sidecar**（EFE 模式）；**policy 驱动 → `episode`**（vla-eval 模式）。
 
-- **answer**：作者写一个文件（`answer.loader` / `answer.scorer`），可声明 `response_schema`、固定 judge 模型；
-  oracle（交标准答案）与 empty（空答案）由套件自动提供，因此每个 answer bench 自带对照。
-- **session**：`[session]` 声明固定轮次文件或模拟用户（模拟用户本身也是一个 Agent 定义），`max_turns`、`scoring = per_turn|final`；
-  Agent 不支持续接时在**提交**阶段拒绝，而不是跑出一堆 0 分。
-- **env**：环境以服务容器运行，实现统一环境协议（HTTP + JSON，跑在 Run 私有网络上；图像等大数据以文件或共享内存引用）：
-  `spec()`、`reset(task, seed)`、`step(action)`、`evaluate()`、`close()`，可选 `snapshot/restore`、`render`、`stop`。
-  观测量与动作量是封闭类型集合（text / image / json / vector / discrete / composite），决定 Web 怎么展示、桥接怎么造工具。
-  `embodied` profile 另有 `control_hz` 与同步/异步执行；`gui` profile 另有坐标系与分辨率。
-- **native**：`[native]` 给出 `run` / `score` 命令与 `agent_injection`（`command` / `builtin-map` / `none`）；
-  `command` 模式下 Orbit 填入 `orbit-agent run --instruction-file …`，于是**只要原生 runner 支持用命令调用 Agent，
-  就能用任意已注册 Agent**（ASI 的 `--agent-cmd` 正是这种接口）。原生 runner 无法提供的信息（如逐步 token）在结果中标明缺失。
+### 9.4 被评测对象：Agent 与 Policy
 
-### 9.4 Agent 接口与桥接
+- **Agent**：已实现的注册表（§6），任意 CLI，含自定义 harness。
+- **Policy**（新增 `Method.agent = "policy"` + `PolicySpec`）：`{ image | dockerfile, command, port, protocol, health, resources(GPU), env, weights(dataset) }`，
+  `protocol ∈ vla-eval-ws | openpi-ws | gr00t-zmq | lite-http | custom`。policy 作为 trial 的 GPU service 启动，与 sim 一起**整组准入**
+  （gang lease：全部资源同时满足才启动，避免一半占着 GPU 等另一半）。模型权重走命名 dataset 只读挂载。
+- 能力匹配：bench 声明 `requires`（`multiTurn`、`policyProtocol`、`gui`、`obs: rgb|depth|proprio`、`action: joint|ee|chunk`），提交前与
+  Agent / Policy 声明比对，不匹配直接拒绝。
 
-Agent 定义（§6）之外，能力分为五种接口：`cli`（一段指令跑到结束）、`session`（可续接）、`tools`（可用 MCP/命令行工具）、
-`policy`（`act(observation) → action` 的函数或 HTTP 服务）、`model`（Orbit 内置的最小基线 Agent）。
+### 9.5 Agent 与环境的桥
 
-| kind \ 接口 | cli | session | tools | policy | model |
-| --- | --- | --- | --- | --- | --- |
-| answer | 写 `answer.txt` | 同 cli | 同 cli | `act(prompt)` 返回答案 | Orbit 直接调用模型 |
-| workspace | 现有方式 | 同 cli | 同 cli | 不支持 | 不支持 |
-| session | 不支持（需续接） | Orbit 按轮发送 | 同 session | 每轮 `act` | Orbit 维护对话 |
-| env | `orbit-env` 命令行工具 | 同 cli | 以 MCP 暴露动作空间 | Orbit 的环境循环调用 `act` | 逐步调用模型 |
-| native | `{agent_cmd}` 垫片 | 视 runner | 视 runner | 视 runner | 视 runner |
+| 场景 | 桥 | 依据 |
+| --- | --- | --- |
+| CLI Agent × GUI（桌面/浏览器/手机） | 容器内 computer-use 工具：CLI 命令 + MCP，动作模式取 CUA-Lite canonical tool call（坐标 `[0,1000]`、computer / mobile 两族、finish 工具），后端连 env-server 或 Cua session | 让 Claude Code、Codex、pi… 直接操作 GUI；观测/动作权限作为实验条件记录 |
+| CLI Agent × 机器人仿真 | 沿用 EFE 客户端（`/spec /observe /submit`，RCB1） | coding agent 写控制程序，sidecar 在线判定 |
+| Policy × 仿真 | 原生协议直连（vla-eval HELLO/EPISODE_START/OBS/ACTION，sync/live） | Orbit 不在每步路径上，避免延迟 |
+| VLM agent × GUI | hub 原生 rollout | 先对齐官方分数 |
 
-两个关键桥：**env × CLI Agent**（容器内 `orbit-env observe|act|done`，同时以 MCP 工具暴露，参数由动作空间生成，
-这样 Claude Code、Codex 等能直接操作文本游戏、浏览器、桌面与仿真）与 **env × policy**（Orbit 内置环境循环，
-不经过工具调用，延迟低，具身必须走这条）。提交时检查 kind 与 Agent 能力是否匹配，不匹配直接拒绝并说明原因。
+桥的协议规则（来自 CUA-Lite / EFE）：step 非幂等，响应丢失时**按 operation id 查询**而不重发；容量不足用可重试错误（503 + Retry-After）
+与真实失败区分；读超时 → 关闭重建实例，不盲目重试。
 
-### 9.5 统一轨迹
+### 9.6 资源与环境生命周期
 
-每个 trial 一个 `trajectory.jsonl` 事件流加 `media/`。事件类型封闭：`message`、`thinking`、`tool_call`、
-`tool_result`、`observation`、`action`、`reward`、`turn`、`usage`、`operator`（真机人工干预）、`error`。
-Agent 侧（会话解析器）与环境侧（桥接器）按 step 与时间对齐合并；每条轨迹标注完整度（会话完整解析 / 只有桥接记录 /
-只有原生日志），不把残缺轨迹当完整的。导出：Agent 部分映到 Harbor 的 ATIF，具身部分导出 LeRobotDataset；
-高频传感器数据按块存成视频或数组文件，**不进 sqlite**。现有 `GuiTrajectory` 成为 Web 的一个视图，另加对话视图与视频时间轴。
+1. **资源契约**：`ServiceSpec` 增加 `gpus`、`gpuMemGB`、`gpuFeatures`（rtx/egl/vulkan）、`devices`（kvm、dri、net/tun）、
+   `volumes`（命名缓存卷，如 OSWorld qcow2、仿真资产）、`ipc`/`shmGB`、`stopGraceSec`、`capAdd`；`leaseRequest` 把 service 的 GPU/设备计入。
+   compose 翻译补齐 `devices`、`deploy.resources.reservations`、命名卷、`x-gpu-memory-gb`；仍不支持的键继续报 unsupported。
+2. **节点能力探测**：doctor/心跳上报 KVM、`/dev/dri`、GPU 型号与 RT core、Android SDK、可用 runtime；placement 只选具备能力的节点（Gym-Anything preflight）。
+3. **分层准入**（CUA-Lite）：主机保护（内存、负载、磁盘、swap）→ 租约容量 → 环境内部容量 → 创建/reset 限流（避免同时解包镜像、同时起 32 个 AVD）。
+4. **内部并发归 Orbit**：adapter 回复 `slots: n` 与每 slot 资源，Orbit 一次租齐；或一 trial 一 episode。禁止 hub 自行扩张。
+5. **环境实例**按所有权分类（CUA-Lite）：`dedicated`（每 trial 独占）、`pooled`（可复位复用）、`singleton`（共享后端，如 WebArena 网站）、
+   `remote`（外部托管）。实例是租约资源；**setup 前即标脏**（OSWorld），复位需覆盖设备、后端数据、任务对象三层（MobileWorld），
+   复位确认后才释放，失败进 `quarantined`。共享后端用 `shared_state` 组串行或分实例（AgentLab 依赖图）。
+6. **对账回收**：周期比对"账本中的实例"与"实际带 Orbit 标签的容器/VM"，处理 tracked-but-gone 与 live-but-untracked；查询失败跳过本轮而非全部释放。
+7. **阶段时长**：agent 截止 ≠ 释放。sim finalize、视频渲染、verifier 仍占资源（EFE 样例：agent 30 min，sim collect 最多约 38 min）；租约覆盖整段。
+   停止顺序固定：先阻止 agent 继续发动作 → sidecar 在线判定落盘 → 再渲染视频 → 再收集与清理。
 
-### 9.6 评分与有效性
+### 9.7 结果、有效性与可复现
 
-verifier 类型：`function`、`command`、`env`（在线 `evaluate`）、`judge`、`native`。在现有"执行 / 评测 / 清理"三态分离之上：
-`Outcome` 增加 `episode { steps, terminated, truncated, turns }`；invalid 原因为封闭枚举（`infra`、
-`agent_model_unavailable`、`env_crash`、`reset_failed`、`scorer_error`、`judge_unavailable`、`budget_exceeded`）；
-bench 自己声明资源超限算什么（`on_budget_exceeded = fail | invalid`），因为把资源预算当任务条件的 benchmark 与
-诊断用途的判断相反。汇总同时显示计划数、完成数、有效数与每类排除原因。重评语义由 kind 决定：answer/workspace 可从产物
-重评，env 的在线评分只能做证据重查（`rescore = evidence`）。
+- `Outcome` 增加 `episode { steps, terminated, truncated, endedBy, successSignal }`、`official { metrics, aggregation }`（原样保存）、
+  `failure`（封闭枚举：`env_start`、`env_step`、`reset_failed`、`policy_start`、`policy_act`、`server_unreachable`、`call_watchdog`、
+  `resume_failed`、`scorer_error`、`judge_unavailable`、`model_unavailable`、`budget_exceeded`）。执行 / 评测有效性 / 清理三态不变。
+- **两个口径**：官方聚合（照 bench 规则，如 vla-eval 把 error 计入分母）与 Orbit 有效口径（valid-only，任务聚类 CI）。Web 并列显示并命名。
+- **attempts 与 retries 分开**（Cua Bench）：attempt 进入 pass@k 统计；retry 只修复基础设施失败，最多一次且条件完全相同（EFE `SAME`）。
+- 完整性：计划数 / 完成数 / 有效数 / `partial`；hub 结果缺项时标 partial，不当全量。
+- **指纹**：源码 SHA、任务 digest、镜像 digest（解析后）、协议版本、模式、seed、观测/动作权限、网络、资源、时钟；跨指纹比较给出警告（OSWorld release manifest、EFE `effective_config`）。
+- **证据信任级**：每个产物标 `producer`（agent / sidecar / verifier / monitor）、`trust`（trusted / self-reported）、视频来源 `live | render`。
 
-### 9.7 资源与环境实例
+### 9.8 统一轨迹
 
-任务资源声明扩展为 `gpus`、`gpu_features`（egl/vulkan/cuda）、`devices`（kvm/dri/android/robot:<class>）、
-`shared_state`（同组串行）、`env_reuse`（none/pool）、`reset_cost_sec`。
+- 一个 trial 一份 `trajectory/` 索引：`events.jsonl`（事件类型封闭：message、thinking、tool_call、tool_result、observation、action、reward、
+  turn、usage、error、operator）+ `media/` + 原始文件引用。Agent 侧与 **ATIF 兼容**（Cua Bench、Harbor 已采用，可直接导入导出），
+  环境侧按 step 与时间对齐；具身高频数据保留原格式（RCB1、npz、视频）并导出 LeRobotDataset，不进 sqlite。
+- **导入器**（每个 hub 一个，纯函数、带测试）：Codex/Claude 会话、Harbor/Cua ATIF、CUA-Lite sample、vla-eval SQLite/JSONL、EFE journal、
+  MobileWorld `traj.json`、AgentLab step、OSWorld `traj.jsonl`、BrowserGym JSONL。
+- 完整度标注：会话完整 / 只有环境记录 / 只有原生日志 / 截断；现有 `GuiTrajectory` 作为 GUI 视图的输入之一。
 
-**环境实例是租约资源，不是第二个状态机**：与 GPU 一样有容量、可租、有占用者，且**只有确认复位成功才释放租约**
-（与"清理确认后才释放"同一条规则）；复位失败 → `quarantined`，不再分配并可见。环境可以比 Run 活得久（暖池），
-同一环境可串行服务多个 trial。这解决了 OSWorld 冷启动约 10 分钟、Android 模拟器约 2 分钟这类真实成本，
-而这正是 hosted provider 在替用户解决的问题。所需改动：资源账本支持设备类（节点登记 + 探测命令）、
-GPU 可分配给 service 容器（仿真器本身就是 service）、新增 `envs/` 管理环境实例（经 `runs/placement.ts` 一类的接口注入，
-不让 runs 依赖它）。
+### 9.9 Web：按场景的视图
 
-### 9.8 具身两阶段
+- **作业中心**（参考 MobileWorld eval-server，但状态来自 daemon）：选 bench 家族 → 任务子集 → Agent/Policy × seed，显示资源预估与
+  能力检查；提交、取消、**补跑缺失/无效**、复制配置。
+- **Trial 视图**按 kind/profile 选择：
+  - GUI：截图帧 + 动作叠加（点击点、拖拽轨迹、输入文本）、a11y/DOM 标签页、Agent 思考并排、视频、终止原因；
+  - 具身：多相机同步时间轴、动作/关节曲线、action chunk 边界、实时模式的迟到与 stall 标记、在线判定与证据信任徽章；
+  - 文本环境 / 多轮：对话视图；代码：diff 与终端（已有）。
+- **实时画面**：运行中的 noVNC / 视频流（只读默认），与历史回放分开。
+- **对比与榜单**：同指纹的方法比较、官方与 Orbit 两种口径、保真度与条件徽章；跨条件比较给出警告。
+- **静态导出**：一个 job 或 trial 导出为自包含 HTML（MobileWorld），用于论文附录、分享和社区传播。
 
-- **第一阶段（仿真）**：`env` / `embodied` profile，仿真器作为 GPU service 运行，EGL 渲染，策略走 `policy` 接口，
-  轨迹存视频与状态数组。主要工作在资源与执行层（device、GPU 给 service、大产物索引）。
-- **第二阶段（真机）**：环境接口不变，只换成"设备提供者"。现在就预留：`reserve / health / reset / stop / release`；
-  `reset` 支持 `operator_confirmed`（确认前不释放租约）；`cancel` 必须先 `stop()` 并确认设备停稳；
-  `operator` 事件进入轨迹；校准指纹（设备、相机、标定版本）写入结果，跨指纹对比给出警告；实时控制留给设备侧执行器，
-  Orbit 只管理作业与记录。第一阶段按同一协议实现，第二阶段就不改 Trial、评分、轨迹与 Web。
+### 9.10 保真度与 catalog
 
-### 9.9 保真度分级
+级别：`L0 实验性` → `L1 对照通过`（oracle 满分、empty 零分）→ `L2 样例对齐`（与原生 runner 抽样一致）→ `L3 真实 Agent/Policy 对照` →
+`L4 持续维护`。另记 `hub-claimed`（上游矩阵声称复现，本机未验证）。`deviations` 列出所有改动；不可复现就 `refused`。
+catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kind、资源、保真度、最近验证日期），Web 与 `orbit bench search` 读取。
 
-`L0 实验性` → `L1 对照通过`（oracle 满分、empty 零分）→ `L2 样例对齐`（抽样与原版 runner 一致）→
-`L3 真实 Agent 对照`（固定版本与预算、配对运行、差异有解释）→ `L4 持续维护`（负责人、回归、最近验证日期）。
-另三条规则：`deviations` 列出所有改动（修正答案、剔除题目、换 judge、换动作接口）；不能复现就 `refused`，不给 0 分；
-`compare` 遇到偏差或固定条件不同时警告或拒绝比较。
+### 9.11 具身两阶段
 
-### 9.10 与 Harbor 的关系
+- **第一阶段（仿真）**：EFE（coding agent，workspace + GPU sidecar）与 vla-eval / Arena（policy，episode / native）两条线并行；先补 §9.6 第 1 条的 service GPU 契约与 gang lease。
+- **第二阶段（真机）**：设备作为资源类（`robot:<class>`、独占），设备提供者实现 `reserve / health / reset / stop / release`；
+  `reset` 支持 `operator_confirmed`；cancel 先 `stop()` 并确认停稳；`operator` 事件入轨迹；校准指纹入结果；控制循环留在设备侧。
+  第一阶段 episode 协议与证据结构不变，第二阶段只换"环境提供者"。
 
-复用：workspace kind 直接读 Harbor task 目录；`orbit bench import harbor:<name>` 在隔离 Python 环境调用**他们的**生成器产出
-任务目录；把 `agents/installed/` 的安装与命令逻辑翻译成 Agent 定义（Apache-2.0，保留署名，标 `unverified`）；
-轨迹导出 ATIF；parity 记录可引用但不算 Orbit 的验证结果。不复用它的 trial 运行时与云沙箱后端——调度、资源账本与记录
-是 Orbit 自己的核心。不做：移植 Harbor 的 Python、让 daemon 依赖 Python、为"支持条目数"追数量。
+### 9.12 不做
 
-### 9.11 落地顺序与验收
+不引入 hub 的队列/数据库为第二状态源；不内嵌 OSMO / Kubernetes / Ray 控制面；不移植 Harbor 运行时；不让 daemon 依赖 Python
+（hub 在各自隔离环境里跑）；不把 hub 声称的覆盖数当作支持数；不用重算口径冒充官方分数。
+
+### 9.13 路线与验收
 
 | 阶段 | 内容 | 验收 |
 | --- | --- | --- |
-| P1 Agent 注册表 | 定义、`orbit-agent` 垫片、Codex/Claude 迁移、新增 CLI | 已实现（§6、`docs/tasks/20261103-agent-registry.md`） |
-| P2 answer kind + SDK | Python SDK、`bench init/check`、`model` 基线 Agent | 5 个数据集 L1，其中 2 个 L2 |
-| P3 env kind + 轨迹 v1 | 环境协议、`orbit-env`/MCP 桥、policy 循环、Web 轨迹视图 | 文本环境用 Claude Code 与策略各跑通；BrowserGym 迁移完成 |
-| P4 session kind | 多轮运行器、模拟用户 | LongDS 用通用 runner 与原版对齐；一个 tau 任务集跑通 |
-| P5 具身仿真 + 设备 | GPU service、EGL、devices、`envs/` 暖池 | 一个仿真 bench 的官方脚本策略复现官方成功率；OSWorld 暖池跑 20 个任务 |
-| P6 生态 | `import harbor:*`、catalog、保真度展示 | 10 个 Harbor bench 导入到 L1 |
-| P7 真机 | 设备提供者实现 | 需要合作方、设备与安全流程才启动；在此之前只保留接口 |
-
-规范降低的是接入成本并让偏差可见，不消除偏差；原生 runner 的质量靠包装无法修正；CLI Agent 操作 GUI 与具身的效果
-取决于 Agent 本身（桥接保证"能操作"，不保证"操作得好"）；维护成本随 bench 数量增长，所以需要保真度分级与 catalog
-让第三方维护自己的包。与 HarnessGrad 的关系待定：它已有 59 个数据集的官方 scorer 与对照测试，可考虑让其数据集以
-answer/session/env 包进入 catalog，两个项目共用一套评分代码。
+| P1 Agent 注册表 | 已完成 | §6；12 个内置定义，codex/claude 验证 |
+| P2 资源与证据底座 | service GPU/设备/卷、gang lease、能力探测、内部 slots、阶段租约、Outcome 两口径与指纹、产物信任级、轨迹索引 v1 + ATIF 导入导出 | EFE RoboTwin standard 样例 oracle/empty 在 Orbit 跑通（GPU sidecar）；故障注入四类分类正确 |
+| P3 GUI 广度 | CUA-Lite env-server 家族、Cua Bench、BrowserGym 全套、OSWorld（KVM + 缓存卷）、MobileWorld；GUI trial 视图与实时画面 | 每家族至少一个套件 L1、一个 L2；OSWorld 20 任务跑通 |
+| P4 具身广度 | vla-eval native（LIBERO / SimplerEnv 起步）、PolicySpec、Arena native；具身视图 | LIBERO 官方 baseline policy 复现上游成功率（同版本）；policy + sim 整组准入无超卖 |
+| P5 CLI Agent 桥 | computer-use 工具（CLI + MCP）、EFE 客户端集成、能力检查 | Claude Code 在 MiniWoB / OSWorld 子集与 EFE CPU 任务跑通并有统一轨迹 |
+| P6 规模与环境池 | 分层准入、pooled/singleton 实例、对账回收、多节点能力路由 | 长批次无泄漏；复位失败进 quarantine；两台真机验证 |
+| P7 生态 | catalog、`bench search`、静态导出、answer kind + HarnessGrad 数据集 | 外部作者无改核心接入一个 bench |
+| P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |
 
 ## 10. 路线
 
@@ -858,7 +882,7 @@ answer/session/env 包进入 catalog，两个项目共用一套评分代码。
 | R2 | 认证模块与通知 | login / API key / relay 三类 profile 可用于容器内 Codex、Claude Code；完成/失败通知 |
 | R3 | 刷榜 | ASI 原生包装、TB-Science Harbor 格式在同一 Run/租约上运行；方法对比页面；新 bench 接入指南 |
 | R4 | 多节点 | 一个 Agent 调度两台机器 8 张 GPU；已实现，仅同机双 daemon 仿真验证（§8） |
-| R5 | 任意 Agent + 跨场景评测规范 | Agent 注册表已实现（§6）；P2–P7 见 §9.11 |
+| R5 | 任意 Agent + 跨场景评测规范 | Agent 注册表已实现（§6）；P2–P8 见 §9.13 |
 
 ## 11. 来自 v0（Python 版）的教训
 
