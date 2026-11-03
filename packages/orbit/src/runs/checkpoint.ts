@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
-import type { Run, RunCheckpoint, RunSpecInput } from "../contracts/index.ts";
+import type { AgentDefinition, Run, RunCheckpoint, RunSpecInput } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
 import { finishHarness, resumeAgentCommand } from "../harness/index.ts";
+import { builtinRegistry } from "../harness/registry.ts";
 import { nowIso } from "../lib/ids.ts";
 import { dirBytes } from "../records/index.ts";
 import { loadRunAgentTranscript } from "../sessions/index.ts";
@@ -122,7 +123,23 @@ export async function capture(
   );
 }
 
-export function resumeSpec(run: Run, command?: string[]): RunSpecInput {
+/** The Agent a run used: from its auth profile's harness, else the command's own program name. */
+function resumeDef(
+  run: Run,
+  agents?: { get(name: string): AgentDefinition | null },
+): AgentDefinition {
+  const session = run.checkpoint?.session;
+  const name = session?.harness ?? run.spec.command[0] ?? "";
+  const def = (agents ?? builtinRegistry()).get(name);
+  if (!def) throw new UserError(`Agent ${name || "of this run"} is not registered on this node`);
+  return def;
+}
+
+export function resumeSpec(
+  run: Run,
+  command?: string[],
+  agents?: { get(name: string): AgentDefinition | null },
+): RunSpecInput {
   const checkpoint = run.checkpoint;
   if (checkpoint?.state !== "ready" || !checkpoint.imageId)
     throw new UserError("run has no usable checkpoint");
@@ -148,7 +165,9 @@ export function resumeSpec(run: Run, command?: string[]): RunSpecInput {
     command:
       command ??
       resumeAgentCommand(
-        run.spec.command,
+        resumeDef(run, agents),
+        // The method's model and effort are baked into the command; a resume only needs the id.
+        {},
         checkpoint.session as NonNullable<typeof checkpoint.session>,
       ),
     parentId: run.id,

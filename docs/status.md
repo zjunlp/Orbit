@@ -1,7 +1,7 @@
 # Orbit status
 
 - **Updated at:** 2026-11-03
-- **Basis:** Snapshot index timestamps preserve same-size edit detection; GUI benchmark Web workflow and BrowserGym/MiniWoB phase one retained.
+- **Basis:** Agent registry (12 built-in Agents, user definitions, `orbit agent`); snapshot index timestamps preserve same-size edit detection; GUI benchmark Web workflow and BrowserGym/MiniWoB phase one retained.
 - **Stage:** R0–R2 validated here; R3 LongDS checked with a complete native Codex task, Harbor with oracle/empty samples; R4 only as two daemons on one machine.
 - **Blockers:** none for the current release.
 
@@ -15,7 +15,8 @@
 - Who holds each GPU (user, command, PID, container/Run, memory, runtime; else unknown) in Web and CLI.
 - Pre-flight `orbit run|sweep --check` (data, output disk, image, placement); `--smoke '<cmd>'` gates submission.
 - Data directory apart from `~/.orbit` (`orbit config data`, `ORBIT_DATA`), doctor disk warnings; owned home symlink targets and existing private files checked/tightened; logical folders (`--folder`, `mv`, `folders`, `export`).
-- Auth profiles for Codex and Claude Code; notifications (Feishu, DingTalk, WeCom, Slack, webhook; `feishu-app` bot: `orbit feishu init` QR setup, pairing, read-only `/gpu` `/runs` `/show`, curve cards).
+- Agent registry: one declaration per Agent (`codex`, `claude-code`, `pi`, `opencode`, `kimi-cli`, `gemini-cli`, `aider`, `goose`, `qwen-code`, `copilot-cli`, `mini-swe-agent`, `dsh`), user definitions in `agents.json`, `orbit agent ls|show|add|rm|check`, per-Agent install/credentials/argv/transcript; bench methods name any registered Agent. Only codex and claude-code ran on this machine; the other ten follow their CLIs and Harbor's adapters but are `unverified`.
+- Auth profiles per Agent (kinds depend on the definition); notifications (Feishu, DingTalk, WeCom, Slack, webhook; `feishu-app` bot: `orbit feishu init` QR setup, pairing, read-only `/gpu` `/runs` `/show`, curve cards).
 - Bench: solve + verify run per trial, valid-only means (OOM solves invalid); one JSON adapter protocol
   for built-ins and external executables ([LongDS native multi-turn runner/judge](../examples/bench-adapters/longds/), ResearchClawBench); per-task resources and timeout resolved before adapter planning; `bench usage`
   suggestions; solves whose Agent could not use its model are invalid without a verify run; `bench consolidate` checks preview digests and preserves newly invalid evidence; startup repairs stale trial cleanup; completed invalid retries and task append retain validity; `orbit-bench` skill; `bench rescore` re-verifies from saved solve outputs (history kept). Measured peak memory / CPU / GPU memory on every run. Adapter-declared
@@ -28,13 +29,12 @@
 
 - ASI / TB-Science scores not yet compared with official Harbor runs (only oracle-level); codex lacks Harbor's `unified_exec`; no GPU-type placement, allowlist networks, multi-step tasks or MCP servers for Harbor tasks. R4 not run on two real machines; no bundle cache eviction. LongDS's native process runner has no failure checkpoint; real Claude execution/continuation remains unchecked.
 - Per-user daemons on one machine (busy 7717 → free port) can lease the same free GPU at once; fix when needed with a shared per-GPU lock.
+- §9 (kinds, policy methods, hub adapters, service GPUs, environment instances, unified trajectory, per-scenario Web, embodied support) is designed but not implemented; only the harbor `workspace` shape and external adapters exist today. Service containers get no GPUs (`serviceContainer` sets `gpuIds: []`).
 - Additional bench metrics: tests and fake adapters only; group notifications may fire between solve and verify. Untried: some auth kinds, real IM webhooks (the Feishu app was checked on a phone). No MCP server or dsh/pi session capture/in-container harnesses; no overcommit.
 
 ## Next priorities
-1. Real Agent bench jobs (RCB first), Web `/bench`, R4 on two machines.
-2. Paired Agent runs Orbit vs `harbor run` on sampled TB-Science tasks; LLM-judge / pairwise scoring for non-Harbor benchmarks.
+1. Scenario expansion (design §9, revised from the GUI/embodied source research): P2 resource and evidence base (service GPU/devices/volumes, gang lease, two scoring views, fingerprints, trajectory index), then GUI hubs (CUA-Lite, Cua Bench, BrowserGym, OSWorld, MobileWorld) and embodied hubs (EFE, vla-eval, Arena). P1 (Agent registry) is done.
+2. Real Agent bench jobs (RCB first), R4 on two machines; paired Orbit vs `harbor run` on sampled TB-Science tasks.
 
 ## Records
-
-[design.md](design.md) · [R0](tasks/20260929-ts-rewrite-r0.md) · [R1](tasks/20260930-r1-research-loop.md) · [R2](tasks/20260930-r2-auth-notify.md) · [R3](tasks/20260930-r3-bench.md) · [R4](tasks/20260930-r4-multinode.md) · [review](tasks/20261001-code-review.md) · [cpu](tasks/20261002-cpu-external-load.md) ·
-[adapters](tasks/20261003-bench-adapter-protocol.md) · [resources](tasks/20261003-bench-resources-usage.md) · [validity](tasks/20261004-bench-validity-checks.md) · [web](tasks/20261004-web-jobs-trials-delete.md) · [metrics](tasks/20261005-bench-metrics.md) · [folders](tasks/20261005-data-dir-folders.md) · [gpu-procs](tasks/20261006-gpu-processes.md) · [preflight](tasks/20261008-preflight-smoke.md) · [rescore](tasks/20261008-bench-rescore.md) · [feishu-app](tasks/20261008-feishu-app.md) · [feishu-init](tasks/20261008-feishu-init.md) · [npm](tasks/20261008-npm-plugin-install.md) · [plugins](tasks/20261008-agent-plugins.md) · [ASI compatibility](tasks/20261009-asi-runner-timeouts.md) · [timeouts](tasks/20261009-bench-timeout-classification.md) · [harbor modes](tasks/20261010-harbor-verifier-modes.md) · [sidecars](tasks/20261010-harbor-sidecars.md) · [harness parity](tasks/20261010-harness-parity.md) · [shared verifier](tasks/20261010-harbor-shared-verifier.md) · [collect hooks](tasks/20261010-harbor-collect-hooks.md)
+[design.md](design.md) · [R0](tasks/20260929-ts-rewrite-r0.md) · [R1](tasks/20260930-r1-research-loop.md) · [R2](tasks/20260930-r2-auth-notify.md) · [R3](tasks/20260930-r3-bench.md) · [R4](tasks/20260930-r4-multinode.md) · [review](tasks/20261001-code-review.md) · [cpu](tasks/20261002-cpu-external-load.md) · [adapters](tasks/20261003-bench-adapter-protocol.md) · [resources](tasks/20261003-bench-resources-usage.md) · [validity](tasks/20261004-bench-validity-checks.md) · [web](tasks/20261004-web-jobs-trials-delete.md) · [metrics](tasks/20261005-bench-metrics.md) · [folders](tasks/20261005-data-dir-folders.md) · [gpu-procs](tasks/20261006-gpu-processes.md) · [preflight](tasks/20261008-preflight-smoke.md) · [rescore](tasks/20261008-bench-rescore.md) · [feishu-app](tasks/20261008-feishu-app.md) · [feishu-init](tasks/20261008-feishu-init.md) · [npm](tasks/20261008-npm-plugin-install.md) · [plugins](tasks/20261008-agent-plugins.md) · [ASI compatibility](tasks/20261009-asi-runner-timeouts.md) · [timeouts](tasks/20261009-bench-timeout-classification.md) · [harbor modes](tasks/20261010-harbor-verifier-modes.md) · [sidecars](tasks/20261010-harbor-sidecars.md) · [harness parity](tasks/20261010-harness-parity.md) · [shared verifier](tasks/20261010-harbor-shared-verifier.md) · [collect hooks](tasks/20261010-harbor-collect-hooks.md) · [agent registry](tasks/20261103-agent-registry.md)

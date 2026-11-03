@@ -1,19 +1,24 @@
 import type { Hono } from "hono";
 import {
+  type AgentDefinition,
+  AgentDefinitionInput,
+  type AgentInfo,
+  type AgentList,
   type AuthProfile,
   type AuthTestResult,
   type Ledger,
   NotifyPairInput,
   type NotifyTarget,
 } from "../../contracts/index.ts";
+import { AgentError } from "../../harness/registry.ts";
 import { NotFoundError, UserError } from "../../runs/service.ts";
 import type { AppDeps } from "../app.ts";
 import { runDoctor } from "../doctor.ts";
 
 export function registerSettingsRoutes(api: Hono, deps: AppDeps): void {
-  const { runs, auth, notifyStore, notifier, feishu, cluster } = deps;
+  const { runs, auth, agents, notifyStore, notifier, feishu, cluster } = deps;
   api.get("/resources", async (c) => c.json(await runs.resources(true)));
-  api.get("/doctor", async (c) => c.json(await runDoctor(deps.paths)));
+  api.get("/doctor", async (c) => c.json(await runDoctor(deps.paths, deps.agents)));
   api.get("/ledger", async (c) =>
     c.json<Ledger>({
       resources: await runs.resources(),
@@ -21,6 +26,39 @@ export function registerSettingsRoutes(api: Hono, deps: AppDeps): void {
       nodes: cluster.nodeStatus(),
     }),
   );
+
+  // Agents: definitions this node can run; built-ins cannot be replaced.
+  api.get("/agents", async (c) => {
+    const list = await Promise.all(agents.list().map((d) => agents.info(d)));
+    return c.json<AgentList>({ agents: list });
+  });
+  api.get("/agents/:name", async (c) => {
+    const def = agents.get(c.req.param("name"));
+    if (!def) throw new NotFoundError(`Agent not found: ${c.req.param("name")}`);
+    return c.json<AgentInfo>(await agents.info(def));
+  });
+  api.post("/agents", async (c) => {
+    const parsed = AgentDefinitionInput.safeParse(await c.req.json());
+    if (!parsed.success)
+      throw new UserError(
+        parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+      );
+    try {
+      return c.json<AgentDefinition>(agents.put(parsed.data), 201);
+    } catch (e) {
+      if (e instanceof AgentError) throw new UserError(e.message);
+      throw e;
+    }
+  });
+  api.delete("/agents/:name", (c) => {
+    try {
+      if (!agents.remove(c.req.param("name"))) throw new NotFoundError("Agent not found");
+    } catch (e) {
+      if (e instanceof AgentError) throw new UserError(e.message);
+      throw e;
+    }
+    return c.json({ ok: true });
+  });
 
   // Credentials: secrets go in once and never come back out.
   api.get("/auth", (c) => c.json<{ profiles: AuthProfile[] }>({ profiles: auth.list() }));

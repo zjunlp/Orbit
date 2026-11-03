@@ -53,7 +53,7 @@ const CLAUDE_MODEL_VARS = [
   "CLAUDE_CODE_SUBAGENT_MODEL",
 ];
 
-const SECRET_VAR: Record<Harness, Record<AuthKind, string>> = {
+const SECRET_VAR: Record<string, Partial<Record<AuthKind, string>>> = {
   codex: { login: "", "api-key": "OPENAI_API_KEY", relay: "OPENAI_API_KEY" },
   "claude-code": {
     login: "CLAUDE_CODE_OAUTH_TOKEN",
@@ -99,7 +99,7 @@ async function readSecret(o: AddOpts, env: Record<string, string>): Promise<stri
     return readFileSync(o.from, "utf8").trim();
   }
   if (o.fromEnv) {
-    const name = SECRET_VAR[o.harness][o.kind];
+    const name = SECRET_VAR[o.harness]?.[o.kind];
     const v = name ? env[name] : undefined;
     if (!v)
       throw new Error(`--from-env: ${name || "no variable"} is not set for ${o.harness} ${o.kind}`);

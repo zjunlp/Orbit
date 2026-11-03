@@ -27,6 +27,7 @@ import {
 import { isTerminal, type Run, type RunSpecInput } from "../contracts/index.ts";
 import { acquireProcessLock, ProcessLockError } from "../lib/lock.ts";
 import { VERSION } from "../lib/version.ts";
+import { registerAgent } from "./agent.ts";
 import { registerAuth, registerNotify } from "./auth.ts";
 import { registerBench } from "./bench.ts";
 import { registerCluster } from "./cluster.ts";
@@ -435,6 +436,7 @@ export function createProgram(deps: ProgramDeps, paths: OrbitPaths = orbitPaths(
       if (!r.ok) process.exitCode = 1;
     });
 
+  registerAgent(program, client, print);
   registerAuth(program, client, print);
   registerNotify(program, client, print);
   registerFeishu(program, client, print);

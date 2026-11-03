@@ -27,6 +27,7 @@ import {
 } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
 import type { Prepared } from "../harness/index.ts";
+import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { Redactor } from "../lib/redact.ts";
 import { allocate } from "../resources/allocate.ts";
@@ -67,6 +68,8 @@ export interface RunServiceDeps {
   probe: () => Promise<NodeResources>;
   /** Credential profiles for `spec.auth`; runs with auth are rejected without it. */
   auth?: AuthStore;
+  /** Agent definitions known on this node; runs with auth need one for the profile's harness. */
+  agents?: AgentRegistry;
   /** Named datasets on this node, for `dataset` mounts. */
   datasets?: DatasetRegistry;
   /** Scheduler period; the loop also runs after every submit/finish. */
@@ -97,6 +100,8 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
   private readonly store: Store;
   private readonly paths: OrbitPaths;
   private readonly probeFn: () => Promise<NodeResources>;
+  /** Agent definitions; built-ins when the caller (tests, embedders) did not supply a registry. */
+  private readonly agents: AgentRegistry;
   private readonly homeLabel: string;
   private readonly node: string;
   /** Worker nodes; set by the daemon when the cluster module starts. */
@@ -228,6 +233,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     this.store = deps.store;
     this.paths = deps.paths;
     this.probeFn = deps.probe;
+    this.agents = deps.agents ?? builtinRegistry();
     this.node = deps.paths.node;
     this.homeLabel = createHash("sha256")
       .update(resolve(deps.paths.home))
@@ -445,7 +451,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     )
       throw new UserError("resume requires a local finished run with confirmed cleanup");
     const { command } = RunResume.parse(input);
-    const spec = checkpoint.resumeSpec(run, command);
+    const spec = checkpoint.resumeSpec(run, command, this.agents);
     this.restoring.set(id, (this.restoring.get(id) ?? 0) + 1);
     try {
       if (!(await docker.imageExists(spec.image as string)))

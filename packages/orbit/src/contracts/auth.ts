@@ -1,10 +1,14 @@
 import { z } from "zod";
-import { EnvName, ProfileName } from "./common.ts";
+import { AgentName } from "./agent.ts";
+import { AuthKind, EnvName, ProfileName } from "./common.ts";
 
-export const Harness = z.enum(["codex", "claude-code"]);
+/**
+ * The Agent a profile is for (`contracts/agent.ts`). Built-ins are `codex` and `claude-code`;
+ * registered definitions use their own names. Kept as an alias so older imports keep working.
+ */
+export const Harness = AgentName;
 export type Harness = z.infer<typeof Harness>;
-export const AuthKind = z.enum(["login", "api-key", "relay"]);
-export type AuthKind = z.infer<typeof AuthKind>;
+export { AuthKind } from "./common.ts";
 /** Public view of a credential profile for an Agent CLI inside containers. Never contains the secret. */
 export const AuthProfile = z.object({
   name: ProfileName,

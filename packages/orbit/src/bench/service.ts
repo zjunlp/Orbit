@@ -9,6 +9,7 @@ import type { AuthEntry, AuthStore } from "../auth/index.ts";
 import type { OrbitPaths } from "../config/paths.ts";
 import {
   type AdapterTasksResponse,
+  type AgentDefinition,
   type BenchCompare,
   type BenchConsolidateInput,
   type BenchConsolidateResult,
@@ -38,6 +39,7 @@ import {
   trialRunIds,
 } from "../contracts/index.ts";
 import { metricValue, resolveMetrics } from "../contracts/metrics.ts";
+import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { dirBytes } from "../records/index.ts";
 import { NotFoundError, type RunService, UserError } from "../runs/service.ts";
@@ -66,6 +68,8 @@ export interface BenchServiceDeps {
   registry: BenchmarkRegistry;
   paths: OrbitPaths;
   auth?: AuthStore;
+  /** Agent definitions known on this node (they give the Agent argv for `agentTask` methods). */
+  agents?: AgentRegistry;
   /** Command running this orbit binary; built-in adapters run as `<self> __adapter <name>`. */
   self?: string[];
   log?: (msg: string) => void;
@@ -83,12 +87,15 @@ function failed(solve: Run, issues: string[], issue: string): Outcome {
 
 export class BenchService {
   private readonly deps: BenchServiceDeps;
+  /** Agent definitions; built-ins when the caller (tests, embedders) did not supply a registry. */
+  private readonly agents: AgentRegistry;
   /** Trials being advanced, and those changed meanwhile (advanced once more afterwards). */
   private readonly busy = new Set<string>();
   private readonly again = new Set<string>();
 
   constructor(deps: BenchServiceDeps) {
     this.deps = deps;
+    this.agents = deps.agents ?? builtinRegistry();
     deps.runs.on("change", ({ run }) => this.onRun(run));
   }
 
@@ -216,6 +223,13 @@ export class BenchService {
     });
     this.advanceAll(ids);
     return job;
+  }
+
+  /** The Agent definition a method names; `external`/`oracle`/`empty` never reach a definition. */
+  private agentDef(m: Method): AgentDefinition {
+    const def = this.agents.get(m.agent);
+    if (!def) throw new UserError(`${m.name}: unknown Agent ${m.agent}`);
+    return def;
   }
 
   private checkMethod(m: Method): void {
@@ -707,7 +721,7 @@ export class BenchService {
       const { b, trial } = this.context(job, t);
       const reply = await this.adapter(b).solve(trial);
       spec = applyOverride(
-        toRunSpec(reply.spec, trial.method, b, "solve"),
+        toRunSpec(reply.spec, trial.method, b, "solve", () => this.agentDef(trial.method)),
         job.resources?.[t.task],
         job.spec.timeoutMin,
       );
@@ -747,7 +761,7 @@ export class BenchService {
     try {
       const { b, trial } = this.context(job, t);
       const reply = await this.adapter(b).verify(trial, this.ref(solve));
-      spec = toRunSpec(reply.spec, trial.method, b, "verify");
+      spec = toRunSpec(reply.spec, trial.method, b, "verify", () => this.agentDef(trial.method));
       // A rescore asks again; the same solve output yields the same issues.
       t.issues = [...new Set([...t.issues, ...reply.issues])];
     } catch (e) {

@@ -1,6 +1,6 @@
 import { type OrbitPaths, privateStateCheck } from "../config/paths.ts";
-import type { DoctorCheck, DoctorReport, Harness } from "../contracts/index.ts";
-import { hostCli } from "../harness/index.ts";
+import type { AgentInfo, DoctorCheck, DoctorReport } from "../contracts/index.ts";
+import type { AgentRegistry } from "../harness/registry.ts";
 import { exec } from "../lib/exec.ts";
 import { diskCheck as disk } from "../resources/disk.ts";
 
@@ -10,16 +10,19 @@ async function tool(name: string, cmd: string, args: string[]): Promise<DoctorCh
   return { name, ok: r.code === 0, detail: out || `exit ${r.code}`, warn: false };
 }
 
-/** Agent CLIs mounted into containers for `--auth` runs. Missing ones only matter for those runs. */
-async function harness(h: Harness): Promise<DoctorCheck> {
-  const cli = await hostCli(h);
+/**
+ * Agent CLIs that mount from this machine. Missing ones only matter for runs that use them, so the
+ * check never fails: an `install` Agent needs no host binary at all.
+ */
+async function agentCheck(info: AgentInfo): Promise<DoctorCheck> {
+  const install = info.definition.install;
   return {
-    name: h,
+    name: info.definition.name,
     ok: true,
     warn: false,
-    detail: cli
-      ? `${cli.version} (${cli.hostBin})`
-      : "not found; --auth runs with this harness fail",
+    detail: info.available
+      ? info.detail
+      : `${info.detail}; runs with this Agent fail on this node${install.kind === "host" ? " (or install it and restart)" : ""}`,
   };
 }
 
@@ -31,7 +34,12 @@ async function dockerRoot(): Promise<DoctorCheck | null> {
   return disk("docker data", dir, "large images fill it (docker `data-root`)");
 }
 
-export async function runDoctor(paths: OrbitPaths): Promise<DoctorReport> {
+export async function runDoctor(paths: OrbitPaths, agents?: AgentRegistry): Promise<DoctorReport> {
+  const agentChecks = agents
+    ? await Promise.all(
+        (await Promise.all(agents.list().map((d) => agents.info(d)))).map(agentCheck),
+      )
+    : [];
   const checks = await Promise.all([
     Promise.resolve(privateStateCheck(paths)),
     Promise.resolve<DoctorCheck>({ name: "node", ok: true, warn: false, detail: process.version }),
@@ -43,8 +51,7 @@ export async function runDoctor(paths: OrbitPaths): Promise<DoctorReport> {
     tool("git", "git", ["--version"]),
     tool("docker", "docker", ["version", "--format", "server {{.Server.Version}}"]),
     tool("nvidia-smi", "nvidia-smi", ["--query-gpu=driver_version", "--format=csv,noheader"]),
-    harness("codex"),
-    harness("claude-code"),
+    ...agentChecks,
     dockerRoot(),
   ]);
   const all = checks.filter((c): c is DoctorCheck => c !== null);
