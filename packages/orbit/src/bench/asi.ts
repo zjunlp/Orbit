@@ -141,19 +141,32 @@ export function oracleTemplate(instances: string, outputs: string[]): string {
   ].join(" ");
 }
 
+/** Agents ASI's own runner can launch; others are refused rather than mapped to one of these. */
+const ASI_AGENTS: Record<string, string> = { codex: "codex_cli", "claude-code": "claude_code_cli" };
+
+/** Why ASI cannot run a method, or null; checked when a job is submitted. */
+export function asiMethodProblem(method: Pick<Method, "agent">): string | null {
+  if (method.agent === "external") return "ASI does not support external methods";
+  if (isCliMethod(method) && !ASI_AGENTS[method.agent])
+    return `ASI runs only codex and claude-code through its native runner; ${method.agent} is not adapted`;
+  return null;
+}
+
+function asiAgent(method: Method): string {
+  const a = ASI_AGENTS[method.agent];
+  if (!a)
+    throw new Error(
+      `ASI runs only codex and claude-code through its native runner; ${method.agent} is not adapted`,
+    );
+  return a;
+}
+
 function agentArgs(method: Method): string[] {
   if (!isCliMethod(method)) return [];
   const config: Record<string, string> = {};
   if (method.model) config.model = method.model;
   if (method.effort) config.effort = method.effort;
-  return [
-    "--agent",
-    method.agent === "codex" ? "codex_cli" : "claude_code_cli",
-    "--agent-config",
-    JSON.stringify(config),
-    "--sandbox",
-    "os",
-  ];
+  return ["--agent", asiAgent(method), "--agent-config", JSON.stringify(config), "--sandbox", "os"];
 }
 
 /** `sh -c 'exec "$@" <flag> "$ORBIT_OUTPUT/<sub>"'`: output paths are known only at launch. */
@@ -218,7 +231,7 @@ print(check())
 
 function requireCompatibleRunner(b: Bench, method: Method): void {
   if (!isCliMethod(method)) return;
-  const adapter = method.agent === "codex" ? "codex_cli" : "claude_code_cli";
+  const adapter = asiAgent(method);
   const result = spawnSync(
     b.config.python ?? "python3",
     ["-c", RUNNER_COMPATIBILITY, b.path, adapter],

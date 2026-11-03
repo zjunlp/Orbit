@@ -80,6 +80,10 @@ export async function launchProcess(
     };
     if (run.spec.auth) {
       const h = await ctx.prepareAuth(run, dirs);
+      if (h.setup)
+        throw new Error(
+          "this Agent installs inside a container; process runs need an Agent mounted from the host",
+        );
       if (Object.keys(h.secretEnv).length > 0)
         writeFileSync(envFile, docker.envFileText(h.secretEnv), { mode: 0o600 });
       cfg.auth = {

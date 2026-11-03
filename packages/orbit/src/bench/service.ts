@@ -24,6 +24,7 @@ import {
   type BenchRescoreResult,
   type BenchTask,
   type BenchUsage,
+  capabilityAllows,
   Folder,
   type FolderExportResult,
   type FolderMoveResult,
@@ -58,6 +59,7 @@ import { compareJobs, summarize } from "./summary.ts";
 export { benchGroup } from "./consolidate.ts";
 export { compareJobs, summarize } from "./summary.ts";
 
+import { asiMethodProblem } from "./asi.ts";
 import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { applyOverride, loadResources, resolveResources, usageRows } from "./resources.ts";
@@ -159,8 +161,10 @@ export class BenchService {
     for (const m of spec.methods) {
       if (names.has(m.name)) throw new UserError(`duplicate method name: ${m.name}`);
       names.add(m.name);
-      if (info.capabilities && !info.capabilities.methods.includes(m.agent))
+      if (info.capabilities && !capabilityAllows(info.capabilities.methods, m.agent))
         throw new UserError(`${b.name} does not support ${m.agent} methods`);
+      const asi = b.adapter === "asi" ? asiMethodProblem(m) : null;
+      if (asi) throw new UserError(`${m.name}: ${asi}`);
       this.checkMethod(m);
     }
     if (spec.tasks.length === 0) spec.tasks = all.filter((t) => t.supported).map((t) => t.id);
@@ -239,8 +243,14 @@ export class BenchService {
         throw new UserError(`${m.name}: ${m.agent} takes no auth, model or bundle`);
       return;
     }
+    const def = this.agents.get(m.agent);
+    if (!def) throw new UserError(`${m.name}: unknown Agent ${m.agent}; see \`orbit agent ls\``);
     const entry = m.auth ? this.deps.auth?.get(m.auth) : null;
     if (!entry) throw new UserError(`${m.name}: auth profile not found: ${m.auth}`);
+    if (!def.auth.kinds.includes(entry.profile.kind))
+      throw new UserError(
+        `${m.name}: ${m.agent} does not support ${entry.profile.kind} auth profiles`,
+      );
     if (entry.profile.harness !== m.agent)
       throw new UserError(
         `${m.name}: auth profile ${m.auth} is for ${entry.profile.harness}, not ${m.agent}`,

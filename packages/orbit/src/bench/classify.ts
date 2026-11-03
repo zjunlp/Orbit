@@ -36,6 +36,9 @@ export function solveVerdict(solve: Run): {
       evaluation: "invalid",
       issue: `environment failed: ${solve.reason ?? "not started"}`,
     };
+  // The Agent CLI could not be installed in the container: the environment failed, not the method.
+  if (solve.reason?.startsWith("Agent install failed"))
+    return { verify: false, evaluation: "invalid", issue: `environment failed: ${solve.reason}` };
   // Timeouts and failures are the method's result; whatever it left behind is verified.
   return { verify: true };
 }

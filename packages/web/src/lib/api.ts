@@ -1,6 +1,7 @@
 // Typed fetch helpers for the daemon API. Types come from the shared contracts (type-only import,
 // so zod is not bundled); the daemon validates, the Web trusts its own daemon.
 import type {
+  AgentList,
   Artifacts,
   AuthProfile,
   AuthTestResult,
@@ -133,6 +134,7 @@ export const api = {
   ledger: () => req<Ledger>("/ledger"),
   doctor: () => req<DoctorReport>("/doctor"),
   authProfiles: () => req<{ profiles: AuthProfile[] }>("/auth").then((r) => r.profiles),
+  agents: () => req<AgentList>("/agents").then((r) => r.agents),
   authRemove: (name: string) => req<{ ok: boolean }>(`/auth/${enc(name)}`, { method: "DELETE" }),
   authTest: (name: string) =>
     req<AuthTestResult>(`/auth/${enc(name)}/test`, { method: "POST", body: "{}" }),

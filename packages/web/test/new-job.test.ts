@@ -5,7 +5,7 @@ import type {
   BenchTask,
   Method,
 } from "@zjunlp/orbit/contracts";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   buildMethods,
   type EvaluationFields,
@@ -190,4 +190,23 @@ it("detects registration changes against saved conditions and treats missing his
   ).toBe(true);
   expect(registrationChanged(source, { ...registration, adapter: "/different.py" })).toBe(true);
   expect(registrationChanged({ ...source, benchmarkSnapshot: undefined }, registration)).toBeNull();
+});
+
+describe("registered Agent methods", () => {
+  it("lists registered Agents between the special kinds and checks capabilities like the daemon", async () => {
+    const { capabilityAllows, isCliAgent, methodTypes } = await import(
+      "../src/pages/bench/new-job.ts"
+    );
+    expect(methodTypes(["codex", "kimi-cli", "external"])).toEqual([
+      "empty",
+      "external",
+      "codex",
+      "kimi-cli",
+      "oracle",
+    ]);
+    expect(isCliAgent("kimi-cli")).toBe(true);
+    expect(isCliAgent("oracle")).toBe(false);
+    expect(capabilityAllows(["codex"], "kimi-cli")).toBe(false);
+    expect(capabilityAllows(["cli"], "kimi-cli")).toBe(true);
+  });
 });

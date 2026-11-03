@@ -411,7 +411,7 @@ export const BUILTIN_SEEDS: AgentDefinitionInput[] = [
     },
     command: {
       run: ["dsh", "headless", "{instruction}"],
-      resume: ["dsh", "headless", "--resume", "{session}", "{instruction}"],
+      resume: ["dsh", "headless", "--session-id", "{session}", "{instruction}"],
     },
     capabilities: { oneShot: true, multiTurn: true, mcp: true, gui: false },
   },

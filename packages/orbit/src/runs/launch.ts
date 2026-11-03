@@ -97,6 +97,13 @@ export async function launch(ctx: Context, id: string): Promise<void> {
       const h = await ctx.prepareAuth(run, dirs);
       const imagePath = run.spec.env.PATH ?? (await docker.imagePath(image));
       if (h.cli) h.env.PATH = containerPath(h.cli.pathDirs, imagePath);
+      if (h.setup) {
+        // An Agent that installs inside the run: the install script runs before the command, and a
+        // failure is recorded as the environment's (see `AGENT_INSTALL_FAILED`), not the method's.
+        writeFileSync(join(dirs.agent, AGENT_SETUP_FILE), `${h.setup}\n`, { mode: 0o700 });
+        spec.command = withAgentSetup(spec.command);
+        ctx.store.addEvent(run.id, "harness", "installing the Agent CLI inside the container");
+      }
       spec.mounts.push(...h.mounts);
       Object.assign(spec.env, h.env);
       Object.assign(secretEnv, h.secretEnv);
@@ -148,6 +155,28 @@ export function passEnv(ctx: Context, run: Run): Record<string, string> {
     else ctx.store.addEvent(run.id, "env", `${k} is not set in the daemon environment`);
   }
   return out;
+}
+
+/** The Agent's install script, in the Agent home (mounted at /orbit/agent). */
+export const AGENT_SETUP_FILE = ".orbit-setup.sh";
+/** Written by the wrapper when the install script fails; the run is then an environment failure. */
+export const AGENT_SETUP_FAILED = ".orbit-setup.failed";
+/** Reason prefix of a run whose Agent could not be installed. */
+export const AGENT_INSTALL_FAILED = "Agent install failed";
+
+/**
+ * Run the Agent install script, then the command. npm and uv install into the Agent home and the
+ * user's ~/.local, which are put first on PATH so the CLI is found without root.
+ */
+export function withAgentSetup(command: string[]): string[] {
+  const script = [
+    "a=/orbit/agent",
+    `export PATH="\${NPM_CONFIG_PREFIX:+$NPM_CONFIG_PREFIX/bin:}\${HOME:-/tmp}/.local/bin:$PATH"`,
+    `sh "$a/${AGENT_SETUP_FILE}" > "$a/setup.log" 2>&1; c=$?`,
+    `if [ "$c" -ne 0 ]; then echo "$c" > "$a/${AGENT_SETUP_FAILED}"; echo "[orbit] ${AGENT_INSTALL_FAILED} (exit $c):" >&2; tail -n 40 "$a/setup.log" >&2; exit 125; fi`,
+    'exec "$@"',
+  ].join("\n");
+  return ["/bin/sh", "-c", script, "sh", ...command];
 }
 
 export async function prepareAuth(ctx: Context, run: Run, dirs: RunDirs): Promise<Prepared> {

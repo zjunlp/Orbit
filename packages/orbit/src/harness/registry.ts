@@ -5,6 +5,7 @@ import {
   type AgentDefinitionInput,
   type AgentInfo,
   BUILTIN_AGENTS,
+  RESERVED_METHOD_AGENTS,
   AgentDefinition as schema,
 } from "../contracts/index.ts";
 import { exec } from "../lib/exec.ts";
@@ -223,6 +224,8 @@ export class AgentRegistry {
       .parse(input) as AgentDefinitionInput;
     if ((BUILTIN_AGENTS as readonly string[]).includes(parsed.name))
       throw new AgentError(`${parsed.name} is built in and cannot be replaced`);
+    if ((RESERVED_METHOD_AGENTS as readonly string[]).includes(parsed.name))
+      throw new AgentError(`${parsed.name} is a reserved method kind, not an Agent name`);
     const problem = definitionProblem(parsed);
     if (problem) throw new AgentError(problem);
     const agents = [...this.user().filter((a) => a.name !== parsed.name), parsed].sort((a, b) =>
