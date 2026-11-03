@@ -396,3 +396,19 @@ R1 的真实验收只证明实际测试过的 Agent × adapter × task 路线；
 | 实测 | Harbor 格式小任务：empty 0、oracle 1、dsh（容器内安装 0.2.1-rc.5，宿主为 rc.2）1/1 valid，日志无密钥，清理完成 |
 | 实测中发现 | 默认 npm registry 在本机网络下安装 19 分钟未完成；通过 auth profile 的 `NPM_CONFIG_REGISTRY` 解决。版本固定与安装缓存列为待办 |
 | 未验证 | Docker 中真实安装失败；pi、opencode、kimi-cli 等其余 install 型 Agent |
+
+## R2–R8 回写记录
+
+R2–R8 及复审补充已回写 [design.md](design.md) §9（与 §7 Method / capabilities 说明）：
+
+| 条目 | 位置 |
+| --- | --- |
+| R2 评测身份、官方聚合层、报告修订 | §9.1a、§9.7 |
+| R3 兼容清单先行 | §9.6 第 0 条 |
+| R4 按角色分配、native 承载（vla-eval `--no-docker` 于 main） | §9.4 |
+| R5 结束阶段持久化、协议能力分支 | §9.5、§9.6 第 8 条 |
+| R6 路线重排 | §9.13 |
+| R7 状态权威与私有执行记录 | §9.0、§9.1 |
+| R8 L1 改为声明的正负校准 | §9.10 |
+
+回写内容仍是规划，未实现；实现状态以 status.md 与任务记录为准。本文自此作为审查历史保留，不再是待决事项。
