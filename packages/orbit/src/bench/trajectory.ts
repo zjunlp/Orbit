@@ -48,16 +48,27 @@ export function importEfeTrajectory(input: EfeTrajectoryInput): EpisodeTrajector
   for (let step = stride; step < count; step += stride) steps.add(step);
   for (const call of calls) steps.add(call.control_steps as number);
   if (steps.size > 10_000) throw new Error("EFE trajectory has too many call boundaries");
+  if (calls.length > 100_000) throw new Error("EFE journal has too many calls");
   const messageTimes = input.messages.map((m) => (m.at ? Date.parse(m.at) / 1000 : Number.NaN));
+  // Messages in time order, matched to calls with one forward pass.
+  const order = messageTimes
+    .flatMap((time, i) => (Number.isFinite(time) ? [i] : []))
+    .sort((a, b) => (messageTimes[a] as number) - (messageTimes[b] as number) || a - b);
   const refs = new Map<number, number[]>();
   let lastTime = -Infinity;
+  let next = 0;
   for (const call of calls) {
-    const indexes = messageTimes.flatMap((time, i) =>
-      time > lastTime && time <= (call.ts as number) ? [i] : [],
-    );
+    const ts = call.ts as number;
+    const indexes: number[] = [];
+    while (next < order.length && (messageTimes[order[next] as number] as number) <= ts) {
+      if ((messageTimes[order[next] as number] as number) > lastTime)
+        indexes.push(order[next] as number);
+      next++;
+    }
+    indexes.sort((a, b) => a - b);
     const step = call.control_steps as number;
     refs.set(step, [...(refs.get(step) ?? []), ...indexes].slice(-200));
-    lastTime = call.ts as number;
+    lastTime = Math.max(lastTime, ts);
   }
   const tail = messageTimes.flatMap((time, i) => (time > lastTime ? [i] : []));
   refs.set(count, [...(refs.get(count) ?? []), ...tail].slice(-200));

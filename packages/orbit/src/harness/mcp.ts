@@ -4,21 +4,19 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "smol-toml";
 import { type AgentDefinition, type AgentTool, AgentTools } from "../contracts/index.ts";
+import { readRegular, writePrivateFile } from "../lib/safe-fs.ts";
 import { AgentError } from "./registry.ts";
 
 /** Reserved stdio tool declarations in Orbit-generated method bundles. */
 export const MCP_TOOLS_FILE = ".orbit-mcp-tools.json";
 
-function read(file: string): string {
-  return existsSync(file) ? readFileSync(file, "utf8") : "";
-}
+const read = readRegular;
 
 function codexDocument(text: string) {
   try {
@@ -114,12 +112,12 @@ export function agentToolsBundle(
 /** Called after the method bundle and the current auth config reach the Agent home. */
 export function installAgentTools(def: AgentDefinition, home: string): void {
   const metadata = join(home, MCP_TOOLS_FILE);
-  if (!existsSync(metadata)) return;
-  const tools = AgentTools.parse(JSON.parse(readFileSync(metadata, "utf8")));
+  const declared = readRegular(metadata);
+  if (!declared) return;
+  const tools = AgentTools.parse(JSON.parse(declared));
   if (def.command.mcp.kind === "none") throw new AgentError(`${def.name} has no MCP wiring`);
   const file = join(home, configName(def));
   const config = renderMcpConfig(def, tools, read(file));
-  writeFileSync(file, config, { mode: 0o600 });
-  chmodSync(file, 0o600);
+  writePrivateFile(file, config);
   rmSync(metadata);
 }

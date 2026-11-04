@@ -67,7 +67,12 @@ class CuaLiteBackend:
         if "id" not in call:
             self.call_number += 1
             call["id"] = f"orbit-gui-{self.call_number}"
-        reply = self.loop.run_until_complete(self.env.step([call]))
+        try:
+            reply = self.loop.run_until_complete(self.env.step([call]))
+        except (TypeError, ValueError, KeyError) as exc:
+            # The native executor rejected the Agent's arguments: report it like a validation error
+            # (the Agent may retry), not as an environment failure that would void the trial.
+            raise service.RequestError(400, f"Native executor rejected the call: {type(exc).__name__}: {exc}"[:500]) from None
         frames = [image for result in reply.results for image in result.images]
         errors = [result.error for result in reply.results if result.error]
         self.obs = {"screenshot": frames[-1] if frames else self.obs["screenshot"],

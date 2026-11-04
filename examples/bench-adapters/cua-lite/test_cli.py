@@ -173,6 +173,28 @@ class CliTests(unittest.TestCase):
             backend.step(json.dumps({**call, 'id': 'caller-supplied'}))
         self.assertEqual(identifiers, ['orbit-gui-1', 'orbit-gui-2', 'caller-supplied'])
 
+    def test_native_argument_errors_are_the_agents_not_an_environment_failure(self):
+        backend = CuaLiteBackend({})
+        self.addCleanup(backend.close)
+        backend.obs = {'screenshot': b'old fixture', 'goal': 'fixture goal'}
+        async def step(calls):
+            raise ValueError('coordinate out of range')
+        async def broken(calls):
+            raise RuntimeError('browser crashed')
+        async def close():
+            pass
+        validator = SimpleNamespace(validate_lite_tool_call=lambda call, where, require_id: None)
+        call = json.dumps({'type': 'function', 'function': {'name': 'computer', 'arguments': {}}})
+        with patch.dict(sys.modules, {'lite.core.tools.calls': validator}):
+            backend.env = SimpleNamespace(step=step, close=close)
+            with self.assertRaises(service.RequestError) as caught:
+                backend.step(call)
+            self.assertEqual(caught.exception.status, 400)
+            self.assertIn('coordinate out of range', str(caught.exception))
+            backend.env = SimpleNamespace(step=broken, close=close)
+            with self.assertRaises(RuntimeError):
+                backend.step(call)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,8 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import { type AuthEntry, parseCodexLogin, secretValues } from "../auth/index.ts";
 import type { AgentDefinition, Method } from "../contracts/index.ts";
+import { readRegular, realDirs, writePrivateFile } from "../lib/safe-fs.ts";
 import { preserveCodexMcp } from "./mcp.ts";
 import { AgentError, type HostCli, renderCommand } from "./registry.ts";
 
@@ -60,10 +61,8 @@ export function codexConfig(entry: AuthEntry): string {
   return `${lines.join("\n")}\n`;
 }
 
-function writePrivate(file: string, text: string): void {
-  writeFileSync(file, text, { mode: 0o600 });
-  chmodSync(file, 0o600);
-}
+/** The Agent home is shared with the container (and restored from checkpoints): never follow links. */
+const writePrivate = writePrivateFile;
 
 /** Fill `{model}`, `{baseUrl}` and `{home}` in a definition's declared environment. */
 function agentEnv(def: AgentDefinition, entry: AuthEntry, home: string): Record<string, string> {
@@ -105,7 +104,8 @@ export async function prepareAgent(
     throw new HarnessError(`${def.name} has no ${p.kind} secret variable`);
 
   const dir = agentHomeDir(def, agentDir);
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(agentDir, { recursive: true });
+  realDirs(agentDir, dir);
   const home = def.auth.home ?? `${AGENT_HOME}/${def.name}`;
   const env: Record<string, string> = { ...p.env, DISABLE_AUTOUPDATER: "1" };
   const secretEnv: Record<string, string> = {};
@@ -115,10 +115,7 @@ export async function prepareAgent(
   if (def.name === "codex") {
     env.CODEX_HOME = home;
     const config = join(dir, "config.toml");
-    writePrivate(
-      config,
-      preserveCodexMcp(codexConfig(entry), existsSync(config) ? readFileSync(config, "utf8") : ""),
-    );
+    writePrivate(config, preserveCodexMcp(codexConfig(entry), readRegular(config)));
     if (p.kind === "login") writePrivate(join(dir, "auth.json"), entry.secret);
     else if (p.kind === "api-key")
       writePrivate(join(dir, "auth.json"), JSON.stringify({ OPENAI_API_KEY: entry.secret }));
@@ -189,7 +186,7 @@ export function finishHarness(
   if (entry?.profile.harness === "codex" && entry.profile.kind === "login") {
     const file = join(agentDir, "codex", "auth.json");
     try {
-      const text = readFileSync(file, "utf8");
+      const text = readRegular(file);
       const now = parseCodexLogin(text);
       const before = parseCodexLogin(entry.secret);
       if ((now.last_refresh ?? "") > (before.last_refresh ?? "")) out.refreshed = text;
@@ -197,9 +194,13 @@ export function finishHarness(
   }
   for (const f of CREDENTIAL_FILES) rmSync(join(agentDir, f), { force: true });
   // Clear obvious key files in the registered Agent's declared home too.
-  if (def)
-    for (const f of GENERIC_CREDENTIALS)
-      rmSync(join(agentHomeDir(def, agentDir), f), { force: true });
+  if (def) {
+    let home: string | null = null;
+    try {
+      home = agentHomeDir(def, agentDir);
+    } catch {}
+    if (home) for (const f of GENERIC_CREDENTIALS) rmSync(join(home, f), { force: true });
+  }
   return out;
 }
 

@@ -228,6 +228,12 @@ export class AgentRegistry {
       throw new AgentError(`${parsed.name} is a reserved method kind, not an Agent name`);
     const problem = definitionProblem(parsed);
     if (problem) throw new AgentError(problem);
+    const home = parsed.auth?.home;
+    if (
+      home !== undefined &&
+      (!/^\/orbit\/agent\/[^/]/.test(home) || home.split("/").includes(".."))
+    )
+      throw new AgentError(`${parsed.name}: auth.home must be a directory below /orbit/agent`);
     const agents = [...this.user().filter((a) => a.name !== parsed.name), parsed].sort((a, b) =>
       a.name.localeCompare(b.name),
     );

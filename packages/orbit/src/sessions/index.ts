@@ -26,15 +26,44 @@ function clip(text: string, max: number): { text: string; truncated?: boolean } 
   return text.length <= max ? { text } : { text: text.slice(0, max), truncated: true };
 }
 
+/** Transcripts can be written by the Agent itself: bound what one read may hold. */
+const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
+const MAX_LINE_BYTES = 8 * 1024 * 1024;
+
 async function* jsonLines(file: string): AsyncGenerator<Record<string, unknown>> {
-  const rl = createInterface({ input: createReadStream(file, "utf8"), crlfDelay: Infinity });
-  for await (const line of rl) {
-    if (!line.trim()) continue;
+  let pending = "";
+  let skipping = false;
+  let read = 0;
+  const parse = (line: string) => {
+    if (!line.trim()) return null;
     try {
       const v = JSON.parse(line);
-      if (v && typeof v === "object") yield v as Record<string, unknown>;
-    } catch {}
+      return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+  for await (const chunk of createReadStream(file, { encoding: "utf8", highWaterMark: 1 << 20 })) {
+    read += (chunk as string).length;
+    const parts = (pending + (chunk as string)).split("\n");
+    pending = parts.pop() ?? "";
+    for (const line of parts) {
+      // The tail of an oversized line is dropped with it.
+      if (skipping) {
+        skipping = false;
+        continue;
+      }
+      const v = parse(line);
+      if (v) yield v;
+    }
+    if (pending.length > MAX_LINE_BYTES) {
+      pending = "";
+      skipping = true;
+    }
+    if (read > MAX_TRANSCRIPT_BYTES) return;
   }
+  const v = skipping ? null : parse(pending);
+  if (v) yield v;
 }
 
 const str = (v: unknown) =>

@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import {
   appendFileSync,
-  cpSync,
+  copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   realpathSync,
   rmSync,
@@ -16,6 +17,7 @@ import * as docker from "../executor/docker.ts";
 import { agentHomeDir, containerPath, type Prepared, prepareAgent } from "../harness/index.ts";
 import { installAgentTools } from "../harness/mcp.ts";
 import { nowIso } from "../lib/ids.ts";
+import { copyTreeInto, readRegular, realDirs } from "../lib/safe-fs.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, containerName, GENERIC_DIRS, usesRunNetworks } from "./execution.ts";
 import { keepsContainer, runCommand, stopMain, WatchStopped, writePhaseScript } from "./phases.ts";
@@ -331,16 +333,17 @@ export function containerSpec(
  */
 export function installBundle(bundle: string, agentDir: string, def: AgentDefinition) {
   const home = agentHomeDir(def, agentDir);
-  mkdirSync(home, { recursive: true });
-  cpSync(bundle, home, { recursive: true, dereference: true });
+  mkdirSync(agentDir, { recursive: true });
+  realDirs(agentDir, home);
+  copyTreeInto(realpathSync(bundle), home);
   installAgentTools(def, home);
   const names = ["AGENTS.md", "CLAUDE.md"];
   for (const [from, to] of [
     ["AGENTS.md", "CLAUDE.md"],
     ["CLAUDE.md", "AGENTS.md"],
   ] as const)
-    if (!existsSync(join(home, to)) && existsSync(join(home, from)))
-      cpSync(join(home, from), join(home, to));
+    if (!lstatSync(join(home, to), { throwIfNoEntry: false }) && readRegular(join(home, from)))
+      copyFileSync(join(home, from), join(home, to));
   void names;
 }
 
