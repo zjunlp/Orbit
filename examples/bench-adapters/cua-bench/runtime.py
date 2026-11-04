@@ -12,6 +12,18 @@ import time
 from evidence import digest, read, write
 
 
+async def close_connections(result, session, sandbox):
+    errors = {}
+    for name, resource, method in [('session', session, 'close'), ('sandbox', sandbox, 'disconnect')]:
+        if resource is not None:
+            try:
+                await getattr(resource, method)()
+            except Exception as error:
+                errors[name] = type(error).__name__
+    if errors:
+        result['connection_close_errors'] = errors
+
+
 async def run(plan_path, output):
     output.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(plan_path, output / 'plan.json')
@@ -85,13 +97,7 @@ async def run(plan_path, output):
         result.update(failure=phase, error_type=type(error).__name__)
         print(f'Cua {phase}: {type(error).__name__}', file=sys.stderr)
     finally:
-        try:
-            if session is not None:
-                await session.close()
-            if sandbox is not None:
-                await sandbox.disconnect()
-        except Exception as error:
-            result.update(failure='server_unreachable', error_type=type(error).__name__)
+        await close_connections(result, session, sandbox)
         result['elapsed_sec'] = time.monotonic() - started
         # Datetime values are native timing metadata, converted without changing the reward.
         import json

@@ -1,4 +1,5 @@
 """Explicit source/result fixtures; these tests never start a desktop or call a model."""
+import asyncio
 import json
 from pathlib import Path
 import sys
@@ -10,6 +11,7 @@ HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 import adapter
 import evidence
+import runtime
 from trajectory import capture as capture_frames
 
 
@@ -105,6 +107,37 @@ class AdapterTest(unittest.TestCase):
                                                 'failure_mode': 'FailureMode.API_ERROR'}))
         self.assertTrue(report['invalid'])
         self.assertEqual(report['failure'], 'model_unavailable')
+
+    def test_close_errors_do_not_replace_the_evaluation_and_both_closes_are_attempted(self):
+        calls = []
+
+        class BrokenSession:
+            async def close(self):
+                calls.append('session')
+                raise RuntimeError('explicit session close fixture')
+
+        class BrokenSandbox:
+            async def disconnect(self):
+                calls.append('sandbox')
+                raise ConnectionError('explicit sandbox close fixture')
+
+        for failure in (None, 'scorer_error'):
+            out = self.capture({'reward': 1, 'evaluation': [1], 'success': True}, failure)
+            result = evidence.read(out / 'result.json')
+            asyncio.run(runtime.close_connections(result, BrokenSession(), BrokenSandbox()))
+            self.assertEqual(result['connection_close_errors'],
+                             {'session': 'RuntimeError', 'sandbox': 'ConnectionError'})
+            evidence.write(out / 'result.json', result)
+            evidence.write(out / 'manifest.json',
+                           {n: evidence.digest(out / n) for n in ('plan.json', 'result.json')})
+            report = evidence.validate(out)
+            if failure:
+                self.assertTrue(report['invalid'])
+                self.assertEqual(report['failure'], failure)
+            else:
+                self.assertFalse(report['invalid'])
+                self.assertEqual(report['score'], 1)
+        self.assertEqual(calls, ['session', 'sandbox', 'session', 'sandbox'])
 
     def test_missing_changed_and_nonfinite_evidence(self):
         out = self.capture()
