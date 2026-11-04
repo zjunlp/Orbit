@@ -1,4 +1,11 @@
-import type { Lease, NodeResources, ResourceRequest, RoleAllocation } from "../contracts/index.ts";
+import type {
+  DeviceAllocation,
+  DeviceRequest,
+  Lease,
+  NodeResources,
+  ResourceRequest,
+  RoleAllocation,
+} from "../contracts/index.ts";
 import type { RoleRequest } from "../contracts/runs.ts";
 
 /** Keep this fraction of host memory out of leases for the OS and the daemon. */
@@ -36,6 +43,12 @@ export function infeasible(req: ResourceRequest, r: NodeResources): string | nul
   const maxMem = r.memory.totalGB * MEM_LEASABLE_FRACTION;
   if (req.memGB > maxMem)
     return `needs ${req.memGB} GB memory but at most ${Math.floor(maxMem)} GB is leasable`;
+  for (const d of deviceTotals(req.devices ?? [])) {
+    const have = (r.devices ?? []).find((x) => x.class === d.class);
+    // A shared class (kvm, dri, tun) is present or not; any number of runs and roles use it.
+    if (!have || have.count < (have.shared ? 1 : d.count))
+      return `needs ${d.count} ${d.class} device(s), but this node has ${have?.count ?? 0}${have?.detail ? ` (${have.detail})` : ""}`;
+  }
   return null;
 }
 
@@ -71,6 +84,8 @@ export function allocate(req: ResourceRequest, r: NodeResources, leases: Lease[]
     const free = Math.floor(Math.min(leasable, r.memory.availableGB));
     return { ok: false, reason: `waiting for memory (${free}/${req.memGB} GB free)` };
   }
+  const devices = allocateDevices(req.devices ?? [], r, leases);
+  if (!devices.ok) return devices;
   if (req.gpus === 0) return { ok: true, gpuIds: [] };
 
   const leased = new Set(leases.flatMap((l) => l.gpuIds));
@@ -87,15 +102,88 @@ export function allocate(req: ResourceRequest, r: NodeResources, leases: Lease[]
   return { ok: true, gpuIds: free.slice(0, req.gpus).map((g) => g.uuid) };
 }
 
+function deviceTotals(requests: DeviceRequest[]): DeviceRequest[] {
+  const totals = new Map<string, number>();
+  for (const d of requests) totals.set(d.class, (totals.get(d.class) ?? 0) + d.count);
+  return [...totals].map(([cls, count]) => ({ class: cls, count }));
+}
+
+/** Device paths are assigned once, then carried by the lease to the container. */
+function allocateDevices(
+  requests: DeviceRequest[],
+  r: NodeResources,
+  leases: Lease[],
+  reserved: DeviceAllocation[] = [],
+): { ok: true; devices: DeviceAllocation[] } | { ok: false; reason: string } {
+  const active = leases.filter((l) => l.state === "active");
+  const held = active.flatMap((l) => l.roles.flatMap((role) => role.devices ?? []));
+  const out: DeviceAllocation[] = [];
+  for (const req of deviceTotals(requests)) {
+    const node = (r.devices ?? []).find((d) => d.class === req.class);
+    if (node?.shared) {
+      // Shared device nodes are not consumed: present is enough, every run gets the same nodes.
+      if (node.count < 1)
+        return { ok: false, reason: `waiting for devices (${req.class}: none present)` };
+      out.push({ ...req, paths: node.paths.slice(0, req.count) });
+      continue;
+    }
+    const others = held.filter((d) => d.class === req.class);
+    const sameRun = reserved.filter((d) => d.class === req.class);
+    const used = [...others, ...sameRun];
+    const free =
+      node?.exclusive && others.length
+        ? 0
+        : Math.max(0, (node?.count ?? 0) - used.reduce((n, d) => n + d.count, 0));
+    const owners = active
+      .filter((l) => l.roles.some((role) => role.devices?.some((d) => d.class === req.class)))
+      .map((l) => l.runId);
+    if (free < req.count)
+      return {
+        ok: false,
+        reason: `waiting for devices (${req.class}: ${free}/${req.count} free${owners.length ? `; held by ${owners.join(", ")}` : ""}${node?.exclusive ? "; exclusive" : ""})`,
+      };
+    const taken = new Set([...held, ...reserved, ...out].flatMap((d) => d.paths));
+    const paths = (node?.paths ?? []).filter((p) => !taken.has(p));
+    // Older count-only leases cannot safely identify a free physical device.
+    const unknown = used.reduce((n, d) => n + Math.max(0, d.count - d.paths.length), 0);
+    const candidates = unknown ? [] : [...new Set(paths)];
+    if (node?.paths.length && candidates.length < req.count)
+      return {
+        ok: false,
+        reason: `waiting for devices (${req.class}: ${candidates.length}/${req.count} device paths free)`,
+      };
+    out.push({ ...req, paths: candidates.slice(0, req.count) });
+  }
+  return { ok: true, devices: out };
+}
+
+const DECLARED_GPU_CAPABILITIES = new Set(["egl", "vulkan", "cuda"]);
+
+function gpuFeatures(role: RoleRequest): { models: string[]; declared: string[] } {
+  const features = [...new Set((role.gpuFeatures ?? []).map((x) => x.trim().toLowerCase()))];
+  return {
+    models: features.filter((x) => x && !DECLARED_GPU_CAPABILITIES.has(x)),
+    declared: features.filter((x) => DECLARED_GPU_CAPABILITIES.has(x)),
+  };
+}
+
+/** These declarations are retained, but a GPU name cannot verify graphics or CUDA support. */
+export function gpuCapabilityWarnings(roles: RoleRequest[]): string[] {
+  return roles.flatMap((role) => {
+    const { declared } = gpuFeatures(role);
+    return role.gpus > 0 && declared.length
+      ? [`role ${role.role}: ${declared.join(", ")} capabilities declared, not verified`]
+      : [];
+  });
+}
+
 export type RoleAllocationResult =
   | { ok: true; gpuIds: string[]; roles: RoleAllocation[] }
   | { ok: false; reason: string };
 
 /**
- * Allocate a run's roles (its own container, a simulator, a policy server) together (design §9.4).
- * Roles never share a card, so a heterogeneous requirement (a RTX card for the simulator, a large
- * card for the policy) is satisfied or the run waits: a half-started run would hold GPUs while
- * waiting for the rest. CPU and memory were already summed by `leaseRequest`.
+ * Allocate all roles together, without sharing cards. Matching may move an earlier unrestricted
+ * role to another card so it cannot strand a later role requiring a specific model or GPU ID.
  */
 export function allocateRoles(
   roles: RoleRequest[],
@@ -103,45 +191,97 @@ export function allocateRoles(
   leases: Lease[],
 ): RoleAllocationResult {
   const total = roles.reduce((n, x) => n + x.gpus, 0);
+  const warnings = gpuCapabilityWarnings(roles);
+  const waiting = (reason: string): RoleAllocationResult => ({
+    ok: false,
+    reason: `${reason}${warnings.length ? `; ${warnings.join("; ")}` : ""}`,
+  });
   const whole = allocate(
     {
       gpus: total,
       cpus: roles.reduce((n, x) => n + x.cpus, 0),
       memGB: roles.reduce((n, x) => n + x.memGB, 0),
+      devices: roles.flatMap((x) => x.devices ?? []),
     } as ResourceRequest,
     r,
     leases,
   );
-  if (!whole.ok) return whole;
-  if (total === 0)
-    return {
-      ok: true,
-      gpuIds: [],
-      roles: roles.map((x) => ({ role: x.role, gpuIds: [], cpus: x.cpus, memGB: x.memGB })),
-    };
+  if (
+    !whole.ok &&
+    (!whole.reason.startsWith("waiting for GPUs") ||
+      !roles.some((role) => gpuFeatures(role).models.length))
+  )
+    return waiting(whole.reason);
 
   const leased = new Set(leases.flatMap((l) => l.gpuIds));
-  const taken = new Set<string>();
-  const out: RoleAllocation[] = [];
-  for (const role of roles) {
-    const free = r.gpus
-      .filter((g) => !leased.has(g.uuid) && !taken.has(g.uuid) && g.available)
+  const candidates = roles.map((role) => {
+    const { models } = gpuFeatures(role);
+    return r.gpus
+      .filter((g) => !leased.has(g.uuid) && g.available)
       .filter((g) => gpuMemFits(g, role as ResourceRequest))
-      .filter(
-        (g) =>
-          !role.gpuIds?.length || role.gpuIds.some((id) => id === g.uuid || id === String(g.index)),
-      )
-      .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index);
-    if (free.length < role.gpus) {
-      const named = (role as RoleRequest & { gpuFeatures?: string[] }).gpuFeatures ?? [];
-      return {
-        ok: false,
-        reason: `waiting for GPUs (role ${role.role}: ${free.length}/${role.gpus} free${named.length ? ` for ${named.join(",")}` : ""})`,
-      };
+      .filter((g) => !role.gpuIds?.length || matchesId(g, role.gpuIds))
+      .filter((g) => models.every((name) => g.name.toLowerCase().includes(name)))
+      .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index)
+      .map((g) => g.uuid);
+  });
+  const shortage = (i: number, free: number) => {
+    const role = roles[i] as RoleRequest;
+    const { models } = gpuFeatures(role);
+    return waiting(
+      `waiting for GPUs (role ${role.role}: ${models.length ? `needs ${models.join(", ")}, ` : ""}${free}/${role.gpus} matching cards free)`,
+    );
+  };
+  for (const [i, role] of roles.entries())
+    if ((candidates[i]?.length ?? 0) < role.gpus) return shortage(i, candidates[i]?.length ?? 0);
+  if (!whole.ok) return waiting(whole.reason);
+
+  const slots = roles.flatMap((role, i) => Array.from({ length: role.gpus }, () => i));
+  const owner = new Map<string, number>();
+  const assign = (slot: number, seen: Set<string>): boolean => {
+    const available = candidates[slots[slot] as number] ?? [];
+    // Try unused cards first, preserving the previous least-used-card preference.
+    for (const card of available) {
+      if (!seen.has(card) && !owner.has(card)) {
+        owner.set(card, slot);
+        return true;
+      }
     }
-    const picked = free.slice(0, role.gpus).map((g) => g.uuid);
-    for (const id of picked) taken.add(id);
-    out.push({ role: role.role, gpuIds: picked, cpus: role.cpus, memGB: role.memGB });
+    for (const card of available) {
+      if (seen.has(card)) continue;
+      seen.add(card);
+      const previous = owner.get(card);
+      if (previous !== undefined && assign(previous, seen)) {
+        owner.set(card, slot);
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const [slot, role] of slots.entries())
+    if (!assign(slot, new Set())) {
+      const available = (candidates[role] ?? []).filter((card) => !owner.has(card)).length;
+      return shortage(role, available);
+    }
+  const out: RoleAllocation[] = [];
+  for (const [i, role] of roles.entries()) {
+    const devices = allocateDevices(
+      role.devices ?? [],
+      r,
+      leases,
+      out.flatMap((x) => x.devices),
+    );
+    if (!devices.ok) return waiting(`role ${role.role}: ${devices.reason}`);
+    const picked = (candidates[i] ?? []).filter((card) => {
+      const slot = owner.get(card);
+      return slot !== undefined && slots[slot] === i;
+    });
+    out.push({
+      role: role.role,
+      devices: devices.devices,
+      gpuIds: picked,
+      cpus: role.cpus,
+      memGB: role.memGB,
+    });
   }
   return { ok: true, gpuIds: out.flatMap((x) => x.gpuIds), roles: out };
 }

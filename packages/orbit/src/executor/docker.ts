@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -53,6 +54,8 @@ export interface ContainerSpec {
   labels: Record<string, string>;
   gpuIds: string[];
   gpuMode: GpuMode;
+  /** Concrete device nodes assigned to this container by its role lease. */
+  devices?: string[];
   /** Null: no limit (service containers without one). */
   cpus: number | null;
   memGB: number | null;
@@ -119,6 +122,7 @@ export function runArgs(s: ContainerSpec): string[] {
     // Hosts whose default runtime is nvidia would otherwise expose every GPU to CUDA images.
     args.push("-e", "NVIDIA_VISIBLE_DEVICES=void");
   }
+  for (const device of s.devices ?? []) args.push("--device", device);
   if (s.cpus !== null) args.push("--cpus", String(s.cpus));
   if (s.memGB !== null) {
     args.push("--memory", `${Math.ceil(s.memGB * 1024)}m`);
@@ -190,7 +194,18 @@ export const shellJoin = (argv: string[]) =>
 /** `--mount` is parsed as CSV: quote a field holding a comma or a quote. */
 const csvField = (f: string) => (/[",]/.test(f) ? `"${f.replace(/"/g, '""')}"` : f);
 
+const deadlines = new AsyncLocalStorage<number>();
+export function withDeadline<T>(deadline: number, action: () => Promise<T>): Promise<T> {
+  return deadlines.run(deadline, action);
+}
+
 async function docker(args: string[], timeoutMs = 60_000) {
+  const deadline = deadlines.getStore();
+  if (deadline !== undefined) {
+    const left = deadline - Date.now();
+    if (left <= 0) throw new Error("phase deadline exceeded");
+    timeoutMs = Math.max(1, Math.min(timeoutMs || Infinity, left));
+  }
   return exec("docker", args, { timeoutMs });
 }
 
@@ -436,7 +451,12 @@ export async function copyFromContainer(
   dest: string,
 ): Promise<string | null> {
   mkdirSync(dirname(dest), { recursive: true });
-  const r = await docker(["cp", `${id}:${src}`, dest], 600_000);
+  // Past a phase deadline `docker` throws; a copy reports it like any other failed path, so a
+  // collect loop records the rest as missing instead of stopping at the first one.
+  const r = await docker(["cp", `${id}:${src}`, dest], 600_000).catch((e: Error) => ({
+    code: 124,
+    stderr: e.message,
+  }));
   return r.code === 0 ? null : (r.stderr.trim().split("\n")[0] ?? `exit ${r.code}`);
 }
 
@@ -461,6 +481,11 @@ export async function execDetached(
 export async function execWait(id: string, argv: string[], timeoutMs = 60_000): Promise<number> {
   const r = await docker(["exec", id, ...argv], timeoutMs);
   return r.code;
+}
+
+/** Read a small command status from a running container. */
+export async function execRead(id: string, argv: string[], timeoutMs = 10_000) {
+  return docker(["exec", id, ...argv], timeoutMs);
 }
 
 /** Copy a host file or directory's contents to `dest` in a container; returns an error line or null. */

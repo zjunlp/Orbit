@@ -9,7 +9,7 @@ import {
 } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
 
-import { allocateRoles, infeasible } from "../resources/allocate.ts";
+import { allocateRoles, gpuCapabilityWarnings, infeasible } from "../resources/allocate.ts";
 import { diskCheck, lowFreeGB } from "../resources/disk.ts";
 import type { RunContext } from "./context.ts";
 import { joinReasons, nodeLeases, type RemoteNode, remoteBlocker } from "./placement.ts";
@@ -78,6 +78,8 @@ export async function preflight(ctx: Context, spec: RunSpec, full = false): Prom
     add("spec", false, invalid);
     return checks;
   }
+  for (const warning of gpuCapabilityWarnings(roleRequests(spec)))
+    add("GPU capabilities", true, warning, true);
   const nodes = ctx.remoteNodes();
   if (full) {
     if (spec.project)

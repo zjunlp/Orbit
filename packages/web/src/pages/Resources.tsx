@@ -191,6 +191,63 @@ function NodeDetail({
       </section>
 
       <section className="card">
+        <div className="card-h">Devices</div>
+        {!res.devices?.length ? (
+          <div className="card-b faint">No device capabilities reported.</div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Class</th>
+                <th>Available</th>
+                <th>Held by</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {res.devices.map((device) => {
+                const held = active.flatMap((lease) =>
+                  lease.roles.flatMap((role) =>
+                    (role.devices ?? [])
+                      .filter((d) => d.class === device.class)
+                      .map((d) => ({ lease, role: role.role, count: d.count, paths: d.paths })),
+                  ),
+                );
+                const used = held.reduce((n, d) => n + d.count, 0);
+                const free = device.exclusive && used ? 0 : Math.max(0, device.count - used);
+                return (
+                  <tr key={device.class}>
+                    <td className="mono">
+                      {device.class}
+                      {device.exclusive && <span className="faint"> · exclusive</span>}
+                    </td>
+                    <td className="num">
+                      {free} / {device.count}
+                    </td>
+                    <td>
+                      {held.length ? (
+                        held.map((d) => (
+                          <div key={`${d.lease.id}-${d.role}`} title={d.paths.join(", ")}>
+                            <RunCell id={d.lease.runId} run={byId.get(d.lease.runId)} />
+                            <span className="faint mono">
+                              {d.role} · {d.count} leased
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="faint">—</span>
+                      )}
+                    </td>
+                    <td className="muted">{device.detail ?? device.paths.join(", ")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card">
         <div className="card-h">
           Active leases <span className="sub">{active.length}</span>
         </div>
@@ -202,6 +259,7 @@ function NodeDetail({
               <tr>
                 <th>Run</th>
                 <th>GPUs</th>
+                <th>Devices</th>
                 <th className="r">CPUs</th>
                 <th className="r">Memory</th>
                 <th className="r">Held for</th>
@@ -217,6 +275,13 @@ function NodeDetail({
                     {l.gpuIds
                       .map((u) => `#${res.gpus.find((g) => g.uuid === u)?.index ?? "?"}`)
                       .join(" ") || "—"}
+                  </td>
+                  <td className="mono">
+                    {l.roles
+                      .flatMap((r) =>
+                        (r.devices ?? []).map((d) => `${r.role}: ${d.count} ${d.class}`),
+                      )
+                      .join(", ") || "—"}
                   </td>
                   <td className="r num">{l.cpus}</td>
                   <td className="r num">{l.memGB} GB</td>
@@ -337,6 +402,14 @@ function QueueTable({
         {rows.map((q, i) => {
           const r = byId.get(q.id);
           const rq = r?.spec.resources;
+          const devices = r
+            ? [
+                ...(r.spec.devices?.length ? r.spec.devices : (rq?.devices ?? [])),
+                ...r.spec.services.flatMap((s) => s.devices ?? []),
+              ]
+                .map((d) => `${d.count} ${d.class}`)
+                .join(", ")
+            : "";
           return (
             <tr key={q.id}>
               <td className="faint num">{i + 1}</td>
@@ -345,7 +418,7 @@ function QueueTable({
               </td>
               <td className="mono muted">
                 {rq
-                  ? `${rq.gpus} GPU${rq.gpuMemGB ? ` ≥${rq.gpuMemGB}G` : ""} · ${rq.cpus} CPU · ${rq.memGB} GB`
+                  ? `${rq.gpus} GPU${rq.gpuMemGB ? ` ≥${rq.gpuMemGB}G` : ""} · ${rq.cpus} CPU · ${rq.memGB} GB${devices ? ` · ${devices}` : ""}`
                   : "—"}
               </td>
               <td>{q.reason ?? "—"}</td>

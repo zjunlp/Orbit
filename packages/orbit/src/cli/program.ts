@@ -419,7 +419,10 @@ export function createProgram(deps: ProgramDeps, paths: OrbitPaths = orbitPaths(
 
   program
     .command("resources")
-    .description("show GPUs, CPU, memory, leases and the queue on this node and its workers")
+    .alias("ledger")
+    .description(
+      "show GPUs, devices, CPU, memory, leases and the queue on this node and its workers",
+    )
     .option("--json", "print JSON")
     .action(async (o: { json?: boolean }) => {
       const l = await (await client()).ledger();

@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { RunDirs } from "../config/paths.ts";
 import { type Run, type ServiceSpec, serviceOrder } from "../contracts/index.ts";
@@ -6,9 +6,11 @@ import * as docker from "../executor/docker.ts";
 import { safeJoin } from "../records/index.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, containerName, LOG_DRAIN_TIMEOUT_MS, sleep } from "./execution.ts";
+import { checkWatching, copyCollected, realDirs } from "./phases.ts";
 
 type Context = Pick<
   RunContext,
+  | "stopped"
   | "dirs"
   | "gpuMode"
   | "homeLabel"
@@ -60,6 +62,11 @@ export async function startServices(
   for (const s of serviceOrder(run.spec.services) ?? []) {
     if (ctl.cancel) return;
     await ctx.waitServices(id, s.dependsOn, ctl);
+    if (run.spec.hooks.some((h) => h.service === s.name)) {
+      const phaseDir = join(dirs.orbit, "phases", "services", s.name);
+      mkdirSync(phaseDir, { recursive: true });
+      chmodSync(phaseDir, 0o777);
+    }
     const spec = ctx.serviceContainer(run, s, images.get(s.name) as string);
     let containerId: string;
     try {
@@ -152,10 +159,24 @@ export function serviceContainer(
     ...(s.entrypoint ? { entrypoint: s.entrypoint } : {}),
     labels: { [docker.LABEL_PARENT]: run.id, [docker.LABEL_HOME]: ctx.homeLabel },
     gpuIds: s.role ? (run.lease?.roles.find((x) => x.role === s.role)?.gpuIds ?? []) : [],
+    devices: s.role
+      ? (run.lease?.roles.find((r) => r.role === s.role)?.devices.flatMap((d) => d.paths) ?? [])
+      : [],
     gpuMode: ctx.gpuMode,
     cpus: s.cpus ?? null,
     memGB: s.memGB ?? null,
-    mounts: s.binds.map((b) => ({ source: b.source, target: b.target, mode: b.mode })),
+    mounts: [
+      ...s.binds.map((b) => ({ source: b.source, target: b.target, mode: b.mode })),
+      ...(run.spec.hooks.some((h) => h.service === s.name)
+        ? [
+            {
+              source: join(ctx.dirs(run.id).orbit, "phases", "services", s.name),
+              target: `/tmp/orbit-${run.id}-phases`,
+              mode: "rw" as const,
+            },
+          ]
+        : []),
+    ],
     volumes: s.volumes.map((v) => ({
       name: volumeName(run.id, v.volume),
       target: v.target,
@@ -191,29 +212,47 @@ export function serviceContainer(
 export async function stopServices(ctx: Context, id: string): Promise<void> {
   if (ctx.mustGet(id).services.length === 0) return;
   const base = join(ctx.dirs(id).output, "services");
-  const failures = new Map<string, string>();
-  for (const svc of ctx.mustGet(id).services) {
-    if (!svc.containerId) continue;
-    const st = await docker.inspectContainer(svc.containerId).catch(() => null);
-    if (!st) failures.set(svc.name, "container disappeared");
-    else if (!st.running && (st.exitCode !== 0 || st.oomKilled))
-      failures.set(
-        svc.name,
-        `exited with code ${st.exitCode}${st.oomKilled ? " (out of memory)" : ""}`,
-      );
-    else if (st.health === "unhealthy") failures.set(svc.name, "unhealthy");
-  }
-  const run = ctx.mustGet(id);
-  for (const svc of run.services) svc.failure = failures.get(svc.name) ?? svc.failure;
-  ctx.save(run, "service", "stopping services");
-  await Promise.all(
-    run.services.map((s) => (s.containerId ? docker.stopContainer(s.containerId) : null)),
-  );
-  for (const svc of run.services) {
-    const spec = run.spec.services.find((x) => x.name === svc.name);
-    if (!svc.containerId || !spec) continue;
+  const initial = ctx.mustGet(id);
+  const order = (serviceOrder(initial.spec.services) ?? initial.spec.services).slice().reverse();
+  const stopErrors: string[] = [];
+  for (const spec of order) {
+    checkWatching(ctx);
+    let run = ctx.mustGet(id);
+    const svc = run.services.find((s) => s.name === spec.name);
+    if (!svc?.containerId) continue;
+    if (svc.stopState !== "done") {
+      try {
+        const st = await docker.inspectContainer(svc.containerId);
+        if (!svc.stopState) {
+          if (!st) svc.failure = "container disappeared";
+          else if (!st.running && (st.exitCode !== 0 || st.oomKilled))
+            svc.failure = `exited with code ${st.exitCode}${st.oomKilled ? " (out of memory)" : ""}`;
+          else if (st.health === "unhealthy") svc.failure = "unhealthy";
+        }
+        svc.stopState = "running";
+        ctx.save(run, "service", `${svc.name}: stopping`);
+        await docker.stopContainer(svc.containerId);
+        const stopped = await docker.inspectContainer(svc.containerId);
+        if (stopped?.running) throw new Error("container did not stop");
+        checkWatching(ctx);
+        run = ctx.mustGet(id);
+        const fresh = run.services.find((s) => s.name === svc.name) as typeof svc;
+        fresh.stopState = "done";
+        delete fresh.stopReason;
+        ctx.save(run, "service", `${svc.name}: stopped`);
+      } catch (e) {
+        checkWatching(ctx);
+        run = ctx.mustGet(id);
+        const fresh = run.services.find((s) => s.name === svc.name) as typeof svc;
+        fresh.stopState = "failed";
+        fresh.stopReason = (e as Error).message;
+        stopErrors.push(`${svc.name}: ${fresh.stopReason}`);
+        ctx.save(run, "service", `${svc.name}: stop failed (${fresh.stopReason})`);
+      }
+    }
     const dir = join(base, svc.name);
-    mkdirSync(dir, { recursive: true });
+    realDirs(ctx.dirs(id).output, dir);
+    writeFileSync(join(dir, "log"), "");
     const logs = docker.followLogs(svc.containerId, join(dir, "log"), ctx.redactor(run));
     await Promise.race([logs.done, sleep(LOG_DRAIN_TIMEOUT_MS)]);
     logs.proc.kill();
@@ -221,7 +260,7 @@ export async function stopServices(ctx: Context, id: string): Promise<void> {
     for (const p of spec.collect) {
       const dest = safeJoin(dir, `.${p}`);
       const err = dest
-        ? await docker.copyFromContainer(svc.containerId, p, dest)
+        ? await copyCollected(svc.containerId, p, dest, ctx.dirs(id).output)
         : "path leaves the output directory";
       if (err) missing.push(`${p} (${err})`);
     }
@@ -232,6 +271,7 @@ export async function stopServices(ctx: Context, id: string): Promise<void> {
       `${what}${missing.length ? `; missing ${missing.join("; ")}` : ""}`,
     );
   }
+  if (stopErrors.length) throw new Error(stopErrors.join("; "));
 }
 
 export async function cleanupServices(ctx: Context, run: Run): Promise<boolean> {

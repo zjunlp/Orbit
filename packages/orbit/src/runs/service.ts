@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { AuthStore } from "../auth/index.ts";
 import { type OrbitPaths, type RunDirs, runDirs } from "../config/paths.ts";
 import {
@@ -409,6 +409,8 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       usage: null,
       services: [],
       after: null,
+      phases: [],
+      stopRequested: null,
       sizeBytes: null,
       createdAt: nowIso(),
       startedAt: null,
@@ -784,7 +786,13 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
 
   /** Stop the run when its timeout is reached (from `startedAt`, so also after a restart). */
   private armTimeout(run: Run): void {
-    if (!run.spec.timeoutMin || this.stopped) return;
+    if (
+      !run.spec.timeoutMin ||
+      this.stopped ||
+      run.exitCode !== null ||
+      phases.readCode(join(this.dirs(run.id).orbit, "phases", "main.exit")) !== null
+    )
+      return;
     this.disarmTimeout(run.id);
     const ctl = this.control(run.id);
     const started = run.startedAt ? Date.parse(run.startedAt) : Date.now();
@@ -964,15 +972,17 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
   }
 
   private requestStop(run: Run, why: "cancel" | "timeout"): void {
+    run.stopRequested = why === "cancel" ? why : (run.stopRequested ?? why);
+    this.save(run);
     const ctl = this.active.get(run.id);
-    if (ctl) ctl.cancel ??= why;
+    if (ctl) ctl.cancel = run.stopRequested;
     // Not watched yet (the daemon is still reattaching): the watcher takes it over.
     else this.stopIntent.set(run.id, why);
     this.store.addEvent(run.id, why, why === "cancel" ? "cancel requested" : "timeout reached");
     // At its timeout, a run with an after phase stops only the command; the phase still runs.
-    if (run.containerId && why === "timeout" && keepsContainer(run.spec))
-      void this.stopMain(run.containerId);
-    else if (run.containerId) void docker.stopContainer(run.containerId);
+    if (run.containerId && keepsContainer(run.spec)) {
+      if (run.exitCode === null) void this.stopMain(run.containerId);
+    } else if (run.containerId) void docker.stopContainer(run.containerId);
     if (run.proc) void this.stopProcess(run);
   }
 
@@ -1047,11 +1057,15 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
         setTimeout(() => void this.recover(false), DOCKER_RETRY_MS * 6).unref();
         return;
       }
-      if (!st) {
+      // Gone with no recorded exit code: Orbit cannot tell how the command ended, so the run is lost
+      // (bench treats that as unknown), not failed. With a recorded exit, the ending phases go on.
+      const recordedExit =
+        run.exitCode ?? phases.readCode(join(this.dirs(run.id).orbit, "phases", "main.exit"));
+      if (!st && recordedExit === null) {
         await this.finalize(run, "lost", null, "container not found after daemon restart");
         continue;
       }
-      if (!run.containerId || run.state === "starting") {
+      if (st && (!run.containerId || run.state === "starting")) {
         run.containerId = st.id;
         run.state = "running";
         run.startedAt ??= nowIso();
@@ -1059,13 +1073,20 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       this.save(
         run,
         "recovered",
-        st.running ? "reattached after daemon restart" : "collected after daemon restart",
+        st?.running ? "reattached after daemon restart" : "collected after daemon restart",
       );
-      this.control(run.id);
-      if (st.running) this.armTimeout(run);
-      const id = st.id;
+      const ctl = this.control(run.id);
+      ctl.cancel = run.stopRequested ?? undefined;
+      if (st?.running && run.exitCode === null) {
+        if (ctl.cancel) this.requestStop(run, ctl.cancel);
+        else this.armTimeout(run);
+      }
+      const id = st?.id ?? run.containerId ?? containerName(run.id);
       void this.watch(run.id, id, true)
-        .catch((e) => console.error(`orbit: run ${run.id}:`, (e as Error).message))
+        .catch((e) => {
+          if (!(e instanceof phases.WatchStopped))
+            console.error(`orbit: run ${run.id}:`, (e as Error).message);
+        })
         .finally(() => this.active.delete(run.id));
     }
   }

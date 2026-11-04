@@ -13,6 +13,7 @@ const probe = async () => ({
   probedAt: new Date().toISOString(),
   gpus: [],
   gpuError: null,
+  devices: [],
   cpu: { count: 4, load1: 0, busy: 0 },
   memory: { totalGB: 16, availableGB: 16 },
   disk: { path: dir, totalGB: 100, freeGB: 100 },
