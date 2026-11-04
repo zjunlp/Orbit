@@ -105,7 +105,13 @@ export function registerAgent(program: Command, client: () => Promise<OrbitClien
     .option("--json", "print JSON")
     .action(async (name: string, o: { json?: boolean }) => {
       const a = await (await client()).agentGet(name);
-      print(o.json, a, () => JSON.stringify(a.definition, null, 2));
+      print(o.json, a, () => {
+        const note =
+          a.definition.capabilities.mcp && a.definition.command.mcp.kind === "none"
+            ? "\nMCP declared, not wired"
+            : "";
+        return JSON.stringify(a.definition, null, 2) + note;
+      });
     });
 
   agent

@@ -309,11 +309,25 @@ export function builtinRegistry(): AgentRegistry {
 export function renderCommand(
   def: AgentDefinition,
   phase: "run" | "resume",
-  vars: { instruction: string; model?: string; effort?: string; session?: string; home: string },
+  vars: {
+    instruction: string;
+    model?: string;
+    effort?: string;
+    session?: string;
+    home: string;
+    mcp?: boolean;
+  },
 ): string[] {
   const tokens = phase === "resume" ? def.command.resume : def.command.run;
   if (!tokens) throw new AgentError(`${def.name} cannot continue a session`);
-  const argv = renderTemplate(tokens, {
+  const mcp = def.command.mcp;
+  const configured =
+    vars.mcp && mcp.kind === "claude-json"
+      ? tokens.flatMap((t) =>
+          t.includes("{instruction}") ? [mcp.flag, `${vars.home}/orbit-mcp.json`, t] : [t],
+        )
+      : tokens;
+  const argv = renderTemplate(configured, {
     instruction: vars.instruction,
     model: vars.model,
     effort: vars.effort,

@@ -249,6 +249,10 @@ export class BenchService {
     }
     const def = this.agents.get(m.agent);
     if (!def) throw new UserError(`${m.name}: unknown Agent ${m.agent}; see \`orbit agent ls\``);
+    if (requires.includes("mcp") && def.command.mcp.kind === "none")
+      throw new UserError(
+        `${m.name}: this benchmark requires MCP, but ${m.agent} has no MCP wiring`,
+      );
     const lacking = requires.filter((k) => !def.capabilities[k]);
     if (lacking.length)
       throw new UserError(
@@ -786,7 +790,14 @@ export class BenchService {
       const { b, trial } = this.context(job, t);
       const reply = await this.adapter(b).solve(trial);
       spec = applyOverride(
-        toRunSpec(reply.spec, trial.method, b, "solve", () => this.agentDef(trial.method)),
+        toRunSpec(
+          reply.spec,
+          trial.method,
+          b,
+          "solve",
+          () => this.agentDef(trial.method),
+          trial.staging,
+        ),
         job.resources?.[t.task],
         job.spec.timeoutMin,
       );

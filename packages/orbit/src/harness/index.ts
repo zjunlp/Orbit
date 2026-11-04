@@ -1,7 +1,8 @@
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, relative } from "node:path";
 import { type AuthEntry, parseCodexLogin, secretValues } from "../auth/index.ts";
 import type { AgentDefinition, Method } from "../contracts/index.ts";
+import { preserveCodexMcp } from "./mcp.ts";
 import { AgentError, type HostCli, renderCommand } from "./registry.ts";
 
 export { BUILTIN_SEEDS } from "./definitions.ts";
@@ -9,6 +10,14 @@ export { AgentError, type HostCli } from "./registry.ts";
 
 /** Where the Agent home lives inside the container (under the `/orbit` mount). */
 export const AGENT_HOME = "/orbit/agent";
+
+/** Translate the declared container home into its host directory. */
+export function agentHomeDir(def: AgentDefinition, agentDir: string): string {
+  const path = relative(AGENT_HOME, def.auth.home ?? `${AGENT_HOME}/${def.name}`);
+  if (!path || path === ".." || path.startsWith("../") || isAbsolute(path))
+    throw new AgentError(`${def.name}: Agent home must be below ${AGENT_HOME}`);
+  return join(agentDir, path);
+}
 
 /**
  * Kept for callers that still say "harness"; an Agent is what Orbit drives, and its definition
@@ -95,7 +104,7 @@ export async function prepareAgent(
   if (!declared && !builtinLogin)
     throw new HarnessError(`${def.name} has no ${p.kind} secret variable`);
 
-  const dir = join(agentDir, def.name);
+  const dir = agentHomeDir(def, agentDir);
   mkdirSync(dir, { recursive: true });
   const home = def.auth.home ?? `${AGENT_HOME}/${def.name}`;
   const env: Record<string, string> = { ...p.env, DISABLE_AUTOUPDATER: "1" };
@@ -105,7 +114,11 @@ export async function prepareAgent(
 
   if (def.name === "codex") {
     env.CODEX_HOME = home;
-    writeFileSync(join(dir, "config.toml"), codexConfig(entry));
+    const config = join(dir, "config.toml");
+    writePrivate(
+      config,
+      preserveCodexMcp(codexConfig(entry), existsSync(config) ? readFileSync(config, "utf8") : ""),
+    );
     if (p.kind === "login") writePrivate(join(dir, "auth.json"), entry.secret);
     else if (p.kind === "api-key")
       writePrivate(join(dir, "auth.json"), JSON.stringify({ OPENAI_API_KEY: entry.secret }));
@@ -183,9 +196,10 @@ export function finishHarness(
     } catch {}
   }
   for (const f of CREDENTIAL_FILES) rmSync(join(agentDir, f), { force: true });
-  // A registered Agent keeps its own state under <agentDir>/<name>; clear obvious key files there.
-  for (const name of def ? [def.name] : [])
-    for (const f of GENERIC_CREDENTIALS) rmSync(join(agentDir, name, f), { force: true });
+  // Clear obvious key files in the registered Agent's declared home too.
+  if (def)
+    for (const f of GENERIC_CREDENTIALS)
+      rmSync(join(agentHomeDir(def, agentDir), f), { force: true });
   return out;
 }
 
@@ -199,10 +213,16 @@ export function containerPath(pathDirs: string[], imagePath: string | null): str
  * Headless Agent invocation for a method: argv from the Agent's definition, so a new CLI needs no
  * code here. `home` is where the run's Agent home is mounted inside the container.
  */
-export function agentCommand(def: AgentDefinition, method: Method, instruction: string): string[] {
+export function agentCommand(
+  def: AgentDefinition,
+  method: Method,
+  instruction: string,
+  mcp = false,
+): string[] {
   if (!def.command.run) throw new HarnessError(`${def.name} cannot run an instruction`);
   return renderCommand(def, "run", {
     instruction,
+    mcp,
     model: method.model,
     effort: method.effort,
     home: def.auth.home ?? `${AGENT_HOME}/${def.name}`,
@@ -214,10 +234,12 @@ export function resumeAgentCommand(
   def: AgentDefinition,
   method: Pick<Method, "model" | "effort">,
   session: { sessionId: string },
+  mcp = false,
 ): string[] {
   if (!def.command.resume)
     throw new HarnessError(`${def.name} cannot continue a session; provide a command instead`);
   return renderCommand(def, "resume", {
+    mcp,
     instruction:
       "Continue the interrupted task from the saved state. Inspect existing files and avoid repeating completed work.",
     model: method.model,

@@ -22,6 +22,7 @@ import {
   ScoreResult,
 } from "../contracts/index.ts";
 import { agentCommand } from "../harness/index.ts";
+import { agentToolsBundle } from "../harness/mcp.ts";
 
 export class AdapterError extends Error {}
 
@@ -175,6 +176,7 @@ export function toRunSpec(
   b: Benchmark,
   phase: "solve" | "verify",
   agentDef: () => AgentDefinition,
+  staging?: string,
 ): RunSpecInput {
   const { agentTask, command, ...rest } = s;
   if (agentTask && (phase === "verify" || !isCliMethod(method)))
@@ -185,14 +187,16 @@ export function toRunSpec(
     );
   const spec = {
     ...rest,
-    command: agentTask ? agentCommand(agentDef(), method, agentTask.instruction) : command,
+    command: agentTask
+      ? agentCommand(agentDef(), method, agentTask.instruction, Boolean(agentTask.tools?.length))
+      : command,
     env: { ...b.env, ...((rest.env as Record<string, string> | undefined) ?? {}) },
     snapshot: false,
   } as RunSpecInput;
   if (phase === "solve" && isCliMethod(method)) {
     // The Agent reaches its model API; native runners get the auth to inject into their containers.
     spec.auth = method.auth;
-    spec.agentBundle = method.bundle;
+    spec.agentBundle = agentToolsBundle(agentDef(), method.bundle, agentTask?.tools, staging);
     spec.network = true;
   }
   if (phase === "solve" && method.agent === "external") {

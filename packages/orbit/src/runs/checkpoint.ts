@@ -155,6 +155,17 @@ export function resumeSpec(
     throw new UserError(
       "checkpoint has no native Agent session; provide a command to restore files",
     );
+  let nextCommand = command;
+  if (!nextCommand) {
+    const def = resumeDef(run, agents);
+    nextCommand = resumeAgentCommand(
+      def,
+      // The method's model and effort are baked into the command; a resume only needs the id.
+      {},
+      checkpoint.session as NonNullable<typeof checkpoint.session>,
+      def.command.mcp.kind === "claude-json" && run.spec.command.includes(def.command.mcp.flag),
+    );
+  }
   return {
     ...run.spec,
     image: checkpoint.imageId,
@@ -162,14 +173,7 @@ export function resumeSpec(
     project: undefined,
     agent: undefined,
     agentBundle: undefined,
-    command:
-      command ??
-      resumeAgentCommand(
-        resumeDef(run, agents),
-        // The method's model and effort are baked into the command; a resume only needs the id.
-        {},
-        checkpoint.session as NonNullable<typeof checkpoint.session>,
-      ),
+    command: nextCommand,
     parentId: run.id,
     name: `Resume ${run.spec.name ?? run.id}`.slice(0, 200),
     group: undefined,

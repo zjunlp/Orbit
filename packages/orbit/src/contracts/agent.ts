@@ -94,6 +94,14 @@ export const TEMPLATE_PLACEHOLDERS = [
  */
 export const AgentCommand = z.object({
   run: z.array(z.string()).min(1),
+  /** How Orbit connects declared stdio tools to this CLI. */
+  mcp: z
+    .discriminatedUnion("kind", [
+      z.object({ kind: z.literal("claude-json"), flag: z.string().min(1) }),
+      z.object({ kind: z.literal("codex-toml") }),
+      z.object({ kind: z.literal("none") }),
+    ])
+    .default({ kind: "none" }),
   /** Continuation of a session; `{session}` is the id the CLI reported. */
   resume: z.array(z.string()).optional(),
   /**
