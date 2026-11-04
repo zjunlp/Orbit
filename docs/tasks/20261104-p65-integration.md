@@ -47,7 +47,7 @@ branch: feat/p65-integration · status: completed · updated: 2026-11-04 · owne
 | EFE MetaWorld+ 自动校准（真实 Docker） | 48cd26a | passed | 2 任务 × empty/oracle × 2 seed：7 项全部 PASS（empty 0、oracle 1、重评一致、清理确认） |
 | vla-eval LIBERO 清单（真实 Docker） | 1aa8292 | passed | 镜像内真实列举 10 个 libero_spatial 任务；2 任务 × empty × 2 seed 校准 PASS（valid 0，与 Python 适配器 P4 结果一致），oracle 不适用 |
 | 审查修正 | fix/p65-review | passed | `pnpm verify`：Orbit 582 / 26 skipped；新增空选择、按键合并、整词型号、gpu_types 全角色、歧义 GPU 布局、跳过重评回归；LIBERO 清单真实列举 10 任务、无残留列举容器 |
-| EFE GPU 共享任务真实运行 | — | not_run | pandadyn 基础镜像拉取过慢（>25 分钟未完成）；共享组、gpusOf 与型号限制由单测覆盖，真实检查见后续记录 |
+| EFE GPU 共享任务真实运行 | categories 分支 | failed（环境） | pandadyn standard：GPU 分配与 gpusOf 共享、Agent 无 GPU、invalid 判定与清理均正确；仿真器 Vulkan 在本机容器内初始化失败（CDI / --gpus 都失败），任务未能得分 |
 | 授权数据卷任务 | — | not_run | 本机没有 BEHAVIOR / ManiGuard / BlenderKit 数据 |
 
 ## Next / open issues
