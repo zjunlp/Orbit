@@ -149,15 +149,33 @@ function allocateDevices(
   return { ok: true, devices: out };
 }
 
+const DECLARED_GPU_CAPABILITIES = new Set(["egl", "vulkan", "cuda"]);
+
+function gpuFeatures(role: RoleRequest): { models: string[]; declared: string[] } {
+  const features = [...new Set((role.gpuFeatures ?? []).map((x) => x.trim().toLowerCase()))];
+  return {
+    models: features.filter((x) => x && !DECLARED_GPU_CAPABILITIES.has(x)),
+    declared: features.filter((x) => DECLARED_GPU_CAPABILITIES.has(x)),
+  };
+}
+
+/** These declarations are retained, but a GPU name cannot verify graphics or CUDA support. */
+export function gpuCapabilityWarnings(roles: RoleRequest[]): string[] {
+  return roles.flatMap((role) => {
+    const { declared } = gpuFeatures(role);
+    return role.gpus > 0 && declared.length
+      ? [`role ${role.role}: ${declared.join(", ")} capabilities declared, not verified`]
+      : [];
+  });
+}
+
 export type RoleAllocationResult =
   | { ok: true; gpuIds: string[]; roles: RoleAllocation[] }
   | { ok: false; reason: string };
 
 /**
- * Allocate a run's roles (its own container, a simulator, a policy server) together (design §9.4).
- * Roles never share a card, so a heterogeneous requirement (a RTX card for the simulator, a large
- * card for the policy) is satisfied or the run waits: a half-started run would hold GPUs while
- * waiting for the rest. CPU and memory were already summed by `leaseRequest`.
+ * Allocate all roles together, without sharing cards. Matching may move an earlier unrestricted
+ * role to another card so it cannot strand a later role requiring a specific model or GPU ID.
  */
 export function allocateRoles(
   roles: RoleRequest[],
@@ -165,6 +183,11 @@ export function allocateRoles(
   leases: Lease[],
 ): RoleAllocationResult {
   const total = roles.reduce((n, x) => n + x.gpus, 0);
+  const warnings = gpuCapabilityWarnings(roles);
+  const waiting = (reason: string): RoleAllocationResult => ({
+    ok: false,
+    reason: `${reason}${warnings.length ? `; ${warnings.join("; ")}` : ""}`,
+  });
   const whole = allocate(
     {
       gpus: total,
@@ -175,36 +198,75 @@ export function allocateRoles(
     r,
     leases,
   );
-  if (!whole.ok) return whole;
+  if (
+    !whole.ok &&
+    (!whole.reason.startsWith("waiting for GPUs") ||
+      !roles.some((role) => gpuFeatures(role).models.length))
+  )
+    return waiting(whole.reason);
 
   const leased = new Set(leases.flatMap((l) => l.gpuIds));
-  const taken = new Set<string>();
+  const candidates = roles.map((role) => {
+    const { models } = gpuFeatures(role);
+    return r.gpus
+      .filter((g) => !leased.has(g.uuid) && g.available)
+      .filter((g) => gpuMemFits(g, role as ResourceRequest))
+      .filter((g) => !role.gpuIds?.length || matchesId(g, role.gpuIds))
+      .filter((g) => models.every((name) => g.name.toLowerCase().includes(name)))
+      .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index)
+      .map((g) => g.uuid);
+  });
+  const shortage = (i: number, free: number) => {
+    const role = roles[i] as RoleRequest;
+    const { models } = gpuFeatures(role);
+    return waiting(
+      `waiting for GPUs (role ${role.role}: ${models.length ? `needs ${models.join(", ")}, ` : ""}${free}/${role.gpus} matching cards free)`,
+    );
+  };
+  for (const [i, role] of roles.entries())
+    if ((candidates[i]?.length ?? 0) < role.gpus) return shortage(i, candidates[i]?.length ?? 0);
+  if (!whole.ok) return waiting(whole.reason);
+
+  const slots = roles.flatMap((role, i) => Array.from({ length: role.gpus }, () => i));
+  const owner = new Map<string, number>();
+  const assign = (slot: number, seen: Set<string>): boolean => {
+    const available = candidates[slots[slot] as number] ?? [];
+    // Try unused cards first, preserving the previous least-used-card preference.
+    for (const card of available) {
+      if (!seen.has(card) && !owner.has(card)) {
+        owner.set(card, slot);
+        return true;
+      }
+    }
+    for (const card of available) {
+      if (seen.has(card)) continue;
+      seen.add(card);
+      const previous = owner.get(card);
+      if (previous !== undefined && assign(previous, seen)) {
+        owner.set(card, slot);
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const [slot, role] of slots.entries())
+    if (!assign(slot, new Set())) {
+      const available = (candidates[role] ?? []).filter((card) => !owner.has(card)).length;
+      return shortage(role, available);
+    }
   const out: RoleAllocation[] = [];
-  for (const role of roles) {
+  for (const [i, role] of roles.entries()) {
     const devices = allocateDevices(
       role.devices ?? [],
       r,
       leases,
       out.flatMap((x) => x.devices),
     );
-    if (!devices.ok) return { ok: false, reason: `role ${role.role}: ${devices.reason}` };
-    const free = r.gpus
-      .filter((g) => !leased.has(g.uuid) && !taken.has(g.uuid) && g.available)
-      .filter((g) => gpuMemFits(g, role as ResourceRequest))
-      .filter(
-        (g) =>
-          !role.gpuIds?.length || role.gpuIds.some((id) => id === g.uuid || id === String(g.index)),
-      )
-      .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index);
-    if (free.length < role.gpus) {
-      const named = (role as RoleRequest & { gpuFeatures?: string[] }).gpuFeatures ?? [];
-      return {
-        ok: false,
-        reason: `waiting for GPUs (role ${role.role}: ${free.length}/${role.gpus} free${named.length ? ` for ${named.join(",")}` : ""})`,
-      };
-    }
-    const picked = free.slice(0, role.gpus).map((g) => g.uuid);
-    for (const id of picked) taken.add(id);
+    if (!devices.ok) return waiting(`role ${role.role}: ${devices.reason}`);
+    const picked = (candidates[i] ?? []).filter((card) => {
+      const slot = owner.get(card);
+      return slot !== undefined && slots[slot] === i;
+    });
     out.push({
       role: role.role,
       devices: devices.devices,

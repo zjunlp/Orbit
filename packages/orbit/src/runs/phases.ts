@@ -160,7 +160,7 @@ kill -KILL -"$p" 2>/dev/null || kill -KILL "$p" 2>/dev/null || true`,
 
 /** The claim and watchdog live in the container, surviving both daemon and Docker-client exits. */
 export const DURABLE_COMMAND = `d=$1; seconds=$2; shift 2
-if ! mkdir "$d" 2>/dev/null; then test -d "$d" && exit 0; exit 125; fi
+if ! mkdir -m 0777 "$d" 2>/dev/null; then test -d "$d" && exit 0; exit 125; fi
 exec > "$d/log" 2>&1
 if command -v setsid >/dev/null 2>&1; then setsid "$@" & else "$@" & fi
 pid=$!

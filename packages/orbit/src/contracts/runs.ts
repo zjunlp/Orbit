@@ -231,6 +231,7 @@ export interface RoleRequest {
   gpuMemGB?: number;
   gpuIds?: string[];
   devices?: DeviceRequest[];
+  gpuFeatures?: string[];
   cpus: number;
   memGB: number;
 }
@@ -484,8 +485,11 @@ export function roleRequests(
       gpus: s.resources.gpus,
       ...(s.resources.gpuMemGB ? { gpuMemGB: s.resources.gpuMemGB } : {}),
       ...(s.resources.gpuIds ? { gpuIds: s.resources.gpuIds } : {}),
-      cpus: s.resources.cpus,
-      memGB: s.resources.memGB,
+      cpus:
+        s.resources.cpus + s.services.filter((x) => !x.role).reduce((n, x) => n + (x.cpus ?? 1), 0),
+      memGB:
+        s.resources.memGB +
+        s.services.filter((x) => !x.role).reduce((n, x) => n + (x.memGB ?? 1), 0),
     },
   ];
   for (const x of s.services)
@@ -498,7 +502,7 @@ export function roleRequests(
         ...(x.gpuFeatures ? { gpuFeatures: x.gpuFeatures } : {}),
         cpus: x.cpus ?? 1,
         memGB: x.memGB ?? 1,
-      } as RoleRequest);
+      });
   return roles;
 }
 

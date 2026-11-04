@@ -1,5 +1,5 @@
 # P5：资源与执行能力（设备、按卡型分配、结束阶段持久化）
-branch: feat/p5-coverage · status: in_progress · updated: 2026-11-04 · owner: Codex（主线由 Claude 验收）
+branch: feat/p5-coverage · status: completed · updated: 2026-11-04 · owner: Codex（主线由 Claude 验收）
 
 本文是交给实现者的任务书。完成后在同一文件补写 Changes / Validation，作为该 Part 的记录。
 动手前按 [AGENTS.md](../../AGENTS.md) §1 读 design.md（§4 资源、§7、§9.4–§9.6、§9.13）、status.md
@@ -104,10 +104,25 @@ reason?, attempts }`，`Run.phases` 默认为空（旧记录可读）。
 - 保持 Harbor 的 after 前 solve 产物快照；复制先写临时目标再替换，恢复不产生目录嵌套。服务逆拓扑串行停止，每步记结果，清理仍以实际删除确认决定租约释放。
 - 实现细化：阶段时限由各 hook / after / render 配置和有界 Docker I/O 预算组合；已有 hook 中混合的 finalize 与视频命令仍是一个不可拆分步骤，只有显式 after.render 可单独跳过。旧 after 文件协议恢复时继续等待原命令。
 
+- 设备类增加非 root 探测、诊断、具体路径与按角色租约；提交拒绝缺失设备，已占用设备排队，主容器和服务均使用已分配的 `--device`。CLI resources/ledger 与 Web Resources 展示容量与持有者。adb 只声明能力，不猜测 USB 映射。
+- GPU 名称按大小写无关子串匹配，整组匹配不会让无型号限制角色占住唯一符合条件的卡；EGL/Vulkan/CUDA 明确为未验证声明。无角色服务的 CPU/内存也纳入准入。
+- Compose 严格翻译显式 x-orbit-role 的 NVIDIA GPU reservation 与 x-gpu-memory-gb；未知键继续 unsupported。未改并行线的 benchmark 契约、Harbor adapter 或 trial 页面。
+
 ## Validation
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
-| 阶段单元与恢复注入 | phase worktree | passed | 显式 executor doubles；幂等、失败/超时后继续采集、取消跳 render、RunService 重新附着 |
-| 真实 Docker 阶段 | phase worktree | passed | 4 场景：finalize 中重启、取消、TERM-resistant 子进程超时、服务逆序与网络/卷清理 |
+| `pnpm verify` | P5 integrated tree | passed | 格式/lint、类型、边界、532 项测试、Web/CLI 构建；21 项 opt-in 测试默认跳过，真实阶段测试单独执行 |
+| 阶段单元与恢复注入 | P5 integrated tree | passed | 显式 executor doubles：幂等、失败/超时后继续采集、取消跳 render、绝对 deadline、RunService 重新附着 |
+| 真实 Docker 阶段 | P5 integrated tree | passed | 4 场景：主容器停止后服务 finalize 中重启不重复主 hook、取消保留 verdict、TERM-resistant 子进程超时、服务逆序与网络/卷清理；临时状态目录亦清理成功 |
+| 设备与 GPU/Compose 回归 | P5 integrated tree | passed | 缺失设备提交拒绝、独占槽位排队、跨路径冲突、型号/显存/ID 匹配、严格 Compose 正负例；资源/placement doubles 明确为测试注入 |
+| 真实设备 / GPU / CLI | P5 integrated tree | passed | 独立 daemon + 实际 probe：resources/ledger 显示设备、未知设备拒绝、TUN 容器映射与争用排队、取消后释放、RTX 服务 nvidia-smi 映射与租约一致、未知型号排队、全部自建资源清理 |
+| 两台物理节点 GPU 放置 | — | not_run | 本次真实验证在单节点执行；多节点路径保留单元测试覆盖，未配置第二台物理执行节点 |
+| 原版 EFE abc-sim 任务枚举 | P5 integrated tree | passed | 如实保持 unsupported：sim/rcb_monitor 缺 x-orbit-role；只增加角色的开发副本可枚举 supported，但独占 GPU 条件不同，不视为原版对齐 |
+| 原版 EFE GPU oracle / empty | P5 integrated tree | not_run | 原版缺角色且假定共享 GPU，与本任务明确角色/独占规则冲突；ABC 仿真镜像未安装，不修改上游任务或静默放宽条件 |
+| 主线核对 | 4993f5f | passed | fetch 后 main 与 origin/main 均为当前三提交的直接基线；无需移动提交，未推送或合并 |
 
 ## Next / open issues
+
+- 主线验收三个提交；合并由主线负责。
+- EFE GPU 原版校准需先确定 sim/monitor 的显式角色和 GPU 共享语义，再准备固定镜像执行 oracle/empty。
+- 旧记录可读；升级前没有 durable hook 标记的已执行操作无法追溯防重。混合 finalize/video 的旧 hook 只能整体恢复；独立取消渲染需显式 after.render。

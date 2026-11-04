@@ -855,6 +855,15 @@ hook、after 与可选 `after.render` 用容器内原子 claim / PID / exit 标�
 每步停止结果在 `Run.services` 中保存。重试采集先复制到临时目标再替换，保留 after 前的 solve 快照；
 租约直到主容器、服务、网络和卷确认删除才释放。旧 after 文件协议仍能恢复，升级前没有 hook 标记的操作无法追溯防重。
 
+`NodeResources.devices` 探测 KVM、DRI render 节点、TUN、adb 与串口，失败在 detail 中显示而不使整次探测失败；
+设备类可扩展，已知 /dev 路径由 probe 提供，随角色租约保存并传给主/服务容器的 `--device`。
+`RunSpec.devices` 与 `resources.devices` 二选一；服务设备要求显式且唯一的 role。设备缺失在提交期拒绝，
+数量已占用则排队，exclusive 类只给一个 Run；adb 仅代表可用性能力槽位，不声称枚举或转发 Android 硬件。
+按 GPU 名称匹配角色 gpuFeatures；EGL/Vulkan/CUDA 只保留声明并提示未验证。整组匹配可重新安排未限定型号的角色，
+避免占住其他角色唯一能用的卡；没有 role 的服务 CPU/内存也计入准入。Compose 仅翻译显式 x-orbit-role 下的
+NVIDIA count + capabilities:[gpu] reservation 与 x-gpu-memory-gb；其他 deploy 设置继续拒绝。
+原版 EFE abc-sim 未声明角色且假定模拟器/监控器共享 GPU，现有独占角色契约不会隐式改变其条件。
+
 ### 9.7 结果、有效性与可复现
 
 - `Outcome` 增加 `episode { steps, terminated, truncated, endedBy, successSignal }`、`official { metrics, aggregation }`（原样保存）、

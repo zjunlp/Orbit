@@ -5,7 +5,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import type { Healthcheck, NetworkSpec, ServiceSpec, VolumeMount } from "../contracts/index.ts";
+import {
+  type Healthcheck,
+  LeaseRole,
+  type NetworkSpec,
+  type ServiceSpec,
+  type VolumeMount,
+} from "../contracts/index.ts";
 
 export interface ComposeOptions {
   /**
@@ -76,7 +82,82 @@ const SERVICE_KEYS = new Set([
   "pid",
   "cgroup",
   "network_mode",
+  "deploy",
+  "x-orbit-role",
+  "x-gpu-memory-gb",
 ]);
+
+/** Only explicit NVIDIA GPU reservations are translated; all other deploy semantics fail closed. */
+function gpuReservation(
+  s: Table,
+  problems: string[],
+  label: string,
+): Pick<ServiceSpec, "role" | "gpus" | "gpuMemGB"> {
+  const out: Pick<ServiceSpec, "role" | "gpus" | "gpuMemGB"> = {};
+  if (s["x-orbit-role"] !== undefined) {
+    const role = LeaseRole.safeParse(s["x-orbit-role"]);
+    if (!role.success || role.data === "main")
+      problems.push(`${label}: x-orbit-role must be a valid role other than main`);
+    else out.role = role.data;
+  }
+  const section = (v: unknown, key: string, path: string): unknown => {
+    if (!isTable(v)) {
+      problems.push(`${label}: ${path} must be a mapping`);
+      return undefined;
+    }
+    for (const k of Object.keys(v))
+      if (k !== key) problems.push(`${label}: ${path}.${k} is not supported`);
+    if (v[key] === undefined) problems.push(`${label}: ${path}.${key} is required`);
+    return v[key];
+  };
+  if (s.deploy !== undefined) {
+    const resources = section(s.deploy, "resources", "deploy");
+    const reservations =
+      resources === undefined ? undefined : section(resources, "reservations", "deploy.resources");
+    const devices =
+      reservations === undefined
+        ? undefined
+        : section(reservations, "devices", "deploy.resources.reservations");
+    if (devices !== undefined) {
+      const path = "deploy.resources.reservations.devices";
+      if (!Array.isArray(devices) || devices.length !== 1 || !isTable(devices[0]))
+        problems.push(`${label}: ${path} requires exactly one NVIDIA GPU reservation`);
+      else {
+        const device = devices[0];
+        for (const key of Object.keys(device))
+          if (!["driver", "count", "capabilities"].includes(key))
+            problems.push(`${label}: ${path}.${key} is not supported`);
+        const count =
+          typeof device.count === "string" && /^\d+$/.test(device.count)
+            ? Number(device.count)
+            : device.count;
+        if (device.driver !== "nvidia") problems.push(`${label}: ${path}.driver must be nvidia`);
+        if (typeof count !== "number" || !Number.isSafeInteger(count) || count <= 0)
+          problems.push(
+            `${label}: ${path}.count must be a positive integer (all and device_ids are not supported)`,
+          );
+        else out.gpus = count;
+        if (
+          !Array.isArray(device.capabilities) ||
+          device.capabilities.length !== 1 ||
+          device.capabilities[0] !== "gpu"
+        )
+          problems.push(`${label}: ${path}.capabilities must be [gpu]`);
+        if (!out.role) problems.push(`${label}: GPU services require x-orbit-role`);
+      }
+    }
+  }
+  if (s["x-gpu-memory-gb"] !== undefined) {
+    const raw = s["x-gpu-memory-gb"];
+    const memory = typeof raw === "string" && /^\d+(?:\.\d+)?$/.test(raw) ? Number(raw) : raw;
+    if (typeof memory !== "number" || !Number.isFinite(memory) || memory <= 0)
+      problems.push(`${label}: x-gpu-memory-gb must be a positive number`);
+    else out.gpuMemGB = memory;
+    if (!out.gpus || !out.role)
+      problems.push(`${label}: x-gpu-memory-gb needs a GPU reservation and x-orbit-role`);
+  }
+  return out;
+}
 
 /**
  * Service `volumes`: a top-level named volume, or a host path relative to the compose file (bind).
@@ -370,6 +451,7 @@ export function parseCompose(
       noNetwork: false,
       gpuFeatures: [],
       devices: [],
+      ...gpuReservation(s, problems, label),
     };
     if (s.restart !== undefined) {
       const r = String(s.restart);
@@ -425,6 +507,8 @@ export function parseCompose(
       if (gb) svc.shmGB = gb;
       else problems.push(`${label}: shm_size ${String(s.shm_size)} is not a size`);
     }
+    if (svc.role && plan.services.some((x) => x.role === svc.role))
+      problems.push(`${label}: x-orbit-role ${svc.role} is already assigned to another service`);
     plan.services.push(svc);
   }
   // Compose refuses to wait for the health of a service without a health check.
