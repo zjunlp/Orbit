@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { AdapterSpecResponse, RunSpec } from "../src/contracts/index.ts";
 
-it.each(["posttrainbench", "researchclawbench", "longds", "browsergym", "cua-bench"])(
+it.each(["posttrainbench", "researchclawbench", "longds", "browsergym", "cua-bench", "cua-lite"])(
   "checks the %s Python adapter",
   (name) => {
     const dir = fileURLToPath(
