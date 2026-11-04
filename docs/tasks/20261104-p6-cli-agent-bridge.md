@@ -96,7 +96,7 @@ solve Run
 ## Validation
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
-| 最终 rebase / `pnpm verify` | `1bb866f` + 本记录 | passed | 已 rebase 最新本地 main `4184d4c`；格式/lint/types/boundaries、Orbit 422 项、Web 60 项与构建通过。默认跳过的 opt-in 真实检查按下列独立结果记录。 |
+| 首次交付 / `pnpm verify` | `1bb866f` + 本记录 | passed | 首次交付基线为本地 main `4184d4c`；格式/lint/types/boundaries、Orbit 422 项、Web 60 项与构建通过。默认跳过的 opt-in 真实检查按下列独立结果记录。 |
 | BrowserGym Python 单测 | `ce274b8` | passed | 宿主 29 项中 28 通过；Python 3.10 不含 tomllib 的入口测试显式跳过。真实 Python 3.11 镜像内 29/29 通过；fixture 测试不代替真实浏览器。覆盖重复 id、耗尽/finish、停止优先级、清理顺序、签名/篡改/错误阶段。 |
 | external / empty 真实回归 | `browsergym.docker.test.ts` | passed | 隔离 daemon、独立 ORBIT_HOME/ORBIT_DATA、自动空闲端口；click-test、click-button、click-checkboxes、enter-text、choose-list 五任务 empty 均 valid 0；bid 脚本 click-test 正校准 valid 1。另验 provider 异常 invalid、重查与取消清理；不是模型 Agent。 |
 | CLI/MCP 真实协议 | `browsergym-bridge.docker.test.ts` | passed | 4/4：真实 Chromium + 显式脚本客户端，MCP initialize/list_tools/四工具调用、重复 act 不重复 step、finish 后拒绝、Agent 未 finish 的 hook 补齐、取消 SIGTERM 收尾、伪造 archive 拒绝。 |
@@ -104,7 +104,8 @@ solve Run
 | 证据隔离 / 失败分类 | `ce274b8` | passed | main 无 /adapter、/miniwob、/evidence 挂载；真实容器中的显式测试客户端预建 collect 目标并伪造自洽 reward/哈希及 policy_setup 错误阶段时，验证失败且 score=null、invalid、scorer_error；独立针对性真实回归通过。 |
 | 清理 | 真实协议与 CLI 套件 | passed | 等待 cleanup=done，再确认租约释放和本次 Run 标签对应 container/network/volume 均无残留；另按本线所有独立目录（含早期认证失败与 UI 检查）复核 daemon 均停止，并同时核对 orbit.run/orbit.parent 标签残留为 0；未触碰其他 Docker 资源。 |
 | Web 组件与输入边界 | `1bb866f` | passed | 初次交付 Web 60/60；GUI 动作解析/精确 id（含短 id）、契约/parser 一致、路径/空帧/维度/时间校验、媒体缺失与视频实际流字节预算。 |
-| 会话对齐复查 / 全仓库验证 | 本次复查 | passed | 错误 step 与连续 tool_result 回归先失败、修正后通过；pnpm verify 通过（Orbit 422、Web 61、构建）；BrowserGym 宿主单测 28 通过、1 因 Python 3.10 缺 tomllib 跳过。执行协议未改，本轮不重复模型和 Docker 验收，沿用上表真实结果。 |
+| 会话对齐复查 / 全仓库验证 | 本次复查 | passed | 错误 step 与连续 tool_result 回归先失败、修正后通过；pnpm verify 通过（Orbit 422、Web 61、构建）；BrowserGym 宿主单测 28 通过、1 因 Python 3.10 缺 tomllib 跳过。此修正不改变执行协议，模型结果沿用上表；新主线的 Docker 回归见下一行。 |
+| P4 主线集成复查 | main `4993f5f` / `9207f5d` | passed | 已 rebase 新 main；状态文档保留 P4 与 GUI 两边进展。pnpm verify：Orbit 425、Web 61，类型/边界/构建通过；固定既有镜像的真实 Chromium CLI/MCP 协议 4/4 再通过（显式脚本客户端，无模型调用）。本轮 5 个 Run 全部 cleanup done、租约 released，无 orbit.run/orbit.parent 资源残留，测试 daemon 已停止。 |
 | 真实浏览器查看 | `1bb866f` | passed | 隔离 Orbit 中的 Chromium 打开真实 Claude step 与显式 GUI/具身 fixture；确认比例叠加、对应会话、双相机、video currentTime=0.2s 定位、uPlot 和紧凑布局，无 pageerror。仓库外保留 gui-agent-session.png、gui-overlay.png、episode-timeline.png 与 browser-check.json，交付时提供位置。 |
 | Codex GUI 模型连接 | 签名前开发前置检查 | failed | 已尝试，但现有认证/容器模型连接未通过；没有冒称完成 GUI 任务或开启其 gui 能力。可复现的核心识别缺口见 Next。 |
 | 其他 CLI / 实际具身 adapter | 本任务范围外 | not_run | 其余 CLI 未逐一真实验证；具身仅实现约定格式和视图，后续由主线 adapter 生产索引。 |
