@@ -1,8 +1,9 @@
-import type { GuiTrajectory } from "@zjunlp/orbit/contracts";
+import type { GuiTrace, SessionMessage } from "@zjunlp/orbit/contracts";
 import { useMemo, useState } from "react";
 import { copy, Empty, Link, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
 import { bytes, runPath } from "../../lib/format.ts";
+import { actionOverlay, stepMessages } from "../../lib/gui-action.ts";
 import { overlayOpen, useHotkeys } from "../../lib/hotkeys.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { parseTrajectory, trajectoryFrame, trajectoryStep } from "../../lib/trajectory.ts";
@@ -23,6 +24,7 @@ export function TrajectoryFile({
   note?: string | null;
 }) {
   const a = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
+  const session = useAsync(() => api.session(run.id), [run.id, run.state]);
   const entry = a.data?.files.find((item) => item.path === file.path);
   const source = useAsync(async () => {
     if (!entry || entry.bytes > MAX_BYTES) return null;
@@ -81,6 +83,7 @@ export function TrajectoryFile({
           runId={run.id}
           files={files}
           listingTruncated={a.data?.truncated ?? false}
+          messages={session.data?.agent?.messages ?? []}
         />
       )}
     </div>
@@ -92,17 +95,20 @@ export function TrajectoryViewer({
   runId,
   files,
   listingTruncated,
+  messages = [],
 }: {
-  trajectory: GuiTrajectory;
+  trajectory: GuiTrace;
   runId: string;
   files: Set<string>;
   listingTruncated: boolean;
+  messages?: SessionMessage[];
 }) {
   const loc = useLocation();
   const index = trajectoryStep(loc.query.get("step"), trajectory.steps.length);
   const before = loc.query.get("frame") === "before";
   const { action, observation } = trajectoryFrame(trajectory, index, before);
   const last = trajectory.steps.length - 1;
+  const aligned = stepMessages(trajectory, index, messages);
   const [original, setOriginal] = useState(false);
   const select = (step: number) => setQuery({ step: String(Math.max(0, Math.min(last, step))) });
   useHotkeys({
@@ -213,6 +219,8 @@ export function TrajectoryViewer({
                 key={screenshot}
                 src={screenshot}
                 label={`Observation ${observation.step} for ${trajectory.goal}`}
+                action={action.action}
+                error={action.actionError}
               />
             ) : (
               <Empty title="Screenshot unavailable">
@@ -276,6 +284,27 @@ export function TrajectoryViewer({
               <p>{trajectory.stopReason}</p>
             </div>
           )}
+          <section aria-label="Agent at this step">
+            <span className="faint">Agent at this step</span>
+            {aligned.length ? (
+              aligned.map((message) => (
+                <details
+                  key={`${message.kind}-${message.at}-${message.text}`}
+                  open={message.kind === "thinking"}
+                >
+                  <summary>
+                    {message.kind.replace("_", " ")}
+                    {message.name ? ` · ${message.name}` : ""}
+                  </summary>
+                  <pre>{message.text}</pre>
+                </details>
+              ))
+            ) : (
+              <p className="faint">
+                No session messages linked to this action. The full Agent session remains available.
+              </p>
+            )}
+          </section>
           {observation.observation && (
             <details>
               <summary>Observation text</summary>
@@ -324,13 +353,79 @@ export function TrajectoryViewer({
   );
 }
 
-function SavedScreenshot({ src, label }: { src: string; label: string }) {
+export function ActionMarker({
+  action,
+  width,
+  height,
+}: {
+  action: string | null;
+  width: number;
+  height: number;
+}) {
+  const overlay = actionOverlay(action);
+  if (!overlay.point || width <= 0 || height <= 0) return null;
+  const inside = ([x, y]: [number, number]) => x >= 0 && y >= 0 && x <= width && y <= height;
+  if (!inside(overlay.point) || (overlay.end && !inside(overlay.end))) return null;
+  return (
+    <svg
+      className="gui-action-overlay"
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={overlay.end ? "Drag path" : "Action position"}
+    >
+      <title>{overlay.end ? "Drag path" : "Action position"}</title>
+      {overlay.end && (
+        <line x1={overlay.point[0]} y1={overlay.point[1]} x2={overlay.end[0]} y2={overlay.end[1]} />
+      )}
+      <circle cx={overlay.point[0]} cy={overlay.point[1]} r={7} />
+      {overlay.end && <circle cx={overlay.end[0]} cy={overlay.end[1]} r={4} />}
+    </svg>
+  );
+}
+
+function SavedScreenshot({
+  src,
+  label,
+  action,
+  error,
+}: {
+  src: string;
+  label: string;
+  action: string | null;
+  error?: string;
+}) {
   const [failed, setFailed] = useState(false);
+  const [size, setSize] = useState([0, 0]);
+  const overlay = actionOverlay(action);
   return failed ? (
     <Empty title="Could not load the screenshot">
       The recorded action is still available. Check the original outputs.
     </Empty>
   ) : (
-    <img loading="lazy" decoding="async" src={src} alt={label} onError={() => setFailed(true)} />
+    <div className="gui-image-wrap">
+      <div className="gui-image-position">
+        <img
+          loading="lazy"
+          decoding="async"
+          src={src}
+          alt={label}
+          onError={() => setFailed(true)}
+          onLoad={(event) =>
+            setSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])
+          }
+        />
+        <ActionMarker action={action} width={size[0] ?? 0} height={size[1] ?? 0} />
+      </div>
+      {(overlay.text || error) && (
+        <div className="gui-image-caption">
+          {overlay.text && (
+            <div>
+              Input: <code>{overlay.text}</code>
+            </div>
+          )}
+          {error && <div className="gui-action-error">Action error: {error}</div>}
+        </div>
+      )}
+    </div>
   );
 }

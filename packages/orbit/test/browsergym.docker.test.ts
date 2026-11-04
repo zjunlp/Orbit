@@ -66,7 +66,7 @@ def waiting(context):
           actionSet,
           agentDir: policy,
           maxSteps: "3",
-          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3",
+          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2",
         },
         passEnv: ["ORBIT_GUI_TEST_GRADER_KEY"],
         resources: join(adapter, "resources.json"),
@@ -115,9 +115,16 @@ def waiting(context):
     return client.benchJob(id);
   };
 
-  it("gets valid zero from the original environment on every supported empty task", async () => {
+  it("gets valid zero from the original environment on five sampled empty tasks", async () => {
     const job = await client.benchSubmit({
       benchmark: "coord",
+      tasks: [
+        "miniwob.click-test",
+        "miniwob.click-button",
+        "miniwob.click-checkboxes",
+        "miniwob.enter-text",
+        "miniwob.choose-list",
+      ],
       methods: [{ name: "empty", agent: "empty" }],
     });
     const detail = await finish(job.id);

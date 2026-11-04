@@ -38,6 +38,7 @@ import { upsertRun, useRun } from "../lib/runs-store.ts";
 import { useAsync } from "../lib/use.ts";
 import { ArtifactsTab, Csv } from "./run/Artifacts.tsx";
 import { SessionTab } from "./run/Session.tsx";
+import { EpisodeFile } from "./trial/Episode.tsx";
 import { TrajectoryFile } from "./trial/Trajectory.tsx";
 
 interface TabDef {
@@ -310,6 +311,7 @@ function TabBody(props: {
         />
       );
     }
+    if (resolved.kind === "episode" && run) return <EpisodeFile run={run} file={f} />;
     return run ? <ReviewFileView key={tab} run={run} f={f} /> : notStarted(f.phase);
   }
   if (tab === "grader" && review) return <GraderItems items={review.items} />;

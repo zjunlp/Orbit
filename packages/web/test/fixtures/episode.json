@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "kind": "episode",
+  "goal": "Explicit saved-episode fixture",
+  "actionNames": ["gripper"],
+  "proprioNames": ["joint 1", "joint 2"],
+  "cameras": [
+    {
+      "name": "front",
+      "frames": [
+        { "time": 0, "path": "camera/front0.png" },
+        { "time": 0.2, "path": "camera/front1.png" }
+      ],
+      "source": "live"
+    },
+    { "name": "wrist", "video": { "path": "camera/wrist.mp4", "offsetSec": 0 }, "source": "render" }
+  ],
+  "samples": [
+    {
+      "time": 0,
+      "action": [0],
+      "proprio": [0.1, 0.2],
+      "reward": 0,
+      "terminated": false,
+      "truncated": false,
+      "late": true,
+      "stall": true
+    },
+    {
+      "time": 0.2,
+      "action": [1],
+      "proprio": [0.3, 0.4],
+      "reward": 1,
+      "terminated": true,
+      "truncated": false
+    }
+  ],
+  "chunks": [{ "start": 0, "end": 0.2, "label": "grasp" }],
+  "producer": "sidecar",
+  "trust": "trusted"
+}

@@ -1,0 +1,53 @@
+.episode-review {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.episode-viewer {
+  padding: 20px 24px;
+  overflow: auto;
+}
+.episode-controls,
+.episode-flags,
+.episode-chunks,
+.episode-values {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.episode-controls input {
+  flex: 1;
+  min-width: 140px;
+  accent-color: var(--accent);
+}
+.episode-cameras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.episode-camera {
+  margin: 0;
+  min-width: 0;
+}
+.episode-camera figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.episode-camera img,
+.episode-camera video {
+  display: block;
+  width: 100%;
+  max-height: min(36vh, 360px);
+  object-fit: contain;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.episode-values {
+  font: 12px var(--font-mono);
+}

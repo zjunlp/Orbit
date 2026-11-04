@@ -9,3 +9,4 @@ export { autoRunName, runDisplayName } from "./naming.ts";
 export * from "./records.ts";
 export * from "./resources.ts";
 export * from "./runs.ts";
+export * from "./trajectory.ts";

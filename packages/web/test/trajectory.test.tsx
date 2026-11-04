@@ -139,3 +139,96 @@ describe("saved GUI trajectory", () => {
     }
   });
 });
+
+describe("GUI action overlays and Agent alignment", () => {
+  it("draws coordinate actions and drag lines without evaluating action text", async () => {
+    const { actionOverlay } = await import("../src/lib/gui-action.ts");
+    const { ActionMarker } = await import("../src/pages/trial/Trajectory.tsx");
+    expect(actionOverlay("mouse_click(12, 30)")).toEqual({ point: [12, 30] });
+    expect(actionOverlay("mouse_click(12, 30, button='right')")).toEqual({ point: [12, 30] });
+    expect(actionOverlay("mouse_drag_and_drop(12, 30, 45, 50)")).toEqual({
+      point: [12, 30],
+      end: [45, 50],
+    });
+    expect(actionOverlay("mouse_drag(12, 30, 45, 50)")).toEqual({});
+    expect(actionOverlay("fill('13', 'hello, world')")).toEqual({ text: "hello, world" });
+    expect(actionOverlay(String.raw`keyboard_type("it\'s")`)).toEqual({ text: "it's" });
+    expect(actionOverlay("drag_and_drop('13', '14')")).toEqual({});
+    expect(actionOverlay("__import__('os').system('bad')")).toEqual({});
+    const html = renderToStaticMarkup(
+      <ActionMarker action="mouse_drag_and_drop(12, 30, 45, 50)" width={160} height={200} />,
+    );
+    expect(html).toContain("Drag path");
+    expect(html).toContain('x1="12"');
+    expect(
+      renderToStaticMarkup(<ActionMarker action="mouse_click(999, 30)" width={160} height={200} />),
+    ).toBe("");
+  });
+  it("requires the returned step and excludes a preceding unrelated tool result", async () => {
+    const { stepMessages } = await import("../src/lib/gui-action.ts");
+    const t = parsed();
+    if (t.steps[1]) t.steps[1].actionId = "operation";
+    const unrelated = {
+      at: null,
+      role: "tool" as const,
+      kind: "tool_result" as const,
+      text: '{"id":"operation","step":2}',
+    };
+    const result = {
+      ...unrelated,
+      text: JSON.stringify({
+        content: [{ type: "text", text: JSON.stringify({ id: "operation", step: 1 }) }],
+      }),
+    };
+    expect(stepMessages(t, 1, [unrelated])).toEqual([]);
+    expect(stepMessages(t, 1, [unrelated, result])).toEqual([result]);
+  });
+  it("shows only messages linked by the saved action id and preserves missing alignment", async () => {
+    const { stepMessages } = await import("../src/lib/gui-action.ts");
+    const t = parsed();
+    if (t.steps[1]) t.steps[1].actionId = "unique-operation-id";
+    const messages = [
+      {
+        at: null,
+        role: "assistant" as const,
+        kind: "thinking" as const,
+        text: "Click the visible button",
+      },
+      {
+        at: null,
+        role: "assistant" as const,
+        kind: "tool_call" as const,
+        text: "orbit-computer act mouse_click(120,90)",
+      },
+      {
+        at: null,
+        role: "tool" as const,
+        kind: "tool_result" as const,
+        text: '{"id":"unique-operation-id","step":1}',
+      },
+      {
+        at: null,
+        role: "assistant" as const,
+        kind: "thinking" as const,
+        text: "Unrelated next action",
+      },
+    ];
+    expect(stepMessages(t, 1, messages)).toEqual(messages.slice(0, 3));
+    expect(stepMessages(t, 2, messages)).toEqual([]);
+    if (t.steps[1]) t.steps[1].actionId = "1";
+    expect(stepMessages(t, 1, messages)).toEqual([]);
+    if (t.steps[1]) t.steps[1].actionId = "unique-operation-id";
+    location.query = new URLSearchParams("step=1");
+    const html = renderToStaticMarkup(
+      <TrajectoryViewer
+        trajectory={t}
+        runId="fixture"
+        files={new Set()}
+        listingTruncated={false}
+        messages={messages}
+      />,
+    );
+    expect(html).toContain("Click the visible button");
+    expect(html).not.toContain("Unrelated next action");
+  });
+});

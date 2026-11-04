@@ -107,6 +107,8 @@ export const BenchCapabilities = z.object({
   conditions: z.record(z.string().max(80), z.string().max(2000)),
   scoreKind: z.enum(["binary", "scalar"]),
   rescore: z.enum(["evidence", "score", "none"]),
+  /** Agent capabilities (registry `capabilities`) a CLI method needs; checked on submission. */
+  requires: z.array(z.enum(["oneShot", "multiTurn", "mcp", "gui"])).default([]),
 });
 export type BenchCapabilities = z.infer<typeof BenchCapabilities>;
 
@@ -170,7 +172,15 @@ export type Evaluation = z.infer<typeof Evaluation>;
  * an adapter picks a kind, it never sends markup or styles. Unknown kinds are kept and shown with
  * their `fallback` kind, else by file extension, else as text.
  */
-export const REVIEW_KINDS = ["markdown", "image", "text", "json", "table", "trajectory"] as const;
+export const REVIEW_KINDS = [
+  "markdown",
+  "image",
+  "text",
+  "json",
+  "table",
+  "trajectory",
+  "episode",
+] as const;
 export type ReviewKind = (typeof REVIEW_KINDS)[number];
 
 /** Row zero is the initial observation; later rows contain each action's resulting observation. */
