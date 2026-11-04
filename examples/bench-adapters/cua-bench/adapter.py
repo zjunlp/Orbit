@@ -35,7 +35,12 @@ def settings(req):
     return root, c, steps
 
 
+IMMUTABLE = re.compile(r'(?:sha256:|[^\s]+@sha256:)[a-f0-9]{64}')
+
+
 def readiness(c):
+    if not IMMUTABLE.fullmatch(c.get('image', '')):
+        return 'Register the client image by its immutable id: -c image=sha256:<id> (see README)'
     try:
         runtime = subprocess.check_output(['docker', 'info', '--format', '{{.DefaultRuntime}}'],
                                          text=True, stderr=subprocess.DEVNULL, timeout=10).strip()

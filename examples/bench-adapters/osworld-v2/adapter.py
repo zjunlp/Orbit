@@ -198,7 +198,7 @@ def score(req):
         failure = "scorer_error"
         try: failure = read(root / "result.json").get("failure", failure)
         except (OSError, ValueError): pass
-        if failure not in {"env_start", "env_step", "policy_start", "policy_act", "scorer_error"}:
+        if failure not in {"env_start", "reset_failed", "env_step", "policy_start", "policy_act", "model_unavailable", "scorer_error"}:
             failure = "scorer_error"
         return {"score": None, "maxScore": 1, "invalid": True, "failure": failure,
                 "issues": [f"OSWorld evidence: {exc}"], "review": review}

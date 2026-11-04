@@ -118,3 +118,18 @@ KVM / 大镜像 / 外网导致无法真实运行时，如实记 not_run 与原�
 - 准备完整 WebVoyager 原版资产镜像并做真实浏览器检查；两套 Web 均需补模型计分校准；其他未审查任务保持 unsupported。含 after 的 Web trial 暂不能 rescore，MiniWoB 应单独注册。
 - Cua KiCad / workflows 的应用与账号条件未映射，继续 unsupported；原版 basic 其他变体未逐一校准。
 - 主线核心取消缺口：将 AbortSignal 贯通 starting 阶段 Docker build/pull；当前显式 process 准备路径可正常取消，不能替代对默认准备路径的修复。本线未改核心。
+
+## 主线审查修正（2026-11-04）
+
+审查结论：无阻塞的协议缺陷；所有适配器调用原版评分器，基础设施错误判 invalid 而非 0 分。修正：
+
+| 发现 | 处理 |
+| --- | --- |
+| Cua / CUA-Lite 客户端镜像默认可变 tag，仅 `docker image inspect` | 改为必须以不可变 id 登记（`sha256:` 或 `@sha256:`），否则任务 unsupported 并说明 |
+| Online-Mind2Web 把上游合法的 `Score = 0`（判读文本不可解析）判为 invalid | 接受 0..5；新增测试；越界值仍判 malformed |
+| WebVoyager 无回答被改为有效 0 分，仅在 README 说明 | 作为偏差写入 `capabilities.conditions` |
+| 一个 `maxSteps` 同时改三个套件 | 拆为 `maxSteps`（MiniWoB）、`webVoyagerMaxSteps`、`onlineMind2WebMaxSteps` |
+| OSWorld reset 失败记 `env_start`；模型 API 失败一律 `policy_act` | reset 记 `reset_failed`；模型 SDK 异常记 `model_unavailable`；score 允许这两类 |
+
+保留的判断：未声明 official 规则（MobileWorld 上游 `errors: exclude` 可后续加）；OSWorld 每 trial 解包 VM 归档（成本问题）。
+复查：四个适配器 unittest 全部通过（Cua 10、CUA-Lite 21 / 3 skipped、MobileWorld 9、OSWorld 12 / 2 skipped），`example-adapters.test.ts` 13/13。

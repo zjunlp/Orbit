@@ -13,7 +13,8 @@ from web_suites import ONLINE_BUILD_VERSIONS, ONLINE_SOURCE_LAYOUT, WEB_SUITES, 
 
 HERE = Path(__file__).resolve().parent
 TASKS = set(read(HERE / 'miniwob_tasks.json')['tasks'])
-CONFIG = {'image', 'miniwob', 'maxSteps', 'agentDir', 'webVoyagerImage', 'onlineMind2WebImage'}
+CONFIG = {'image', 'miniwob', 'maxSteps', 'webVoyagerMaxSteps', 'onlineMind2WebMaxSteps', 'agentDir',
+          'webVoyagerImage', 'onlineMind2WebImage'}
 OTHER_SUITES = ['osworld', 'osworld_v2', 'windowsarena', 'cua.basic', 'cua.kicad', 'cua.workflows',
                 'androidworld', 'androidlab', 'mobileworld', 'mobilegym',
                 'browsergym.webarena', 'browsergym.visualwebarena', 'webgym', 'osworld_g', 'screenspot_pro']
@@ -40,7 +41,12 @@ def settings(req):
     return root, c, steps
 
 
+IMMUTABLE = re.compile(r'(?:sha256:|[^\s]+@sha256:)[a-f0-9]{64}')
+
+
 def readiness(c):
+    if not IMMUTABLE.fullmatch(c.get('image', '')):
+        return 'Register the client image by its immutable id: -c image=sha256:<id> (see README)'
     try:
         subprocess.check_output(['docker', 'image', 'inspect', c.get('image', 'orbit-cua-lite:2af6926')],
                                 stderr=subprocess.DEVNULL, timeout=10)
@@ -128,7 +134,8 @@ def tasks(req):
             'Web evaluation': 'Original terminal judge deferred to after phase; no judge key or terminal reward given to the policy',
             'Web rescore': 'Current Orbit does not rescore after-phase trials; use a separate MiniWoB registration for evidence rescore',
             'Web judges': 'Native gpt-4.1 / o4-mini; OPENAI_API_KEY via benchmark passEnv; image_judge_workers=1',
-            'Web step limits': f"WebVoyager {c.get('maxSteps', '15')}; Online-Mind2Web {c.get('maxSteps', '30')}",
+            'Web step limits': f"WebVoyager {c.get('webVoyagerMaxSteps', '15')}; Online-Mind2Web {c.get('onlineMind2WebMaxSteps', '30')}",
+            'Deviation: WebVoyager no-answer': 'The original judge returns None (no_agent_response) when the agent gives no answer; Orbit records a valid 0 (the agent produced nothing to judge)',
             'Web subset': 'Five reviewed read-only tasks per suite; live-site availability is checked during reset',
             'Unsupported suites': 'Explicit suite rows are availability records, not individual benchmark episodes',
             'KVM': 'Not in Orbit ledger; desktop/mobile suites refused; host exclusivity required',
@@ -150,7 +157,10 @@ def solve(req):
             raise ValueError('Task is outside the reviewed login-free web subset')
         if issue := web_readiness(c, suite):
             raise ValueError(issue)
-        steps = int(c.get('maxSteps', str(web['steps'])))
+        key = 'webVoyagerMaxSteps' if suite == 'webharbor.webvoyager' else 'onlineMind2WebMaxSteps'
+        steps = int(c.get(key, str(web['steps'])))
+        if not 1 <= steps <= 1000:
+            raise ValueError(f'{key} must be 1..1000')
     elif t['task'] not in {f'browsergym.miniwob@{name}' for name in TASKS}:
         raise ValueError('Only registered MiniWoB or reviewed web episodes are supported')
     if t.get('options') or t.get('hostNetwork'):

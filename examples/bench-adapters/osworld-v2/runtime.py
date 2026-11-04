@@ -16,6 +16,10 @@ import zipfile
 from evidence import digest, read, redact_text_artifacts, trajectory_review, write
 
 
+# Exception class names of model SDKs whose failure means the model, not the policy, was unusable.
+MODEL_ERRORS = re.compile(r"(APIError|APIConnectionError|APITimeoutError|RateLimitError|AuthenticationError|PermissionDeniedError|InternalServerError|ServiceUnavailable|Overloaded)")
+
+
 class EvaluatorErrors(logging.Handler):
     """Observe the fixed upstream branches that otherwise convert evaluator exceptions to zero."""
     def __init__(self):
@@ -161,7 +165,7 @@ def run(plan_path):
         native_reset, native_step, native_evaluate = env.reset, env.step, env.evaluate
 
         def reset(*args, **kwargs):
-            result["failure"] = "env_start"
+            result["failure"] = "reset_failed"
             result["resets"] += 1
             if result["resets"] != 1:
                 raise ValueError("A second episode is forbidden")
@@ -225,6 +229,8 @@ def run(plan_path):
         result.pop("failure", None)
     except Exception as error:
         result["error_type"] = type(error).__name__
+        if result.get("failure") == "policy_act" and MODEL_ERRORS.search(type(error).__name__):
+            result["failure"] = "model_unavailable"
         print(f"OSWorld failed: {result.get('failure')} ({type(error).__name__})", file=sys.stderr)
     finally:
         # Orbit's existing process cleanup owns the labelled VM even if native close fails or we are cancelled.

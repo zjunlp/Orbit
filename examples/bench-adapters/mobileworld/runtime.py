@@ -13,6 +13,10 @@ import sys
 from evidence import digest, original_score, read, redact_text_artifacts, trajectory_review, write
 
 
+# Exception class names of model SDKs whose failure means the model, not the policy, was unusable.
+MODEL_ERRORS = re.compile(r"(APIError|APIConnectionError|APITimeoutError|RateLimitError|AuthenticationError|PermissionDeniedError|InternalServerError|ServiceUnavailable|Overloaded)")
+
+
 def docker(command):
     return subprocess.check_output(["docker", *command], text=True, timeout=60).strip()
 
@@ -144,6 +148,8 @@ def run(plan_path):
         result.pop("failure", None)
     except (Exception, SystemExit) as error:
         result["error_type"] = type(error).__name__
+        if result.get("failure") == "policy_act" and MODEL_ERRORS.search(type(error).__name__):
+            result["failure"] = "model_unavailable"
         print(f"MobileWorld failed: {result['failure']} ({type(error).__name__})", file=sys.stderr)
     finally:
         # The process backend collects and removes every orbit.parent container, even after cancellation.

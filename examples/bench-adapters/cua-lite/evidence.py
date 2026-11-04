@@ -41,7 +41,8 @@ def check_judge_verdict(suite, reward, info, image_count):
         records = info.get('image_judge_record')
         if not isinstance(records, list) or len(records) != image_count:
             raise ValueError('Original Online-Mind2Web image judgments are incomplete')
-        if any(not isinstance(row, dict) or type(row.get('Score')) is not int or not 1 <= row['Score'] <= 5
+        # Upstream sets Score = 0 for unparseable judge text ("legitimately not important"); 1..5 otherwise.
+        if any(not isinstance(row, dict) or type(row.get('Score')) is not int or not 0 <= row['Score'] <= 5
                for row in records):
             raise ValueError('Original Online-Mind2Web image judgment is malformed')
 

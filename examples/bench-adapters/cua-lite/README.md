@@ -41,7 +41,7 @@ MiniWoB uses live native terminal rewards. The two Web suites use the original t
 
 ## Web backends and terminal judges
 
-Each Web trial owns one fresh native backend service, with `instances=1`; it never attaches to a shared host service. WebVoyager keeps the original WebHarbor mirror sites and their image-baked initial data on a private network. Online-Mind2Web retains the original live-site browser and outbound network. Neither service receives model or judge keys. Each service reserves 2 CPU and 4 GiB in addition to the client allocation. The native step defaults are 15 and 30 respectively (`maxSteps` overrides them); the trial seed does not freeze external website content.
+Each Web trial owns one fresh native backend service, with `instances=1`; it never attaches to a shared host service. WebVoyager keeps the original WebHarbor mirror sites and their image-baked initial data on a private network. Online-Mind2Web retains the original live-site browser and outbound network. Neither service receives model or judge keys. Each service reserves 2 CPU and 4 GiB in addition to the client allocation. The native step defaults are 15 and 30 respectively (`webVoyagerMaxSteps` / `onlineMind2WebMaxSteps` override them; `maxSteps` is MiniWoB only); the trial seed does not freeze external website content.
 
 Prepare each native image by copying the fixed checkout's original build context:
 
@@ -90,3 +90,5 @@ The native evaluators can also return zero for malformed model text. The adapter
 `python3 -B -m unittest discover -s examples/bench-adapters/cua-lite` uses explicit file fixtures; real Chromium and screenshot-only calibration checks are recorded in [the task record](../../../docs/tasks/20261104-p5a-gui-hub-adapters.md).
 
 `ORBIT_LITE_NATIVE_TEST=1` additionally enables the original evaluator boundary tests, requiring Python 3.12 with the pinned source on `PYTHONPATH`. These use explicit image-buffer fixtures, check the original no-answer/key/dependency behavior, and make no model calls. They do not replace live browser or model calibration. Run them inside the prepared client with the adapter mounted at `/adapter`, the fixed `lite/` at `/upstream/lite`, its `pyproject.toml` at `/upstream/pyproject.toml`, `PYTHONPATH=/adapter:/upstream`, and `python -B -m unittest discover -s /adapter` through Orbit.
+
+The client image must be registered by its immutable id (`-c image=sha256:<id>` or `name@sha256:<digest>`); a mutable tag is refused so a later rebuild cannot silently change the client. Online-Mind2Web image judgments with `Score = 0` (upstream's value for unparseable judge text) are valid. WebVoyager's no-answer case is recorded as a valid 0 and declared under conditions as a deviation.

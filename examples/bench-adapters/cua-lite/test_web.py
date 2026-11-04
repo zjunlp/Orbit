@@ -175,7 +175,7 @@ class WebAdapterTest(unittest.TestCase):
 
     def test_online_malformed_terminal_or_image_judgment_is_invalid(self):
         for info in ({'eval_verdict': 'explicit malformed fixture', 'image_judge_record': [{'Score': 1}]},
-                     {'eval_verdict': 'Status: failure', 'image_judge_record': [{'Score': 0}]},
+                     {'eval_verdict': 'Status: failure', 'image_judge_record': [{'Score': 6}]},
                      {'eval_verdict': 'Status: failure', 'image_judge_record': []}):
             out = self.capture('online_mind2web', 0, info)
             with self.assertRaises(ValueError):
@@ -185,6 +185,12 @@ class WebAdapterTest(unittest.TestCase):
             with patch.object(judge, 'restore_native', return_value=SimpleNamespace(_evaluate=evaluate)):
                 self.assertEqual(asyncio.run(judge.run(out)), 1)
             self.assertEqual(evidence.validate(out)['failure'], 'scorer_error')
+
+    def test_online_unparseable_image_judgment_scored_zero_upstream_is_valid(self):
+        # Upstream main.py sets Score = 0 when the image judge's text cannot be parsed.
+        evidence.check_judge_verdict('online_mind2web', 0,
+                                     {'eval_verdict': 'Status: failure',
+                                      'image_judge_record': [{'Score': 0}]}, 1)
 
     def test_native_backend_preparation_preserves_source_and_refuses_overwrite(self):
         suite = 'online_mind2web'
