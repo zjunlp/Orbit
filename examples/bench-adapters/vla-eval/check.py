@@ -7,21 +7,33 @@ import sys
 
 
 def summarize(out: Path) -> dict:
+    """The one episode vla-eval exported for this trial, and which initial state it ran."""
     files = sorted(out.glob("*_aggregate.json"))
-    if not files:
-        raise ValueError("no vla-eval aggregate json in the solve output")
-    agg = json.loads(files[-1].read_text())
+    if len(files) != 1:
+        raise ValueError(f"expected one vla-eval aggregate json, found {len(files)}")
+    agg = json.loads(files[0].read_text())
     episodes = [e for t in agg.get("tasks") or [] for e in t.get("episodes", [])]
-    if not episodes:
-        raise ValueError("the aggregate has no episodes")
-    values = [float(e["metrics"]["success"]) for e in episodes if (e.get("metrics") or {}).get("success") is not None]
-    if len(values) != len(episodes):
-        raise ValueError("an episode has no success metric")
-    errors = sum(1 for e in episodes if e.get("failure_reason"))
-    return {"benchmark": agg.get("benchmark", ""), "episodes": len(episodes),
-            "success": sum(values) / len(values), "errors": errors,
-            "issues": [f"{errors} episode(s) errored upstream (vla-eval counts them as failures)"]
-            if errors else []}
+    if len(episodes) != 1:
+        raise ValueError(f"a trial is one episode, the aggregate has {len(episodes)}")
+    ep = episodes[0]
+    success = (ep.get("metrics") or {}).get("success")
+    if success is None:
+        raise ValueError("the episode has no success metric")
+    params = (agg.get("config") or {}).get("params") or {}
+    if "orbit_episode" not in params:
+        raise ValueError("the aggregate does not record which initial state ran")
+    error = ep.get("failure_reason")
+    return {
+        "benchmark": agg.get("benchmark", ""),
+        "task": ep.get("name", ""),
+        "episode": int(params["orbit_episode"]),
+        "steps": int(ep.get("steps") or 0),
+        "success": float(success),
+        "errors": 1 if error else 0,
+        "issues": [f"the episode errored upstream ({error}); vla-eval counts it as a failure"]
+        if error
+        else [],
+    }
 
 
 def main() -> int:

@@ -2,7 +2,6 @@ import { createReadStream } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import type { AgentRef, SessionMessage, SessionTranscript } from "../contracts/index.ts";
 import { agentErrorKind } from "../harness/index.ts";
 

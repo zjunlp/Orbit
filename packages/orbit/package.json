@@ -38,7 +38,8 @@
   "exports": {
     "./contracts": "./src/contracts/index.ts",
     "./naming": "./src/contracts/naming.ts",
-    "./metrics": "./src/contracts/metrics.ts"
+    "./metrics": "./src/contracts/metrics.ts",
+    "./categories": "./src/contracts/categories.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -55,6 +56,10 @@
       "./metrics": {
         "types": "./dist/metrics.d.mts",
         "import": "./dist/metrics.mjs"
+      },
+      "./categories": {
+        "types": "./dist/categories.d.mts",
+        "import": "./dist/categories.mjs"
       }
     }
   },

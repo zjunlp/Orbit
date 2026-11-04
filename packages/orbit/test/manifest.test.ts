@@ -200,3 +200,44 @@ it("never scores a missing value as 0 and merges method resources with solve", (
   expect(spec.resources).toMatchObject({ cpus: 6, memGB: 9, gpus: 1 });
   expect(spec.env).toEqual({ BASE: "1", X: "1" });
 });
+
+it("checks the planned episode in verify and score, and refuses seeds without one", () => {
+  writeFileSync(
+    join(dir, "episodes.yaml"),
+    MANIFEST.replace(
+      "version: 1\n",
+      "version: 1\nepisodes: 5\ncategory: embodied-policy\n",
+    ).replace(
+      "  invalid:\n",
+      '  expect:\n    - { path: "episode", equals: "{{episode}}" }\n  invalid:\n',
+    ),
+  );
+  const b = { ...benchmark, config: { manifest: "episodes.yaml" } };
+  const out = join(dir, "out-ep");
+  const verifyOut = join(dir, "verify-ep");
+  mkdirSync(join(verifyOut, "result"), { recursive: true });
+  mkdirSync(out, { recursive: true });
+  const write = (episode: number) => {
+    const text = JSON.stringify({ episode, episodes: [{ success: 1 }] });
+    writeFileSync(join(out, "A_result.json"), text);
+    writeFileSync(join(verifyOut, "result", "A_result.json"), text);
+  };
+  const req = (seed: number) => ({
+    protocol: 1,
+    op: "score",
+    benchmark: b,
+    trial: { ...trial("empty"), seed },
+    solve: { run: {}, output: out },
+    verify: { run: {}, output: verifyOut },
+  });
+  write(2);
+  expect(manifestAdapter.verify(req(3) as never).spec.command).toBeDefined();
+  expect(manifestAdapter.score(req(3) as never)).toMatchObject({ score: 1, invalid: false });
+  expect(manifestAdapter.score(req(1) as never)).toMatchObject({
+    invalid: true,
+    issues: [expect.stringContaining("planned 0")],
+  });
+  expect(() => manifestAdapter.solve({ ...req(6), op: "solve" } as never)).toThrow(
+    /seed 6 has no episode/,
+  );
+});

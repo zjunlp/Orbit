@@ -75,7 +75,7 @@ def tasks(req):
     return {'tasks': [{'id': r['id'], 'title': r['title'], 'supported': not (unavailable or reason(r)),
                        'reason': unavailable or reason(r), 'tags': {'suite': r['path'].split('/')[0],
                        'variant': str(r['variant']), 'fidelity': 'experimental'}} for r in rows],
-            'capabilities': {'kind': 'desktop', 'methods': ['external', 'empty', 'oracle'],
+            'capabilities': {'category': 'gui', 'profiles': ['desktop', 'fixture'], 'kind': 'desktop', 'methods': ['external', 'empty', 'oracle'],
                 'scoreKind': 'scalar', 'rescore': 'evidence', 'conditions': {
                     'Cua source': COMMIT, 'Desktop image': DESKTOP_IMAGE,
                     'Tasksets': 'Local datasets at the pinned source commit; not the older registry 1.0 revision',

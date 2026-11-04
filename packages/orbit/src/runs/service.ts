@@ -32,7 +32,7 @@ import type { Prepared } from "../harness/index.ts";
 import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { Redactor } from "../lib/redact.ts";
-import { allocate, allocateRoles, hostProtection } from "../resources/allocate.ts";
+import { allocateRoles, hostProtection } from "../resources/allocate.ts";
 import { resolveAgentRef } from "../sessions/index.ts";
 import type { RunFilter, Store } from "../store/index.ts";
 import type { DatasetRegistry } from "../workspace/datasets.ts";

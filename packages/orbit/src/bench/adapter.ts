@@ -31,7 +31,7 @@ export interface AdapterHandlers {
   /** Metrics besides `score` (or a relabelled `score`), declared with the tasks. */
   metrics?: MetricSpecInput[];
   /** What the `tasks` reply declares besides the tasks, when it depends on the registration. */
-  info?(req: AdapterRequest): Omit<AdapterTasksResponseInput, "tasks">;
+  info?(req: AdapterRequest, tasks: BenchTask[]): Omit<AdapterTasksResponseInput, "tasks">;
   tasks(req: AdapterRequest): BenchTask[];
   solve(req: TrialRequest): SpecReply;
   verify(req: VerifyRequest): SpecReply;
@@ -43,8 +43,10 @@ export function handle(h: AdapterHandlers, req: AdapterRequest): unknown {
   const need = (k: "trial" | "solve" | "verify") => {
     if (!req[k]) throw new Error(`${req.op} request without ${k}`);
   };
-  if (req.op === "tasks")
-    return { tasks: h.tasks(req), metrics: h.metrics ?? [], ...h.info?.(req) };
+  if (req.op === "tasks") {
+    const tasks = h.tasks(req);
+    return { tasks, metrics: h.metrics ?? [], ...h.info?.(req, tasks) };
+  }
   need("trial");
   if (req.op === "solve") return h.solve(req as TrialRequest);
   need("solve");

@@ -129,7 +129,7 @@ def tasks(req):
         failures = ([reason] if reason else []) + common
         rows.append({"id": Path(filename).stem, "title": Path(filename).stem, "supported": not failures,
                      "reason": "; ".join(failures) or None, "tags": {"release": RELEASE, "source_sha256": expected["sha256"]}})
-    return {"tasks": rows, "capabilities": {"kind": "desktop", "methods": ["external", "empty"],
+    return {"tasks": rows, "capabilities": {"category": "gui", "profiles": ["desktop", "fixture"], "kind": "desktop", "methods": ["external", "empty"],
         "scoreKind": "scalar", "rescore": "evidence", "conditions": {
             "Code": COMMIT, "Release": RELEASE, "Task revision": release["tasks"]["commit"],
             "Assets revision": release["assets"]["commit"], "VM runtime": release["provider_images"]["docker"]["ubuntu"]["runtime_image"],

@@ -100,6 +100,28 @@ interface Resources {
   gpuModels?: string[];
 }
 
+/**
+ * Embodied First Exam tasks (`[task] name = "embodied-first-exam/…"`): a coding agent solving a
+ * robotics task (category agent-workspace). A privileged task hands in a trajectory or program that
+ * the verifier replays; a standard or realtime task drives the simulator live and its sidecar grades.
+ */
+export function embodiedTags(id: string, task: Table, meta: Table): Record<string, string> {
+  if (!str(task.name)?.startsWith("embodied-first-exam/")) return {};
+  const mode = /-(privileged|standard-realtime|realtime|standard)$/.exec(id)?.[1] ?? "standard";
+  // roboEngineer seals a numeric controller even in standard mode (its hidden dynamics are the task).
+  const program = mode === "privileged" || id.startsWith("roboengineer-");
+  const out: Record<string, string> = {
+    domain: "embodied",
+    mode: mode === "standard-realtime" ? "realtime" : mode,
+    profile: program ? "embodied-program" : "embodied-live",
+  };
+  for (const k of ["protocol", "oracle", "simulator", "task_type"] as const) {
+    const v = str(meta[k]);
+    if (v) out[k === "task_type" ? "deliverable" : k] = v;
+  }
+  return out;
+}
+
 /** `[environment] gpu_types`: GPU models any of which Harbor may provision. */
 function gpuTypes(v: unknown, problems: string[]): string[] {
   if (v === undefined || v === null) return [];
@@ -416,6 +438,7 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     const v = str(meta[k]);
     if (v) tags[k] = v;
   }
+  Object.assign(tags, embodiedTags(id, task, meta));
   return {
     id,
     dir,
@@ -776,6 +799,21 @@ export const harborAdapter: AdapterHandlers = {
   metrics: HARBOR_METRICS,
   tasks: (req) =>
     findHarborTasks(req.benchmark.path, harborOptions(req.benchmark.config)).map(toBenchTask),
+  info: (_req, tasks) => {
+    const profiles = [...new Set(tasks.map((t) => t.tags.profile ?? "terminal"))].sort();
+    const embodied = tasks.some((t) => t.tags.domain === "embodied");
+    return {
+      capabilities: {
+        category: "agent-workspace",
+        profiles,
+        domains: embodied ? ["embodied"] : [],
+        methods: ["oracle", "empty", "cli"],
+        conditions: { Format: "Harbor task directories; each task's own environment and verifier" },
+        scoreKind: "scalar",
+        rescore: "evidence",
+      },
+    };
+  },
   solve: ({ benchmark, trial }) => {
     const t = harborTask(benchmark.path, trial.task, harborOptions(benchmark.config));
     return {

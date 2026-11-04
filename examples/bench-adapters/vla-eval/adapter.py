@@ -25,7 +25,22 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 from orbit_bench import main as protocol_main  # noqa: E402
 
-CONFIG = {"image", "benchmark", "episodesPerTask", "timeoutMin", "params", "policyImage"}
+CONFIG = {"image", "benchmark", "episodes", "timeoutMin", "params", "policyImage"}
+# One trial is one episode; its seed picks the initial state (seed 1 → episode 0). This module, staged
+# per trial, makes the upstream benchmark start that episode; everything else stays upstream.
+EPISODE_MODULE = """import importlib
+
+_base = getattr(importlib.import_module({module!r}), {cls!r})
+
+
+class OrbitEpisode(_base):
+    def __init__(self, orbit_episode: int = 0, **kw):
+        super().__init__(**kw)
+        self.orbit_episode = int(orbit_episode)
+
+    async def start_episode(self, task, recorder=None):
+        return await super().start_episode({{**task, "episode_idx": self.orbit_episode}}, recorder)
+"""
 CONTAINER_CONFIG = "/orbit-config/vla-eval.yaml"
 POLICY_PORT = 8000
 # The images run `conda run -n libero` from their ENTRYPOINT; a replaced entrypoint needs the path.
@@ -49,6 +64,8 @@ print(json.dumps([{"id": str(t.get("task_id", i)), "name": t.get("name", ""),
 def settings(req):
     b = req["benchmark"]
     c = b["config"]
+    if "episodesPerTask" in c:
+        raise ValueError("episodesPerTask is gone: a trial is one episode; use seeds (seed n = episode n-1)")
     unknown = set(c) - CONFIG
     if unknown:
         raise ValueError(f"Unknown vla-eval config: {', '.join(sorted(unknown))}")
@@ -59,10 +76,19 @@ def settings(req):
     if not re.fullmatch(r"[A-Za-z_][\w.]*:[A-Za-z_]\w*", spec):
         raise ValueError("config `benchmark` is module:Class, e.g. "
                          "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark")
-    episodes = int(c.get("episodesPerTask", "1"))
-    if not 1 <= episodes <= 100:
-        raise ValueError("episodesPerTask must be between 1 and 100")
+    # Initial states per task the benchmark provides (LIBERO: 50).
+    episodes = int(c.get("episodes", "50"))
+    if not 1 <= episodes <= 1000:
+        raise ValueError("episodes must be between 1 and 1000")
     return root, c, spec, episodes
+
+
+def episode_of(trial, episodes):
+    """The episode (initial state) a trial runs: seed n is episode n-1."""
+    seed = int(trial["seed"])
+    if not 1 <= seed <= episodes:
+        raise ValueError(f"seed {seed} has no episode: this benchmark has episodes 1..{episodes} per task")
+    return seed - 1
 
 
 def image_of(c):
@@ -101,7 +127,11 @@ def tasks(req):
             for t in rows
         ],
         "capabilities": {
-            "kind": "other",
+            # C6: a fixed policy closes the loop with the simulator, one episode per trial.
+            "category": "embodied-policy",
+            "profiles": ["sim", "sync", "step"],
+            "domains": ["embodied"],
+            "calibration": {"oracle": "none", "seedsVary": True},
             "methods": ["external", "empty"],
             "scoreKind": "scalar",
             "rescore": "evidence",
@@ -109,7 +139,8 @@ def tasks(req):
                 "Environment": image_of(c),
                 "Benchmark": spec,
                 "Benchmark params": json.dumps(params, sort_keys=True),
-                "Episodes per task": str(int(c.get("episodesPerTask", "1"))),
+                "Episode": "one per trial; seed n runs the benchmark's initial state n-1 "
+                           f"(1..{int(c.get('episodes', '50'))})",
                 "Entry": "vla-eval run --no-docker (the command the benchmark image itself uses)",
                 "Policy": "external: the model-server image as service `policy`, its own GPU; "
                           "empty: a zero-action server from the benchmark image",
@@ -161,6 +192,7 @@ def solve(req):
     root, c, spec, episodes = settings(req)
     t = req["trial"]
     method = t["method"]
+    episode = episode_of(t, episodes)
     if method["agent"] not in ("external", "empty"):
         raise ValueError("vla-eval runs external model servers and empty; CLI Agents are not adapted")
     params = params_of(c)
@@ -168,14 +200,17 @@ def solve(req):
     staging = Path(t["staging"])
     staging.mkdir(parents=True, exist_ok=True)
     server_url = f"ws://policy:{POLICY_PORT}"
+    module, cls = spec.split(":")
+    (staging / "orbit_episode.py").write_text(EPISODE_MODULE.format(module=module, cls=cls),
+                                              encoding="utf-8")
+    params = {**params, "orbit_episode": episode}
     config = (
         f"server:\n  url: {json.dumps(server_url)}\n"
         "logging:\n  level: INFO\n"
         "benchmarks:\n"
-        f"  - benchmark: {json.dumps(spec)}\n"
-        f"    episodes_per_task: {episodes}\n"
-        + ("    params:\n" + "".join(f"      {k}: {json.dumps(v)}\n" for k, v in params.items())
-           if params else "")
+        "  - benchmark: \"orbit_episode:OrbitEpisode\"\n"
+        "    episodes_per_task: 1\n"
+        "    params:\n" + "".join(f"      {k}: {json.dumps(v)}\n" for k, v in params.items())
     )
     (staging / "vla-eval.yaml").write_text(config, encoding="utf-8")
     # One task, selected by its own name (vla-eval filters tasks by suite or name, then caps the list):
@@ -184,7 +219,7 @@ def solve(req):
     argv = [
         "run", "--no-docker", "--config", CONTAINER_CONFIG,
         "--output-dir", "/orbit/output",
-        "--benchmark-field", f"episodes_per_task={episodes}",
+        "--benchmark-field", "episodes_per_task=1",
         "--benchmark-field", f"max_tasks=1",
         "--benchmark-field", f"tasks={json.dumps([name])}",
     ]
@@ -202,7 +237,7 @@ def solve(req):
             "entrypoint": CONDA,
             "command": ["run", "--no-capture-output", "-n", "libero", "vla-eval", *argv],
             "mounts": mounts,
-            "env": {"ORBIT_VLA_CONFIG": f"/orbit-config/vla-eval.yaml"},
+            "env": {"ORBIT_VLA_CONFIG": "/orbit-config/vla-eval.yaml", "PYTHONPATH": "/orbit-config"},
             # The benchmark image keeps its LIBERO config under /root/.libero; run as root like
             # Harbor does for task containers, so the image's own configuration is visible.
             "root": True,
@@ -229,29 +264,31 @@ def verify(req):
 
 
 def summarize(out: Path) -> dict:
-    """The result vla-eval exported: mean success over the episode(s) of this trial."""
+    """The one episode vla-eval exported for this trial, and which initial state it ran."""
     files = sorted(out.glob("*_aggregate.json"))
-    if not files:
-        raise ValueError("no vla-eval aggregate json in the output")
-    agg = json.loads(files[-1].read_text())
+    if len(files) != 1:
+        raise ValueError(f"expected one vla-eval aggregate json, found {len(files)}")
+    agg = json.loads(files[0].read_text())
     episodes = [e for t in agg.get("tasks") or [] for e in t.get("episodes", [])]
-    if not episodes:
-        raise ValueError("the aggregate has no episodes")
-    values = [
-        float(e["metrics"]["success"])
-        for e in episodes
-        if (e.get("metrics") or {}).get("success") is not None
-    ]
-    if len(values) != len(episodes):
-        raise ValueError("an episode has no success metric")
-    errors = sum(1 for e in episodes if e.get("failure_reason"))
+    if len(episodes) != 1:
+        raise ValueError(f"a trial is one episode, the aggregate has {len(episodes)}")
+    ep = episodes[0]
+    success = (ep.get("metrics") or {}).get("success")
+    if success is None:
+        raise ValueError("the episode has no success metric")
+    params = (agg.get("config") or {}).get("params") or {}
+    if "orbit_episode" not in params:
+        raise ValueError("the aggregate does not record which initial state ran")
+    error = ep.get("failure_reason")
     return {
         "benchmark": agg.get("benchmark", ""),
-        "episodes": len(episodes),
-        "success": sum(values) / len(values),
-        "errors": errors,
-        "issues": [f"{errors} episode(s) errored upstream (vla-eval counts them as failures)"]
-        if errors
+        "task": ep.get("name", ""),
+        "episode": int(params["orbit_episode"]),
+        "steps": int(ep.get("steps") or 0),
+        "success": float(success),
+        "errors": 1 if error else 0,
+        "issues": [f"the episode errored upstream ({error}); vla-eval counts it as a failure"]
+        if error
         else [],
     }
 
@@ -270,6 +307,11 @@ def score(req):
         verdict = json.loads((Path(req["verify"]["output"]) / "check.json").read_text())
         if body != verdict:
             raise ValueError("Verifier output disagrees with the saved result")
+        _, _, _, episodes = settings(req)
+        planned = episode_of(req["trial"], episodes)
+        if body["episode"] != planned or body["task"] != req["trial"]["task"].partition(":")[2]:
+            raise ValueError(f"ran {body['task']!r} episode {body['episode']}, planned episode {planned}")
+        episode = {"steps": body["steps"], "endedBy": "success" if body["success"] else "horizon"}
         if body["errors"]:
             # vla-eval counts infrastructure errors as failures; Orbit reports them as invalid and
             # keeps the rule's official value, so the two views stay distinguishable.
@@ -287,8 +329,10 @@ def score(req):
             "invalid": False,
             "issues": [],
             "metrics": {"success": 100.0 * float(body["success"])},
+            "episode": episode,
             "review": {**review, "details": {"benchmark": body["benchmark"],
-                                             "episodes": str(body["episodes"])}},
+                                             "initial state": str(body["episode"]),
+                                             "steps": str(body["steps"])}},
         }
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return {

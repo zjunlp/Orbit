@@ -4,11 +4,18 @@
 # mean_success. Register with: orbit bench add libero <this directory> --adapter manifest
 version: 1
 image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
+# C6: a fixed policy closes the loop with the simulator; one trial is one episode, seed n runs
+# LIBERO's initial state n-1 (50 per task).
+category: embodied-policy
+profiles: [sim, sync, step]
+domains: [embodied]
+calibration: { oracle: none, seedsVary: true }
+episodes: 50
 scoreKind: scalar
 conditions:
   Benchmark: vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark
   Benchmark params: '{"suite": "libero_spatial", "seed": 7}'
-  Episodes per task: "1"
+  Episode: "one per trial; seed n runs initial state n-1 (1..50)"
   Entry: vla-eval run --no-docker (the command the benchmark image itself uses)
   Policy: "external: the model-server image as service `policy`; empty: a zero-action server from the benchmark image"
 metrics:
@@ -29,17 +36,30 @@ tasks:
   id: "{{suite}}:{{name}}"
 
 files:
+  # Starts the trial's episode; everything else is the upstream benchmark.
+  orbit_episode.py: |
+    from vla_eval.benchmarks.libero.benchmark import LIBEROBenchmark
+
+
+    class OrbitEpisode(LIBEROBenchmark):
+        def __init__(self, orbit_episode: int = 0, **kw):
+            super().__init__(**kw)
+            self.orbit_episode = int(orbit_episode)
+
+        async def start_episode(self, task, recorder=None):
+            return await super().start_episode({**task, "episode_idx": self.orbit_episode}, recorder)
   vla-eval.yaml: |
     server:
       url: "ws://policy:8000"
     logging:
       level: INFO
     benchmarks:
-      - benchmark: "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark"
+      - benchmark: "orbit_episode:OrbitEpisode"
         episodes_per_task: 1
         params:
           suite: "libero_spatial"
           seed: 7
+          orbit_episode: {{episode}}
 
 solve:
   # The image's ENTRYPOINT is `conda run -n libero vla-eval`; run conda explicitly with the same environment.
@@ -62,6 +82,7 @@ solve:
     - max_tasks=1
     - --benchmark-field
     - 'tasks=[{{json:task.tags.name}}]'
+  env: { PYTHONPATH: /orbit-config }
   # LIBERO keeps its configuration under /root/.libero in the image.
   root: true
   network: true
@@ -99,6 +120,9 @@ result:
   maxScore: 1
   metrics:
     success: { path: "tasks[*].episodes[*].metrics.success", reduce: mean, scale: 100 }
+  expect:
+    - { path: "config.params.orbit_episode", equals: "{{episode}}" }
+    - { path: "num_episodes_total", equals: "1" }
   invalid:
     - path: "tasks[*].episodes[*].failure_reason"
       failure: env_step
