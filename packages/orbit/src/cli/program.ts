@@ -439,6 +439,26 @@ export function createProgram(deps: ProgramDeps, paths: OrbitPaths = orbitPaths(
       if (!r.ok) process.exitCode = 1;
     });
 
+  program
+    .command("reconcile")
+    .description(
+      "remove Docker leftovers of finished runs and release leaked leases now (the daemon also does it every 10 min)",
+    )
+    .option("--json", "print JSON")
+    .action(async (o: { json?: boolean }) => {
+      const r = await (await client()).reconcile();
+      print(o.json, r, () =>
+        r.skipped
+          ? "docker did not answer; nothing was decided"
+          : [
+              `removed ${r.removed.length} leftover(s), released ${r.released.length} lease(s)`,
+              ...r.removed.map((x) => `  - ${x}`),
+              ...r.failed.map((x) => `  ! failed: ${x}`),
+            ].join("\n"),
+      );
+      if (r.failed.length || r.skipped) process.exitCode = 1;
+    });
+
   registerAgent(program, client, print);
   registerAuth(program, client, print);
   registerNotify(program, client, print);

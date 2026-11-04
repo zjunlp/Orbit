@@ -140,3 +140,23 @@ it("translates an EFE-style task: main GPU, monitor sharing it, gpu_types and sh
   expect(args.filter((a) => a === "--shm-size")).toHaveLength(1);
   expect(args).toContain("8192m");
 });
+
+it("routes a GPU-model restricted run only to a worker with that model", async () => {
+  const { remoteBlocker } = await import("../src/runs/placement.ts");
+  const spec = RunSpec.parse({
+    image: "x",
+    command: ["x"],
+    resources: { gpus: 1, cpus: 1, memGB: 1, gpuModels: ["L40S"] },
+  });
+  const worker = (resources: NodeResources) => ({
+    name: "w",
+    online: true,
+    resources,
+    leases: [],
+    datasets: [],
+    profiles: [],
+  });
+  const only3090 = NodeResources.parse({ ...node, gpus: [node.gpus[0]] });
+  expect(remoteBlocker(spec, worker(only3090) as never)).toMatch(/L40S/);
+  expect(remoteBlocker(spec, worker(node) as never)).toBeNull();
+});

@@ -303,3 +303,22 @@ export function allocateRoles(
   }
   return { ok: true, gpuIds: out.flatMap((x) => x.gpuIds), roles: out };
 }
+
+/** Below this much free space on the data disk no new run starts here (outputs, images, checkpoints). */
+export const MIN_FREE_DISK_GB = 5;
+
+/**
+ * Host protection before any lease (design §9.6, point 3): a nearly full data disk, or too many runs
+ * starting at once (image pulls, builds, VM unpacking), make new local runs wait.
+ */
+export function hostProtection(
+  r: NodeResources,
+  starting: number,
+  maxStarting: number,
+): string | null {
+  if (r.disk.totalGB > 0 && r.disk.freeGB < MIN_FREE_DISK_GB)
+    return `host protection: the data disk has ${r.disk.freeGB} GB free (under ${MIN_FREE_DISK_GB} GB)`;
+  if (starting >= maxStarting)
+    return `waiting for ${starting} starting run(s) (at most ${maxStarting} start at once; ORBIT_MAX_STARTING)`;
+  return null;
+}
