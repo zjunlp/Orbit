@@ -5,4 +5,5 @@ RUN pip install --no-cache-dir browsergym-miniwob==0.14.3 playwright==1.44.0 gym
     psutil==7.0.0 docker==7.1.0 uvicorn==0.34.2 fastapi==0.115.12 httpx==0.28.1 pydantic==2.10.6 jsonschema==4.26.0 \
  && playwright install --with-deps chromium \
  && mv /root/.cache/ms-playwright /ms-playwright && chmod -R a+rX /ms-playwright
+RUN pip install --no-cache-dir openai==1.75.0
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
