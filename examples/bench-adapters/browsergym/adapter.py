@@ -11,8 +11,19 @@ import sys
 from evidence import BROWSERGYM_VERSION, MINIWOB_COMMIT, read, validate, write
 
 HERE = Path(__file__).resolve().parent
-TASKS = {"click-test", "click-test-2", "click-button", "enter-text", "click-checkboxes"}
-CONFIG = {"image", "agentDir", "actionSet", "maxSteps"}
+# Every task browsergym-miniwob registers, snapshotted from the pinned package (not guessed).
+TASKS = set(json.loads((HERE / "miniwob_tasks.json").read_text())["tasks"])
+CONFIG = {"image", "agentDir", "actionSet", "maxSteps", "suite"}
+# BrowserGym suites that need deployed websites with shared state. Running their tasks in parallel
+# lets one task change what another sees, and Orbit has no exclusive scheduling for shared backends
+# yet (design §9.6 item 5), so they are refused rather than run under changed conditions.
+BACKEND_SUITES = {
+    "webarena": "WebArena (shared shopping/reddit/gitlab/map sites)",
+    "webarena_verified": "WebArena Verified (same backends as WebArena)",
+    "visualwebarena": "VisualWebArena (shared classifieds/shopping/reddit sites)",
+    "workarena": "WorkArena (a ServiceNow instance)",
+    "assistantbench": "AssistantBench (the open web)",
+}
 
 
 def settings(req):
@@ -20,6 +31,12 @@ def settings(req):
     c = b["config"]
     if set(c) - CONFIG:
         raise ValueError(f"Unknown BrowserGym config: {', '.join(sorted(set(c) - CONFIG))}")
+    suite = c.get("suite", "miniwob")
+    if suite in BACKEND_SUITES:
+        raise ValueError(f"{BACKEND_SUITES[suite]} needs a deployed backend and exclusive task "
+                         "scheduling, which this Orbit version does not provide; only miniwob runs")
+    if suite != "miniwob":
+        raise ValueError(f"Unknown BrowserGym suite: {suite}")
     root = Path(b["path"]).resolve()
     if not (root / "miniwob/html/miniwob").is_dir():
         raise ValueError("Expected a miniwob-plusplus checkout with miniwob/html/miniwob")
@@ -45,7 +62,7 @@ def tasks(req):
     available = {p.stem for p in (root / "miniwob/html/miniwob").glob("*.html")}
     rows = []
     for task in sorted(available | TASKS):
-        reason = ("Outside the phase-one MiniWoB subset" if task not in TASKS else
+        reason = ("Not registered by browsergym-miniwob 0.14.3" if task not in TASKS else
                   "Missing original task HTML" if task not in available else None)
         rows.append({"id": f"miniwob.{task}", "title": task, "supported": reason is None,
                      "reason": reason, "tags": {"environment": "browsergym-miniwob"}})
@@ -57,7 +74,7 @@ def tasks(req):
             "Observation": "Screenshot + accessibility tree" if config.get("actionSet") == "bid"
                            else "Screenshot",
             "Actions": config.get("actionSet", "coord"), "Step limit": str(steps),
-            "Coverage": "Five-task integration subset"}}, "metrics": [
+            "Coverage": f"Full MiniWoB++ ({len(TASKS)} tasks registered by browsergym-miniwob {BROWSERGYM_VERSION})"}}, "metrics": [
         {"name": "score", "label": "Success", "unit": "%", "primary": True,
          "description": "Original BrowserGym MiniWoB binary reward, averaged over tasks"}]}
 
@@ -68,7 +85,7 @@ def solve(req):
     if t.get("options"):
         raise ValueError("BrowserGym has no trial options; set actionSet/maxSteps at registration")
     if t["task"] not in {f"miniwob.{name}" for name in TASKS}:
-        raise ValueError("Task is outside the phase-one MiniWoB subset")
+        raise ValueError("Task is not registered by browsergym-miniwob")
     if not (root / "miniwob/html/miniwob" / f"{t['task'][8:]}.html").is_file():
         raise ValueError("Original task HTML is missing")
     method = t["method"]

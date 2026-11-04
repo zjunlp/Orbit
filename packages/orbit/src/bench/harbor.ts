@@ -5,7 +5,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { parse as parseToml } from "smol-toml";
-import type { BenchTask, Method } from "../contracts/index.ts";
+import type { BenchTask, FailureKind, Method } from "../contracts/index.ts";
 import type { AdapterHandlers, RunDescription, ScoreReply } from "./adapter.ts";
 import { type ComposePlan, composeFile, parseCompose } from "./compose.ts";
 
@@ -66,6 +66,28 @@ export interface HarborTask {
     workdir: string | null;
   };
   tags: Record<string, string>;
+  /** Conditions that differ from Harbor's, allowed by the registration and recorded on trials. */
+  deviations: string[];
+}
+
+/** Registration options of the built-in harbor adapter (`orbit bench add -c KEY=VALUE`). */
+export interface HarborOptions {
+  /** `allow`: compose `pid: host` / `cgroup: host` (resource monitors). */
+  hostNamespaces?: string;
+  /** `public`: run an `allowlist` agent network as public internet (a recorded deviation). */
+  allowlistNetwork?: string;
+}
+
+const HARBOR_CONFIG = new Set(["hostNamespaces", "allowlistNetwork"]);
+
+export function harborOptions(config: Record<string, string>): HarborOptions {
+  const unknown = Object.keys(config).filter((k) => !HARBOR_CONFIG.has(k));
+  if (unknown.length) throw new Error(`unknown harbor config: ${unknown.join(", ")}`);
+  if (config.hostNamespaces && config.hostNamespaces !== "allow")
+    throw new Error("hostNamespaces must be allow");
+  if (config.allowlistNetwork && config.allowlistNetwork !== "public")
+    throw new Error("allowlistNetwork must be public");
+  return config;
 }
 
 interface Resources {
@@ -79,9 +101,15 @@ const table = (v: unknown): Table => (v && typeof v === "object" ? (v as Table) 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
+/** A whole-value `${VAR:-default}` / `${VAR-default}` template; Orbit uses the default. */
+const DEFAULTED = /^\$\{[A-Za-z_][A-Za-z0-9_]*:?-([^}]*)\}$/;
+
 function vars(v: unknown): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [k, x] of Object.entries(table(v))) out[k] = String(x);
+  for (const [k, x] of Object.entries(table(v))) {
+    const m = DEFAULTED.exec(String(x));
+    out[k] = m ? (m[1] as string) : String(x);
+  }
   return out;
 }
 
@@ -141,12 +169,25 @@ export function verifierMode(verifier: Table): string {
  * Harbor's network policy for a phase: the phase's own `network_mode`, else its environment's
  * (`allow_internet = false` is the deprecated spelling of `no-network`), defaulting to public.
  */
-function networkMode(phase: Table, env: Table, problems: string[], label: string): boolean {
+function networkMode(
+  phase: Table,
+  env: Table,
+  problems: string[],
+  label: string,
+  opts: HarborOptions = {},
+  deviations: string[] = [],
+): boolean {
   const legacy = env.allow_internet === false ? "no-network" : "public";
   const mode = str(phase.network_mode) ?? str(env.network_mode) ?? legacy;
   if (mode === "public") return true;
   if (mode === "no-network") return false;
-  problems.push(`${label}-phase network_mode "${mode}" is not supported`);
+  if (mode === "allowlist" && opts.allowlistNetwork === "public") {
+    deviations.push(`${label} network: allowlist run as public internet (no egress filter)`);
+    return true;
+  }
+  problems.push(
+    `${label}-phase network_mode "${mode}" is not supported${mode === "allowlist" ? " (register with -c allowlistNetwork=public to run it as public, recorded as a deviation)" : ""}`,
+  );
   return true;
 }
 
@@ -206,8 +247,8 @@ function unsupportedSettings(toml: Table): string[] {
   ];
   for (const [label, v] of tables)
     check(
-      Object.values(table(v)).some((x) => String(x).includes("${")),
-      `${label} \${VAR} template`,
+      Object.values(table(v)).some((x) => String(x).includes("${") && !DEFAULTED.test(String(x))),
+      `${label} \${VAR} template without a default`,
     );
   return out;
 }
@@ -253,7 +294,24 @@ function verifierImage(
   return { image: solve, bundledTests: false };
 }
 
-export function parseHarborTask(dir: string, id: string): HarborTask {
+/** Tables whose `${VAR:-default}` values take their default (Orbit does not pass its environment). */
+function defaultedTemplates(toml: Table): string[] {
+  const environment = table(toml.environment);
+  const verifier = table(toml.verifier);
+  const out: string[] = [];
+  for (const [label, v] of [
+    ["[environment.env]", environment.env],
+    ["[verifier.env]", verifier.env],
+    ["[verifier.environment.env]", table(verifier.environment).env],
+    ["[solution.env]", table(toml.solution).env],
+  ] as const)
+    for (const [k, x] of Object.entries(table(v)))
+      if (DEFAULTED.test(String(x)))
+        out.push(`${label} ${k} uses its template default (Harbor reads the host environment)`);
+  return out;
+}
+
+export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {}): HarborTask {
   const toml = table(parseToml(readFileSync(join(dir, "task.toml"), "utf8")));
   const task = table(toml.task);
   const meta = table(toml.metadata);
@@ -265,6 +323,7 @@ export function parseHarborTask(dir: string, id: string): HarborTask {
   const verifierEnv = ownVerifierEnv ? table(verifier.environment) : environment;
   const envRes = resources(environment);
   const problems: string[] = [];
+  const deviations = defaultedTemplates(toml);
   const image = solveImage(dir, environment, problems);
   if (!existsSync(join(dir, "instruction.md"))) problems.push("instruction.md missing");
   const envDir = join(dir, "environment");
@@ -284,8 +343,13 @@ export function parseHarborTask(dir: string, id: string): HarborTask {
           ...(image && "image" in image ? { PREBUILT_IMAGE_NAME: image.image } : {}),
         },
         problems,
+        { hostNamespaces: opts.hostNamespaces === "allow" },
       )
     : null;
+  if (compose?.services.some((x) => x.hostPid || x.hostCgroup))
+    deviations.push(
+      "a compose service shares the host PID/cgroup namespace (registration allows it)",
+    );
   const artifacts = withConvention(parseArtifacts(toml.artifacts).artifacts);
   for (const a of artifacts)
     if (a.service && !compose?.services.some((x) => x.name === a.service))
@@ -302,8 +366,15 @@ export function parseHarborTask(dir: string, id: string): HarborTask {
     if (!existsSync(join(dir, "tests", "test.sh"))) problems.push("tests/test.sh missing");
   } else problems.push(`verifier environment_mode "${mode}" is not supported`);
   problems.push(...unsupportedSettings(toml));
-  const envNetwork = networkMode(agent, environment, problems, "agent");
-  const verifierNetwork = networkMode(verifier, verifierEnv, problems, "verifier");
+  const envNetwork = networkMode(agent, environment, problems, "agent", opts, deviations);
+  const verifierNetwork = networkMode(
+    verifier,
+    verifierEnv,
+    problems,
+    "verifier",
+    opts,
+    deviations,
+  );
   const tags: Record<string, string> = {};
   for (const k of ["domain", "field", "subfield"]) {
     const v = str(meta[k]);
@@ -337,7 +408,8 @@ export function parseHarborTask(dir: string, id: string): HarborTask {
       bundledTests: verify.bundledTests,
       workdir: workdir(verifierEnv, problems),
     },
-    tags,
+    tags: deviations.length ? { ...tags, deviations: deviations.join("; ") } : tags,
+    deviations,
   };
 }
 
@@ -368,7 +440,7 @@ function harborTaskDirs(base: string): string[] {
 }
 
 /** Task directories (containing task.toml) under `root/tasks` or `root`; ids are directory names. */
-export function findHarborTasks(root: string): HarborTask[] {
+export function findHarborTasks(root: string, opts: HarborOptions = {}): HarborTask[] {
   const base = taskBase(root);
   const dirs = harborTaskDirs(base);
   const counts = new Map<string, number>();
@@ -376,7 +448,7 @@ export function findHarborTasks(root: string): HarborTask[] {
   return dirs.map((d) => {
     const id = (counts.get(basename(d)) ?? 0) > 1 ? relative(base, d) : basename(d);
     try {
-      return parseHarborTask(d, id);
+      return parseHarborTask(d, id, opts);
     } catch (e) {
       return brokenTask(d, id, `task.toml: ${(e as Error).message}`);
     }
@@ -400,6 +472,7 @@ function brokenTask(dir: string, id: string, reason: string): HarborTask {
     solutionEnv: {},
     verifier: { ...r, mode: "separate", bundledTests: true },
     tags: {},
+    deviations: [],
   };
 }
 
@@ -455,6 +528,9 @@ export function harborSolveSpec(
           networks: c.networks,
           runNetworks: c.runNetworks,
           dependsOn: c.dependsOn,
+          volumes: c.volumes,
+          volumeMounts: c.mainVolumes,
+          ...(c.mainPidsLimit ? { pidsLimit: c.mainPidsLimit } : {}),
         }
       : {}),
   };
@@ -543,12 +619,21 @@ export function harborVerifySpec(
 export function harborReward(verifierDir: string): ScoreReply {
   const json = join(verifierDir, "reward.json");
   const txt = join(verifierDir, "reward.txt");
-  const bad = (issue: string): ScoreReply => ({
+  const bad = (issue: string, failure: FailureKind = "scorer_error"): ScoreReply => ({
     score: null,
     maxScore: 1,
     issues: [issue],
     invalid: true,
+    failure,
   });
+  const fromTxt = (): ScoreReply | null => {
+    if (!existsSync(txt)) return null;
+    const raw = readFileSync(txt, "utf8").trim();
+    const n = Number(raw);
+    if (raw === "" || !Number.isFinite(n))
+      return bad(`reward.txt is not a number: ${raw.slice(0, 40)}`);
+    return { score: n, maxScore: 1, issues: [], invalid: false };
+  };
   if (existsSync(json)) {
     let v: unknown;
     try {
@@ -558,23 +643,23 @@ export function harborReward(verifierDir: string): ScoreReply {
     }
     const t = table(v);
     const keys = Object.keys(t);
+    // Benchmarks that report failures of their own infrastructure or grader beside the reward
+    // (Embodied First Exam: `infra_error`, `grader_error`): no trustworthy score, not a zero.
+    if ((num(t.infra_error) ?? 0) > 0)
+      return bad("the benchmark reported an infrastructure error", "infra");
+    if ((num(t.grader_error) ?? 0) > 0) return bad("the benchmark reported a grader error");
     const pick = "reward" in t ? t.reward : keys.length === 1 ? t[keys[0] as string] : undefined;
     const n = num(pick);
-    if (n === null)
-      return bad(`reward.json has no single numeric reward (keys: ${keys.join(", ")})`);
-    return { score: n, maxScore: 1, issues: [], invalid: false };
+    if (n !== null) return { score: n, maxScore: 1, issues: [], invalid: false };
+    // Several named values and no `reward`: Harbor keeps them all; reward.txt names the reward.
+    const txtReward = fromTxt();
+    if (txtReward) return txtReward;
+    return bad(`reward.json has no single numeric reward (keys: ${keys.join(", ")})`);
   }
-  if (existsSync(txt)) {
-    const raw = readFileSync(txt, "utf8").trim();
-    const n = Number(raw);
-    if (raw === "" || !Number.isFinite(n))
-      return bad(`reward.txt is not a number: ${raw.slice(0, 40)}`);
-    return { score: n, maxScore: 1, issues: [], invalid: false };
-  }
-  return bad("verifier wrote no reward");
+  return fromTxt() ?? bad("verifier wrote no reward");
 }
 
-function harborTask(root: string, id: string): HarborTask {
+function harborTask(root: string, id: string, opts: HarborOptions = {}): HarborTask {
   const base = taskBase(root);
   let dir: string | undefined;
   if (existsSync(join(base, "task.toml"))) {
@@ -593,7 +678,7 @@ function harborTask(root: string, id: string): HarborTask {
   if (!dir) throw new Error(`task not found: ${id}`);
   let t: HarborTask;
   try {
-    t = parseHarborTask(dir, id);
+    t = parseHarborTask(dir, id, opts);
   } catch (e) {
     t = brokenTask(dir, id, `task.toml: ${(e as Error).message}`);
   }
@@ -641,17 +726,17 @@ const HARBOR_METRICS: AdapterHandlers["metrics"] = [
 
 export const harborAdapter: AdapterHandlers = {
   metrics: HARBOR_METRICS,
-  tasks: (req) => findHarborTasks(req.benchmark.path).map(toBenchTask),
-  solve: ({ benchmark, trial }) => ({
-    spec: harborSolveSpec(
-      harborTask(benchmark.path, trial.task),
-      trial.method,
-      trial.staging,
-      trial.timeoutMin,
-    ),
-  }),
+  tasks: (req) =>
+    findHarborTasks(req.benchmark.path, harborOptions(req.benchmark.config)).map(toBenchTask),
+  solve: ({ benchmark, trial }) => {
+    const t = harborTask(benchmark.path, trial.task, harborOptions(benchmark.config));
+    return {
+      spec: harborSolveSpec(t, trial.method, trial.staging, trial.timeoutMin),
+      issues: t.deviations.map((d) => `deviation: ${d}`),
+    };
+  },
   verify: ({ benchmark, trial, solve }) => {
-    const t = harborTask(benchmark.path, trial.task);
+    const t = harborTask(benchmark.path, trial.task, harborOptions(benchmark.config));
     const { spec, missing } = harborVerifySpec(t, solve.output, trial.staging);
     return { spec, issues: missing.map((m) => `artifact not produced: ${m}`) };
   },

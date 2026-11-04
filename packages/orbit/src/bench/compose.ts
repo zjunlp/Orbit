@@ -5,7 +5,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import type { Healthcheck, NetworkSpec, ServiceSpec } from "../contracts/index.ts";
+import type { Healthcheck, NetworkSpec, ServiceSpec, VolumeMount } from "../contracts/index.ts";
+
+export interface ComposeOptions {
+  /**
+   * Allow `pid: host` / `cgroup: host` (a resource monitor watching sibling containers). It sees
+   * every process on the machine, so the benchmark registration must opt in.
+   */
+  hostNamespaces?: boolean;
+}
 
 export interface ComposePlan {
   services: ServiceSpec[];
@@ -17,12 +25,17 @@ export interface ComposePlan {
   /** `main`'s own environment and working directory from the compose file. */
   env: Record<string, string>;
   workdir: string | null;
+  /** Top-level named volumes, created per run. */
+  volumes: string[];
+  /** Volumes and the PID limit of `main`. */
+  mainVolumes: VolumeMount[];
+  mainPidsLimit: number | null;
 }
 
 type Table = Record<string, unknown>;
 const isTable = (v: unknown): v is Table =>
   Boolean(v) && typeof v === "object" && !Array.isArray(v);
-const NAME = /^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$/;
+const NAME = /^[a-z0-9]([a-z0-9_-]{0,40}[a-z0-9])?$/;
 
 /** Keys Orbit maps; `expose` and `pull_policy` change nothing for containers on a private network. */
 const MAIN_KEYS = new Set([
@@ -34,6 +47,8 @@ const MAIN_KEYS = new Set([
   "depends_on",
   "networks",
   "expose",
+  "volumes",
+  "pids_limit",
 ]);
 const SERVICE_KEYS = new Set([
   "build",
@@ -56,7 +71,69 @@ const SERVICE_KEYS = new Set([
   "security_opt",
   "pids_limit",
   "shm_size",
+  "volumes",
+  "restart",
+  "pid",
+  "cgroup",
+  "network_mode",
 ]);
+
+/**
+ * Service `volumes`: a top-level named volume, or a host path relative to the compose file (bind).
+ * Short (`src:target[:ro]`) and long (`{type, source, target, read_only}`) syntax.
+ */
+function volumesOf(
+  v: unknown,
+  named: Set<string>,
+  envDir: string,
+  problems: string[],
+  label: string,
+): { volumes: VolumeMount[]; binds: { source: string; target: string; mode: "ro" | "rw" }[] } {
+  const volumes: VolumeMount[] = [];
+  const binds: { source: string; target: string; mode: "ro" | "rw" }[] = [];
+  for (const raw of Array.isArray(v) ? v : []) {
+    let source: string | undefined;
+    let target: string | undefined;
+    let ro = false;
+    if (typeof raw === "string") {
+      const parts = raw.split(":");
+      [source, target] = parts;
+      const mode = parts[2];
+      if (parts.length > 3 || (mode && mode !== "ro" && mode !== "rw")) {
+        problems.push(`${label}: volume ${raw} is not supported`);
+        continue;
+      }
+      ro = mode === "ro";
+    } else if (isTable(raw)) {
+      const extra = Object.keys(raw).filter(
+        (k) => !["type", "source", "target", "read_only"].includes(k),
+      );
+      if (extra.length || (raw.type !== "volume" && raw.type !== "bind")) {
+        problems.push(`${label}: volume ${JSON.stringify(raw)} is not supported`);
+        continue;
+      }
+      source = typeof raw.source === "string" ? raw.source : undefined;
+      target = typeof raw.target === "string" ? raw.target : undefined;
+      ro = raw.read_only === true;
+    }
+    if (!source || !target?.startsWith("/")) {
+      problems.push(
+        `${label}: volume ${JSON.stringify(raw)} needs a source and an absolute target`,
+      );
+      continue;
+    }
+    const mode = ro ? "ro" : "rw";
+    if (named.has(source)) volumes.push({ volume: source, target, mode });
+    else if (source.startsWith(".") || source.startsWith("/")) {
+      const path = isAbsolute(source) ? source : resolve(envDir, source);
+      if (!path.startsWith(`${resolve(envDir)}/`))
+        problems.push(`${label}: bind ${source} leaves the task environment directory`);
+      else if (!existsSync(path)) problems.push(`${label}: bind source ${source} not found`);
+      else binds.push({ source: path, target, mode });
+    } else problems.push(`${label}: volume ${source} is not declared at the top level`);
+  }
+  return { volumes, binds };
+}
 
 export function composeFile(envDir: string): string | null {
   for (const f of ["docker-compose.yaml", "docker-compose.yml"])
@@ -203,6 +280,7 @@ export function parseCompose(
   mainImage: string | null,
   vars: Record<string, string>,
   problems: string[],
+  options: ComposeOptions = {},
 ): ComposePlan {
   const plan: ComposePlan = {
     services: [],
@@ -211,6 +289,9 @@ export function parseCompose(
     dependsOn: [],
     env: {},
     workdir: null,
+    volumes: [],
+    mainVolumes: [],
+    mainPidsLimit: null,
   };
   let doc: unknown;
   try {
@@ -221,7 +302,7 @@ export function parseCompose(
   }
   const top = deepInterpolate(isTable(doc) ? doc : {}, vars, problems) as Table;
   for (const k of Object.keys(top))
-    if (!["services", "networks", "name", "version"].includes(k) && !k.startsWith("x-"))
+    if (!["services", "networks", "volumes", "name", "version"].includes(k) && !k.startsWith("x-"))
       problems.push(`compose top-level ${k} is not supported`);
   const nets = isTable(top.networks) ? top.networks : {};
   for (const [name, cfg] of Object.entries(nets)) {
@@ -231,6 +312,15 @@ export function parseCompose(
     if (!NAME.test(name)) problems.push(`compose network name ${name} is not supported`);
     plan.networks.push({ name, internal: c.internal === true });
   }
+  const vols = isTable(top.volumes) ? top.volumes : {};
+  for (const [name, cfg] of Object.entries(vols)) {
+    // Only plain per-project volumes: external, driver or named-elsewhere ones are shared state.
+    if (isTable(cfg) && Object.keys(cfg).length)
+      problems.push(`compose volume ${name}: ${Object.keys(cfg).join(", ")} is not supported`);
+    if (!NAME.test(name)) problems.push(`compose volume name ${name} is not supported`);
+    plan.volumes.push(name);
+  }
+  const named = new Set(plan.volumes);
   const services = isTable(top.services) ? top.services : {};
   for (const [name, raw] of Object.entries(services)) {
     const s = isTable(raw) ? raw : {};
@@ -250,6 +340,10 @@ export function parseCompose(
       plan.workdir = typeof s.working_dir === "string" ? s.working_dir : null;
       plan.dependsOn = dependsOn(s.depends_on, problems, label);
       plan.runNetworks = networkList(s.networks);
+      const mv = volumesOf(s.volumes, named, envDir, problems, label);
+      plan.mainVolumes = mv.volumes;
+      if (mv.binds.length) problems.push(`${label}: bind mounts are not supported`);
+      if (typeof s.pids_limit === "number") plan.mainPidsLimit = s.pids_limit;
       continue;
     }
     for (const k of Object.keys(s))
@@ -270,7 +364,38 @@ export function parseCompose(
       capDrop: strings(s.cap_drop),
       securityOpt: strings(s.security_opt),
       collect: [],
+      ...volumesOf(s.volumes, named, envDir, problems, label),
+      hostPid: false,
+      hostCgroup: false,
+      noNetwork: false,
     };
+    if (s.restart !== undefined) {
+      const r = String(s.restart);
+      if (/^(no|always|unless-stopped|on-failure(:\d+)?)$/.test(r)) svc.restart = r;
+      else problems.push(`${label}: restart ${r} is not supported`);
+    }
+    for (const [key, field] of [
+      ["pid", "hostPid"],
+      ["cgroup", "hostCgroup"],
+    ] as const) {
+      if (s[key] === undefined) continue;
+      if (s[key] !== "host") problems.push(`${label}: ${key} ${String(s[key])} is not supported`);
+      else if (!options.hostNamespaces)
+        problems.push(
+          `${label}: ${key}: host needs the registration option -c hostNamespaces=allow (it sees every process on this machine)`,
+        );
+      else svc[field] = true;
+    }
+    if (s.network_mode !== undefined) {
+      if (s.network_mode !== "none")
+        problems.push(`${label}: network_mode ${String(s.network_mode)} is not supported`);
+      else if (s.networks !== undefined)
+        problems.push(`${label}: network_mode none with networks is not supported`);
+      else {
+        svc.noNetwork = true;
+        svc.networks = [];
+      }
+    }
     if (s.build !== undefined) {
       const b = buildOf(s.build, envDir);
       if (!existsSync(b.dockerfile)) problems.push(`${label}: ${b.dockerfile} not found`);

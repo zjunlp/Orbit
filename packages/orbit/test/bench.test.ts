@@ -330,7 +330,9 @@ command = "true"
     expect(by.sr?.env).toMatchObject({ cpus: 4, memGB: 8, network: false });
     expect(by.sr?.tags).toEqual({ domain: "physics" });
     expect(by.shared?.reason).toBeNull();
-    expect(by.compose?.reason).toMatch(/compose service db: volumes is not supported/);
+    expect(by.compose?.reason).toMatch(
+      /compose service db: volume data is not declared at the top level/,
+    );
     expect(by.broken?.reason).toMatch(/^task.toml:/);
     const req = { protocol: 1 as const, op: "tasks" as const };
     const reply = handle(harborAdapter, {

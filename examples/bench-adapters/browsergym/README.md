@@ -1,11 +1,15 @@
 # BrowserGym / MiniWoB
 
-第一阶段接入：一个 CPU Docker 容器运行一个 BrowserGym episode，复用 Orbit 的 Run、资源租约、Trial 和产物页面。
+一个 CPU Docker 容器运行一个 BrowserGym episode，复用 Orbit 的 Run、资源租约、Trial 和产物页面。
 使用 `browsergym-miniwob==0.14.3` 和官方推荐的 MiniWoB commit
 `7fd85d71a4b60325c6585396ec4f48377d049838`，不修改任务、视口或奖励函数。
 
-支持 `miniwob.click-test`、`miniwob.click-test-2`、`miniwob.click-button`、`miniwob.enter-text`、
-`miniwob.click-checkboxes`；其他 HTML 任务显示为 unsupported。这是接入与校准子集，不代表完整 MiniWoB 榜单成绩。
+支持 `browsergym-miniwob` 0.14.3 注册的全部 125 个 MiniWoB++ 任务（清单固定在 `miniwob_tasks.json`，由该版本的
+`ALL_MINIWOB_TASKS` 生成，不是手写）；checkout 中存在但未注册的 HTML 显示为 unsupported。
+
+需要已部署网站且共享后端状态的 BrowserGym 套件（WebArena、WebArena Verified、VisualWebArena、WorkArena、
+AssistantBench）登记时用 `-c suite=<name>` 会被明确拒绝：任务之间会通过共享网站相互影响，而 Orbit 还没有共享后端的
+独占调度（design §9.6 第 5 条）。不在改变条件的情况下运行它们。
 方法支持 `external` 和 `empty`；没有参考 oracle，不支持 Codex/Claude CLI 直接操作这个环境。
 
 ## 准备与校准
@@ -124,6 +128,7 @@ pnpm verify
 ```
 
 Python 单测使用明确的文件 fixture，不代表浏览器验证。
+全量 empty 校准：125 个任务在临时 Orbit daemon 中全部得到有效 0 分（见 `docs/tasks/20261104-p3-browsergym-efe.md`）。
 可选 Docker 测试通过临时 Orbit daemon 检查五个任务的 empty、click-test 脚本成功、
 模型异常、凭据阶段隔离、截图、保存证据重查与取消后的清理；不调用付费模型。
 

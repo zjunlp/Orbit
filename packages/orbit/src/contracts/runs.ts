@@ -40,7 +40,20 @@ export type AgentRef = z.infer<typeof AgentRef>;
 /** A service or network name: a DNS label, also the host name other containers reach it by. */
 const ServiceName = z
   .string()
-  .regex(/^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$/, "names must be lowercase DNS labels");
+  .regex(
+    /^[a-z0-9]([a-z0-9_-]{0,40}[a-z0-9])?$/,
+    "names are lowercase letters, digits, '-' or '_' (as Compose service names)",
+  );
+
+/** A named volume of a run: created with it (labelled), shared by its containers, removed with it. */
+const VolumeName = ServiceName;
+/** A run volume mounted into a container. */
+export const VolumeMount = z.object({
+  volume: VolumeName,
+  target: ContainerPath,
+  mode: z.enum(["ro", "rw"]).default("rw"),
+});
+export type VolumeMount = z.infer<typeof VolumeMount>;
 
 /** Container health check, as in Docker's HEALTHCHECK (`CMD` form). */
 export const Healthcheck = z.object({
@@ -85,7 +98,44 @@ export const ServiceSpec = z
     pidsLimit: z.number().int().positive().optional(),
     /** Absolute paths copied to `output/services/<name>/<path>` once the run has stopped. */
     collect: z.array(ContainerPath).default([]),
+    /** Run volumes mounted into the service. */
+    volumes: z.array(VolumeMount).default([]),
+    /** Host files or directories bind-mounted into the service (absolute host paths). */
+    binds: z
+      .array(
+        z.object({
+          source: z.string().startsWith("/", "bind sources are absolute host paths"),
+          target: ContainerPath,
+          mode: z.enum(["ro", "rw"]).default("ro"),
+        }),
+      )
+      .default([]),
+    /** Docker restart policy: `no`, `on-failure[:N]`, `always`, `unless-stopped`. */
+    restart: z
+      .string()
+      .regex(
+        /^(no|always|unless-stopped|on-failure(:\d+)?)$/,
+        "restart is no, on-failure[:N], always or unless-stopped",
+      )
+      .optional(),
+    /**
+     * Host PID / cgroup namespaces (a resource monitor watching sibling containers). Only allowed when
+     * the benchmark registration opts in; recorded on the run.
+     */
+    hostPid: z.boolean().default(false),
+    hostCgroup: z.boolean().default(false),
+    /** No network at all (Compose `network_mode: none`); then `networks` must be empty. */
+    noNetwork: z.boolean().default(false),
   })
+  .refine(
+    (s) =>
+      !s.noNetwork ||
+      s.networks.length === 0 ||
+      (s.networks.length === 1 && s.networks[0] === "default"),
+    {
+      message: "a service without network joins no networks",
+    },
+  )
   .refine((s) => Boolean(s.image) !== Boolean(s.dockerfile), {
     message: "a service needs exactly one of image or dockerfile",
   })
@@ -237,6 +287,12 @@ export const RunSpec = z
     after: AfterPhase.optional(),
     /** Absolute directories created in the container before `command` (e.g. Harbor's /logs/*). */
     mkdirs: z.array(z.string()).default([]),
+    /** Named volumes created for the run (with services) and removed with it. */
+    volumes: z.array(VolumeName).default([]),
+    /** Run volumes mounted into the run's own container. */
+    volumeMounts: z.array(VolumeMount).default([]),
+    /** PID limit of the run's own container. */
+    pidsLimit: z.number().int().positive().optional(),
     /**
      * Shell commands run once `command` has exited, in the run's container (kept for them) or in a
      * service, before anything is collected (e.g. Harbor's `[[verifier.collect]]` snapshots).
@@ -304,6 +360,8 @@ export type RunSpecInput = z.input<typeof RunSpec>;
 
 /** Why a run's services, networks and dependencies do not fit together, or null. */
 function servicesProblem(s: {
+  volumes: string[];
+  volumeMounts: VolumeMount[];
   services: ServiceSpec[];
   networks: NetworkSpec[];
   runNetworks: string[];
@@ -311,7 +369,11 @@ function servicesProblem(s: {
   backend: string;
   hostNetwork: boolean;
 }): string | null {
+  const vols = new Set(s.volumes);
+  for (const m of [...s.volumeMounts, ...s.services.flatMap((x) => x.volumes)])
+    if (!vols.has(m.volume)) return `unknown volume ${m.volume}`;
   if (s.services.length === 0) {
+    if (s.volumes.length) return "volumes need services";
     const plain =
       s.networks.length === 0 &&
       s.dependsOn.length === 0 &&

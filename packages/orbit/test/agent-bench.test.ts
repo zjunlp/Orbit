@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { asiMethodProblem } from "../src/bench/asi.ts";
 import { solveVerdict } from "../src/bench/classify.ts";
+import { parseCompose } from "../src/bench/compose.ts";
+import { harborReward } from "../src/bench/harbor.ts";
 import { toRunSpec } from "../src/bench/protocol.ts";
 import {
   type AuthProfile,
@@ -17,6 +19,7 @@ import {
   Run,
   RunSpec,
 } from "../src/contracts/index.ts";
+import { runArgs } from "../src/executor/docker.ts";
 import { AgentRegistry } from "../src/harness/registry.ts";
 import { AGENT_SETUP_FAILED, AGENT_SETUP_FILE, withAgentSetup } from "../src/runs/launch.ts";
 import { localBlocker } from "../src/runs/preflight.ts";
@@ -176,5 +179,121 @@ describe("placement of runs with an installed Agent", () => {
     expect(await localBlocker(ctx, spec)).toBeNull();
     profile.harness = "codex";
     expect(await localBlocker(ctx, spec)).toMatch(/codex CLI not found/);
+  });
+});
+
+describe("compose volumes, restart and host namespaces (EFE-style sidecars)", () => {
+  const compose = (yaml: string, hostNamespaces = false) => {
+    const env = mkdtempSync(join(tmpdir(), "orbit-compose-"));
+    mkdirSync(join(env, "mon"));
+    writeFileSync(join(env, "mon", "limits.json"), "{}");
+    writeFileSync(join(env, "docker-compose.yaml"), yaml);
+    const problems: string[] = [];
+    const plan = parseCompose(join(env, "docker-compose.yaml"), env, null, null, {}, problems, {
+      hostNamespaces,
+    });
+    rmSync(env, { recursive: true, force: true });
+    return { plan, problems };
+  };
+  const yaml = `
+services:
+  main:
+    pids_limit: 1024
+    volumes: [lim:/run/lim:ro]
+  sim:
+    image: sim
+    restart: on-failure:6
+    volumes: [obs:/run/obs]
+  rcb_monitor:
+    image: mon
+    pid: host
+    cgroup: host
+    network_mode: none
+    volumes: ["./mon/limits.json:/opt/limits.json:ro", lim:/run/lim, obs:/run/obs]
+volumes:
+  lim:
+  obs:
+`;
+
+  it("maps named volumes, binds inside the task, restart and network_mode none", () => {
+    const { plan, problems } = compose(yaml, true);
+    expect(problems).toEqual([]);
+    expect(plan.volumes).toEqual(["lim", "obs"]);
+    expect(plan.mainVolumes).toEqual([{ volume: "lim", target: "/run/lim", mode: "ro" }]);
+    expect(plan.mainPidsLimit).toBe(1024);
+    const sim = plan.services.find((s) => s.name === "sim");
+    expect(sim?.restart).toBe("on-failure:6");
+    const mon = plan.services.find((s) => s.name === "rcb_monitor");
+    expect(mon).toMatchObject({ hostPid: true, hostCgroup: true, noNetwork: true, networks: [] });
+    expect(mon?.binds[0]).toMatchObject({ target: "/opt/limits.json", mode: "ro" });
+    expect(mon?.volumes.map((v) => v.volume)).toEqual(["lim", "obs"]);
+  });
+
+  it("refuses host namespaces unless the registration allows them, and escaping binds", () => {
+    expect(compose(yaml).problems.join("; ")).toMatch(/hostNamespaces=allow/);
+    const out = compose(`services:\n  s:\n    image: x\n    volumes: ["../../etc:/e"]\n`);
+    expect(out.problems.join("; ")).toMatch(/leaves the task environment/);
+  });
+
+  it("puts run volumes into docker run arguments", () => {
+    const args = runArgs({
+      name: "n",
+      image: "i",
+      command: [],
+      labels: {},
+      gpuIds: [],
+      gpuMode: "gpus",
+      cpus: null,
+      memGB: null,
+      mounts: [],
+      env: {},
+      workdir: null,
+      network: "none",
+      user: null,
+      volumes: [{ name: "orbit-r-lim", target: "/run/lim", mode: "ro" }],
+      restart: "on-failure:6",
+      hostPid: true,
+      hostCgroup: true,
+    });
+    expect(args.join(" ")).toContain("type=volume,source=orbit-r-lim,target=/run/lim,readonly");
+    expect(args).toEqual(
+      expect.arrayContaining(["--restart", "on-failure:6", "--pid", "host", "--cgroupns", "host"]),
+    );
+  });
+});
+
+describe("harbor rewards with diagnostic fields (Embodied First Exam)", () => {
+  const verifier = (files: Record<string, string>) => {
+    const d = mkdtempSync(join(tmpdir(), "orbit-reward-"));
+    for (const [n, text] of Object.entries(files)) writeFileSync(join(d, n), text);
+    return d;
+  };
+  const efe = (over: object) =>
+    JSON.stringify({
+      success: 1,
+      live_success: 1,
+      infra_error: 0,
+      grader_error: 0,
+      peak_cpus: 2,
+      ...over,
+    });
+
+  it("takes reward.txt when reward.json holds several values and no `reward`", () => {
+    expect(harborReward(verifier({ "reward.json": efe({}), "reward.txt": "1\n" }))).toMatchObject({
+      score: 1,
+      invalid: false,
+    });
+    expect(harborReward(verifier({ "reward.json": efe({}) })).invalid).toBe(true);
+  });
+
+  it("treats reported infrastructure and grader errors as invalid, not zero", () => {
+    expect(
+      harborReward(
+        verifier({ "reward.json": efe({ infra_error: 1, success: 0 }), "reward.txt": "0" }),
+      ),
+    ).toMatchObject({ score: null, invalid: true, failure: "infra" });
+    expect(
+      harborReward(verifier({ "reward.json": efe({ grader_error: 1 }), "reward.txt": "0" })),
+    ).toMatchObject({ invalid: true, failure: "scorer_error" });
   });
 });
