@@ -956,9 +956,50 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | P3 两个小而完整的接入 | 已完成：MiniWoB++ 全量 125；EFE MetaWorld+ standard（compose 卷、restart、偏差登记） | empty 125/125；EFE oracle 1 / empty 0 |
 | P4 Policy 路线 | 已完成：`Lease.roles` 按角色分配、service GPU 与 `entrypoint`、vla-eval 适配器（LIBERO 真实任务） | 角色独占卡、整组排队；LIBERO empty 0 分 valid |
 | P5 扩大覆盖（核心能力与 GUI hub 适配器已完成；EFE GPU 原版校准、Arena 未做；见 tasks/20261104-p5-core、p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
-| P6 CLI Agent 桥（主线见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 按实际诊断保留能力限制；OSWorld 等 KVM 后端后置 |
+| P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 按实际诊断保留能力限制；OSWorld 等 KVM 后端后置 |
+| P6.5 接入层（§9.14） | calibrate / coverage、L2 SDK、L1 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按层级接入成本达标；迁移前后校准一致 |
 | P7 规模优化 | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |
+
+### 9.14 后续改进方向：接入层（2026-11-04 复盘）
+
+**判断**：§9.1–§9.7 的核心不变——成功判据沿用上游（分数可与官方对比），Orbit 统一执行、资源、有效性、聚合、
+可信证据与对比视图。问题在接入层：除 Harbor 格式外，每个 hub 都是手写 adapter（几百到上千行），重复实现镜像固定、
+readiness、证据哈希与签名、verify 复核、失败映射与评分回读；接入是否完成靠人工校准判断，大型 hub 的覆盖说不清
+（EFE 2,260 个模式目录中只有 MetaWorld+ 一个任务经过 oracle/empty 校准）。
+
+**原则**：跟随 hub 与协议，不逐个追 bench。新 bench 多数先进入某个 hub 或采用已有格式；Orbit 只支持少数事实标准，
+不自造协议：任务格式 → Harbor（EFE、Cua Bench、TB 系列）；GUI 交互 → CUA-Lite canonical tool call 与 MCP computer-use；
+具身 Policy → vla-eval 协议；具身 coding agent → EFE `/spec /observe /submit`。
+
+**三层接入**（新 bench 优先落到最低层）：
+
+| 层 | 适用 | 新 bench 需要做的事 | 目标成本 |
+| --- | --- | --- | --- |
+| L0 零代码 | 已是 Harbor 格式，或 hub 可导出 Harbor | `orbit bench add`；缺的 compose 能力补进核心（惠及整类） | 分钟级 |
+| L1 声明式清单 | 有镜像、入口命令、结果文件的 bench | `orbit-bench.yaml`：镜像 digest、任务枚举命令、运行命令、角色资源、结果文件与指标解析、上游错误 → `FailureKind` 映射、官方聚合规则；由 Orbit 内置的通用 adapter 执行 | 半天内 |
+| L2 SDK | 需要交互桥或特殊流程（GUI 环境服务、可信 sidecar） | 基于共享 Python SDK（`orbit_bench`：环境 service 框架、证据签名与复核、失败映射、评分回读、readiness），只写启动环境、reset/step、读结果 | 约 1 天、几十行 |
+
+清单与 SDK 都编译成现有 adapter 协议 1（§7）的四个操作，不新增执行路径；SDK 的签名与证据格式沿用 §7 已实现的规则，
+旧 trial 的 rescore 必须保持有效。
+
+**接入的验收与盘点**：
+
+- `orbit bench calibrate <bench> [--sample N]`：对抽样任务自动跑 empty 与 oracle（若有），检查 valid、重复运行一致、
+  资源确认清理、证据可复核，生成接入报告；"已接入"以该报告为准，保真度级别（§9.10）由报告给出。
+- `orbit bench coverage <bench>`：按套件统计 supported / unsupported 及原因（缺 GPU 角色、需 allowlist 网络、需 KVM…），
+  按原因排序后即为 Harbor 能力补全的优先级。
+
+**顺序**（取代 §9.13 中 P6 之后的排序，P7 规模优化在其后）：
+
+1. `calibrate` 与 `coverage`，用它们盘点 EFE 35 个套件，确定 Harbor 能力缺口排名。
+2. P6 主线第 1 项（共享 GUI service）扩展为 L2 SDK；现有 6 个 adapter 逐步迁移，迁移前后校准结果一致。
+3. L1 清单与通用 adapter，以 vla-eval 改写为样板。
+4. 按 coverage 排名补全 Harbor 能力：allowlist 网络、GPU 共享语义（EFE abc-sim）、`mcp_servers`、多步任务。
+5. 跨 bench 汇总视图：各 bench 分数尺度不同，只并列"有效样本数、官方值、Orbit 值、保真度"，不做跨 bench 平均。
+
+**仍未统一、需要正视的**：轨迹（Agent 会话与环境记录合成一份，§9.8，P6 主线第 4 项）；具身 bench 尚无真实
+coding agent / VLA 正向校准；覆盖数字在 `coverage` 落地前不对外宣称。
 
 ## 10. 路线
 
