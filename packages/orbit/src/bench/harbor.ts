@@ -390,18 +390,25 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     deviations,
   );
   if (compose?.mainGpus) envRes.gpus = Math.max(envRes.gpus, compose.mainGpus);
+  else if (envRes.gpus > 0 && compose?.sharedGpuOwner && compose.sharedGpuOwner !== "main")
+    // Compose would put main and the sharing services on the same cards; Orbit cannot express that.
+    problems.push("[environment] gpus with a compose GPU service is not supported");
   const gpuModels = gpuTypes(environment.gpu_types, problems);
   if (gpuModels.length) {
-    const owner = compose?.sharedGpuOwner ?? (envRes.gpus > 0 ? "main" : null);
-    if (!owner) problems.push("[environment] gpu_types without a GPU reservation");
+    // gpu_types restricts every card the task gets: main's and each GPU role's.
+    const holders = [
+      ...(envRes.gpus > 0 ? ["main"] : []),
+      ...(compose?.services.filter((x) => x.role && (x.gpus ?? 0) > 0).map((x) => x.role) ?? []),
+    ];
+    if (!holders.length) problems.push("[environment] gpu_types without a GPU reservation");
     else if (opts.gpuTypes === "any")
       deviations.push(
         `gpu_types ${gpuModels.join(" / ")} not enforced (registration allows any GPU)`,
       );
-    else if (owner === "main") envRes.gpuModels = gpuModels;
     else {
-      const svc = compose?.services.find((x) => x.role === owner);
-      if (svc) svc.gpuModels = gpuModels;
+      if (holders.includes("main")) envRes.gpuModels = gpuModels;
+      for (const svc of compose?.services ?? [])
+        if (svc.role && (svc.gpus ?? 0) > 0) svc.gpuModels = gpuModels;
     }
   }
   const tags: Record<string, string> = {};

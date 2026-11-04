@@ -160,3 +160,46 @@ it("routes a GPU-model restricted run only to a worker with that model", async (
   expect(remoteBlocker(spec, worker(only3090) as never)).toMatch(/L40S/);
   expect(remoteBlocker(spec, worker(node) as never)).toBeNull();
 });
+
+it("matches GPU models on whole words of the card name", async () => {
+  const { modelMatches } = await import("../src/resources/allocate.ts");
+  expect(modelMatches("NVIDIA L4", ["L4"])).toBe(true);
+  expect(modelMatches("NVIDIA L40S", ["L4"])).toBe(false);
+  expect(modelMatches("NVIDIA A100-SXM4-80GB", ["A10"])).toBe(false);
+  expect(modelMatches("NVIDIA GeForce RTX 4090", ["RTX 4090"])).toBe(true);
+  expect(modelMatches("NVIDIA RTX 6000 Ada Generation", ["RTX 6000 Ada"])).toBe(true);
+  expect(modelMatches("NVIDIA GeForce RTX 3090", ["RTX 4090", "L40S"])).toBe(false);
+});
+
+it("refuses ambiguous GPU layouts and applies gpu_types to every GPU role", () => {
+  const reservation = {
+    deploy: {
+      resources: {
+        reservations: { devices: [{ driver: "nvidia", count: 1, capabilities: ["gpu"] }] },
+      },
+    },
+  };
+  const make = (name: string, toml: string, services: object) => {
+    const task = join(dir, "tasks2", name);
+    for (const d of ["environment", "tests", "solution"])
+      mkdirSync(join(task, d), { recursive: true });
+    writeFileSync(join(task, "instruction.md"), "x");
+    writeFileSync(join(task, "tests", "test.sh"), "true");
+    writeFileSync(join(task, "solution", "solve.sh"), "true");
+    writeFileSync(join(task, "environment", "Dockerfile"), "FROM scratch");
+    writeFileSync(join(task, "task.toml"), toml);
+    writeFileSync(join(task, "environment", "docker-compose.yaml"), JSON.stringify({ services }));
+  };
+  make("both", "[environment]\ngpus = 1\n", { main: {}, sim: { image: "s", ...reservation } });
+  make("roles", '[environment]\ngpu_types = ["L40S"]\n', {
+    main: { ...reservation },
+    sim: { image: "s", "x-orbit-role": "sim", ...reservation },
+  });
+  const tasks = findHarborTasks(join(dir, "tasks2"));
+  const both = tasks.find((t) => t.id === "both");
+  expect(both?.reason).toContain("[environment] gpus with a compose GPU service is not supported");
+  const roles = tasks.find((t) => t.id === "roles");
+  expect(roles?.supported).toBe(true);
+  expect(roles?.env.gpuModels).toEqual(["L40S"]);
+  expect(roles?.compose?.services.find((s) => s.name === "sim")?.gpuModels).toEqual(["L40S"]);
+});
