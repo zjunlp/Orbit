@@ -4,6 +4,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import sys
 
 COMMIT = '2af69268c0573f4c12aac391cc03125e6d5c7974'
@@ -20,6 +21,29 @@ def write(path, data):
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def check_judge_verdict(suite, reward, info, image_count):
+    if reward is None:
+        return
+    if not isinstance(info, dict):
+        raise ValueError('Original judge returned malformed metadata')
+    verdict = info.get('eval_verdict')
+    if not isinstance(verdict, str):
+        raise ValueError('Original judge returned a malformed verdict')
+    if suite == 'webharbor.webvoyager':
+        if 'SUCCESS' not in verdict:
+            raise ValueError('Original WebVoyager judge returned a malformed verdict')
+    else:
+        status = verdict.lower().split('status:', 1)
+        if len(status) != 2 or not re.search(r'\b(success|failure)\b', status[1]):
+            raise ValueError('Original Online-Mind2Web judge returned a malformed verdict')
+        records = info.get('image_judge_record')
+        if not isinstance(records, list) or len(records) != image_count:
+            raise ValueError('Original Online-Mind2Web image judgments are incomplete')
+        if any(not isinstance(row, dict) or type(row.get('Score')) is not int or not 1 <= row['Score'] <= 5
+               for row in records):
+            raise ValueError('Original Online-Mind2Web image judgment is malformed')
 
 
 def validate(output, *, allow_pending_judge=False):
@@ -85,6 +109,7 @@ def validate(output, *, allow_pending_judge=False):
             return {'score': None, 'maxScore': 1, 'invalid': True, 'failure': judged['failure'],
                     'issues': [f"Native judge: {judged.get('error_type', 'failed')}"]}
         reward = judged['reward']
+        check_judge_verdict(suite, reward, judged['info'], len(state['images']))
         if (reward is None and suite == 'webharbor.webvoyager' and not state.get('agent_response')
                 and judged['info'].get('eval_skip_reason') == 'no_agent_response'):
             reward = 0

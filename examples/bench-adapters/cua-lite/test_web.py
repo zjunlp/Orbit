@@ -11,7 +11,7 @@ import adapter
 import evidence
 import judge
 import prepare_backend
-from web_suites import WEB_SUITES, capture_judge
+from web_suites import ONLINE_BUILD_VERSIONS, WEB_SUITES, capture_judge
 
 
 class WebAdapterTest(unittest.TestCase):
@@ -57,6 +57,7 @@ class WebAdapterTest(unittest.TestCase):
         with patch.object(adapter.subprocess, 'check_output', return_value=json.dumps(image).encode()):
             self.assertIn('labels', adapter.web_readiness(config, suite))
         image[0]['Config']['Labels'] = {'orbit.cua-lite.source': evidence.COMMIT, 'orbit.cua-lite.suite': suite}
+        image[0]['Config']['Labels'].update({'orbit.cua-lite.' + k: v for k, v in ONLINE_BUILD_VERSIONS.items()})
         with patch.object(adapter.subprocess, 'check_output', return_value=json.dumps(image).encode()), \
              patch.object(adapter, 'readiness', return_value=None):
             self.assertIsNone(adapter.web_readiness(config, suite))
@@ -89,8 +90,13 @@ class WebAdapterTest(unittest.TestCase):
             'task': {'instruction': 'fixture'}, 'max_steps': 15, 'model': WEB_SUITES[suite]['model'],
             'images': ['judge-input/0000.png'], 'agent_response': None,
             'trajectory_steps': [{'action': 'fixture action'}]})
+        if info is None:
+            info = ({'eval_verdict': 'SUCCESS' if reward else 'NOT SUCCESS'}
+                    if suite == 'webharbor.webvoyager' else
+                    {'eval_verdict': 'Status: success' if reward else 'Status: failure',
+                     'image_judge_record': [{'Score': 1, 'Response': 'explicit fixture'}]})
         result = {'commit': evidence.COMMIT, 'suite': suite, 'task_id': task,
-            'input_sha256': evidence.digest(out / 'judge-input.json'), 'reward': reward, 'info': info or {}}
+            'input_sha256': evidence.digest(out / 'judge-input.json'), 'reward': reward, 'info': info}
         if failure:
             result.update(failure=failure, error_type='ExplicitFixtureError')
         evidence.write(out / 'judge-result.json', result)
@@ -136,6 +142,20 @@ class WebAdapterTest(unittest.TestCase):
         self.assertEqual(adapter.score(req)['failure'], 'judge_unavailable')
         self.assertIsNone(adapter.score(req)['score'])
 
+    def test_malformed_native_webvoyager_verdict_is_not_valid_zero(self):
+        out = self.capture(reward=0, info={'eval_verdict': 'explicit malformed fixture'})
+        with self.assertRaisesRegex(ValueError, 'malformed verdict'):
+            evidence.validate(out)
+        async def evaluate():
+            return 0, {'eval_verdict': 'explicit malformed fixture'}
+        native = SimpleNamespace(_require_eval_deps=lambda: None, _evaluate=evaluate)
+        with patch.object(judge, 'restore_native', return_value=native):
+            self.assertEqual(asyncio.run(judge.run(out)), 1)
+        result = evidence.read(out / 'judge-result.json')
+        self.assertEqual(result['reward'], 0)
+        self.assertEqual(result['info']['eval_verdict'], 'explicit malformed fixture')
+        self.assertEqual(evidence.validate(out)['failure'], 'scorer_error')
+
     def test_webvoyager_missing_key_is_invalid_even_without_an_answer(self):
         class EnvDepsMissingError(Exception):
             pass
@@ -152,11 +172,24 @@ class WebAdapterTest(unittest.TestCase):
                 self.assertEqual(asyncio.run(judge.run(out)), 1)
             self.assertEqual(evidence.validate(out)['failure'], 'judge_unavailable')
 
+    def test_online_malformed_terminal_or_image_judgment_is_invalid(self):
+        for info in ({'eval_verdict': 'explicit malformed fixture', 'image_judge_record': [{'Score': 1}]},
+                     {'eval_verdict': 'Status: failure', 'image_judge_record': [{'Score': 0}]},
+                     {'eval_verdict': 'Status: failure', 'image_judge_record': []}):
+            out = self.capture('online_mind2web', 0, info)
+            with self.assertRaises(ValueError):
+                evidence.validate(out)
+            async def evaluate():
+                return 0, info
+            with patch.object(judge, 'restore_native', return_value=SimpleNamespace(_evaluate=evaluate)):
+                self.assertEqual(asyncio.run(judge.run(out)), 1)
+            self.assertEqual(evidence.validate(out)['failure'], 'scorer_error')
+
     def test_native_backend_preparation_preserves_source_and_refuses_overwrite(self):
         suite = 'online_mind2web'
         source = self.root / 'lite/gym/envs/online_mind2web/docker'
         source.mkdir(parents=True)
-        original = 'FROM python:fixture\nENTRYPOINT ["/usr/local/bin/entrypoint.sh"]\n'
+        original = 'FROM python:fixture\nRUN pip install --no-cache-dir playwright\nENTRYPOINT ["/usr/local/bin/entrypoint.sh"]\n'
         (source / 'Dockerfile').write_text(original)
         destination = self.root / 'copy'
         with patch.object(prepare_backend, 'checkout'):
@@ -164,7 +197,9 @@ class WebAdapterTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'existing files'):
                 prepare_backend.prepare(self.root, suite, destination)
         self.assertEqual((source / 'Dockerfile').read_text(), original)
-        self.assertTrue(result.read_text().startswith(original))
+        self.assertIn('RUN pip install --no-cache-dir playwright', result.read_text())
+        self.assertIn('playwright==1.44.0', (destination / 'orbit-constraints.txt').read_text())
+        self.assertIn('orbit.cua-lite.playwright="1.44.0"', result.read_text())
         self.assertIn('orbit.cua-lite.source', result.read_text())
         self.assertIn('CMD ["/usr/local/bin/entrypoint.sh"]', result.read_text())
 

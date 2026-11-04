@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 
-from evidence import COMMIT, digest, read, validate, write
+from evidence import COMMIT, check_judge_verdict, digest, read, validate, write
 from web_suites import WEB_SUITES
 
 
@@ -64,6 +64,7 @@ async def run(output):
             native._require_eval_deps()
         reward, info = await native._evaluate()
         result.update(reward=reward, info=info)
+        check_judge_verdict(suite, reward, info, len(state['images']))
     except Exception as error:
         result.update(failure=judge_failure(error), error_type=type(error).__name__)
         print(f"CUA-Lite terminal judge: {result['failure']} ({result['error_type']})", file=sys.stderr)

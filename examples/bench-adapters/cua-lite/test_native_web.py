@@ -4,10 +4,11 @@ import importlib
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from evidence import read
+from evidence import check_judge_verdict, read
 from judge import restore_native
 from web_suites import WEB_SUITES
 
@@ -53,6 +54,26 @@ class NativeJudgeBoundaryTest(unittest.TestCase):
             with self.assertRaises(Exception) as raised:
                 asyncio.run(native._evaluate())
             self.assertEqual(type(raised.exception).__name__, 'EnvDepsMissingError')
+
+    def test_native_malformed_response_fallbacks_are_rejected_by_validity_check(self):
+        native, _state = self.native('webharbor.webvoyager')
+        native._agent_response = 'explicit provider-response fixture'
+        calls = []
+        def create(**kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='Cannot provide a verdict'))])
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        with patch.dict('sys.modules', {'openai': SimpleNamespace(OpenAI=lambda **kwargs: client)}):
+            reward, info = native._vlm_evaluate_sync()
+        self.assertEqual(reward, 0)
+        self.assertEqual((calls[0]['model'], calls[0]['temperature'], calls[0]['seed']), ('gpt-4.1', 0, 42))
+        with self.assertRaisesRegex(ValueError, 'malformed verdict'):
+            check_judge_verdict('webharbor.webvoyager', reward, info, 1)
+        module = importlib.import_module('lite.gym.envs.online_mind2web.main')
+        reward = module._extract_prediction('Cannot provide a verdict', 'WebJudge_Online_Mind2Web_eval')
+        self.assertEqual(reward, 0)
+        with self.assertRaisesRegex(ValueError, 'malformed verdict'):
+            check_judge_verdict('online_mind2web', reward, {'eval_verdict': 'Cannot provide a verdict'}, 1)
 
 
 if __name__ == '__main__':

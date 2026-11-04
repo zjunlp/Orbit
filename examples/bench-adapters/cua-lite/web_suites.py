@@ -4,6 +4,11 @@ import shutil
 from evidence import write
 
 
+ONLINE_BUILD_VERSIONS = {
+    'fastapi': '0.115.12', 'uvicorn': '0.34.2', 'playwright': '1.44.0', 'pydantic': '2.10.6',
+}
+
+
 WEB_SUITES = {
     'webharbor.webvoyager': {
         'path': 'webharbor/webvoyager', 'image': 'webVoyagerImage',

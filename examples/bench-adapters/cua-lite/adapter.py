@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -B
-"""CUA-Lite's pinned native BrowserGym environment, one episode per Orbit trial."""
+"""Pinned CUA-Lite native browser environments, one episode per Orbit trial."""
 import json
 import os
 from pathlib import Path
@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from evidence import COMMIT, MINIWOB_COMMIT, read, validate, write
-from web_suites import WEB_SUITES, suite_for
+from web_suites import ONLINE_BUILD_VERSIONS, WEB_SUITES, suite_for
 
 HERE = Path(__file__).resolve().parent
 TASKS = set(read(HERE / 'miniwob_tasks.json')['tasks'])
@@ -59,6 +59,9 @@ def web_readiness(c, suite):
         labels = details.get('Config', {}).get('Labels') or {}
         if labels.get('orbit.cua-lite.source') != COMMIT or labels.get('orbit.cua-lite.suite') != suite:
             return 'Backend image lacks matching pinned source/suite labels; use prepare_backend.py'
+        if suite == 'online_mind2web' and any(labels.get('orbit.cua-lite.' + name) != version
+                                             for name, version in ONLINE_BUILD_VERSIONS.items()):
+            return 'Backend image lacks matching fixed dependency labels; use prepare_backend.py'
     except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError):
         return 'The pinned native browser backend image is not prepared locally'
     return readiness(c)
@@ -113,11 +116,12 @@ def tasks(req):
             'Execution': 'One native environment/sample per trial; no rollout queue, retries or result-directory resume',
             'Observation': 'Original screenshot-first CUA-Lite defaults, including cursor overlay; no DOM/a11y override',
             'Actions': 'Original canonical Lite tool calls; normalized coordinates [0,1000]',
-            'Step limit': str(steps), 'Native MiniWoB timeout': 'CUA-Lite default 30 seconds (upstream page default is 5 seconds)', 'Seed': 'Orbit trial seed forwarded to native BrowserGymEnv',
+            'Step limit': str(steps), 'Native MiniWoB timeout': 'CUA-Lite default 30 seconds (upstream page default is 5 seconds)', 'Seed': 'Orbit trial seed forwarded to native environment; live websites are not seeded',
             'Isolation': 'Private container and loopback MiniWoB HTTP server; no host singleton',
             'Web backends': 'One original browser service per trial; instances=1; immutable image IDs recorded in solve plan',
             'WebVoyager image': c.get('webVoyagerImage', 'not prepared'),
             'Online-Mind2Web image': c.get('onlineMind2WebImage', 'not prepared'),
+            'Online-Mind2Web build dependencies': ', '.join(f'{name}=={v}' for name, v in ONLINE_BUILD_VERSIONS.items()),
             'Web evaluation': 'Original terminal judge deferred to after phase; no judge key or terminal reward given to the policy',
             'Web rescore': 'Current Orbit does not rescore after-phase trials; use a separate MiniWoB registration for evidence rescore',
             'Web judges': 'Native gpt-4.1 / o4-mini; OPENAI_API_KEY via benchmark passEnv; image_judge_workers=1',
@@ -125,7 +129,7 @@ def tasks(req):
             'Web subset': 'Five reviewed read-only tasks per suite; live-site availability is checked during reset',
             'Unsupported suites': 'Explicit suite rows are availability records, not individual benchmark episodes',
             'KVM': 'Not in Orbit ledger; desktop/mobile suites refused; host exclusivity required',
-            'Evidence': 'Live original reward; offline verify checks saved evidence only'}},
+            'Evidence': 'Native MiniWoB reward or deferred original Web judge; offline verify checks saved evidence only'}},
         'metrics': [{'name': 'score', 'label': 'Native success', 'unit': '%', 'primary': True}]}
 
 

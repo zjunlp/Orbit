@@ -7,7 +7,7 @@ import shutil
 
 from adapter import checkout
 from evidence import COMMIT
-from web_suites import WEB_SUITES
+from web_suites import ONLINE_BUILD_VERSIONS, WEB_SUITES
 
 
 def prepare(root, suite, destination):
@@ -18,8 +18,21 @@ def prepare(root, suite, destination):
     source = root / 'lite/gym/envs' / WEB_SUITES[suite]['path'] / 'docker'
     shutil.copytree(source, destination)
     dockerfile = destination / 'Dockerfile'
+    if suite == 'online_mind2web':
+        original = dockerfile.read_text()
+        marker = 'RUN pip install --no-cache-dir'
+        if marker not in original:
+            raise ValueError('Expected the pinned native Online-Mind2Web dependency install')
+        constraints = destination / 'orbit-constraints.txt'
+        constraints.write_text(''.join(f'{name}=={version}\n' for name, version in ONLINE_BUILD_VERSIONS.items()))
+        dockerfile.write_text(original.replace(marker,
+            'COPY orbit-constraints.txt /opt/orbit-constraints.txt\n'
+            'ENV PIP_CONSTRAINT=/opt/orbit-constraints.txt\n\n' + marker, 1))
     with dockerfile.open('a') as stream:
         stream.write(f'\nLABEL orbit.cua-lite.source="{COMMIT}" orbit.cua-lite.suite="{suite}"\n')
+        if suite == 'online_mind2web':
+            for name, version in ONLINE_BUILD_VERSIONS.items():
+                stream.write(f'LABEL orbit.cua-lite.{name}="{version}"\n')
         stream.write('ENTRYPOINT []\nCMD ["/usr/local/bin/entrypoint.sh"]\n')
     return dockerfile
 
