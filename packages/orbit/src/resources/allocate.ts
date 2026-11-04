@@ -45,7 +45,8 @@ export function infeasible(req: ResourceRequest, r: NodeResources): string | nul
     return `needs ${req.memGB} GB memory but at most ${Math.floor(maxMem)} GB is leasable`;
   for (const d of deviceTotals(req.devices ?? [])) {
     const have = (r.devices ?? []).find((x) => x.class === d.class);
-    if (!have || have.count < d.count)
+    // A shared class (kvm, dri, tun) is present or not; any number of runs and roles use it.
+    if (!have || have.count < (have.shared ? 1 : d.count))
       return `needs ${d.count} ${d.class} device(s), but this node has ${have?.count ?? 0}${have?.detail ? ` (${have.detail})` : ""}`;
   }
   return null;
@@ -119,6 +120,13 @@ function allocateDevices(
   const out: DeviceAllocation[] = [];
   for (const req of deviceTotals(requests)) {
     const node = (r.devices ?? []).find((d) => d.class === req.class);
+    if (node?.shared) {
+      // Shared device nodes are not consumed: present is enough, every run gets the same nodes.
+      if (node.count < 1)
+        return { ok: false, reason: `waiting for devices (${req.class}: none present)` };
+      out.push({ ...req, paths: node.paths.slice(0, req.count) });
+      continue;
+    }
     const others = held.filter((d) => d.class === req.class);
     const sameRun = reserved.filter((d) => d.class === req.class);
     const used = [...others, ...sameRun];

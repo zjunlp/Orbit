@@ -108,6 +108,14 @@ reason?, attempts }`，`Run.phases` 默认为空（旧记录可读）。
 - GPU 名称按大小写无关子串匹配，整组匹配不会让无型号限制角色占住唯一符合条件的卡；EGL/Vulkan/CUDA 明确为未验证声明。无角色服务的 CPU/内存也纳入准入。
 - Compose 严格翻译显式 x-orbit-role 的 NVIDIA GPU reservation 与 x-gpu-memory-gb；未知键继续 unsupported。未改并行线的 benchmark 契约、Harbor adapter 或 trial 页面。
 
+### 主线验收修正（Claude）
+
+- 阶段回执、`after-durable` 标记与 `solve-collected` 移到 daemon 私有的 `runs/<id>/phase-state/`（0700，不在 `/orbit` 挂载内）；容器内进程无法伪造"已完成"。旧版 `after.exit` 只在 legacy 恢复时读取。
+- 恢复时已过期的 `running` 阶段：带 `resumeMs` 的阶段（quiesce 60 s、collect 10 min、stop-services 按服务数）获得新的时间窗重试，而非直接记 timeout 丢证据。
+- 重启后容器已消失且未记录退出码 → Run 记 `lost`（未知），不记 failed。
+- quiesce 的时限计入 checkpoint 捕获预算；`copyFromContainer` 超过期限返回错误而不是抛出中断整个采集循环。
+- KVM / DRI / TUN 为共享设备类（`NodeDevice.shared`）：只要求存在，不占用计数，多个 Run 与角色可同时使用；android 等仍按计数独占。
+
 ## Validation
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
@@ -119,6 +127,7 @@ reason?, attempts }`，`Run.phases` 默认为空（旧记录可读）。
 | 两台物理节点 GPU 放置 | — | not_run | 本次真实验证在单节点执行；多节点路径保留单元测试覆盖，未配置第二台物理执行节点 |
 | 原版 EFE abc-sim 任务枚举 | P5 integrated tree | passed | 如实保持 unsupported：sim/rcb_monitor 缺 x-orbit-role；只增加角色的开发副本可枚举 supported，但独占 GPU 条件不同，不视为原版对齐 |
 | 原版 EFE GPU oracle / empty | P5 integrated tree | not_run | 原版缺角色且假定共享 GPU，与本任务明确角色/独占规则冲突；ABC 仿真镜像未安装，不修改上游任务或静默放宽条件 |
+| 主线验收修正 | feat/p5-coverage (review fix) | passed | `pnpm verify`：orbit 480 passed / 21 skipped，web 51；新增伪造回执被忽略、过期阶段续跑、容器消失记 lost、共享设备不消耗四项回归 |
 | 主线核对 | 4993f5f | passed | fetch 后 main 与 origin/main 均为当前三提交的直接基线；无需移动提交，未推送或合并 |
 
 ## Next / open issues

@@ -176,7 +176,12 @@ export async function probeDevices(overrides: Partial<DeviceProbe> = {}): Promis
   };
   const reason = (e: unknown) =>
     e instanceof Error ? ((e as NodeJS.ErrnoException).code ?? e.message) : String(e);
-  const nodes = async (cls: string, paths: string[], exclusive = false): Promise<NodeDevice> => {
+  const nodes = async (
+    cls: string,
+    paths: string[],
+    exclusive = false,
+    shared = false,
+  ): Promise<NodeDevice> => {
     const results = await Promise.all(
       paths.map(async (path) => {
         try {
@@ -193,11 +198,18 @@ export async function probeDevices(overrides: Partial<DeviceProbe> = {}): Promis
       class: cls,
       count: available.length,
       exclusive,
+      shared,
       paths: available,
       detail: [...available, ...errors].join("; ") || "no matching device nodes",
     };
   };
-  const directory = async (cls: string, dir: string, pattern: RegExp, exclusive = false) => {
+  const directory = async (
+    cls: string,
+    dir: string,
+    pattern: RegExp,
+    exclusive = false,
+    shared = false,
+  ) => {
     try {
       return await nodes(
         cls,
@@ -206,9 +218,17 @@ export async function probeDevices(overrides: Partial<DeviceProbe> = {}): Promis
           .sort()
           .map((p) => join(dir, p)),
         exclusive,
+        shared,
       );
     } catch (e) {
-      return { class: cls, count: 0, exclusive, paths: [], detail: `${dir}: ${reason(e)}` };
+      return {
+        class: cls,
+        count: 0,
+        exclusive,
+        shared,
+        paths: [],
+        detail: `${dir}: ${reason(e)}`,
+      };
     }
   };
   const android = async (): Promise<NodeDevice> => {
@@ -218,6 +238,7 @@ export async function probeDevices(overrides: Partial<DeviceProbe> = {}): Promis
         class: "android",
         count: result.code === 0 ? 1 : 0,
         exclusive: true,
+        shared: false,
         paths: [],
         detail:
           result.code === 0
@@ -229,15 +250,17 @@ export async function probeDevices(overrides: Partial<DeviceProbe> = {}): Promis
         class: "android",
         count: 0,
         exclusive: true,
+        shared: false,
         paths: [],
         detail: `adb: ${reason(e)}`,
       };
     }
   };
   return Promise.all([
-    nodes("kvm", ["/dev/kvm"]),
-    directory("dri", "/dev/dri", /^renderD\d+$/),
-    nodes("net-tun", ["/dev/net/tun"]),
+    // The kernel multiplexes these: many VMs share /dev/kvm, many containers a render node or TUN.
+    nodes("kvm", ["/dev/kvm"], false, true),
+    directory("dri", "/dev/dri", /^renderD\d+$/, false, true),
+    nodes("net-tun", ["/dev/net/tun"], false, true),
     android(),
     directory("serial", "/dev", /^tty(?:USB|ACM)\d+$/),
   ]);

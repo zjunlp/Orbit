@@ -451,7 +451,12 @@ export async function copyFromContainer(
   dest: string,
 ): Promise<string | null> {
   mkdirSync(dirname(dest), { recursive: true });
-  const r = await docker(["cp", `${id}:${src}`, dest], 600_000);
+  // Past a phase deadline `docker` throws; a copy reports it like any other failed path, so a
+  // collect loop records the rest as missing instead of stopping at the first one.
+  const r = await docker(["cp", `${id}:${src}`, dest], 600_000).catch((e: Error) => ({
+    code: 124,
+    stderr: e.message,
+  }));
   return r.code === 0 ? null : (r.stderr.trim().split("\n")[0] ?? `exit ${r.code}`);
 }
 

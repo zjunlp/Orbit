@@ -207,6 +207,22 @@ describe("device contracts and allocation", () => {
     expect(allocateRoles(both, overlapping, [])).toMatchObject({ ok: false });
   });
 
+  it("does not consume a shared device class: every run and role gets the same nodes", () => {
+    const resources = node([{ class: "kvm", count: 1, shared: true, paths: ["/dev/kvm"] }]);
+    const run = spec({
+      devices: [{ class: "kvm", count: 1 }],
+      services: [{ name: "vm", role: "vm", image: "x", devices: [{ class: "kvm", count: 1 }] }],
+    });
+    expect(infeasible(leaseRequest(run), resources)).toBeNull();
+    const busy = held([{ class: "kvm", count: 1, paths: ["/dev/kvm"] }]);
+    const allocation = allocateRoles(roleRequests(run), resources, [busy]);
+    expect(allocation.ok && allocation.roles.map((r) => r.devices[0]?.paths)).toEqual([
+      ["/dev/kvm"],
+      ["/dev/kvm"],
+    ]);
+    expect(allocateRoles(roleRequests(run), node([]), []).ok).toBe(false);
+  });
+
   it("keeps an exclusive device class with one run until its lease is released", () => {
     const resources = node([{ class: "robot:arm", count: 2, exclusive: true }]);
     const request = ResourceRequest.parse({

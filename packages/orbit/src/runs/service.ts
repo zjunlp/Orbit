@@ -1057,7 +1057,11 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
         setTimeout(() => void this.recover(false), DOCKER_RETRY_MS * 6).unref();
         return;
       }
-      if (!st && run.phases.length === 0 && !keepsContainer(run.spec)) {
+      // Gone with no recorded exit code: Orbit cannot tell how the command ended, so the run is lost
+      // (bench treats that as unknown), not failed. With a recorded exit, the ending phases go on.
+      const recordedExit =
+        run.exitCode ?? phases.readCode(join(this.dirs(run.id).orbit, "phases", "main.exit"));
+      if (!st && recordedExit === null) {
         await this.finalize(run, "lost", null, "container not found after daemon restart");
         continue;
       }

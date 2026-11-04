@@ -55,6 +55,11 @@ export const NodeDevice = z.object({
   count: z.number().int().min(0),
   /** When true, the class can be leased to only one run at a time. */
   exclusive: z.boolean().default(false),
+  /**
+   * When true, many runs may use the same device node at once (KVM, TUN, DRI render nodes are
+   * multiplexed by the kernel); leasing then only checks presence and records the holders.
+   */
+  shared: z.boolean().default(false),
   detail: z.string().optional(),
   /** Concrete device nodes; capability-only classes (e.g. adb) have no paths. */
   paths: z.array(DevicePath).default([]),

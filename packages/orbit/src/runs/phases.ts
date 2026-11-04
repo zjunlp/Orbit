@@ -37,6 +37,12 @@ export interface PhaseStep {
   timeoutMs: number;
   skip?: () => string | undefined;
   reconcile?: boolean;
+  /**
+   * A phase found `running` after a daemon restart whose deadline already passed gets this fresh
+   * budget instead of failing: evidence collection and service stops must not be lost because the
+   * daemon was down. Default (with `reconcile`): 30 s to read what already happened.
+   */
+  resumeMs?: number;
   run: (deadline: number) => Promise<number> | Promise<void>;
 }
 
@@ -79,13 +85,14 @@ export async function runPhased(
       ctx.save(run, "phase", `${step.name}: running`);
     }
     const deadline = phase.deadlineAt ? Date.parse(phase.deadlineAt) : Date.now() + step.timeoutMs;
-    const reconcile = resuming && step.reconcile && Date.now() >= deadline;
+    const reconcile =
+      resuming && (step.reconcile || step.resumeMs !== undefined) && Date.now() >= deadline;
     let result: Partial<RunPhase>;
     try {
       if (Date.now() >= deadline && !reconcile)
         throw new PhaseFailure("phase deadline exceeded", "timeout");
       const exitCode = await docker.withDeadline(
-        reconcile ? Date.now() + 30_000 : deadline,
+        reconcile ? Date.now() + (step.resumeMs ?? 30_000) : deadline,
         async () => (await step.run(deadline)) ?? undefined,
       );
       checkWatching(ctx);
@@ -182,6 +189,16 @@ echo "$code" > "$d/exit.tmp"
 mv "$d/exit.tmp" "$d/exit"
 `;
 
+/**
+ * Daemon-only phase state: receipts and markers that decide whether a phase already ran. It lives
+ * beside the run's `/orbit` mount, never inside it, so a process in the container cannot forge them.
+ */
+export function phaseStateDir(ctx: Pick<Context, "dirs">, id: string): string {
+  const dir = join(ctx.dirs(id).root, "phase-state");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
 export async function durableCommand(
   ctx: Context,
   id: string,
@@ -197,7 +214,7 @@ export async function durableCommand(
   } = {},
 ): Promise<number> {
   checkWatching(ctx);
-  const receipt = join(ctx.dirs(id).orbit, "phases", `${key}.result.json`);
+  const receipt = join(phaseStateDir(ctx, id), `${key}.result.json`);
   const result = (code: number, timedOut: boolean) => {
     if (timedOut) throw new PhaseFailure(`${key} deadline exceeded`, "timeout", code);
     return code;
@@ -362,7 +379,7 @@ export async function runAfter(
   const run = ctx.mustGet(id);
   const a = run.spec.after as AfterPhase;
   if (run.after && run.after.state !== "running") return;
-  const durableMarker = join(ctx.dirs(id).orbit, "phases", "after-durable");
+  const durableMarker = join(phaseStateDir(ctx, id), "after-durable");
   const legacy = run.after?.state === "running" && !existsSync(durableMarker);
   let startedAt = run.after?.startedAt ?? null;
   let status: AfterStatus;
@@ -404,8 +421,10 @@ export async function runAfter(
       phaseDeadline ? Date.parse(phaseDeadline) : Infinity,
     );
     // Older Runs used after.exit without a per-command claim. Wait for that original command.
+    // Only a run started by an older Orbit (no durable marker) may use it: the file is in the
+    // container-writable /orbit mount, so a current run never trusts it.
     const oldExit = join(ctx.dirs(id).orbit, "phases", "after.exit");
-    let code = readCode(oldExit);
+    let code = legacy ? readCode(oldExit) : null;
     if (code === null && legacy) {
       while (code === null && Date.now() < deadline) {
         checkWatching(ctx);

@@ -20,8 +20,10 @@ import {
   copyCollected,
   keepsContainer,
   PhaseFailure,
+  phaseStateDir,
   runPhased,
   runRender,
+  stopMain,
 } from "./phases.ts";
 
 type Context = Pick<
@@ -88,19 +90,21 @@ export async function watch(
     ctx.save(run, "command", `main command exited with code ${exitCode}`);
   }
   ctx.disarmTimeout(id);
-  const preCollected = join(dirs.orbit, "phases", "solve-collected");
+  const preCollected = join(phaseStateDir(ctx, id), "solve-collected");
   const checkpointFailure = Boolean(spec.checkpoint && exitCode !== 0 && ctl.cancel !== "cancel");
   await runPhased(ctx, id, [
     {
       name: "quiesce",
-      timeoutMs: 60_000,
+      // A failure checkpoint commits the writable layer here; it had no time bound before phases.
+      timeoutMs:
+        60_000 + (checkpointFailure ? 600_000 + (spec.checkpoint?.maxSizeGB ?? 4) * 120_000 : 0),
+      resumeMs: 60_000,
       run: async () => {
         if (keepsContainer(spec)) {
           // Stop leftover Agent processes before trusted hooks can finalize the environment.
           const st = await docker.inspectContainer(containerId);
           if (!st) throw new PhaseFailure("container disappeared");
           if (st.running) {
-            const { stopMain } = await import("./phases.ts");
             await stopMain(ctx, containerId);
           }
         }
@@ -142,7 +146,6 @@ export async function watch(
         if (spec.after) {
           if (!existsSync(preCollected)) {
             await attempt(() => ctx.collect(ctx.mustGet(id), containerId));
-            mkdirSync(join(dirs.orbit, "phases"), { recursive: true });
             writeFileSync(preCollected, "done");
           }
           await attempt(() => ctx.runAfter(id, containerId, ctl));
@@ -187,6 +190,7 @@ export async function watch(
           (spec.after?.render?.collect.length ?? 0)) *
           600_000,
       ),
+      resumeMs: 600_000,
       run: async () => {
         if (!existsSync(preCollected)) await ctx.collect(ctx.mustGet(id), containerId);
         await collectAfter(ctx, id, containerId);
@@ -194,6 +198,7 @@ export async function watch(
     },
     {
       name: "stop-services",
+      resumeMs: 120_000 + spec.services.length * 60_000,
       timeoutMs:
         60_000 + spec.services.reduce((n, s) => n + 60_000 + s.collect.length * 600_000, 0),
       run: async () => {

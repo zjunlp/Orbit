@@ -3,10 +3,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { ensureHome, orbitPaths } from "../src/config/paths.ts";
+import { ensureHome, orbitPaths, runDirs } from "../src/config/paths.ts";
 import { Run, RunPhase } from "../src/contracts/index.ts";
 import * as docker from "../src/executor/docker.ts";
-import { PhaseFailure, runPhased, WatchStopped } from "../src/runs/phases.ts";
+import {
+  durableCommand,
+  PhaseFailure,
+  phaseStateDir,
+  runPhased,
+  WatchStopped,
+} from "../src/runs/phases.ts";
 import { RunService } from "../src/runs/service.ts";
 import { Store } from "../src/store/index.ts";
 
@@ -240,4 +246,90 @@ it("reconciles a completed durable phase after downtime without extending its sa
     attempts: 1,
     deadlineAt: "2000-01-01T00:00:00Z",
   });
+});
+
+it("gives an expired recovered phase with a resume budget a fresh attempt window", async () => {
+  const f = fixture();
+  f.ctx.save({
+    phases: [
+      RunPhase.parse({
+        name: "collect",
+        state: "running",
+        attempts: 1,
+        deadlineAt: "2000-01-01T00:00:00Z",
+      }),
+    ],
+  } as Run);
+  const action = vi.fn(async () => 0);
+  await runPhased(f.ctx, "r", [
+    { name: "collect", timeoutMs: 1000, resumeMs: 60_000, run: action },
+  ]);
+  expect(action).toHaveBeenCalledTimes(1);
+  expect(f.run.phases[0]?.state).toBe("done");
+});
+
+it("ignores a command receipt forged inside the container-writable /orbit mount", async () => {
+  const home = mkdtempSync(join(tmpdir(), "orbit-phase-forge-"));
+  const paths = orbitPaths({ ORBIT_HOME: home });
+  const dirs = (id: string) => runDirs(paths, id);
+  const ctx = {
+    stopped: false,
+    dirs,
+    mustGet: () => ({ services: [] }) as unknown as Run,
+  } as unknown as Parameters<typeof durableCommand>[0];
+  try {
+    const forged = join(dirs("r").orbit, "phases");
+    mkdirSync(forged, { recursive: true });
+    writeFileSync(join(forged, "hook-0.result.json"), '{"code":0,"timedOut":false}');
+    vi.mocked(docker.inspectContainer).mockResolvedValue(null);
+    await expect(durableCommand(ctx, "r", "c", "hook-0", ["true"], 1000)).rejects.toThrow(
+      /container disappeared/,
+    );
+    writeFileSync(
+      join(phaseStateDir(ctx, "r"), "hook-0.result.json"),
+      '{"code":3,"timedOut":false}',
+    );
+    expect(await durableCommand(ctx, "r", "c", "hook-0", ["true"], 1000)).toBe(3);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+it("finalizes a run whose container vanished before any exit was recorded as lost", async () => {
+  const home = mkdtempSync(join(tmpdir(), "orbit-phase-lost-"));
+  const paths = orbitPaths({ ORBIT_HOME: home });
+  ensureHome(paths);
+  const store = new Store(paths.db);
+  const runs = new RunService({ store, paths, probe: vi.fn() });
+  const at = new Date().toISOString();
+  const run = Run.parse({
+    id: "phase-lost",
+    spec: { image: "fixture", command: ["true"], hooks: [{ command: "finalize" }] },
+    state: "running",
+    reason: null,
+    exitCode: null,
+    node: paths.node,
+    image: "fixture",
+    containerId: "gone",
+    lease: null,
+    code: null,
+    cleanup: "pending",
+    note: "",
+    createdAt: at,
+    startedAt: at,
+    endedAt: null,
+    phases: [{ name: "quiesce", state: "running", attempts: 1, startedAt: at }],
+  });
+  mkdirSync(runs.dirs(run.id).output, { recursive: true });
+  writeFileSync(runs.dirs(run.id).log, "");
+  store.putRun(run);
+  vi.mocked(docker.inspectContainer).mockResolvedValue(null);
+  try {
+    await runs.start();
+    await expect.poll(() => runs.get(run.id)?.state).toBe("lost");
+  } finally {
+    await runs.stop();
+    store.close();
+    rmSync(home, { recursive: true, force: true });
+  }
 });
