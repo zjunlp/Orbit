@@ -2,7 +2,15 @@
 // Orbit runs the solve phase in the task environment and the verifier in a separate container
 // (environment_mode = "separate"), with the declared artifacts copied across. Settings Orbit cannot
 // honour mark the task unsupported instead of being ignored, so scores keep the task's conditions.
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { BenchTask, FailureKind, Method } from "../contracts/index.ts";
@@ -98,6 +106,28 @@ interface Resources {
   memGB: number;
   gpus: number;
   gpuModels?: string[];
+}
+
+/**
+ * Embodied First Exam tasks (`[task] name = "embodied-first-exam/…"`): a coding agent solving a
+ * robotics task (category agent-workspace). A privileged task hands in a trajectory or program that
+ * the verifier replays; a standard or realtime task drives the simulator live and its sidecar grades.
+ */
+export function embodiedTags(id: string, task: Table, meta: Table): Record<string, string> {
+  if (!str(task.name)?.startsWith("embodied-first-exam/")) return {};
+  const mode = /-(privileged|standard-realtime|realtime|standard)$/.exec(id)?.[1] ?? "standard";
+  // roboEngineer seals a numeric controller even in standard mode (its hidden dynamics are the task).
+  const program = mode === "privileged" || id.startsWith("roboengineer-");
+  const out: Record<string, string> = {
+    domain: "embodied",
+    mode: mode === "standard-realtime" ? "realtime" : mode,
+    profile: program ? "embodied-program" : "embodied-live",
+  };
+  for (const k of ["protocol", "oracle", "simulator", "task_type"] as const) {
+    const v = str(meta[k]);
+    if (v) out[k === "task_type" ? "deliverable" : k] = v;
+  }
+  return out;
 }
 
 /** `[environment] gpu_types`: GPU models any of which Harbor may provision. */
@@ -416,6 +446,7 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     const v = str(meta[k]);
     if (v) tags[k] = v;
   }
+  Object.assign(tags, embodiedTags(id, task, meta));
   return {
     id,
     dir,
@@ -664,7 +695,57 @@ export function harborVerifySpec(
 }
 
 /** Reward from `reward.json` (the `reward` key, or its only key) or `reward.txt` (one number). */
+/**
+ * Messages upstream verifiers print when their own infrastructure failed, before writing a reward of
+ * 0 anyway (design: integration-categories §3 ③). A 0 that comes with one is not the method's result.
+ */
+const UPSTREAM_FAULTS: { pattern: RegExp; failure: FailureKind; issue: string }[] = [
+  // Harbor's TextArena adapter (tests/test.sh): the game server was unreachable or gave no reward.
+  {
+    pattern: /✗ (Could not reach game server|Game server returned \d+|No reward value in result)/,
+    failure: "infra",
+    issue: "the game server did not report a result (the verifier wrote 0)",
+  },
+];
+
+/** A grader script that crashed (not an assertion) before the wrapper wrote 0. */
+const CRASH =
+  /Traceback \(most recent call last\):[\s\S]*?\n(?!AssertionError)(\w+(?:Error|Exception)): ?(.{0,160})/;
+
+/** The verifier log's last 64 KiB (the run wrote it; read as data only). */
+function verifierLog(verifierDir: string): string {
+  const file = join(verifierDir, "test-stdout.txt");
+  try {
+    const st = lstatSync(file);
+    if (!st.isFile()) return "";
+    const text = readFileSync(file, "utf8");
+    return text.slice(-65_536);
+  } catch {
+    return "";
+  }
+}
+
+/** The reward with upstream faults that a 0 may hide made visible (invalid, or an issue). */
 export function harborReward(verifierDir: string): ScoreReply {
+  const r = rawHarborReward(verifierDir);
+  if (r.invalid || r.score !== 0) return r;
+  const log = verifierLog(verifierDir);
+  for (const f of UPSTREAM_FAULTS)
+    if (f.pattern.test(log))
+      return { score: null, maxScore: 1, invalid: true, failure: f.failure, issues: [f.issue] };
+  const crash = CRASH.exec(log);
+  if (crash)
+    return {
+      ...r,
+      issues: [
+        ...(r.issues ?? []),
+        `the verifier raised ${crash[1]} (${crash[2]?.trim()}) and scored 0: check whether the solution or the grader failed`,
+      ],
+    };
+  return r;
+}
+
+function rawHarborReward(verifierDir: string): ScoreReply {
   const json = join(verifierDir, "reward.json");
   const txt = join(verifierDir, "reward.txt");
   const bad = (issue: string, failure: FailureKind = "scorer_error"): ScoreReply => ({
@@ -776,6 +857,21 @@ export const harborAdapter: AdapterHandlers = {
   metrics: HARBOR_METRICS,
   tasks: (req) =>
     findHarborTasks(req.benchmark.path, harborOptions(req.benchmark.config)).map(toBenchTask),
+  info: (_req, tasks) => {
+    const profiles = [...new Set(tasks.map((t) => t.tags.profile ?? "terminal"))].sort();
+    const embodied = tasks.some((t) => t.tags.domain === "embodied");
+    return {
+      capabilities: {
+        category: "agent-workspace",
+        profiles,
+        domains: embodied ? ["embodied"] : [],
+        methods: ["oracle", "empty", "cli"],
+        conditions: { Format: "Harbor task directories; each task's own environment and verifier" },
+        scoreKind: "scalar",
+        rescore: "evidence",
+      },
+    };
+  },
   solve: ({ benchmark, trial }) => {
     const t = harborTask(benchmark.path, trial.task, harborOptions(benchmark.config));
     return {

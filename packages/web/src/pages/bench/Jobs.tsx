@@ -1,9 +1,11 @@
+import { benchCategory } from "@zjunlp/orbit/categories";
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { useState } from "react";
 import { IconCompare, IconFlask } from "../../components/icons.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { Empty, Link, Loading } from "../../components/ui.tsx";
 import { api, type BenchJobList, type Benchmark } from "../../lib/api.ts";
+import { BENCH_CATEGORIES, CATEGORY_LABELS, categoryLabel } from "../../lib/category.ts";
 import { ago, jobPath } from "../../lib/format.ts";
 import { navigate, onLinkClick, setQuery, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
@@ -19,7 +21,7 @@ export function BenchJobs() {
   const tab = loc.query.get("tab") === "environments" ? "environments" : "jobs";
   const query = loc.query.get("q") ?? "";
   const status = loc.query.get("state") ?? "all";
-  const kind = loc.query.get("kind") ?? "all";
+  const category = loc.query.get("category") ?? "all";
   const toggle = (id: string) => {
     const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
     setQuery({ sel: next.join(",") || null });
@@ -29,7 +31,7 @@ export function BenchJobs() {
     const state = verifying ? "verifying" : j.state;
     return (
       (status === "all" || state === status) &&
-      (kind === "all" || j.capabilities?.kind === kind) &&
+      (category === "all" || benchCategory(j.capabilities) === category) &&
       `${jobLabel(j)} ${j.id} ${j.spec.benchmark} ${j.spec.methods.map((m) => m.name).join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase())
@@ -100,17 +102,18 @@ export function BenchJobs() {
                 </select>
                 <select
                   className="input"
-                  aria-label="Filter by environment kind"
-                  value={kind}
+                  aria-label="Filter by category"
+                  value={category}
                   onChange={(e) =>
-                    setQuery({ kind: e.target.value === "all" ? null : e.target.value })
+                    setQuery({ category: e.target.value === "all" ? null : e.target.value })
                   }
                 >
-                  <option value="all">All environments</option>
-                  <option value="browser">Browser</option>
-                  <option value="desktop">Desktop</option>
-                  <option value="mobile">Mobile</option>
-                  <option value="other">Other declared environments</option>
+                  <option value="all">All categories</option>
+                  {BENCH_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {CATEGORY_LABELS[c]}
+                    </option>
+                  ))}
                 </select>
               </div>
               {jobs.error && (
@@ -292,7 +295,9 @@ function JobTable({
               </td>
               <td>
                 {j.spec.benchmark}
-                {j.capabilities && <div className="faint">{j.capabilities.kind}</div>}
+                {categoryLabel(j.capabilities) && (
+                  <div className="faint">{categoryLabel(j.capabilities)}</div>
+                )}
               </td>
               <td>
                 <JobState state={j.state} />

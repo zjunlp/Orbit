@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  BENCH_CATEGORIES,
+  CATEGORY_PROFILES,
+  type BenchCategory as Category,
+} from "./categories.ts";
 import { EnvName, ProfileName } from "./common.ts";
 import { Folder } from "./folders.ts";
 import { CheckpointPolicy } from "./runs.ts";
@@ -153,15 +158,76 @@ export function capabilityAllows(methods: readonly string[], agent: string): boo
   return methods.includes(agent) || (methods.includes("cli") && isCliMethod({ agent }));
 }
 
-export const BenchCapabilities = z.object({
-  kind: z.enum(["browser", "desktop", "mobile", "other"]),
-  methods: z.array(CapabilityMethod).min(1),
-  conditions: z.record(z.string().max(80), z.string().max(2000)),
-  scoreKind: z.enum(["binary", "scalar"]),
-  rescore: z.enum(["evidence", "score", "none"]),
-  /** Agent capabilities (registry `capabilities`) a CLI method needs; checked on submission. */
-  requires: z.array(z.enum(["oneShot", "multiTurn", "mcp", "gui"])).default([]),
+export const BenchCategory = z.enum(BENCH_CATEGORIES);
+export type BenchCategory = Category;
+
+const Range = z.object({ min: z.number(), max: z.number() }).refine((r) => r.max >= r.min);
+/**
+ * What calibration may expect of a benchmark (`orbit bench calibrate`). Categories have defaults
+ * (`calibrationDefaults`); a benchmark overrides them where its rules differ (e.g. a do-nothing
+ * policy that can already satisfy a goal, or a judge that is not exactly repeatable).
+ */
+export const CalibrationExpect = z.object({
+  /** `min`: 0; `any`: no expectation; or a range. */
+  empty: z.union([z.literal("min"), z.literal("any"), Range]).optional(),
+  /** `max`: full marks; `none`: no reference solution; or a range. */
+  oracle: z.union([z.literal("max"), z.literal("none"), Range]).optional(),
+  /** `exact`, or the largest allowed spread of repeated seeds of a task × method. */
+  repeat: z
+    .union([z.literal("exact"), z.object({ tolerance: z.number().nonnegative() })])
+    .optional(),
+  /** Repeated seeds are different episodes (initial states), not repeats of one. */
+  seedsVary: z.boolean().optional(),
 });
+export type CalibrationExpect = z.infer<typeof CalibrationExpect>;
+
+export function calibrationDefaults(
+  category: Category | null,
+): Required<Pick<CalibrationExpect, "empty" | "oracle" | "repeat">> & { seedsVary: boolean } {
+  switch (category) {
+    case "embodied-policy":
+      // A still policy can satisfy a goal that holds at the start; seeds pick initial states.
+      return { empty: "any", oracle: "max", repeat: "exact", seedsVary: true };
+    case "fixed-input":
+      return { empty: "any", oracle: "max", repeat: "exact", seedsVary: false };
+    case "user-session":
+    case "game":
+      return { empty: "min", oracle: "none", repeat: { tolerance: 1 }, seedsVary: false };
+    default:
+      return { empty: "min", oracle: "max", repeat: "exact", seedsVary: false };
+  }
+}
+
+export const BenchCapabilities = z
+  .object({
+    category: BenchCategory.optional(),
+    profiles: z.array(z.string().max(40)).max(12).default([]),
+    /** Subject-area tags shown in the UI (e.g. `embodied`), independent of the category. */
+    domains: z
+      .array(z.string().regex(/^[a-z][a-z0-9-]{0,30}$/))
+      .max(6)
+      .default([]),
+    /** Kept for older adapters; a GUI platform when the category is `gui`. */
+    kind: z.enum(["browser", "desktop", "mobile", "other"]).default("other"),
+    methods: z.array(CapabilityMethod).min(1),
+    conditions: z.record(z.string().max(80), z.string().max(2000)),
+    scoreKind: z.enum(["binary", "scalar"]),
+    rescore: z.enum(["evidence", "score", "none"]),
+    /** Agent capabilities (registry `capabilities`) a CLI method needs; checked on submission. */
+    requires: z.array(z.enum(["oneShot", "multiTurn", "mcp", "gui"])).default([]),
+    calibration: CalibrationExpect.optional(),
+  })
+  .superRefine((c, ctx) => {
+    if (!c.category) return;
+    const allowed = CATEGORY_PROFILES[c.category];
+    for (const p of c.profiles)
+      if (!allowed.includes(p))
+        ctx.addIssue({
+          code: "custom",
+          path: ["profiles"],
+          message: `${c.category} has no profile ${p} (one of ${allowed.join(", ")})`,
+        });
+  });
 export type BenchCapabilities = z.infer<typeof BenchCapabilities>;
 
 /**

@@ -1,6 +1,6 @@
 # Benchmark 大类与接入规范
 
-状态：**提案，待确认后实施**（2026-11-05）。依据为四份调研报告：[外部生态](research/taxonomy/landscape.md)、
+状态：**已确认并开始实施**（2026-11-05；EFE 归 C2 + 具身 profile，原生具身归 C6）。实施进度见 §7。依据为四份调研报告：[外部生态](research/taxonomy/landscape.md)、
 [具身](research/taxonomy/embodied.md)、[GUI](research/taxonomy/gui.md)、[代码/科研/问答](research/taxonomy/code.md)。
 这些报告由 Codex 读取本机各 bench 源码并联网查阅官方资料后写成，事实带出处；本文是在此基础上的取舍。
 
@@ -108,8 +108,24 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
    C6 原生 LIBERO（修正 seed 与逐 episode）、C2 EFE（profile 自动生成）、C5 MiniWoB（已有，补声明）、
    C1 一个问答或代码生成集、C3 一个 MCP 类、C4 τ²-bench、C7 TextArena 的一个单人游戏。
 
-## 6. 需要确认的决策
+## 6. 已确认的决策（2026-11-05）
 
-1. 7 个大类是否合适（尤其 C3 与 C4 分开、C7 单列、C1 包括 GUI grounding 这类离线视觉任务）。
-2. EFE 归 C2（coding agent），原生具身 benchmark 归 C6，两者分别登记、不合并排行榜。
-3. 样板顺序：建议先做 C6 原生 LIBERO 与 C2 EFE 的规范化，因为具身是当前重点，且已发现 seed 未生效这类实际问题。
+1. 采用 7 个大类。
+2. EFE 归 C2（coding agent）+ `embodied-program` / `embodied-live`，另带 `domains: [embodied]` 标签，Web 可按领域
+   把 EFE 与原生具身 benchmark 放在同一视图，但排行榜分开；原生具身 benchmark 归 C6。
+3. 先做 C6 原生 LIBERO 与 C2 EFE 的规范化，再给其余各类各做一个样板。
+
+## 7. 实施进度
+
+| 项 | 状态 | 位置 |
+| --- | --- | --- |
+| 契约：`category`、`profiles`（按类受控取值）、`domains`、`calibration` 期望；旧 `kind` 映射 | 已实现 | `contracts/categories.ts`（无依赖，Web 运行时可用）、`contracts/bench.ts` |
+| 按类别的校准期望（empty / oracle / 重复容差 / seed 取不同初态），benchmark 可覆盖；oracle 不全的任务不判 oracle、抽样优先 full | 已实现 | `cli/calibrate.ts` |
+| C2 EFE：每个任务按模式自动给出 profile（program 1,064 / live 1,196）、oracle 覆盖、交付类型 | 已实现 | `bench/harbor.ts` `embodiedTags` |
+| C6 LIBERO：一个 trial 一个 episode，seed n 取初态 n-1（越界拒绝），结果核对计划的初态与任务；适配器与清单两种实现 | 已实现，真机三个 seed 三个不同初态 | `examples/bench-adapters/vla-eval`、`examples/bench-manifests/vla-eval-libero` |
+| 现有适配器声明类别（GUI 5 个、科研/训练 3 个、vla-eval、Harbor 内置） | 已实现 | `examples/bench-adapters/*` |
+| Web：作业列表按类别筛选与标注，新建作业显示类别 | 已实现 | `packages/web/src/lib/category.ts` |
+| 有效性：上游 verifier 在自身故障时写 0 的情形——已知故障信息（TextArena 游戏服务不可达 / 无 reward）判 invalid（`infra`）；评分脚本抛出非断言异常后得 0 时加 issue 提示复核（TB-Science 等 `|| echo 0` 写法） | 已实现（Harbor 路径） | `bench/harbor.ts` `harborReward` |
+| SimpleQA judge 解析失败默认 C（未作答）、其余 judge 吞错 | 未开始（需随 C1 样板接入时处理） | — |
+| C1 / C3 / C4 / C7 样板 | 未开始 | — |
+| EFE standard GPU 任务（pandadyn）真实运行 | Orbit 侧通过：sim 租 1 卡、rcb_monitor 经 `gpusOf` 看同卡、Agent 容器无 GPU；sim 失败被判 invalid（infra）而非 0；取消后无残留与租约。任务本身失败：本机容器内 Vulkan `vkCreateDevice` 初始化失败（CDI 与 `--gpus` 相同，与 Orbit 无关），需排查主机图形驱动 | — |

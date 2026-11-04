@@ -18,12 +18,14 @@ import { z } from "zod";
 import {
   type AdapterRequest,
   BenchCapabilities,
+  BenchCategory,
   BenchTask,
+  CalibrationExpect,
   FailureKind,
   MetricSpec,
   OfficialRule,
 } from "../contracts/index.ts";
-import type { AdapterHandlers, RunDescription, ScoreReply } from "./adapter.ts";
+import type { AdapterHandlers, RunDescription, ScoreReply, TrialRequest } from "./adapter.ts";
 
 export const MANIFEST_FILE = "orbit-bench.yaml";
 const CONFIG_DIR = "/orbit-config";
@@ -77,7 +79,17 @@ const Manifest = z.object({
   version: z.literal(1),
   /** Default image of every run (a digest pins the conditions; a tag is recorded as mutable). */
   image: z.string().min(1),
-  kind: BenchCapabilities.shape.kind.default("other"),
+  /** Integration category and profiles (docs/integration-categories.md). */
+  category: BenchCategory.optional(),
+  profiles: z.array(z.string()).default([]),
+  domains: z.array(z.string()).default([]),
+  calibration: CalibrationExpect.optional(),
+  /**
+   * Initial states (episodes) per task: a trial runs one, seed n is episode n-1 (`{{episode}}`), and
+   * seeds beyond it are refused. Without it, seeds are repeats of the same task.
+   */
+  episodes: z.number().int().positive().max(100_000).optional(),
+  kind: z.enum(["browser", "desktop", "mobile", "other"]).default("other"),
   scoreKind: BenchCapabilities.shape.scoreKind.default("scalar"),
   conditions: z.record(z.string().max(80), z.string().max(2000)).default({}),
   official: OfficialRule.optional(),
@@ -119,6 +131,8 @@ const Manifest = z.object({
         }),
       )
       .default([]),
+    /** Values the result must record for this trial (e.g. the planned episode); else invalid. */
+    expect: z.array(z.object({ path: Path, equals: z.string().max(200) })).default([]),
   }),
 });
 export type Manifest = z.infer<typeof Manifest>;
@@ -135,6 +149,9 @@ export function loadManifest(benchmark: AdapterRequest["benchmark"]): { m: Manif
     throw new Error(
       `invalid manifest: ${r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
     );
+  const caps = BenchCapabilities.safeParse(capabilities(r.data));
+  if (!caps.success)
+    throw new Error(`invalid manifest: ${caps.error.issues.map((i) => i.message).join("; ")}`);
   return { m: r.data, dir: dirname(file) };
 }
 
@@ -299,8 +316,21 @@ function listTasks(m: Manifest): BenchTask[] {
   return tasks;
 }
 
+/** The episode a trial runs (seed n → n-1), refusing seeds the benchmark has no episode for. */
+export function episodeOf(m: Manifest, seed: number): number {
+  if (m.episodes && (seed < 1 || seed > m.episodes))
+    throw new Error(
+      `seed ${seed} has no episode: this benchmark has episodes 1..${m.episodes} per task`,
+    );
+  return seed - 1;
+}
+
 function capabilities(m: Manifest) {
   return {
+    ...(m.category ? { category: m.category } : {}),
+    profiles: m.profiles,
+    domains: m.domains,
+    ...(m.calibration ? { calibration: m.calibration } : {}),
     kind: m.kind,
     methods: Object.keys(m.methods),
     scoreKind: m.scoreKind,
@@ -338,7 +368,11 @@ function resultFiles(out: string, pattern: string): string[] {
 }
 
 /** The trial's result from the files a run left, as protocol 1's score reply. */
-export function readResult(m: Manifest, out: string): ScoreReply & { file: string | null } {
+export function readResult(
+  m: Manifest,
+  out: string,
+  ctx: Record<string, unknown> = {},
+): ScoreReply & { file: string | null } {
   const files = resultFiles(out, m.result.file);
   const file = files.filter((f) => lstatSync(f).isFile()).pop() ?? null;
   const several =
@@ -365,6 +399,14 @@ export function readResult(m: Manifest, out: string): ScoreReply & { file: strin
     if (rule.when === "present" ? vs.length > 0 : reduce(vs, "any") === 1)
       return fail(rule.issue, rule.failure);
   }
+  for (const e of m.result.expect) {
+    const want = render(e.equals, ctx);
+    const got = select(doc, e.path);
+    if (got.length !== 1 || String(got[0]) !== want)
+      return fail(
+        `the result records ${e.path} = ${got.map(String).join(", ") || "nothing"}, planned ${want}`,
+      );
+  }
   // A missing score is the grader's problem, never a 0 (count/any would otherwise give 0).
   const picked = select(doc, m.result.score.path);
   const s = picked.length ? reduce(picked, m.result.score.reduce) : null;
@@ -384,9 +426,19 @@ export function readResult(m: Manifest, out: string): ScoreReply & { file: strin
   };
 }
 
+/** What `result.expect` templates see: the trial's task, seed, episode and options. */
+function resultContext(m: Manifest, trial: TrialRequest["trial"]): Record<string, unknown> {
+  return {
+    task: listTasks(m).find((t) => t.id === trial.task),
+    seed: trial.seed,
+    episode: episodeOf(m, trial.seed),
+    option: trial.options,
+  };
+}
+
 export const manifestAdapter: AdapterHandlers = {
   tasks: (req) => listTasks(loadManifest(req.benchmark).m),
-  info: (req) => {
+  info: (req, _tasks) => {
     const { m } = loadManifest(req.benchmark);
     return {
       metrics: m.metrics,
@@ -404,6 +456,7 @@ export const manifestAdapter: AdapterHandlers = {
     const ctx = {
       task,
       seed: trial.seed,
+      episode: episodeOf(m, trial.seed),
       option: trial.options,
       method: {
         name: trial.method.name,
@@ -458,9 +511,9 @@ export const manifestAdapter: AdapterHandlers = {
       issues: m.image.includes("@sha256:") ? [] : [`image ${m.image} is a mutable tag`],
     };
   },
-  verify: ({ benchmark, solve }) => {
+  verify: ({ benchmark, trial, solve }) => {
     const { m } = loadManifest(benchmark);
-    const file = readResult(m, solve.output).file;
+    const file = readResult(m, solve.output, resultContext(m, trial)).file;
     if (!file) throw new Error(`the solve run left no result matching ${m.result.file}`);
     const rel = relative(solve.output, file);
     // An independent copy of the result taken after the solve run ended (what rescore reads).
@@ -481,9 +534,9 @@ export const manifestAdapter: AdapterHandlers = {
       },
     };
   },
-  score: ({ benchmark, solve, verify }) => {
+  score: ({ benchmark, trial, solve, verify }) => {
     const { m } = loadManifest(benchmark);
-    const r = readResult(m, solve.output);
+    const r = readResult(m, solve.output, resultContext(m, trial));
     const copy = r.file ? join(verify.output, "result", r.file.split(sep).pop() as string) : null;
     const { file, ...reply } = r;
     const review = {

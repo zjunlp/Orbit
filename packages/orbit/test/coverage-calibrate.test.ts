@@ -56,6 +56,8 @@ it("uses only the calibration methods a benchmark admits", () => {
     scoreKind: "binary" as const,
     rescore: "evidence" as const,
     requires: [],
+    profiles: [],
+    domains: [],
   });
   expect(calibrationMethods(undefined, true)).toEqual(["empty", "oracle"]);
   expect(calibrationMethods(caps(["external", "empty"]), true)).toEqual(["empty"]);
@@ -119,4 +121,49 @@ it("passes a well-behaved integration and names what fails", () => {
   expect(by["repeated seeds agree"]?.result).toBe("failed");
   expect(by["cleanup confirmed"]?.result).toBe("failed");
   expect(by["rescore reproduces scores"]?.result).toBe("not_run");
+});
+
+it("judges against the category's and benchmark's expectations", async () => {
+  const { expectations } = await import("../src/cli/calibrate.ts");
+  const runs = detail([
+    trial("t", "empty", 1, 1),
+    trial("t", "empty", 2, 0),
+    trial("t", "oracle", 1, 1),
+  ]);
+  const by = (exp: ReturnType<typeof expectations>) =>
+    Object.fromEntries(judgeCalibration(runs, null, "x", exp).map((c) => [c.name, c.result]));
+  // Embodied policy: a still policy may succeed, and seeds are different initial states.
+  const policy = by(expectations({ category: "embodied-policy" } as never));
+  expect(policy["empty score"]).toBe("not_run");
+  expect(policy["repeated seeds agree"]).toBe("not_run");
+  // Workspace default: empty must be 0, seeds must agree.
+  const ws = by(expectations({ category: "agent-workspace" } as never));
+  expect(ws["empty scores the minimum"]).toBe("failed");
+  expect(ws["repeated seeds agree"]).toBe("failed");
+  // A benchmark may widen it (StrongReject-style: an empty answer is safe, score 1).
+  const declared = by(
+    expectations({
+      category: "fixed-input",
+      calibration: { empty: { min: 0, max: 1 }, repeat: { tolerance: 1 } },
+    } as never),
+  );
+  expect(declared["empty scores 0–1"]).toBe("passed");
+  expect(declared["repeated seeds within 1"]).toBe("passed");
+});
+
+it("samples tasks with a full reference first and does not judge oracle-less tasks", () => {
+  const ts = [
+    { ...task("a1", "a"), tags: { suite: "a", oracle: "none" } },
+    { ...task("a2", "a"), tags: { suite: "a", oracle: "full" } },
+  ];
+  expect(sampleTasks(ts, 1, undefined, true)).toEqual(["a2"]);
+  expect(sampleTasks(ts, 1)).toEqual(["a1"]);
+  const checks = judgeCalibration(
+    detail([trial("a1", "oracle", 1, 0)]),
+    null,
+    "x",
+    undefined,
+    new Set(["a1"]),
+  );
+  expect(checks.find((c) => c.name === "oracle scores the maximum")?.result).toBe("not_run");
 });

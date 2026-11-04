@@ -203,3 +203,20 @@ it("refuses ambiguous GPU layouts and applies gpu_types to every GPU role", () =
   expect(roles?.env.gpuModels).toEqual(["L40S"]);
   expect(roles?.compose?.services.find((s) => s.name === "sim")?.gpuModels).toEqual(["L40S"]);
 });
+
+it("tags Embodied First Exam tasks with their workspace profile by mode", async () => {
+  const { embodiedTags } = await import("../src/bench/harbor.ts");
+  const task = { name: "embodied-first-exam/x" };
+  expect(embodiedTags("mw-i00-privileged", task, { oracle: "full" })).toMatchObject({
+    domain: "embodied",
+    profile: "embodied-program",
+    mode: "privileged",
+    oracle: "full",
+  });
+  expect(embodiedTags("mw-i00-standard-realtime", task, {})).toMatchObject({
+    profile: "embodied-live",
+    mode: "realtime",
+  });
+  expect(embodiedTags("roboengineer-g1-i00-standard", task, {}).profile).toBe("embodied-program");
+  expect(embodiedTags("x-standard", { name: "other/x" }, {})).toEqual({});
+});

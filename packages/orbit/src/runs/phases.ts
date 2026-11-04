@@ -1,13 +1,5 @@
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { AfterPhase, AfterStatus, RunPhase, RunSpec } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
 import { nowIso } from "../lib/ids.ts";

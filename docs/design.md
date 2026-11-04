@@ -565,7 +565,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
-- `capabilities` 描述环境类别、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
+- `capabilities` 描述接入大类与 profile（`category` / `profiles` / `domains`，见 integration-categories.md；旧的 `kind` 仅作 GUI 平台兼容）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - `contracts/trajectory.ts`：`GuiStepContext`（step 的 `actionId` / `at`，用于把 Agent 会话中的工具调用与 GUI step 精确对齐，不按时钟猜）与
   `EpisodeTrajectory`（版本 1、`kind: "episode"`：多相机帧/视频、动作与本体感知曲线、奖励；只含保存的媒体和数值，不含可执行动作）。
@@ -978,8 +978,9 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 
 ### 9.14 后续改进方向：接入层（2026-11-04 复盘）
 
-> **2026-11-05 修订提案**：本节"跟随 hub"的组织方式将由 [按大类的接入规范](integration-categories.md) 取代——按被评测对象与
-> 交互契约分 7 个大类，benchmark 以原始来源直接登记，hub 只作实现手段；L0/L1/L2 保留为实现成本维度。该提案待确认后实施。
+> **2026-11-05 已采纳**：本节"跟随 hub"的组织方式由 [按大类的接入规范](integration-categories.md) 取代——按被评测对象与
+> 交互契约分 7 个大类（`BenchCapabilities.category` + 受控 `profiles` + `domains`），benchmark 以原始来源直接登记，hub 只作
+> 实现手段；L0/L1/L2 保留为实现成本维度。校准期望按类别给默认值、benchmark 可覆盖（`calibration`）。
 
 **判断**：§9.1–§9.7 的核心不变——成功判据沿用上游（分数可与官方对比），Orbit 统一执行、资源、有效性、聚合、
 可信证据与对比视图。问题在接入层：除 Harbor 格式外，每个 hub 都是手写 adapter（几百到上千行），重复实现镜像固定、

@@ -151,6 +151,8 @@ describe("bench jobs", () => {
       scoreKind: "binary",
       rescore: "evidence",
       requires: [],
+      profiles: [],
+      domains: [],
     });
     expect(info.metrics[0]?.name).toBe("answer");
     expect(await client.benchTasks(registration.name)).toEqual(info.tasks);

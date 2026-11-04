@@ -297,3 +297,36 @@ describe("harbor rewards with diagnostic fields (Embodied First Exam)", () => {
     ).toMatchObject({ invalid: true, failure: "scorer_error" });
   });
 });
+
+describe("upstream verifiers that write 0 when they themselves failed", () => {
+  const dir2 = (log: string, reward = "0") => {
+    const d = mkdtempSync(join(tmpdir(), "orbit-fault-"));
+    writeFileSync(join(d, "reward.txt"), reward);
+    writeFileSync(join(d, "test-stdout.txt"), log);
+    return d;
+  };
+
+  it("treats a known infrastructure message beside a 0 as invalid", () => {
+    expect(harborReward(dir2("✗ Could not reach game server: timed out\n"))).toMatchObject({
+      score: null,
+      invalid: true,
+      failure: "infra",
+    });
+    // The same message with a real reward is left alone.
+    expect(harborReward(dir2("✗ Could not reach game server\n", "1")).score).toBe(1);
+  });
+
+  it("flags a crashed grader script but keeps a plain failed assertion as a 0", () => {
+    const crash = harborReward(
+      dir2(
+        'Traceback (most recent call last):\n  File "t.py", line 3\nFileNotFoundError: /ref.npz\n',
+      ),
+    );
+    expect(crash).toMatchObject({ score: 0, invalid: false });
+    expect(crash.issues?.[0]).toMatch(/raised FileNotFoundError .*\/ref\.npz/);
+    const failed = harborReward(
+      dir2('Traceback (most recent call last):\n  File "t.py", line 3\nAssertionError: wrong\n'),
+    );
+    expect(failed.issues).toEqual([]);
+  });
+});

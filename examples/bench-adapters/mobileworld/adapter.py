@@ -102,7 +102,7 @@ def tasks(req):
     for row in rows:
         failures = ([row["reason"]] if row["reason"] else []) + reasons
         row.update(supported=not failures, reason="; ".join(failures) or None)
-    return {"tasks": rows, "capabilities": {"kind": "mobile", "methods": ["external", "empty"],
+    return {"tasks": rows, "capabilities": {"category": "gui", "profiles": ["mobile", "fixture", "live"], "kind": "mobile", "methods": ["external", "empty"],
         "scoreKind": "scalar", "rescore": "evidence", "conditions": {
             "Source": COMMIT, "Image": config.get("image", "unprepared"), "Observation": "Original screenshot",
             "Actions": "Original JSONAction; no MCP or user simulator", "Step limit": str(steps),

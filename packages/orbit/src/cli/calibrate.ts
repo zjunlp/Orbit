@@ -6,6 +6,8 @@ import {
   type BenchCapabilities,
   type BenchJobDetail,
   type BenchTask,
+  benchCategory,
+  calibrationDefaults,
   capabilityAllows,
   taskSuite,
 } from "../contracts/index.ts";
@@ -27,10 +29,20 @@ export interface CalibrationReport {
   calibrated: boolean;
 }
 
-/** Spread `n` tasks over the suites, round robin, in each suite's listed order. */
-export function sampleTasks(tasks: BenchTask[], n: number, suite?: string): string[] {
+/**
+ * Spread `n` tasks over the suites, round robin, in each suite's listed order. With `oracle`, tasks
+ * whose reference solution is partial or missing (`oracle` tag) come last, so a positive calibration
+ * is not judged on a task that has none.
+ */
+export function sampleTasks(
+  tasks: BenchTask[],
+  n: number,
+  suite?: string,
+  oracle = false,
+): string[] {
   const bySuite = new Map<string, string[]>();
-  for (const t of tasks) {
+  const rank = (t: BenchTask) => (oracle && t.tags.oracle && t.tags.oracle !== "full" ? 1 : 0);
+  for (const t of [...tasks].sort((a, b) => rank(a) - rank(b))) {
     if (!t.supported) continue;
     const s = taskSuite(t);
     if (suite && s !== suite) continue;
@@ -44,7 +56,11 @@ export function sampleTasks(tasks: BenchTask[], n: number, suite?: string): stri
 }
 
 /** Calibration methods the benchmark admits: `empty` always when allowed, `oracle` when allowed. */
-export function calibrationMethods(caps: BenchCapabilities | undefined, oracle: boolean): string[] {
+export function calibrationMethods(
+  caps: Pick<BenchCapabilities, "methods" | "calibration"> | undefined,
+  oracle: boolean,
+): string[] {
+  if (caps?.calibration?.oracle === "none") oracle = false;
   const allowed = (m: string) => !caps || capabilityAllows(caps.methods, m);
   return ["empty", ...(oracle ? ["oracle"] : [])].filter(allowed);
 }
@@ -54,10 +70,22 @@ export function calibrationMethods(caps: BenchCapabilities | undefined, oracle: 
  * maximum score, repeated seeds agreeing, cleanup confirmed and (optionally) a rescore from saved
  * evidence reproducing every score.
  */
+/** Expectations: the benchmark's declaration over its category's defaults. */
+export function expectations(caps: BenchCapabilities | undefined) {
+  return { ...calibrationDefaults(benchCategory(caps)), ...caps?.calibration };
+}
+
+type Expect = ReturnType<typeof expectations>;
+const inRange = (v: number | null | undefined, r: { min: number; max: number }) =>
+  v != null && v >= r.min && v <= r.max;
+
 export function judgeCalibration(
   d: BenchJobDetail,
   rescored: BenchJobDetail | null,
   rescoreNote?: string,
+  expect: Expect = expectations(undefined),
+  /** Tasks whose reference solution is partial or missing: their oracle trials are not judged. */
+  noOracle: ReadonlySet<string> = new Set(),
 ): CalibrationCheck[] {
   const t = d.trials;
   const outcome = (x: (typeof t)[number]) => x.outcome;
@@ -90,26 +118,44 @@ export function judgeCalibration(
     ),
   );
   const empty = t.filter((x) => x.method === "empty");
+  const notExpected = (name: string, why: string): CalibrationCheck => ({
+    name,
+    result: "not_run",
+    detail: why,
+  });
+  const e = expect.empty;
   checks.push(
-    check(
-      "empty scores the minimum",
-      empty
-        .filter((x) => outcome(x)?.score !== 0)
-        .map((x) => `${x.task}#${x.seed}=${x.outcome?.score ?? "null"}`),
-      "a policy that does nothing gets 0",
-      empty.length,
-    ),
+    e === "any"
+      ? notExpected(
+          "empty score",
+          "no expected score for doing nothing (category or benchmark rule)",
+        )
+      : check(
+          e === "min" ? "empty scores the minimum" : `empty scores ${e.min}–${e.max}`,
+          empty
+            .filter((x) => (e === "min" ? outcome(x)?.score !== 0 : !inRange(outcome(x)?.score, e)))
+            .map((x) => `${x.task}#${x.seed}=${x.outcome?.score ?? "null"}`),
+          e === "min" ? "a policy that does nothing gets 0" : "within the declared range",
+          empty.length,
+        ),
   );
-  const oracle = t.filter((x) => x.method === "oracle");
+  const oracle = t.filter((x) => x.method === "oracle" && !noOracle.has(x.task));
+  const o = expect.oracle;
   checks.push(
-    check(
-      "oracle scores the maximum",
-      oracle
-        .filter((x) => outcome(x)?.score == null || outcome(x)?.score !== outcome(x)?.maxScore)
-        .map((x) => `${x.task}#${x.seed}=${x.outcome?.score ?? "null"}`),
-      "the reference solution gets full marks",
-      oracle.length,
-    ),
+    o === "none"
+      ? notExpected("oracle score", "the benchmark has no reference solution")
+      : check(
+          o === "max" ? "oracle scores the maximum" : `oracle scores ${o.min}–${o.max}`,
+          oracle
+            .filter((x) =>
+              o === "max"
+                ? outcome(x)?.score == null || outcome(x)?.score !== outcome(x)?.maxScore
+                : !inRange(outcome(x)?.score, o),
+            )
+            .map((x) => `${x.task}#${x.seed}=${x.outcome?.score ?? "null"}`),
+          o === "max" ? "the reference solution gets full marks" : "within the declared range",
+          oracle.length,
+        ),
   );
   const groups = new Map<string, (number | null)[]>();
   for (const x of t) {
@@ -117,13 +163,22 @@ export function judgeCalibration(
     groups.set(k, [...(groups.get(k) ?? []), x.outcome?.score ?? null]);
   }
   const repeated = [...groups].filter(([, v]) => v.length > 1);
+  const r = expect.repeat;
+  const spread = (v: (number | null)[]) =>
+    v.some((x) => x === null)
+      ? Number.POSITIVE_INFINITY
+      : Math.max(...(v as number[])) - Math.min(...(v as number[]));
   checks.push(
-    check(
-      "repeated seeds agree",
-      repeated.filter(([, v]) => new Set(v).size > 1).map(([k, v]) => `${k}: ${v.join("/")}`),
-      `${repeated.length} task × method pairs`,
-      repeated.length,
-    ),
+    expect.seedsVary
+      ? notExpected("repeated seeds agree", "seeds select different episodes (initial states)")
+      : check(
+          r === "exact" ? "repeated seeds agree" : `repeated seeds within ${r.tolerance}`,
+          repeated
+            .filter(([, v]) => (r === "exact" ? new Set(v).size > 1 : spread(v) > r.tolerance))
+            .map(([k, v]) => `${k}: ${v.join("/")}`),
+          `${repeated.length} task × method pairs`,
+          repeated.length,
+        ),
   );
   checks.push(
     check(
@@ -198,7 +253,14 @@ export async function calibrate(
   o: CalibrateOptions,
 ): Promise<CalibrationReport> {
   const info = await c.benchInfo(benchmark);
-  const tasks = o.tasks?.length ? o.tasks : sampleTasks(info.tasks, o.sample, o.suite);
+  const tasks = o.tasks?.length
+    ? o.tasks
+    : sampleTasks(
+        info.tasks,
+        o.sample,
+        o.suite,
+        o.oracle && info.capabilities?.calibration?.oracle !== "none",
+      );
   if (!tasks.length) throw new Error(`${benchmark} has no supported tasks to calibrate`);
   const methods = calibrationMethods(info.capabilities, o.oracle);
   if (!methods.length) throw new Error(`${benchmark} admits neither empty nor oracle`);
@@ -230,7 +292,10 @@ export async function calibrate(
       note = `rescore refused: ${(e as Error).message}`;
     }
   }
-  const checks = judgeCalibration(done, rescored, note);
+  const noOracle = new Set(
+    info.tasks.filter((t) => t.tags.oracle && t.tags.oracle !== "full").map((t) => t.id),
+  );
+  const checks = judgeCalibration(done, rescored, note, expectations(info.capabilities), noOracle);
   return {
     benchmark,
     job: job.id,

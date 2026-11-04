@@ -55,6 +55,10 @@ def task_dir(req, task):
     return os.path.join(req["benchmark"]["path"], "tasks", task)
 
 
+# Integration category (docs/integration-categories.md).
+CAPABILITIES = {"category": "agent-workspace", "profiles": ["research-report", "judge"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none", "repeat": {"tolerance": 5}}, "conditions": {"Scoring": "rubric items judged by an LLM against the reference"}}
+
+
 def tasks(req):
     root = os.path.join(req["benchmark"]["path"], "tasks")
     out = []
@@ -79,7 +83,7 @@ def tasks(req):
             "reason": "; ".join(problems) or None,
             "tags": {"domain": tid.rsplit("_", 1)[0]},
         })
-    return {"tasks": out, "metrics": METRICS}
+    return {"tasks": out, "metrics": METRICS, "capabilities": CAPABILITIES}
 
 
 def instruction(req, task):

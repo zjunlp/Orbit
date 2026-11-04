@@ -23,6 +23,8 @@ const caps: BenchCapabilities = {
   scoreKind: "binary",
   rescore: "evidence",
   requires: [],
+  profiles: [],
+  domains: [],
 };
 const tasks: BenchTask[] = [
   { id: "click", title: null, supported: true, reason: null, tags: {} },

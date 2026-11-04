@@ -99,6 +99,10 @@ def collected_model_dir(req):
                         workspace.lstrip("/"), "final_model")
 
 
+# Integration category (docs/integration-categories.md).
+CAPABILITIES = {"category": "agent-workspace", "profiles": ["ml-experiment"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none"}, "conditions": {"Scoring": "evaluate.py on the final_model the Agent trained"}}
+
+
 def tasks_dir(req):
     return os.path.join(req["benchmark"]["path"], "src", "eval", "tasks")
 
@@ -155,7 +159,7 @@ def tasks(req):
             "reason": "; ".join(problems) or None,
             "tags": tags,
         })
-    return {"tasks": out, "metrics": METRICS}
+    return {"tasks": out, "metrics": METRICS, "capabilities": CAPABILITIES}
 
 
 def get_prompt(req, task):

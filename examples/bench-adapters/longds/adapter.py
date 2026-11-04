@@ -93,6 +93,10 @@ def validate_turns(turns):
     return ids
 
 
+# Integration category (docs/integration-categories.md).
+CAPABILITIES = {"category": "agent-workspace", "profiles": ["research-report", "judge"], "kind": "other", "methods": [*RUNNERS, "empty", "oracle"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"repeat": {"tolerance": 0.2}}, "conditions": {"Runner": "native multi-turn runner per Agent; per-turn LLM judge"}}
+
+
 def tasks(req):
     _, dataset, version, split, task_root, entries = catalog(req)
     out = []
@@ -111,7 +115,7 @@ def tasks(req):
                     "reason": "; ".join(problems) or None,
                     "tags": {"domain": entry["task_domain"], "version": version,
                              "split": split, "turns": str(count)}})
-    return {"tasks": out, "metrics": METRICS}
+    return {"tasks": out, "metrics": METRICS, "capabilities": CAPABILITIES}
 
 
 def solve(req):
