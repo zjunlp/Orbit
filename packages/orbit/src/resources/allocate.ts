@@ -1,4 +1,11 @@
-import type { Lease, NodeResources, ResourceRequest, RoleAllocation } from "../contracts/index.ts";
+import type {
+  DeviceAllocation,
+  DeviceRequest,
+  Lease,
+  NodeResources,
+  ResourceRequest,
+  RoleAllocation,
+} from "../contracts/index.ts";
 import type { RoleRequest } from "../contracts/runs.ts";
 
 /** Keep this fraction of host memory out of leases for the OS and the daemon. */
@@ -36,6 +43,11 @@ export function infeasible(req: ResourceRequest, r: NodeResources): string | nul
   const maxMem = r.memory.totalGB * MEM_LEASABLE_FRACTION;
   if (req.memGB > maxMem)
     return `needs ${req.memGB} GB memory but at most ${Math.floor(maxMem)} GB is leasable`;
+  for (const d of deviceTotals(req.devices ?? [])) {
+    const have = (r.devices ?? []).find((x) => x.class === d.class);
+    if (!have || have.count < d.count)
+      return `needs ${d.count} ${d.class} device(s), but this node has ${have?.count ?? 0}${have?.detail ? ` (${have.detail})` : ""}`;
+  }
   return null;
 }
 
@@ -71,6 +83,8 @@ export function allocate(req: ResourceRequest, r: NodeResources, leases: Lease[]
     const free = Math.floor(Math.min(leasable, r.memory.availableGB));
     return { ok: false, reason: `waiting for memory (${free}/${req.memGB} GB free)` };
   }
+  const devices = allocateDevices(req.devices ?? [], r, leases);
+  if (!devices.ok) return devices;
   if (req.gpus === 0) return { ok: true, gpuIds: [] };
 
   const leased = new Set(leases.flatMap((l) => l.gpuIds));
@@ -85,6 +99,54 @@ export function allocate(req: ResourceRequest, r: NodeResources, leases: Lease[]
     return { ok: false, reason: `waiting for GPUs (${free.length}/${req.gpus} free${why})` };
   }
   return { ok: true, gpuIds: free.slice(0, req.gpus).map((g) => g.uuid) };
+}
+
+function deviceTotals(requests: DeviceRequest[]): DeviceRequest[] {
+  const totals = new Map<string, number>();
+  for (const d of requests) totals.set(d.class, (totals.get(d.class) ?? 0) + d.count);
+  return [...totals].map(([cls, count]) => ({ class: cls, count }));
+}
+
+/** Device paths are assigned once, then carried by the lease to the container. */
+function allocateDevices(
+  requests: DeviceRequest[],
+  r: NodeResources,
+  leases: Lease[],
+  reserved: DeviceAllocation[] = [],
+): { ok: true; devices: DeviceAllocation[] } | { ok: false; reason: string } {
+  const active = leases.filter((l) => l.state === "active");
+  const held = active.flatMap((l) => l.roles.flatMap((role) => role.devices ?? []));
+  const out: DeviceAllocation[] = [];
+  for (const req of deviceTotals(requests)) {
+    const node = (r.devices ?? []).find((d) => d.class === req.class);
+    const others = held.filter((d) => d.class === req.class);
+    const sameRun = reserved.filter((d) => d.class === req.class);
+    const used = [...others, ...sameRun];
+    const free =
+      node?.exclusive && others.length
+        ? 0
+        : Math.max(0, (node?.count ?? 0) - used.reduce((n, d) => n + d.count, 0));
+    const owners = active
+      .filter((l) => l.roles.some((role) => role.devices?.some((d) => d.class === req.class)))
+      .map((l) => l.runId);
+    if (free < req.count)
+      return {
+        ok: false,
+        reason: `waiting for devices (${req.class}: ${free}/${req.count} free${owners.length ? `; held by ${owners.join(", ")}` : ""}${node?.exclusive ? "; exclusive" : ""})`,
+      };
+    const taken = new Set([...held, ...reserved, ...out].flatMap((d) => d.paths));
+    const paths = (node?.paths ?? []).filter((p) => !taken.has(p));
+    // Older count-only leases cannot safely identify a free physical device.
+    const unknown = used.reduce((n, d) => n + Math.max(0, d.count - d.paths.length), 0);
+    const candidates = unknown ? [] : [...new Set(paths)];
+    if (node?.paths.length && candidates.length < req.count)
+      return {
+        ok: false,
+        reason: `waiting for devices (${req.class}: ${candidates.length}/${req.count} device paths free)`,
+      };
+    out.push({ ...req, paths: candidates.slice(0, req.count) });
+  }
+  return { ok: true, devices: out };
 }
 
 export type RoleAllocationResult =
@@ -108,22 +170,24 @@ export function allocateRoles(
       gpus: total,
       cpus: roles.reduce((n, x) => n + x.cpus, 0),
       memGB: roles.reduce((n, x) => n + x.memGB, 0),
+      devices: roles.flatMap((x) => x.devices ?? []),
     } as ResourceRequest,
     r,
     leases,
   );
   if (!whole.ok) return whole;
-  if (total === 0)
-    return {
-      ok: true,
-      gpuIds: [],
-      roles: roles.map((x) => ({ role: x.role, gpuIds: [], cpus: x.cpus, memGB: x.memGB })),
-    };
 
   const leased = new Set(leases.flatMap((l) => l.gpuIds));
   const taken = new Set<string>();
   const out: RoleAllocation[] = [];
   for (const role of roles) {
+    const devices = allocateDevices(
+      role.devices ?? [],
+      r,
+      leases,
+      out.flatMap((x) => x.devices),
+    );
+    if (!devices.ok) return { ok: false, reason: `role ${role.role}: ${devices.reason}` };
     const free = r.gpus
       .filter((g) => !leased.has(g.uuid) && !taken.has(g.uuid) && g.available)
       .filter((g) => gpuMemFits(g, role as ResourceRequest))
@@ -141,7 +205,13 @@ export function allocateRoles(
     }
     const picked = free.slice(0, role.gpus).map((g) => g.uuid);
     for (const id of picked) taken.add(id);
-    out.push({ role: role.role, gpuIds: picked, cpus: role.cpus, memGB: role.memGB });
+    out.push({
+      role: role.role,
+      devices: devices.devices,
+      gpuIds: picked,
+      cpus: role.cpus,
+      memGB: role.memGB,
+    });
   }
   return { ok: true, gpuIds: out.flatMap((x) => x.gpuIds), roles: out };
 }

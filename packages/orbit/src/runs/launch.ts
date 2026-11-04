@@ -316,6 +316,7 @@ export function containerSpec(
     ...(s.entrypoint ? { entrypoint: s.entrypoint } : {}),
     labels: { [docker.LABEL_RUN]: run.id, [docker.LABEL_HOME]: ctx.homeLabel },
     gpuIds: mainGpus(run),
+    devices: run.lease?.roles.find((r) => r.role === "main")?.devices.flatMap((d) => d.paths) ?? [],
     gpuMode: ctx.gpuMode,
     cpus: s.resources.cpus,
     memGB: s.resources.memGB,

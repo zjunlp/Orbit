@@ -159,6 +159,9 @@ export function serviceContainer(
     ...(s.entrypoint ? { entrypoint: s.entrypoint } : {}),
     labels: { [docker.LABEL_PARENT]: run.id, [docker.LABEL_HOME]: ctx.homeLabel },
     gpuIds: s.role ? (run.lease?.roles.find((x) => x.role === s.role)?.gpuIds ?? []) : [],
+    devices: s.role
+      ? (run.lease?.roles.find((r) => r.role === s.role)?.devices.flatMap((d) => d.paths) ?? [])
+      : [],
     gpuMode: ctx.gpuMode,
     cpus: s.cpus ?? null,
     memGB: s.memGB ?? null,

@@ -54,6 +54,8 @@ export interface ContainerSpec {
   labels: Record<string, string>;
   gpuIds: string[];
   gpuMode: GpuMode;
+  /** Concrete device nodes assigned to this container by its role lease. */
+  devices?: string[];
   /** Null: no limit (service containers without one). */
   cpus: number | null;
   memGB: number | null;
@@ -120,6 +122,7 @@ export function runArgs(s: ContainerSpec): string[] {
     // Hosts whose default runtime is nvidia would otherwise expose every GPU to CUDA images.
     args.push("-e", "NVIDIA_VISIBLE_DEVICES=void");
   }
+  for (const device of s.devices ?? []) args.push("--device", device);
   if (s.cpus !== null) args.push("--cpus", String(s.cpus));
   if (s.memGB !== null) {
     args.push("--memory", `${Math.ceil(s.memGB * 1024)}m`);

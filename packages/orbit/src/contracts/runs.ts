@@ -2,7 +2,7 @@ import { posix } from "node:path";
 import { z } from "zod";
 import { EnvName, ProfileName } from "./common.ts";
 import { Folder } from "./folders.ts";
-import { Lease, ResourceRequest } from "./resources.ts";
+import { DeviceRequest, Lease, ResourceRequest } from "./resources.ts";
 
 const hasDotDot = (p: string) => p.split("/").includes("..");
 const ContainerPath = z
@@ -135,6 +135,7 @@ export const ServiceSpec = z
      * may request its own GPUs, allocated together with the run's and never shared with another role.
      */
     role: LeaseRole.optional(),
+    devices: z.array(DeviceRequest).default([]),
     /** GPUs of this service's role (only with `role`). */
     gpus: z.number().int().min(0).optional(),
     gpuMemGB: z.number().positive().optional(),
@@ -229,6 +230,7 @@ export interface RoleRequest {
   gpus: number;
   gpuMemGB?: number;
   gpuIds?: string[];
+  devices?: DeviceRequest[];
   cpus: number;
   memGB: number;
 }
@@ -268,6 +270,8 @@ export const RunSpec = z
     dockerfile: z.string().optional(),
     command: z.array(z.string()).min(1),
     resources: ResourceRequest.prefault({}),
+    /** Device requirements of the main container; an alternative to resources.devices. */
+    devices: z.array(DeviceRequest).default([]),
     mounts: z.array(Mount).default([]),
     env: z.record(z.string(), z.string()).default({}),
     network: z.boolean().default(true),
@@ -383,6 +387,10 @@ export const RunSpec = z
         message:
           "checkpoints require local Docker runs without services, external writable mounts or a live project mount",
       });
+    if (s.devices.length && s.resources.devices.length)
+      ctx.addIssue({ code: "custom", message: "use devices or resources.devices, not both" });
+    if (s.backend !== "docker" && (s.devices.length || s.resources.devices.length))
+      ctx.addIssue({ code: "custom", message: "devices need the docker backend" });
     const problem = servicesProblem(s);
     if (problem) ctx.addIssue({ code: "custom", message: problem });
     if ((s.after || s.hooks.length) && s.backend !== "docker")
@@ -418,12 +426,17 @@ function servicesProblem(s: {
     return plain ? null : "networks and dependsOn need services";
   }
   if (s.backend !== "docker") return "services need the docker backend";
+  if (s.services.some((x) => x.devices.length && !x.role))
+    return "services requesting devices need a role";
+  const roles = s.services.flatMap((x) => (x.role ? [x.role] : []));
+  if (roles.includes("main") || new Set(roles).size !== roles.length)
+    return "service roles must be distinct and cannot be main";
   // A role's GPUs are wired into that service's container, which only exists next to the run.
+  if (s.services.some((x) => !x.role && (x.gpus ?? 0) > 0))
+    return "only services with a role may request GPUs";
   const roleGpus = s.services.filter((x) => x.role && (x.gpus ?? 0) > 0);
   if (roleGpus.length) {
     if (s.hostNetwork) return "services with GPUs do not work with host networking";
-    if (s.services.some((x) => !x.role && (x.gpus ?? 0) > 0))
-      return "only services with a role may request GPUs";
   }
   if (s.hostNetwork) return "services do not work with host networking";
   const names = s.services.map((x) => x.name);
@@ -461,10 +474,13 @@ export function serviceOrder<T extends { name: string; dependsOn: string[] }>(
  * and memory only, as before. `allocateRoles` decides the assignments together, so a run never
  * starts with half of a heterogeneous requirement.
  */
-export function roleRequests(s: Pick<RunSpec, "resources" | "services">): RoleRequest[] {
+export function roleRequests(
+  s: Pick<RunSpec, "resources" | "services"> & Partial<Pick<RunSpec, "devices">>,
+): RoleRequest[] {
   const roles: RoleRequest[] = [
     {
       role: "main",
+      devices: s.devices?.length ? s.devices : s.resources.devices,
       gpus: s.resources.gpus,
       ...(s.resources.gpuMemGB ? { gpuMemGB: s.resources.gpuMemGB } : {}),
       ...(s.resources.gpuIds ? { gpuIds: s.resources.gpuIds } : {}),
@@ -476,6 +492,7 @@ export function roleRequests(s: Pick<RunSpec, "resources" | "services">): RoleRe
     if (x.role)
       roles.push({
         role: x.role,
+        devices: x.devices,
         gpus: x.gpus ?? 0,
         ...(x.gpuMemGB ? { gpuMemGB: x.gpuMemGB } : {}),
         ...(x.gpuFeatures ? { gpuFeatures: x.gpuFeatures } : {}),
@@ -486,12 +503,15 @@ export function roleRequests(s: Pick<RunSpec, "resources" | "services">): RoleRe
 }
 
 /** The whole run's request: CPU, memory and GPUs summed over its roles. */
-export function leaseRequest(s: Pick<RunSpec, "resources" | "services">): ResourceRequest {
+export function leaseRequest(
+  s: Pick<RunSpec, "resources" | "services"> & Partial<Pick<RunSpec, "devices">>,
+): ResourceRequest {
   const roles = roleRequests(s);
   const extra = s.services.filter((x) => !x.role).map(serviceLease);
   return {
     ...s.resources,
     gpus: roles.reduce((n, r) => n + r.gpus, 0),
+    devices: roles.flatMap((r) => r.devices ?? []),
     cpus:
       s.resources.cpus +
       extra.reduce((a, x) => a + x.cpus, 0) +

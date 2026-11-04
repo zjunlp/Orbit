@@ -1,6 +1,8 @@
-import { readFile, statfs } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, readdir, readFile, stat, statfs } from "node:fs/promises";
 import { availableParallelism, hostname, loadavg } from "node:os";
-import type { Gpu, GpuProcess, NodeResources } from "../contracts/index.ts";
+import { join } from "node:path";
+import type { Gpu, GpuProcess, NodeDevice, NodeResources } from "../contracts/index.ts";
 import { exec } from "../lib/exec.ts";
 import { type ComputeApp, describeProcesses, parseComputeApps } from "./gpu-procs.ts";
 
@@ -155,6 +157,92 @@ export class CpuMeter {
   }
 }
 
+type DeviceProbe = {
+  readDir: (path: string) => Promise<string[]>;
+  readWrite: (path: string) => Promise<void>;
+  adb: () => Promise<{ code: number; stderr: string }>;
+};
+
+/** Non-root checks; unavailable capabilities remain visible with a diagnostic. */
+export async function probeDevices(overrides: Partial<DeviceProbe> = {}): Promise<NodeDevice[]> {
+  const probe: DeviceProbe = {
+    readDir: (path) => readdir(path),
+    readWrite: async (path) => {
+      await access(path, constants.R_OK | constants.W_OK);
+      if (!(await stat(path)).isCharacterDevice()) throw new Error("not a character device");
+    },
+    adb: () => exec("adb", ["version"], { timeoutMs: 3000 }),
+    ...overrides,
+  };
+  const reason = (e: unknown) =>
+    e instanceof Error ? ((e as NodeJS.ErrnoException).code ?? e.message) : String(e);
+  const nodes = async (cls: string, paths: string[], exclusive = false): Promise<NodeDevice> => {
+    const results = await Promise.all(
+      paths.map(async (path) => {
+        try {
+          await probe.readWrite(path);
+          return { path, error: null };
+        } catch (e) {
+          return { path, error: reason(e) };
+        }
+      }),
+    );
+    const available = results.filter((r) => r.error === null).map((r) => r.path);
+    const errors = results.filter((r) => r.error !== null).map((r) => `${r.path}: ${r.error}`);
+    return {
+      class: cls,
+      count: available.length,
+      exclusive,
+      paths: available,
+      detail: [...available, ...errors].join("; ") || "no matching device nodes",
+    };
+  };
+  const directory = async (cls: string, dir: string, pattern: RegExp, exclusive = false) => {
+    try {
+      return await nodes(
+        cls,
+        (await probe.readDir(dir))
+          .filter((p) => pattern.test(p))
+          .sort()
+          .map((p) => join(dir, p)),
+        exclusive,
+      );
+    } catch (e) {
+      return { class: cls, count: 0, exclusive, paths: [], detail: `${dir}: ${reason(e)}` };
+    }
+  };
+  const android = async (): Promise<NodeDevice> => {
+    try {
+      const result = await probe.adb();
+      return {
+        class: "android",
+        count: result.code === 0 ? 1 : 0,
+        exclusive: true,
+        paths: [],
+        detail:
+          result.code === 0
+            ? "adb available (capability only; attached devices not probed)"
+            : `adb unavailable: ${result.stderr.trim() || `exit ${result.code}`}`,
+      };
+    } catch (e) {
+      return {
+        class: "android",
+        count: 0,
+        exclusive: true,
+        paths: [],
+        detail: `adb: ${reason(e)}`,
+      };
+    }
+  };
+  return Promise.all([
+    nodes("kvm", ["/dev/kvm"]),
+    directory("dri", "/dev/dri", /^renderD\d+$/),
+    nodes("net-tun", ["/dev/net/tun"]),
+    android(),
+    directory("serial", "/dev", /^tty(?:USB|ACM)\d+$/),
+  ]);
+}
+
 /** One meter per process: every daemon in it measures the same machine. */
 const cpuMeter = new CpuMeter();
 
@@ -162,11 +250,12 @@ export async function probeNode(
   diskPath: string,
   opts: { node?: string; gpus?: string[] | null } = {},
 ): Promise<NodeResources> {
-  const [gpu, meminfo, fs, stat] = await Promise.all([
+  const [gpu, meminfo, fs, stat, devices] = await Promise.all([
     probeGpus(),
     readFile("/proc/meminfo", "utf8"),
     statfs(diskPath),
     readFile("/proc/stat", "utf8").catch(() => ""),
+    probeDevices(),
   ]);
   const count = availableParallelism();
   const load1 = loadavg()[0] ?? 0;
@@ -175,6 +264,7 @@ export async function probeNode(
     probedAt: new Date().toISOString(),
     gpus: filterGpus(gpu.gpus, opts.gpus ?? null),
     gpuError: gpu.error,
+    devices,
     cpu: {
       count,
       load1: round1(load1),

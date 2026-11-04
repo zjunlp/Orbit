@@ -152,6 +152,26 @@ function formatNode(r: NodeResources, leases: Lease[], head: string): string[] {
     );
     for (const p of g.processes) lines.push(processLine(p, now));
   }
+  for (const d of r.devices ?? []) {
+    const held = leases
+      .filter((l) => l.state === "active")
+      .flatMap((l) =>
+        l.roles.flatMap((role) =>
+          (role.devices ?? [])
+            .filter((x) => x.class === d.class)
+            .map((x) => ({ ...x, runId: l.runId, role: role.role })),
+        ),
+      );
+    const used = held.reduce((n, x) => n + x.count, 0);
+    const free = d.exclusive && used ? 0 : Math.max(0, d.count - used);
+    lines.push(
+      `device  ${d.class}  ${free}/${d.count} free${d.exclusive ? " (exclusive)" : ""}${d.detail ? `  ${d.detail}` : ""}`,
+    );
+    for (const x of held)
+      lines.push(
+        `      run ${x.runId}  role ${x.role}  ${x.count} leased${x.paths.length ? `  ${x.paths.join(", ")}` : ""}`,
+      );
+  }
   const leasedCpu = leases.reduce((n, x) => n + x.cpus, 0);
   const leasedMem = leases.reduce((n, x) => n + x.memGB, 0);
   lines.push(
