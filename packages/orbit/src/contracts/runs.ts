@@ -174,10 +174,18 @@ export type NetworkSpec = z.infer<typeof NetworkSpec>;
  * A second command in the same container once `command` has exited (or was stopped at its
  * timeout), with the state it left: e.g. a verifier that checks files and processes in place.
  */
+export const RenderPhase = z.object({
+  command: z.array(z.string()).min(1),
+  timeoutMin: z.number().positive(),
+  collect: z.array(ContainerPath).default([]),
+});
+export type RenderPhase = z.infer<typeof RenderPhase>;
+
 export const AfterPhase = z
   .object({
     command: z.array(z.string()).min(1),
     timeoutMin: z.number().positive(),
+    render: RenderPhase.optional(),
     env: z.record(z.string(), z.string()).default({}),
     /** Daemon variables for this phase only (e.g. grader keys); set by Orbit for bench runs. */
     passEnv: z.array(EnvName).default([]),
@@ -540,6 +548,18 @@ export const RunUsage = z.object({
 });
 export type RunUsage = z.infer<typeof RunUsage>;
 
+export const RunPhase = z.object({
+  name: z.enum(["quiesce", "finalize", "render", "collect", "stop-services"]),
+  state: z.enum(["pending", "running", "done", "failed", "skipped", "timeout"]),
+  startedAt: z.string().nullable().default(null),
+  endedAt: z.string().nullable().default(null),
+  deadlineAt: z.string().optional(),
+  exitCode: z.number().int().optional(),
+  reason: z.string().optional(),
+  attempts: z.number().int().min(0).default(0),
+});
+export type RunPhase = z.infer<typeof RunPhase>;
+
 export const Run = z.object({
   id: z.string(),
   spec: RunSpec,
@@ -574,11 +594,15 @@ export const Run = z.object({
         name: z.string(),
         containerId: z.string().nullable(),
         failure: z.string().nullable(),
+        stopState: z.enum(["running", "done", "failed"]).optional(),
+        stopReason: z.string().optional(),
       }),
     )
     .default([]),
   /** The after phase (`spec.after`), once it was reached. */
   after: AfterStatus.nullable().default(null),
+  phases: z.array(RunPhase).default([]),
+  stopRequested: z.enum(["cancel", "timeout"]).nullable().default(null),
   /** Size of the run directory on disk, measured once the run is cleaned up. */
   sizeBytes: z.number().nullable().default(null),
   createdAt: z.string(),

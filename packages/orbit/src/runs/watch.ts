@@ -1,6 +1,7 @@
 import {
   appendFileSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   statSync,
   truncateSync,
@@ -13,10 +14,22 @@ import { safeJoin } from "../records/index.ts";
 import type { RunContext } from "./context.ts";
 import { DOCKER_RETRY_MS, LOG_DRAIN_TIMEOUT_MS, outcome, sleep } from "./execution.ts";
 import { AGENT_INSTALL_FAILED, AGENT_SETUP_FAILED } from "./launch.ts";
-import { keepsContainer } from "./phases.ts";
+import {
+  checkWatching,
+  collectAfter,
+  copyCollected,
+  keepsContainer,
+  PhaseFailure,
+  runPhased,
+  runRender,
+} from "./phases.ts";
 
 type Context = Pick<
   RunContext,
+  | "save"
+  | "paths"
+  | "setAfter"
+  | "stopped"
   | "collect"
   | "captureCheckpoint"
   | "containerCgroups"
@@ -61,51 +74,137 @@ export async function watch(
   const logs = docker.followLogs(containerId, dirs.log, ctx.redactor(ctx.mustGet(id)));
   ctl.logs = logs.proc;
   const drained = logs.done.then(() => true);
-  let exitCode: number;
-  let collected = false;
-  const spec = ctx.mustGet(id).spec;
-  const checkpointFailure = async () => {
-    if (!spec.checkpoint || exitCode === 0 || ctl.cancel === "cancel") return false;
-    const startedAt = ctx.mustGet(id).startedAt;
-    const executionMin = startedAt ? Math.max(0, Date.now() - Date.parse(startedAt)) / 60_000 : 0;
-    await docker.stopContainer(containerId);
-    await ctx.waitStopped(containerId);
-    await ctx.captureCheckpoint(id, containerId, executionMin);
-    if (spec.after)
-      ctx.skipAfter(id, "solve interrupted; checkpoint attempted before verification");
-    return true;
-  };
-  if (keepsContainer(spec)) {
-    const main = await ctx.waitMain(id, containerId);
-    exitCode = main.exitCode;
+  let run = ctx.mustGet(id);
+  const spec = run.spec;
+  let exitCode = run.exitCode;
+  if (exitCode === null) {
+    exitCode = keepsContainer(spec)
+      ? (await ctx.waitMain(id, containerId)).exitCode
+      : await ctx.waitStopped(containerId);
+    checkWatching(ctx);
     ctx.disarmTimeout(id);
-    if (await checkpointFailure()) {
-      await ctx.collect(ctx.mustGet(id), containerId);
-      collected = true;
-    } else if (main.running) {
-      // As Harbor: hooks in the run's container first; without an after phase it is stopped
-      // before the services' hooks run.
-      const go = () => ctl.cancel !== "cancel";
-      if (go()) await ctx.runHooks(id, containerId, "main");
-      if (!spec.after) {
-        await docker.stopContainer(containerId);
-        await ctx.waitStopped(containerId);
-      }
-      if (go()) await ctx.runHooks(id, containerId, "services");
-      // Artifacts are taken as the command left them, before the after phase can change them.
-      await ctx.collect(ctx.mustGet(id), containerId);
-      collected = true;
-      if (spec.after) {
-        await ctx.runAfter(id, containerId, ctl);
-        await docker.stopContainer(containerId);
-        await ctx.waitStopped(containerId);
-      }
-    } else if (spec.after) ctx.skipAfter(id, "the container stopped with the command");
-  } else {
-    exitCode = await ctx.waitStopped(containerId);
-    ctx.disarmTimeout(id);
-    await checkpointFailure();
+    run = ctx.mustGet(id);
+    run.exitCode = exitCode;
+    ctx.save(run, "command", `main command exited with code ${exitCode}`);
   }
+  ctx.disarmTimeout(id);
+  const preCollected = join(dirs.orbit, "phases", "solve-collected");
+  const checkpointFailure = Boolean(spec.checkpoint && exitCode !== 0 && ctl.cancel !== "cancel");
+  await runPhased(ctx, id, [
+    {
+      name: "quiesce",
+      timeoutMs: 60_000,
+      run: async () => {
+        if (keepsContainer(spec)) {
+          // Stop leftover Agent processes before trusted hooks can finalize the environment.
+          const st = await docker.inspectContainer(containerId);
+          if (!st) throw new PhaseFailure("container disappeared");
+          if (st.running) {
+            const { stopMain } = await import("./phases.ts");
+            await stopMain(ctx, containerId);
+          }
+        }
+        if (checkpointFailure && !ctx.mustGet(id).checkpoint) {
+          const startedAt = ctx.mustGet(id).startedAt;
+          const executionMin = startedAt
+            ? Math.max(0, Date.now() - Date.parse(startedAt)) / 60_000
+            : 0;
+          await docker.stopContainer(containerId);
+          await ctx.captureCheckpoint(id, containerId, executionMin);
+          if (spec.after)
+            ctx.skipAfter(id, "solve interrupted; checkpoint attempted before verification");
+        }
+        return exitCode as number;
+      },
+    },
+    {
+      name: "finalize",
+      reconcile: true,
+      timeoutMs:
+        60_000 +
+        spec.hooks.reduce((n, h) => n + h.timeoutSec * 1000 + 10_000, 0) +
+        (spec.after?.timeoutMin ?? 0) * 60_000 +
+        (spec.collect.length + (spec.after?.copy.length ?? 0)) * 600_000,
+      skip: () => (checkpointFailure ? "checkpoint captured before verification" : undefined),
+      run: async () => {
+        const errors: Error[] = [];
+        const attempt = async (fn: () => Promise<void>) => {
+          try {
+            await fn();
+          } catch (e) {
+            checkWatching(ctx);
+            errors.push(e as Error);
+          }
+        };
+        await attempt(() => ctx.runHooks(id, containerId, "main"));
+        if (!spec.after) await docker.stopContainer(containerId);
+        await attempt(() => ctx.runHooks(id, containerId, "services"));
+        if (spec.after) {
+          if (!existsSync(preCollected)) {
+            await attempt(() => ctx.collect(ctx.mustGet(id), containerId));
+            mkdirSync(join(dirs.orbit, "phases"), { recursive: true });
+            writeFileSync(preCollected, "done");
+          }
+          await attempt(() => ctx.runAfter(id, containerId, ctl));
+          const after = ctx.mustGet(id).after;
+          if (after && after.state !== "succeeded")
+            errors.push(
+              new PhaseFailure(
+                after.reason ?? `after ${after.state}`,
+                after.state === "timeout" ? "timeout" : "failed",
+              ),
+            );
+        }
+        if (errors.length)
+          throw new PhaseFailure(
+            errors.map((e) => e.message).join("; "),
+            errors.some((e) => e instanceof PhaseFailure && e.state === "timeout")
+              ? "timeout"
+              : "failed",
+          );
+      },
+    },
+    {
+      name: "render",
+      reconcile: true,
+      timeoutMs: (spec.after?.render?.timeoutMin ?? 1) * 60_000,
+      skip: () =>
+        checkpointFailure
+          ? "checkpoint captured"
+          : ctl.cancel === "cancel"
+            ? "run cancelled"
+            : !spec.after?.render
+              ? "no render command"
+              : undefined,
+      run: (deadline) => runRender(ctx, id, containerId, deadline),
+    },
+    {
+      name: "collect",
+      timeoutMs: Math.max(
+        60_000,
+        (spec.collect.length +
+          (spec.after?.collect.length ?? 0) +
+          (spec.after?.render?.collect.length ?? 0)) *
+          600_000,
+      ),
+      run: async () => {
+        if (!existsSync(preCollected)) await ctx.collect(ctx.mustGet(id), containerId);
+        await collectAfter(ctx, id, containerId);
+      },
+    },
+    {
+      name: "stop-services",
+      timeoutMs:
+        60_000 + spec.services.reduce((n, s) => n + 60_000 + s.collect.length * 600_000, 0),
+      run: async () => {
+        await docker.stopContainer(containerId);
+        await ctx.stopServices(id);
+        const st = await docker.inspectContainer(containerId);
+        if (st?.running) throw new PhaseFailure("main container did not stop");
+      },
+    },
+  ]);
+  checkWatching(ctx);
   ctx.disarmTimeout(id);
   // Evidence first: let the log follower reach EOF before the container is removed.
   const complete = await Promise.race([drained, sleep(LOG_DRAIN_TIMEOUT_MS).then(() => false)]);
@@ -121,9 +220,6 @@ export async function watch(
     appendFileSync(dirs.log, ctx.redactor(ctx.mustGet(id)).apply(readFileSync(afterLog, "utf8")));
   }
   const st = await docker.inspectContainer(containerId).catch(() => null);
-  let run = ctx.mustGet(id);
-  if (!collected) await ctx.collect(run, containerId);
-  await ctx.stopServices(id);
   run = ctx.mustGet(id);
   // Docker flags any OOM kill in the container; only a failed exit means the run itself died of it.
   const oom = Boolean(st?.oomKilled) && exitCode !== 0;
@@ -133,13 +229,15 @@ export async function watch(
   const setupFailed = join(dirs.agent, AGENT_SETUP_FAILED);
   if (existsSync(setupFailed))
     reason = `${AGENT_INSTALL_FAILED} (exit ${readFileSync(setupFailed, "utf8").trim()}); see orbit/agent/setup.log`;
+  checkWatching(ctx);
   await ctx.finalize(run, ...outcome(run, ctl, exitCode, reason));
 }
 
-export async function waitStopped(_ctx: Context, containerId: string): Promise<number> {
+export async function waitStopped(ctx: Context, containerId: string): Promise<number> {
   let exitCode = await docker.waitContainer(containerId);
   // `docker wait` also fails when docker itself is unavailable: only a stopped container counts.
   while (exitCode === -1) {
+    checkWatching(ctx);
     const st = await docker.inspectContainer(containerId).catch(() => undefined);
     if (st === null) break;
     if (st && !st.running) {
@@ -159,7 +257,7 @@ export async function collect(ctx: Context, run: Run, containerId: string): Prom
   for (const p of run.spec.collect) {
     const dest = safeJoin(base, `.${p}`);
     const err = dest
-      ? await docker.copyFromContainer(containerId, p, dest)
+      ? await copyCollected(containerId, p, dest)
       : "path leaves the output directory";
     if (err) missing.push(`${p} (${err})`);
   }
@@ -169,6 +267,7 @@ export async function collect(ctx: Context, run: Run, containerId: string): Prom
     "collect",
     `${n}/${run.spec.collect.length} collected${missing.length ? `; missing ${missing.join("; ")}` : ""}`,
   );
+  if (missing.length) throw new PhaseFailure(missing.join("; "));
 }
 
 export const fileSize = (f: string) => (existsSync(f) ? statSync(f).size : 0);

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -190,7 +191,18 @@ export const shellJoin = (argv: string[]) =>
 /** `--mount` is parsed as CSV: quote a field holding a comma or a quote. */
 const csvField = (f: string) => (/[",]/.test(f) ? `"${f.replace(/"/g, '""')}"` : f);
 
+const deadlines = new AsyncLocalStorage<number>();
+export function withDeadline<T>(deadline: number, action: () => Promise<T>): Promise<T> {
+  return deadlines.run(deadline, action);
+}
+
 async function docker(args: string[], timeoutMs = 60_000) {
+  const deadline = deadlines.getStore();
+  if (deadline !== undefined) {
+    const left = deadline - Date.now();
+    if (left <= 0) throw new Error("phase deadline exceeded");
+    timeoutMs = Math.max(1, Math.min(timeoutMs || Infinity, left));
+  }
   return exec("docker", args, { timeoutMs });
 }
 
@@ -461,6 +473,11 @@ export async function execDetached(
 export async function execWait(id: string, argv: string[], timeoutMs = 60_000): Promise<number> {
   const r = await docker(["exec", id, ...argv], timeoutMs);
   return r.code;
+}
+
+/** Read a small command status from a running container. */
+export async function execRead(id: string, argv: string[], timeoutMs = 10_000) {
+  return docker(["exec", id, ...argv], timeoutMs);
 }
 
 /** Copy a host file or directory's contents to `dest` in a container; returns an error line or null. */

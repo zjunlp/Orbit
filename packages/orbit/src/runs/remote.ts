@@ -264,6 +264,8 @@ export async function receiveRemote(ctx: Context, input: RemoteSubmit): Promise<
     usage: null,
     services: [],
     after: null,
+    phases: [],
+    stopRequested: null,
     sizeBytes: null,
     createdAt: nowIso(),
     startedAt: null,

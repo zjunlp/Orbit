@@ -23,7 +23,7 @@ import {
 import { nowIso } from "../lib/ids.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, containerName, GENERIC_DIRS, usesRunNetworks } from "./execution.ts";
-import { keepsContainer, runCommand, writePhaseScript } from "./phases.ts";
+import { keepsContainer, runCommand, stopMain, WatchStopped, writePhaseScript } from "./phases.ts";
 import { volumeName } from "./services.ts";
 
 type Context = Pick<
@@ -123,7 +123,10 @@ export async function launch(ctx: Context, id: string): Promise<void> {
     run.state = "running";
     run.startedAt = nowIso();
     ctx.save(run, "started", `container ${containerId.slice(0, 12)}`);
-    if (ctl.cancel) void docker.stopContainer(containerId);
+    if (ctl.cancel)
+      void (keepsContainer(run.spec)
+        ? stopMain(ctx, containerId)
+        : docker.stopContainer(containerId));
 
     const st = await docker.inspectContainer(containerId);
     const want = [...mainGpus(run)].sort().join(",");
@@ -136,6 +139,7 @@ export async function launch(ctx: Context, id: string): Promise<void> {
     } else ctx.armTimeout(run);
     await ctx.watch(id, containerId, false);
   } catch (e) {
+    if (e instanceof WatchStopped) return;
     const msg = (e as Error).message;
     appendFileSync(dirs.log, `\n[orbit] ${ctx.redactor(run).apply(msg)}\n`);
     await ctx.finalize(ctx.mustGet(id), "failed", null, msg);
