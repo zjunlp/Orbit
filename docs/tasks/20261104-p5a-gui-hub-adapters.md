@@ -1,5 +1,5 @@
 # P5-A：GUI hub 外部适配器（并行线 A）
-branch: feat/p5a-gui-hub-adapters · status: in_progress · updated: 2026-11-04 · owner: Codex（主线由 Claude 负责）
+branch: feat/p5a-gui-hub-adapters · status: blocked · updated: 2026-11-04 · owner: Codex（主线由 Claude 负责）
 
 本文是交给实现者的任务书，完成后在同一文件补写 Changes / Validation，作为该 Part 的记录。
 动手前按 [AGENTS.md](../../AGENTS.md) §1 阅读 design.md（重点 §7 适配器协议、§9）、status.md、
@@ -82,6 +82,9 @@ KVM / 大镜像 / 外网导致无法真实运行时，如实记 not_run 与原�
 - Mobile/OS 保留原始结果并转换已有 GUI 帧，按原版截图时序配对动作，不捏造缺失末帧；已知 passEnv 文本值脱敏后再记录证据哈希。seed 仅记录身份，未假称原版提供任务 seed 接口。没有修改 Orbit 禁改核心目录。
 
 ## Validation
+
+提交号引用 rebase 后的等价实现；真实环境检查基线为 main 4184d4c，最终仓库检查为 main 4993f5f。
+
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
 | Python / 跨语言协议 | 本次复查 | passed | Cua 10 项；Lite 原版函数 opt-in 20 项；Mobile 9 / OS 12 项。包括明确文件、API、provider 响应 fixture，不能代替真实浏览器/模型/VM。13 项 TypeScript 集成检查覆盖 adapter、RunSpec、score 与 GuiTrajectory。 |
@@ -92,10 +95,10 @@ KVM / 大镜像 / 外网导致无法真实运行时，如实记 not_run 与原�
 | Cua token 采集边界 | 固定原版镜像 / 本次产物 | passed | 检查实际服务/Run 日志、ATIF 与输出文件，未发现秘密值模式或未归属的 token 格式字符串；固定镜像生成脚本直接写私有卷、不输出值。原卷已清理，未声称完成实际 token 精确值比对。 |
 | CUA-Lite MiniWoB 注册 / empty | lite 2af6926 / MiniWoB 7fd85d7 | passed | 首次隔离注册 1083 行、125 supported；click-test / click-button / click-dialog / enter-text / choose-list，加补充 click-checkboxes，原版 Chromium 均 valid 0。与 B 的五个同名任务负校准一致；页面 budget、动作与正例观测权限不同，不宣称同条件性能等价。 |
 | CUA-Lite MiniWoB 正例 / 失败 / 清理 | 同上 | passed | screenshot-only click-test 原始奖励 1、证据重查仍 1。故意不兼容的 Python 3.11 环境为 invalid/env_start/score=null；真实 reset 后等待策略取消为 cancelled/unknown、cleanup done。首次 34 Run 清理与 GUI 证据检查通过，隔离 daemon 已停止。 |
-| CUA-Lite 标准客户端构建 | `7ba7775` / Python 3.12 | passed | 固定 Dockerfile 全量构建完成；拆分 pip/系统依赖/browser 缓存层，准备下载采用有界重试，不改变 episode 或固定依赖版本。独立构建 Run 20261104-144336-xhbm succeeded、cleanup done；标准镜像原版接口检查 20/20 passed，无 skip。 |
-| CUA-Lite 标准镜像真实回归 | `7ba7775` / lite 2af6926 | passed | click-test / click-button / click-checkboxes / enter-text / choose-list 五个 empty 均 valid 0；截图脚本 click-test valid 1，rescore 仍 1 且保留 history。六个 episode 均只 reset 一次，native/saved/outcome reward 一致，六份真实 GuiTrajectory schema 通过。该隔离 home 的 19 Run 全终态、cleanup done，已分配租约 released，无 orbit.run/orbit.parent 容器/网络/卷，daemon 已关闭。 |
+| CUA-Lite 标准客户端构建 | `8270f3c` / Python 3.12 | passed | 固定 Dockerfile 全量构建完成；拆分 pip/系统依赖/browser 缓存层，准备下载采用有界重试，不改变 episode 或固定依赖版本。独立构建 Run 20261104-144336-xhbm succeeded、cleanup done；标准镜像原版接口检查 20/20 passed，无 skip。 |
+| CUA-Lite 标准镜像真实回归 | `8270f3c` / lite 2af6926 | passed | click-test / click-button / click-checkboxes / enter-text / choose-list 五个 empty 均 valid 0；截图脚本 click-test valid 1，rescore 仍 1 且保留 history。六个 episode 均只 reset 一次，native/saved/outcome reward 一致，六份真实 GuiTrajectory schema 通过。该隔离 home 的 19 Run 全终态、cleanup done，已分配租约 released，无 orbit.run/orbit.parent 容器/网络/卷，daemon 已关闭。 |
 | Web 原版评分边界 | lite 2af6926 | passed | Python 3.12 的原类/函数检查包含 no-answer、缺 key、无法解析的最终 verdict 和 image relevance fallback；使用明确图像/provider fixture，无模型调用。两套 after 规划通过真实 RunSpec，原始评测输入和输出仍保留。 |
-| Online-Mind2Web 后端 / 真实无 key 检查 | lite 2af6926 / `34818f1` | passed | 固定源码、依赖和 sparse code 布局的原版后端完整构建成功。真实 arXiv empty 与 scroll smoke 均完成 reset PNG、原版动作、terminal capture，进入原 judge；execution succeeded、evaluation invalid、score=null、failure=judge_unavailable、cleanup done。服务 max_instances=1；无模型调用，不计为有效负校准或模型正例。 |
+| Online-Mind2Web 后端 / 真实无 key 检查 | lite 2af6926 / `e632d53` | passed | 固定源码、依赖和 sparse code 布局的原版后端完整构建成功。真实 arXiv empty 与 scroll smoke 均完成 reset PNG、原版动作、terminal capture，进入原 judge；execution succeeded、evaluation invalid、score=null、failure=judge_unavailable、cleanup done。服务 max_instances=1；无模型调用，不计为有效负校准或模型正例。 |
 | Online 取消与资源清理 | 同上 | passed | 真实 reset checkpoint 后取消：cancelled/unknown、cleanup done；最终租约/队列均为 0，对应容器/网络/卷为 0，17844 隔离 daemon 已停止。 |
 | Online live-site 可达性 | 同上 | failed | 另一次真实 GitHub 页面在原导航 20 秒上限超时，准确保留 invalid/reset_failed；未换站点条件、关闭 TLS 或记成有效零分。后端完整构建不保证实时外站总可达。 |
 | WebVoyager 原版镜像 / 浏览器 | lite 2af6926 | not_run | 只读预检确认缺匹配镜像；公开 GHCR 镜像源码/资产条件不同。固定 WebHarbor revision 所需 15 份公开资产齐全，压缩合计 2,680,985,142 bytes；尚未完整构建和运行 mirror，只有源码、规划与原评分器函数检查。 |
@@ -107,7 +110,7 @@ KVM / 大镜像 / 外网导致无法真实运行时，如实记 not_run 与原�
 | Mobile/OS 开发检查清理 | 本次隔离检查 | passed | 六个开发 Run 全终态、cleanup done、lease released；orbit.run/orbit.parent 容器、网络、卷无残留，独立 daemon 已停止。 |
 | 构建 / 拉取阶段自动取消 | 原 main 4184d4c | failed | 原 Docker starting/build/pull 取消未能中止准备；仅对核实归属的自有 CLI 温和终止后由 Orbit 回收。后续 process 构建正常取消成功；不能冒称原 starting 路径已修复。见 Next。 |
 | 通用外部模型 Agent | 四个 hub | not_run | 已实现原生入口；本线真实正例为原版 oracle / 截图脚本，未验证通用模型。CLI Agent 的真实结果属 B 线。 |
-| 全仓库检查 / rebase | 本次复查 | passed | rebase 前 pnpm verify：Orbit 431 / Web 51，格式、lint、类型、边界与构建通过。主线随后更新到 4993f5f；最终 rebase 后结果待回填。 |
+| 全仓库检查 / rebase | main `4993f5f` / 本次复查 | passed | 已 rebase 最新本地 main；最终 pnpm verify：Orbit 434 / Web 51，格式、lint、类型、边界与构建通过。默认 opt-in 跳过项按上表独立真实或 fixture 结果记录。 |
 
 ## Next / open issues
 
