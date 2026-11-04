@@ -4,6 +4,7 @@
 import {
   AdapterOp,
   AdapterRequest,
+  type AdapterTasksResponseInput,
   type BenchTask,
   type MetricSpecInput,
   type ORBIT_OWNED_SPEC_FIELDS,
@@ -29,6 +30,8 @@ export type ScoreReply = Pick<ScoreResult, "score"> & Partial<ScoreResult>;
 export interface AdapterHandlers {
   /** Metrics besides `score` (or a relabelled `score`), declared with the tasks. */
   metrics?: MetricSpecInput[];
+  /** What the `tasks` reply declares besides the tasks, when it depends on the registration. */
+  info?(req: AdapterRequest): Omit<AdapterTasksResponseInput, "tasks">;
   tasks(req: AdapterRequest): BenchTask[];
   solve(req: TrialRequest): SpecReply;
   verify(req: VerifyRequest): SpecReply;
@@ -40,7 +43,8 @@ export function handle(h: AdapterHandlers, req: AdapterRequest): unknown {
   const need = (k: "trial" | "solve" | "verify") => {
     if (!req[k]) throw new Error(`${req.op} request without ${k}`);
   };
-  if (req.op === "tasks") return { tasks: h.tasks(req), metrics: h.metrics ?? [] };
+  if (req.op === "tasks")
+    return { tasks: h.tasks(req), metrics: h.metrics ?? [], ...h.info?.(req) };
   need("trial");
   if (req.op === "solve") return h.solve(req as TrialRequest);
   need("solve");
@@ -72,5 +76,6 @@ export async function adapterMain(name: string, op: string): Promise<void> {
 async function builtin(name: string): Promise<AdapterHandlers> {
   if (name === "harbor") return (await import("./harbor.ts")).harborAdapter;
   if (name === "asi") return (await import("./asi.ts")).asiAdapter;
+  if (name === "manifest") return (await import("./manifest.ts")).manifestAdapter;
   throw new Error(`unknown built-in adapter: ${name}`);
 }

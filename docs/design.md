@@ -999,6 +999,13 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
   取 `tasks/<suite>/<task>` 目录；否则 id 前缀）统计 supported，原因去掉服务名与变量说明后计数排序。
   supported 只表示能在其条件下运行，不等于已校准，也不表示本机有对应 GPU 型号。
 
+**已实现（P6.5）**：L1 内置 `manifest` 适配器（`bench/manifest.ts`，`orbit-bench.yaml`；结果按路径选取上游写出的值，
+`invalid` 规则映射到封闭失败类型；`examples/bench-manifests/vla-eval-libero` 与 Python 版 vla-eval 适配器条件相同）；
+L2 Python SDK `examples/sdk/orbit_bench`（协议入口、`valid/invalid`、`pinned`，失败类型由 TS 测试核对一致），
+仓库内 9 个 Python 适配器改用它（顺带修复 vla-eval 出错仍以 0 退出）；GUI 共享服务仍在 `examples/tools/orbit-gui-service`。
+Harbor 补全：共享 GPU 组、`gpu_types`、main `shm_size`、服务 `entrypoint`。未做：授权数据卷（BEHAVIOR 等，需用户数据目录
+登记）、main 的 `cap_drop`/`healthcheck`、跨 bench 汇总视图。
+
 **顺序**（取代 §9.13 中 P6 之后的排序，P7 规模优化在其后）：
 
 1. `calibrate` 与 `coverage`，用它们盘点 EFE 35 个套件，确定 Harbor 能力缺口排名。

@@ -11,6 +11,10 @@ import sys
 
 from evidence import BROWSERGYM_VERSION, MINIWOB_COMMIT, PUBLIC_KEY_ENV, SignatureError, read, validate, write
 
+# The shared adapter SDK (examples/sdk/orbit_bench): protocol entry point and score replies.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
+from orbit_bench import main as protocol_main  # noqa: E402
+
 # Bump the suffix whenever the Dockerfile changes, so an image built for an older adapter is not reused.
 DEFAULT_IMAGE = f"orbit-browsergym:{BROWSERGYM_VERSION}-3"
 
@@ -223,18 +227,5 @@ def evidence_failure(root):
             "policy_setup": "policy_start", "policy_action": "policy_act"}.get(stage, "scorer_error")
 
 
-def main():
-    try:
-        op = sys.argv[1]
-        req = json.load(sys.stdin)
-        if req.get("protocol") != 1 or req.get("op") != op:
-            raise ValueError("Expected adapter protocol 1 and a matching operation")
-        json.dump({"tasks": tasks, "solve": solve, "verify": verify, "score": score}[op](req),
-                  sys.stdout, ensure_ascii=False, allow_nan=False)
-    except Exception as exc:
-        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-
 if __name__ == "__main__":
-    main()
+    sys.exit(protocol_main(tasks, solve, verify, score))

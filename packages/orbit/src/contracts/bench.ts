@@ -4,7 +4,7 @@ import { Folder } from "./folders.ts";
 import { CheckpointPolicy } from "./runs.ts";
 
 /** Adapters shipped with Orbit (`orbit __adapter <name>`). */
-export const BUILTIN_ADAPTERS = ["harbor", "asi"] as const;
+export const BUILTIN_ADAPTERS = ["harbor", "asi", "manifest"] as const;
 
 /** A registered benchmark checkout. */
 export const BenchmarkInput = z.object({

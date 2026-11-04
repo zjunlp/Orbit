@@ -47,10 +47,15 @@ Config keys (`orbit bench add -c KEY=VALUE`), all optional:
 """
 
 import json
+from pathlib import Path
 import os
 import shutil
 import subprocess
 import sys
+
+# The shared adapter SDK (examples/sdk/orbit_bench): protocol entry point and score replies.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
+from orbit_bench import main as protocol_main  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 # Orbit reserves /workspace (code snapshot) and /orbit (metrics and outputs), so
@@ -481,18 +486,5 @@ def score(req):
             "issues": [], "metrics": {}}
 
 
-def main():
-    op = sys.argv[1] if len(sys.argv) > 1 else ""
-    handlers = {"tasks": tasks, "solve": solve, "verify": verify, "score": score}
-    try:
-        req = json.load(sys.stdin)
-        if op not in handlers or req.get("op") != op:
-            raise ValueError(f"unknown op: {op}")
-        json.dump(handlers[op](req), sys.stdout)
-    except Exception as e:
-        print(f"{type(e).__name__}: {e}", file=sys.stderr)
-        sys.exit(1)
-
-
 if __name__ == "__main__":
-    main()
+    sys.exit(protocol_main(tasks, solve, verify, score))
