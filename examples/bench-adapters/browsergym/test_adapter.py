@@ -1,5 +1,6 @@
 """Explicit filesystem fixtures; these tests do not execute BrowserGym or Chromium."""
 
+import base64
 import copy
 import json
 from pathlib import Path
@@ -87,7 +88,7 @@ class AdapterTests(unittest.TestCase):
     def test_catalog_declares_supported_methods_and_fixed_conditions(self):
         self.req["benchmark"]["config"].update(actionSet="bid", maxSteps="7")
         caps = adapter.tasks(self.req)["capabilities"]
-        self.assertEqual(caps["methods"], ["external", "empty"])
+        self.assertEqual(caps["methods"], ["external", "empty", "cli"])
         self.assertEqual(caps["rescore"], "evidence")
         self.assertEqual(caps["conditions"]["Step limit"], "7")
         self.assertEqual(caps["conditions"]["Observation"], "Screenshot + accessibility tree")
@@ -124,10 +125,10 @@ class AdapterTests(unittest.TestCase):
 
     def test_rejects_unsupported_methods_options_and_gpu(self):
         original = copy.deepcopy(self.req)
-        for agent in ("oracle", "codex", "claude-code"):
+        for agent in ("oracle", "policy"):
             self.req = copy.deepcopy(original)
             self.req["trial"]["method"]["agent"] = agent
-            with self.assertRaisesRegex(ValueError, "supports external and empty"):
+            with self.assertRaisesRegex(ValueError, "no reference oracle"):
                 self.plan()
         self.req = copy.deepcopy(original)
         self.req["trial"]["resources"] = {"gpus": 1}
@@ -137,6 +138,81 @@ class AdapterTests(unittest.TestCase):
         self.req["trial"]["options"] = {"unknown": "ignored?"}
         with self.assertRaisesRegex(ValueError, "no trial options"):
             self.plan()
+
+    def test_cli_agent_uses_private_service_and_does_not_mount_evidence(self):
+        self.req["trial"]["method"] = {"name": "cli", "agent": "codex", "auth": "fixture"}
+        spec, plan = self.plan()
+        self.assertIn("agentTask", spec)
+        self.assertNotIn("command", spec)
+        self.assertIn("observe", spec["agentTask"]["instruction"])
+        self.assertEqual(plan["review_prefix"], "services/gui/evidence/")
+        self.assertEqual(spec["services"][0]["networks"], ["gui"])
+        self.assertEqual(spec["networks"], [{"name": "gui", "internal": True}])
+        self.assertEqual(spec["services"][0]["collect"], ["/evidence"])
+        self.assertEqual(spec["hooks"][0]["service"], "gui")
+        self.assertIn("/finish", spec["hooks"][0]["command"])
+        self.assertEqual({m["target"] for m in spec["mounts"]},
+                         {"/usr/local/bin/orbit-computer", "/tools/orbit-computer.py"})
+        self.req["solve"] = {"output": str(self.root / "solve"), "run": {"spec": spec}}
+        self.assertEqual(adapter.verify(self.req)["spec"]["mounts"][1]["source"],
+                         str(self.root / "solve/services/gui/evidence"))
+        self.req["trial"]["hostNetwork"] = True
+        with self.assertRaisesRegex(ValueError, "private network"):
+            self.plan()
+
+    def sign_episode(self):
+        private = self.root / "private.pem"
+        adapter.subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private)],
+                               check=True, capture_output=True)
+        public = adapter.subprocess.check_output(["openssl", "pkey", "-in", str(private),
+                                                   "-pubout", "-outform", "DER"])
+        evidence.sign_result(self.out, private)
+        return private, base64.b64encode(public).decode()
+
+    def test_signed_evidence_survives_private_key_removal(self):
+        self.episode()
+        private, public = self.sign_episode()
+        private.unlink()
+        self.assertEqual(evidence.validate(self.out, public)["reward"], 1)
+
+    def test_recomputed_untrusted_hashes_do_not_replace_a_service_signature(self):
+        self.episode()
+        _, public = self.sign_episode()
+        self.rows[-1]["reward"] = self.rows[-1]["task_info"]["RAW_REWARD_GLOBAL"] = 0
+        self.result["reward"] = 0
+        self.save()
+        self.assertEqual(evidence.validate(self.out)["reward"], 0)
+        with self.assertRaisesRegex(ValueError, "service evidence signature"):
+            evidence.validate(self.out, public)
+
+    def test_unauthenticated_failure_stage_cannot_classify_a_cli_failure(self):
+        self.req["trial"]["method"] = {"name": "cli", "agent": "codex"}
+        spec, _ = self.plan()
+        self.out = self.root / "solve/services/gui/evidence"
+        self.out.mkdir(parents=True)
+        evidence.write(self.out / "result.json", {"error_stage": "policy_setup"})
+        self.req["solve"] = {"output": str(self.root / "solve"), "run": {"spec": spec}}
+        result = adapter.score(self.req)
+        self.assertTrue(result["invalid"])
+        self.assertIsNone(result["score"])
+        self.assertEqual(result["failure"], "scorer_error")
+        evidence.write(self.out / "evidence-signature.json", [])
+        self.assertEqual(adapter.score(self.req)["failure"], "scorer_error")
+        self.req["solve"]["run"] = {}
+        self.assertEqual(adapter.score(self.req)["failure"], "scorer_error")
+
+    def test_cli_trust_anchor_comes_only_from_saved_run(self):
+        self.req["trial"]["method"] = {"name": "cli", "agent": "codex"}
+        spec, plan = self.plan()
+        private = self.root / "staging" / evidence.PRIVATE_KEY_FILE
+        self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+        self.assertNotIn(evidence.PRIVATE_KEY_FILE, json.dumps(plan))
+        key = spec["services"][0]["env"][evidence.PUBLIC_KEY_ENV]
+        self.req["solve"] = {"run": {"spec": spec}}
+        self.assertEqual(adapter.trusted_public_key(self.req), key)
+        self.req["solve"]["run"] = {}
+        with self.assertRaisesRegex(ValueError, "saved solve Run"):
+            adapter.trusted_public_key(self.req)
 
     def test_rejects_changed_official_checkout(self):
         with patch.object(adapter.subprocess, "check_output", return_value="wrong-revision"):

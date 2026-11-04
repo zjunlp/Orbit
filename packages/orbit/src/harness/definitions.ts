@@ -114,7 +114,7 @@ export const BUILTIN_SEEDS: AgentDefinitionInput[] = [
       ],
       transcript: { glob: "projects/**/*.jsonl", format: "claude-code" },
     },
-    capabilities: { oneShot: true, multiTurn: true, mcp: true, gui: false },
+    capabilities: { oneShot: true, multiTurn: true, mcp: true, gui: true },
   },
   {
     name: "pi",
