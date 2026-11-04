@@ -262,7 +262,7 @@ export async function collect(ctx: Context, run: Run, containerId: string): Prom
   for (const p of run.spec.collect) {
     const dest = safeJoin(base, `.${p}`);
     const err = dest
-      ? await copyCollected(containerId, p, dest)
+      ? await copyCollected(containerId, p, dest, ctx.dirs(run.id).output)
       : "path leaves the output directory";
     if (err) missing.push(`${p} (${err})`);
   }

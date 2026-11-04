@@ -1,5 +1,14 @@
 // Explicit executor doubles exercise durable Run transitions; real containers are opt-in separately.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -7,6 +16,7 @@ import { ensureHome, orbitPaths, runDirs } from "../src/config/paths.ts";
 import { Run, RunPhase } from "../src/contracts/index.ts";
 import * as docker from "../src/executor/docker.ts";
 import {
+  copyCollected,
   durableCommand,
   PhaseFailure,
   phaseStateDir,
@@ -331,5 +341,25 @@ it("finalizes a run whose container vanished before any exit was recorded as los
     await runs.stop();
     store.close();
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+it("collects into real directories instead of following links the run planted in its output", async () => {
+  const root = mkdtempSync(join(tmpdir(), "orbit-collect-link-"));
+  const output = join(root, "output");
+  const outside = join(root, "outside");
+  mkdirSync(output);
+  mkdirSync(outside);
+  try {
+    symlinkSync(outside, join(output, "services"));
+    mkdirSync(join(outside, "gui", "evidence"), { recursive: true });
+    const dest = join(output, "services", "gui", "evidence");
+    expect(await copyCollected("c", "/evidence", dest, output)).toBeNull();
+    expect(readFileSync(dest, "utf8")).toBe("evidence");
+    expect(readdirSync(join(outside, "gui"))).toEqual(["evidence"]);
+    expect(existsSync(join(outside, "gui", "evidence"))).toBe(true);
+    expect(readdirSync(join(outside, "gui", "evidence"))).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

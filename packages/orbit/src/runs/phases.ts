@@ -1,5 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
 import type { AfterPhase, AfterStatus, RunPhase, RunSpec } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
 import { nowIso } from "../lib/ids.ts";
@@ -502,7 +510,9 @@ export async function collectAfter(ctx: Context, id: string, containerId: string
     const missing: string[] = [];
     for (const p of paths) {
       const dest = safeJoin(join(ctx.dirs(id).output, name), `.${p}`);
-      const error = dest ? await copyCollected(containerId, p, dest) : "leaves output";
+      const error = dest
+        ? await copyCollected(containerId, p, dest, ctx.dirs(id).output)
+        : "leaves output";
       if (error) missing.push(`${p} (${error})`);
     }
     failures.push(...missing);
@@ -516,12 +526,34 @@ export async function collectAfter(ctx: Context, id: string, containerId: string
   if (failures.length) throw new PhaseFailure(failures.join("; "));
 }
 
-/** Retry-safe directory copies: Docker always sees a fresh target, then evidence is replaced. */
+/**
+ * Make `dir` and every directory between `root` and it a real directory. The run's container can
+ * write under its output, so a symlink or file it planted there is removed instead of followed out
+ * of the output directory.
+ */
+export function realDirs(root: string, dir: string): void {
+  const rel = relative(root, dir);
+  if (rel.startsWith("..")) throw new Error(`${dir} leaves ${root}`);
+  let at = root;
+  for (const part of rel ? rel.split(sep) : []) {
+    at = join(at, part);
+    const st = lstatSync(at, { throwIfNoEntry: false });
+    if (st && !st.isDirectory()) rmSync(at, { force: true });
+    if (!st?.isDirectory()) mkdirSync(at);
+  }
+}
+
+/**
+ * Retry-safe directory copies: Docker always sees a fresh target, then evidence is replaced. Every
+ * directory from `root` (the output directory) down to `dest` is made real first.
+ */
 export async function copyCollected(
   containerId: string,
   path: string,
   dest: string,
+  root: string,
 ): Promise<string | null> {
+  realDirs(root, dirname(dest));
   const temporary = `${dest}.orbit-collect`;
   rmSync(temporary, { recursive: true, force: true });
   const error = await docker.copyFromContainer(containerId, path, temporary);

@@ -6,7 +6,7 @@ import * as docker from "../executor/docker.ts";
 import { safeJoin } from "../records/index.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, containerName, LOG_DRAIN_TIMEOUT_MS, sleep } from "./execution.ts";
-import { checkWatching, copyCollected } from "./phases.ts";
+import { checkWatching, copyCollected, realDirs } from "./phases.ts";
 
 type Context = Pick<
   RunContext,
@@ -251,7 +251,7 @@ export async function stopServices(ctx: Context, id: string): Promise<void> {
       }
     }
     const dir = join(base, svc.name);
-    mkdirSync(dir, { recursive: true });
+    realDirs(ctx.dirs(id).output, dir);
     writeFileSync(join(dir, "log"), "");
     const logs = docker.followLogs(svc.containerId, join(dir, "log"), ctx.redactor(run));
     await Promise.race([logs.done, sleep(LOG_DRAIN_TIMEOUT_MS)]);
@@ -260,7 +260,7 @@ export async function stopServices(ctx: Context, id: string): Promise<void> {
     for (const p of spec.collect) {
       const dest = safeJoin(dir, `.${p}`);
       const err = dest
-        ? await copyCollected(svc.containerId, p, dest)
+        ? await copyCollected(svc.containerId, p, dest, ctx.dirs(id).output)
         : "path leaves the output directory";
       if (err) missing.push(`${p} (${err})`);
     }
