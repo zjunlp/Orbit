@@ -1,6 +1,6 @@
 # Orbit status
 
-- **Updated at:** 2026-11-03
+- **Updated at:** 2026-11-04
 - **Basis:** Agent registry (12 built-in Agents, user definitions, `orbit agent`); snapshot index timestamps preserve same-size edit detection; GUI benchmark Web workflow and BrowserGym/MiniWoB phase one retained.
 - **Stage:** R0–R2 validated here; R3 LongDS checked with a complete native Codex task, Harbor with oracle/empty samples; R4 only as two daemons on one machine.
 - **Blockers:** none for the current release.
@@ -24,13 +24,13 @@
 - Harbor format: direct flat-task lookup with nested ID compatibility; separate/shared verifiers share the executable test command and stdout capture; compose services, collect hooks, Harbor's network/image rules; per-role GPU allocation (main/sim/policy, allocated together, never shared); service `entrypoint`/GPUs; compose named volumes, binds, restart, `network_mode: none`; opt-in host namespaces and allowlist-as-public recorded as deviations; one Embodied First Exam MetaWorld+ standard task calibrated (oracle 1, empty 0); a vla-eval LIBERO task through the external adapter (empty 0, valid); TB-Science 70/70 and TB 4.0 56/66 supported (oracle/empty checked on samples incl. all 5 compose tasks); jobs record the benchmark commit.
 - GUI Web: [creation, task filtering, saved-frame review and method comparison](guides/gui-bench-web.md), English UI with existing themes; configuration snapshots and capability declarations. [BrowserGym/MiniWoB adapter](../examples/bench-adapters/browsergym/) for all 125 registered MiniWoB++ tasks (backend suites refused); external policy factories, solve-only model variables, original live rewards, screenshots/actions in Trial review. Real Chromium empty/scripted calibration, evidence rescore and cancellation checked; no browser replay/state recovery or general VLM validation.
 - Multi-node: workers join by token; placement across nodes, size-limited code bundles by hash, named datasets, mirrored logs/metrics, artifact streaming from verified descriptors. Guide: [guides/multi-node.md](guides/multi-node.md).
-- GUI hubs: [CUA-Lite](../examples/bench-adapters/cua-lite/) native MiniWoB calibrated (empty, screenshot script, invalid failure, cleanup, evidence rescore); [Cua Bench](../examples/bench-adapters/cua-bench/) experimental adapter present, desktop calibration unverified because the original image download did not finish. Other Lite suites, MobileWorld and OSWorld-V2 remain unsupported / Next.
+- GUI hubs: [Cua Bench](../examples/bench-adapters/cua-bench/) basic desktop tasks passed five real empty/oracle pairs and failure/cleanup checks; [CUA-Lite](../examples/bench-adapters/cua-lite/) MiniWoB is calibrated, with isolated WebVoyager/Online-Mind2Web paths and deferred native judges for reviewed subsets. [MobileWorld](../examples/bench-adapters/mobileworld/) and [OSWorld-V2](../examples/bench-adapters/osworld-v2/) adapters retain original task catalogs and single-episode runners; real KVM calibration remains pending. Web model calibration remains pending.
 
 ## Main gaps
 
 - ASI / TB-Science scores not yet compared with official Harbor runs (only oracle-level); codex lacks Harbor's `unified_exec`; no GPU-type placement, allowlist networks, multi-step tasks or MCP servers for Harbor tasks. R4 not run on two real machines; no bundle cache eviction. LongDS's native process runner has no failure checkpoint; real Claude execution/continuation remains unchecked.
 - Per-user daemons on one machine (busy 7717 → free port) can lease the same free GPU at once; fix when needed with a shared per-GPU lock.
-- §9 policy methods, service GPUs, environment instances, a cross-hub trajectory index and a public catalog remain planned. Service containers get no GPUs (`serviceContainer` sets `gpuIds: []`).
+- Remaining §9 work: first-class policy methods, environment instance pools, a cross-hub trajectory index and a public catalog; real calibration of further GUI and embodied hubs.
 - Additional bench metrics: tests and fake adapters only; group notifications may fire between solve and verify. Untried: some auth kinds, real IM webhooks (the Feishu app was checked on a phone). No MCP server or dsh/pi session capture/in-container harnesses; no overcommit.
 
 ## Next priorities
