@@ -324,6 +324,7 @@ export function containerSpec(
     user,
     ...(volumes.length ? { volumes } : {}),
     ...(s.pidsLimit ? { pidsLimit: s.pidsLimit } : {}),
+    ...(s.shmGB ? { shmGB: s.shmGB } : {}),
   };
 }
 

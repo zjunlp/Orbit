@@ -626,7 +626,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
    插值同 Compose（`${VAR}`、`${VAR:-d}`、`${VAR-d}`、`$$`），变量为 CONTEXT_DIR、CPUS、MEMORY、PREBUILT_IMAGE_NAME 与
    任务变量；未知变量、其他键（ports、外部卷等）都列为不支持。`service = "<名>"` 的 artifacts 从该服务采集。
    未实现的设置一律标为不支持而不是忽略（否则分数不再对应任务条件）：compose 中未实现的键、
-   复用 compose 环境的 separate verifier、`allowlist` 网络（登记 `-c allowlistNetwork=public` 时按公网运行并记为偏差）、非 linux、`gpu_types`/`tpu`、`mcp_servers`、`skills_dir`、`healthcheck`、`[agent]`/`[verifier]`
+   复用 compose 环境的 separate verifier、`allowlist` 网络（登记 `-c allowlistNetwork=public` 时按公网运行并记为偏差）、非 linux、verifier 环境的 `gpu_types`、`tpu`、`mcp_servers`、`skills_dir`、`healthcheck`、`[agent]`/`[verifier]`
    `user`、`[[verifier.collect]]` 的 `user`、`[[steps]]`、没有默认值的 `${VAR}` 变量模板（整值 `${VAR:-d}` 取默认值，
    记为偏差，因为 Harbor 读宿主环境）；Harbor 也忽略的未知字段照样忽略。允许的偏差写入任务 tag `deviations`，
    并作为 `deviation: …` issue 记在每个 trial 上。
@@ -873,9 +873,15 @@ hook、after 与可选 `after.render` 用容器内原子 claim / PID / exit 标�
 `RunSpec.devices` 与 `resources.devices` 二选一；服务设备要求显式且唯一的 role。设备缺失在提交期拒绝，
 数量已占用则排队，exclusive 类只给一个 Run；adb 仅代表可用性能力槽位，不声称枚举或转发 Android 硬件。
 按 GPU 名称匹配角色 gpuFeatures；EGL/Vulkan/CUDA 只保留声明并提示未验证。整组匹配可重新安排未限定型号的角色，
-避免占住其他角色唯一能用的卡；没有 role 的服务 CPU/内存也计入准入。Compose 仅翻译显式 x-orbit-role 下的
-NVIDIA count + capabilities:[gpu] reservation 与 x-gpu-memory-gb；其他 deploy 设置继续拒绝。
-原版 EFE abc-sim 未声明角色且假定模拟器/监控器共享 GPU，现有独占角色契约不会隐式改变其条件。
+避免占住其他角色唯一能用的卡；没有 role 的服务 CPU/内存也计入准入。Compose 只翻译 NVIDIA count + capabilities:[gpu]
+reservation 与 x-gpu-memory-gb，其他 deploy 设置继续拒绝。带 `x-orbit-role` 的服务独占自己的卡（P4/P5 规则）。
+**没有 `x-orbit-role` 的 reservation 按 Compose 单机语义共享**（P6.5 修正：EFE 的 1,294 个 GPU 任务都是这种写法，
+Compose 在一台机器上给每个 `count: N` 同样的前 N 张卡）：`main` 有 reservation 时由 main 租用（privileged 模式，
+Agent 本身用 GPU）；否则由第一个不在宿主命名空间里的服务租用并成为同名角色（standard 模式的 sim）；其余服务
+（如测 GPU 用量的 rcb_monitor）用 `ServiceSpec.gpusOf` 看到同一组卡而不额外租用。组内 count 必须相同；
+`x-gpu-memory-gb` 求和作为该卡的最小显存。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
+拆成 Docker 的可执行文件与前置参数。`[environment] gpu_types` 变成拥有该组卡的角色的 `gpuModels`（任一型号，
+名称包含匹配），本机没有这些型号时提交即给出原因；登记 `-c gpuTypes=any` 时不限制型号并记为偏差。
 
 ### 9.7 结果、有效性与可复现
 
@@ -985,10 +991,13 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
 
 **接入的验收与盘点**：
 
-- `orbit bench calibrate <bench> [--sample N]`：对抽样任务自动跑 empty 与 oracle（若有），检查 valid、重复运行一致、
-  资源确认清理、证据可复核，生成接入报告；"已接入"以该报告为准，保真度级别（§9.10）由报告给出。
-- `orbit bench coverage <bench>`：按套件统计 supported / unsupported 及原因（缺 GPU 角色、需 allowlist 网络、需 KVM…），
-  按原因排序后即为 Harbor 能力补全的优先级。
+- `orbit bench calibrate <bench> [--sample N] [-t task…]`（已实现，`cli/calibrate.ts`）：抽样任务（按 suite 轮转）
+  跑 empty 与 oracle（benchmark 允许时）× 2 seed，逐项判 passed / failed / not_run：全部完成、全部 valid、empty 为 0、
+  oracle 满分、重复 seed 一致、清理确认、从保存证据重评分数不变。只用公开 client API，作业照常留在 Orbit 里；
+  "已接入"以该报告为准。正向的方法（真实 Agent / Policy）与原版分数对比仍需人工完成。
+- `orbit bench coverage <bench>`（已实现，纯函数 `contracts.benchCoverage`）：按 suite（task 的 `suite` tag，Harbor
+  取 `tasks/<suite>/<task>` 目录；否则 id 前缀）统计 supported，原因去掉服务名与变量说明后计数排序。
+  supported 只表示能在其条件下运行，不等于已校准，也不表示本机有对应 GPU 型号。
 
 **顺序**（取代 §9.13 中 P6 之后的排序，P7 规模优化在其后）：
 

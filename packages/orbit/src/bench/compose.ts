@@ -36,6 +36,15 @@ export interface ComposePlan {
   /** Volumes and the PID limit of `main`. */
   mainVolumes: VolumeMount[];
   mainPidsLimit: number | null;
+  /** `main`'s own GPU reservation (`deploy`), its `x-gpu-memory-gb` and `shm_size`. */
+  mainGpus: number;
+  mainGpuMemGB: number | null;
+  mainShmGB: number | null;
+  /**
+   * Who leases the GPUs that reservations without `x-orbit-role` share: `main`, or the service that
+   * became their role. Null without such reservations.
+   */
+  sharedGpuOwner: string | null;
 }
 
 type Table = Record<string, unknown>;
@@ -45,6 +54,9 @@ const NAME = /^[a-z0-9]([a-z0-9_-]{0,40}[a-z0-9])?$/;
 
 /** Keys Orbit maps; `expose` and `pull_policy` change nothing for containers on a private network. */
 const MAIN_KEYS = new Set([
+  "deploy",
+  "shm_size",
+  "x-gpu-memory-gb",
   "build",
   "image",
   "command",
@@ -57,6 +69,7 @@ const MAIN_KEYS = new Set([
   "pids_limit",
 ]);
 const SERVICE_KEYS = new Set([
+  "entrypoint",
   "build",
   "image",
   "command",
@@ -143,7 +156,6 @@ function gpuReservation(
           device.capabilities[0] !== "gpu"
         )
           problems.push(`${label}: ${path}.capabilities must be [gpu]`);
-        if (!out.role) problems.push(`${label}: GPU services require x-orbit-role`);
       }
     }
   }
@@ -153,8 +165,7 @@ function gpuReservation(
     if (typeof memory !== "number" || !Number.isFinite(memory) || memory <= 0)
       problems.push(`${label}: x-gpu-memory-gb must be a positive number`);
     else out.gpuMemGB = memory;
-    if (!out.gpus || !out.role)
-      problems.push(`${label}: x-gpu-memory-gb needs a GPU reservation and x-orbit-role`);
+    if (!out.gpus) problems.push(`${label}: x-gpu-memory-gb needs a GPU reservation`);
   }
   return out;
 }
@@ -373,6 +384,10 @@ export function parseCompose(
     volumes: [],
     mainVolumes: [],
     mainPidsLimit: null,
+    mainGpus: 0,
+    mainGpuMemGB: null,
+    mainShmGB: null,
+    sharedGpuOwner: null,
   };
   let doc: unknown;
   try {
@@ -425,6 +440,16 @@ export function parseCompose(
       plan.mainVolumes = mv.volumes;
       if (mv.binds.length) problems.push(`${label}: bind mounts are not supported`);
       if (typeof s.pids_limit === "number") plan.mainPidsLimit = s.pids_limit;
+      if (s["x-orbit-role"] !== undefined)
+        problems.push(`${label}: x-orbit-role is not supported (main is the run's own role)`);
+      const gpu = gpuReservation({ ...s, "x-orbit-role": undefined }, problems, label);
+      plan.mainGpus = gpu.gpus ?? 0;
+      plan.mainGpuMemGB = gpu.gpuMemGB ?? null;
+      if (s.shm_size !== undefined) {
+        const gb = sizeGB(s.shm_size);
+        if (gb) plan.mainShmGB = gb;
+        else problems.push(`${label}: shm_size ${String(s.shm_size)} is not a size`);
+      }
       continue;
     }
     for (const k of Object.keys(s))
@@ -489,6 +514,16 @@ export function parseCompose(
     else problems.push(`${label}: needs build or image`);
     const cmd = command(s.command, problems, label);
     if (cmd) svc.command = cmd;
+    if (s.entrypoint !== undefined) {
+      // Docker takes one executable; the rest of a list entrypoint goes before the command. As in
+      // Compose, setting an entrypoint drops the image's default command.
+      const entry = command(s.entrypoint, problems, label);
+      if (entry?.length) {
+        svc.entrypoint = entry[0] as string;
+        svc.command = [...entry.slice(1), ...(cmd ?? [])];
+        if (!svc.command.length) delete svc.command;
+      } else if (entry) problems.push(`${label}: an empty entrypoint is not supported`);
+    }
     if (typeof s.working_dir === "string") svc.workdir = s.working_dir;
     const cpus = typeof s.cpus === "string" ? Number(s.cpus) : s.cpus;
     if (typeof cpus === "number" && Number.isFinite(cpus) && cpus > 0) svc.cpus = cpus;
@@ -511,6 +546,7 @@ export function parseCompose(
       problems.push(`${label}: x-orbit-role ${svc.role} is already assigned to another service`);
     plan.services.push(svc);
   }
+  shareGpus(plan, problems);
   // Compose refuses to wait for the health of a service without a health check.
   for (const [name, raw] of Object.entries(services)) {
     const d = isTable(raw) ? raw.depends_on : undefined;
@@ -526,6 +562,57 @@ export function parseCompose(
         );
   }
   return plan;
+}
+
+/**
+ * Reservations without `x-orbit-role` follow Compose on one host: every `count: N` reservation gets
+ * the same first N cards. Orbit leases them once, for `main` when it reserves, else for the first
+ * reserving service outside the host namespaces (it becomes a role of that name); the others (e.g. a
+ * resource monitor measuring that GPU) see the same cards through `gpusOf`. A reservation with
+ * `x-orbit-role` keeps its own cards.
+ */
+function shareGpus(plan: ComposePlan, problems: string[]): void {
+  const members = plan.services.filter((s) => !s.role && (s.gpus ?? 0) > 0);
+  if (!members.length && !plan.mainGpus) return;
+  if (!members.length) {
+    plan.sharedGpuOwner = "main";
+    return;
+  }
+  const counts = new Set([
+    ...members.map((s) => s.gpus),
+    ...(plan.mainGpus ? [plan.mainGpus] : []),
+  ]);
+  if (counts.size > 1)
+    problems.push("compose GPU reservations without x-orbit-role must request the same count");
+  const memory = [plan.mainGpuMemGB ?? 0, ...members.map((s) => s.gpuMemGB ?? 0)].reduce(
+    (a, b) => a + b,
+    0,
+  );
+  let owner: ServiceSpec | undefined;
+  if (!plan.mainGpus) {
+    owner = members.find((s) => !s.hostPid && !s.hostCgroup);
+    if (!owner) {
+      problems.push(
+        "compose GPU reservations without x-orbit-role need main or a service outside the host namespaces to own them",
+      );
+      return;
+    }
+    if (
+      !LeaseRole.safeParse(owner.name).success ||
+      plan.services.some((s) => s.role === owner?.name)
+    )
+      problems.push(`compose service ${owner.name}: cannot become the GPU role (use x-orbit-role)`);
+    owner.role = owner.name;
+    if (memory) owner.gpuMemGB = memory;
+  } else if (memory) plan.mainGpuMemGB = memory;
+  const of = owner?.role ?? "main";
+  plan.sharedGpuOwner = of;
+  for (const s of members) {
+    if (s === owner) continue;
+    delete s.gpus;
+    delete s.gpuMemGB;
+    s.gpusOf = of;
+  }
 }
 
 /** Compose `build`: a context path, or `{context, dockerfile}`; relative to the compose file. */

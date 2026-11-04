@@ -75,7 +75,11 @@ Orbit 读取的 `task.toml` 字段：
 | `[metadata] domain / field / subfield` | 任务标签 |
 
 `orbit bench tasks` 会列出不支持的设置（如 compose 中未实现的键、`allowlist` 网络、`mcp_servers`、`${VAR}` 模板），
-这些任务不会运行，以免在不同条件下打分。
+这些任务不会运行，以免在不同条件下打分。`orbit bench coverage <名>` 按 suite 汇总能运行的任务数和各原因的任务数。
+
+GPU：compose 中没有 `x-orbit-role` 的 NVIDIA reservation 按 Compose 单机语义共享一组卡（`main` 有 reservation 时由
+main 租用，否则由第一个非监控服务租用；监控服务看到同一组卡）；带 `x-orbit-role` 的服务独占自己的卡。
+`[environment] gpu_types` 限定可用型号；本机没有这些型号时可登记 `-c gpuTypes=any`（记为偏差）。
 
 verifier 必须把分数写到 `/logs/verifier/reward.txt`（一个数）或 `reward.json`（`reward` 键或唯一键），满分为 1。
 `environment/docker-compose.yaml` 中的其他服务作为服务容器与 solve Run 一起启动（就绪后才启动 Agent），`service = "<名>"` 的 artifacts 从该服务采集；服务日志在 solve Run 的 `output/services/<名>/log`。shared 模式（默认）的 verifier 在 solve Run 的同一容器里、方法结束后运行（after 阶段），这类 trial 不能 `bench rescore`。
@@ -258,7 +262,15 @@ orbit bench usage <job>... --suggest  # 只输出建议改动，资源文件片�
 
 ## 5. 接入验收
 
-每个新 benchmark（包括 Harbor 路线的新任务集）都要有这三项证据，写进任务记录：
+先运行自动校准，它覆盖下面第 1、2 项以及有效性、重复一致、清理与重评：
+
+```bash
+orbit bench calibrate tbs --sample 3          # 按 suite 抽 3 个任务，empty + oracle × 2 seed
+orbit bench calibrate efe -t <task> --seeds 2 --json > calibration.json
+```
+
+任一检查 FAIL 时退出码为 1；`n/a` 表示该项不适用（例如没有参考解）。每个新 benchmark（包括 Harbor 路线的新任务集）
+都要有这三项证据，写进任务记录：
 
 1. **oracle 满分**：`-m oracle` 在抽样任务上全部 valid 且为满分（没有参考解的 benchmark 省略，并写明）。
 2. **空答案零分**：`-m empty` 全部 valid 且为 0。invalid 说明适配器把"没有产出"当成了环境错误，要修。

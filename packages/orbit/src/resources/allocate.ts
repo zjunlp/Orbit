@@ -31,7 +31,17 @@ export function cpuOutside(r: NodeResources, leases: Lease[]): number {
 export type Allocation = { ok: true; gpuIds: string[] } | { ok: false; reason: string };
 
 /** Reject requests this node can never satisfy (instead of queueing forever). */
-export function infeasible(req: ResourceRequest, r: NodeResources): string | null {
+export function infeasible(
+  req: ResourceRequest,
+  r: NodeResources,
+  roles: RoleRequest[] = [],
+): string | null {
+  for (const role of roles) {
+    if (!role.gpuModels?.length || role.gpus === 0) continue;
+    const have = r.gpus.filter((g) => modelMatches(g.name, role.gpuModels)).length;
+    if (have < role.gpus)
+      return `role ${role.role} needs ${role.gpus} GPU(s) of ${role.gpuModels.join(" / ")}, but this node has ${have}`;
+  }
   if (req.gpus > 0 && r.gpuError) return `GPUs requested but unavailable: ${r.gpuError}`;
   const fitting = r.gpus.filter(
     (g) => gpuMemFits(g, req) && (!req.gpuIds?.length || matchesId(g, req.gpuIds)),
@@ -157,6 +167,13 @@ function allocateDevices(
   return { ok: true, devices: out };
 }
 
+/** Whether a card is one of the acceptable models (none listed: any card). */
+export function modelMatches(name: string, models: string[] | undefined): boolean {
+  if (!models?.length) return true;
+  const card = name.toLowerCase();
+  return models.some((m) => card.includes(m.trim().toLowerCase()));
+}
+
 const DECLARED_GPU_CAPABILITIES = new Set(["egl", "vulkan", "cuda"]);
 
 function gpuFeatures(role: RoleRequest): { models: string[]; declared: string[] } {
@@ -209,7 +226,7 @@ export function allocateRoles(
   if (
     !whole.ok &&
     (!whole.reason.startsWith("waiting for GPUs") ||
-      !roles.some((role) => gpuFeatures(role).models.length))
+      !roles.some((role) => gpuFeatures(role).models.length || role.gpuModels?.length))
   )
     return waiting(whole.reason);
 
@@ -221,6 +238,7 @@ export function allocateRoles(
       .filter((g) => gpuMemFits(g, role as ResourceRequest))
       .filter((g) => !role.gpuIds?.length || matchesId(g, role.gpuIds))
       .filter((g) => models.every((name) => g.name.toLowerCase().includes(name)))
+      .filter((g) => modelMatches(g.name, role.gpuModels))
       .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index)
       .map((g) => g.uuid);
   });
@@ -228,7 +246,7 @@ export function allocateRoles(
     const role = roles[i] as RoleRequest;
     const { models } = gpuFeatures(role);
     return waiting(
-      `waiting for GPUs (role ${role.role}: ${models.length ? `needs ${models.join(", ")}, ` : ""}${free}/${role.gpus} matching cards free)`,
+      `waiting for GPUs (role ${role.role}: ${models.length ? `needs ${models.join(", ")}, ` : ""}${role.gpuModels?.length ? `one of ${role.gpuModels.join(" / ")}, ` : ""}${free}/${role.gpus} matching cards free)`,
     );
   };
   for (const [i, role] of roles.entries())

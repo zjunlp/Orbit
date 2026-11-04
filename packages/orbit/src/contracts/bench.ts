@@ -47,6 +47,58 @@ export const BenchTask = z.object({
 });
 export type BenchTask = z.infer<typeof BenchTask>;
 
+/** How much of a benchmark Orbit can run, by suite and by reason (`orbit bench coverage`). */
+export interface BenchCoverage {
+  total: number;
+  supported: number;
+  suites: { suite: string; total: number; supported: number }[];
+  /** Normalized reasons, most frequent first; a task with several reasons counts for each. */
+  reasons: { reason: string; tasks: number; suites: string[] }[];
+}
+
+/** A task's suite: its `suite` tag, else the id up to the first `.`, `:` or `/`. */
+export function taskSuite(t: Pick<BenchTask, "id" | "tags">): string {
+  return t.tags.suite || (/^([^.:/]+)[.:/]/.exec(t.id)?.[1] ?? "-");
+}
+
+/** One reason without the parts that name a single task (service names, variable help texts). */
+export function normalizeReason(reason: string): string {
+  return reason
+    .trim()
+    .replace(/^compose service (?!main:)[\w.-]+:/, "compose service <service>:")
+    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}/g, "${$1}")
+    .slice(0, 240);
+}
+
+export function benchCoverage(tasks: Pick<BenchTask, "id" | "tags" | "supported" | "reason">[]) {
+  const suites = new Map<string, { suite: string; total: number; supported: number }>();
+  const reasons = new Map<string, { reason: string; tasks: number; suites: Set<string> }>();
+  for (const t of tasks) {
+    const suite = taskSuite(t);
+    const row = suites.get(suite) ?? { suite, total: 0, supported: 0 };
+    row.total++;
+    if (t.supported) row.supported++;
+    suites.set(suite, row);
+    if (t.supported) continue;
+    for (const reason of new Set((t.reason ?? "unsupported").split("; ").map(normalizeReason))) {
+      const r = reasons.get(reason) ?? { reason, tasks: 0, suites: new Set<string>() };
+      r.tasks++;
+      r.suites.add(suite);
+      reasons.set(reason, r);
+    }
+  }
+  return {
+    total: tasks.length,
+    supported: tasks.filter((t) => t.supported).length,
+    suites: [...suites.values()].sort(
+      (a, b) => b.total - a.total || a.suite.localeCompare(b.suite),
+    ),
+    reasons: [...reasons.values()]
+      .sort((a, b) => b.tasks - a.tasks || a.reason.localeCompare(b.reason))
+      .map((r) => ({ ...r, suites: [...r.suites].sort() })),
+  } satisfies BenchCoverage;
+}
+
 /**
  * A metric an adapter declares (`tasks` reply) and reports per trial (`score` reply `metrics`).
  * Valid trials average per task, then over tasks (see `contracts/metrics.ts`). `score`, the score

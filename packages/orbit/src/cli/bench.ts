@@ -4,18 +4,21 @@ import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
 import {
   type BenchCompare,
+  type BenchCoverage,
   type BenchJobDetail,
   type BenchJobList,
   type Benchmark,
   type BenchReport,
   type BenchTask,
   type BenchUsage,
+  benchCoverage,
   type MethodSummary,
   type MetricSpec,
   trialRunIds,
 } from "../contracts/index.ts";
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "../contracts/metrics.ts";
 import type { Print } from "./auth.ts";
+import { calibrate, formatCalibration } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
 import { compactTable as table } from "./format.ts";
 import { kv, numericOption } from "./options.ts";
@@ -69,6 +72,34 @@ function formatTasks(ts: BenchTask[]): string {
   for (const t of ts)
     rows.push([t.id, t.supported ? "yes" : "no", (t.supported ? t.title : t.reason) ?? ""]);
   return `${table(rows)}\n${ok}/${ts.length} supported`;
+}
+
+function formatCoverage(c: BenchCoverage, all: boolean): string {
+  const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : "-");
+  const suites = [["SUITE", "SUPPORTED", "TASKS", "%"]];
+  for (const s of c.suites)
+    suites.push([s.suite, String(s.supported), String(s.total), pct(s.supported, s.total)]);
+  const reasons = [["TASKS", "REASON", "SUITES"]];
+  for (const r of all ? c.reasons : c.reasons.slice(0, 15))
+    reasons.push([
+      String(r.tasks),
+      r.reason,
+      r.suites.length > 4
+        ? `${r.suites.slice(0, 4).join(", ")} +${r.suites.length - 4}`
+        : r.suites.join(", "),
+    ]);
+  return [
+    `${c.supported}/${c.total} tasks supported (${pct(c.supported, c.total)}) — supported means Orbit can run the task under its conditions, not that it is calibrated`,
+    "",
+    table(suites),
+    ...(c.reasons.length
+      ? [
+          "",
+          table(reasons),
+          ...(all || c.reasons.length <= 15 ? [] : [`(${c.reasons.length - 15} more; --all)`]),
+        ]
+      : []),
+  ].join("\n");
 }
 
 function formatJobs(jobs: Job[]): string {
@@ -370,6 +401,61 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
       const ts = await (await client()).benchTasks(name);
       print(o.json, ts, () => formatTasks(ts));
     });
+
+  bench
+    .command("coverage <benchmark>")
+    .description("count supported tasks by suite and the reasons the others cannot run")
+    .option("--all", "list every reason")
+    .option("--json", "print JSON")
+    .action(async (name: string, o: { all?: boolean; json?: boolean }) => {
+      const c = benchCoverage(await (await client()).benchTasks(name));
+      print(o.json, c, () => formatCoverage(c, Boolean(o.all)));
+    });
+
+  bench
+    .command("calibrate <benchmark>")
+    .description(
+      "run empty (and oracle) on sampled tasks and check validity, expected scores, repeatability, cleanup and rescore",
+    )
+    .option("-t, --task <id...>", "calibrate these tasks instead of a sample")
+    .option("--sample <n>", "tasks to sample, spread over suites", numericOption("integer"), 3)
+    .option("--suite <suite>", "sample only this suite")
+    .option("--seeds <n>", "repetitions per task × method", numericOption("integer"), 2)
+    .option("--no-oracle", "skip the oracle method")
+    .option("--no-rescore", "skip rescoring from saved evidence")
+    .option("--timeout <min>", "solve timeout per trial in minutes", numericOption("float"))
+    .option("--wait <min>", "give up waiting after this many minutes", numericOption("float"), 240)
+    .option("--json", "print JSON")
+    .action(
+      async (
+        name: string,
+        o: {
+          task?: string[];
+          sample: number;
+          suite?: string;
+          seeds: number;
+          oracle: boolean;
+          rescore: boolean;
+          timeout?: number;
+          wait: number;
+          json?: boolean;
+        },
+      ) => {
+        const r = await calibrate(await client(), name, {
+          ...(o.task ? { tasks: o.task } : {}),
+          sample: o.sample,
+          ...(o.suite ? { suite: o.suite } : {}),
+          seeds: o.seeds,
+          oracle: o.oracle,
+          rescore: o.rescore,
+          ...(o.timeout ? { timeoutMin: o.timeout } : {}),
+          waitMin: o.wait,
+          progress: o.json ? undefined : (t) => console.error(t),
+        });
+        print(o.json, r, () => formatCalibration(r));
+        if (!r.calibrated) process.exitCode = 1;
+      },
+    );
 
   bench
     .command("run <benchmark>")
