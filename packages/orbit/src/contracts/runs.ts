@@ -38,6 +38,8 @@ export const AgentRef = z.object({
 export type AgentRef = z.infer<typeof AgentRef>;
 
 /** A service or network name: a DNS label, also the host name other containers reach it by. */
+import { LeaseRole } from "./resources.ts";
+
 const ServiceName = z
   .string()
   .regex(
@@ -78,6 +80,8 @@ export const ServiceSpec = z
     context: z.string().optional(),
     /** Default: the image's command. */
     command: z.array(z.string()).min(1).optional(),
+    /** Override the image's ENTRYPOINT (e.g. `bash` to run a script inside a service image). */
+    entrypoint: z.string().min(1).optional(),
     env: z.record(z.string(), z.string()).default({}),
     workdir: z.string().optional(),
     /** Limits; a service without one is unlimited but leased as 1 CPU / 1 GB. */
@@ -126,6 +130,16 @@ export const ServiceSpec = z
     hostCgroup: z.boolean().default(false),
     /** No network at all (Compose `network_mode: none`); then `networks` must be empty. */
     noNetwork: z.boolean().default(false),
+    /**
+     * The role this service plays in the run (a simulator `sim`, a model server `policy`). A role
+     * may request its own GPUs, allocated together with the run's and never shared with another role.
+     */
+    role: LeaseRole.optional(),
+    /** GPUs of this service's role (only with `role`). */
+    gpus: z.number().int().min(0).optional(),
+    gpuMemGB: z.number().positive().optional(),
+    /** GPU models the role needs, e.g. `rtx` (advisory: checked against the card name). */
+    gpuFeatures: z.array(z.string().max(20)).default([]),
   })
   .refine(
     (s) =>
@@ -194,10 +208,22 @@ export const AfterStatus = z.object({
 export type AfterStatus = z.infer<typeof AfterStatus>;
 
 /** Lease for a service: its limits, or 1 CPU / 1 GB when it has none. */
-export const serviceLease = (s: Pick<ServiceSpec, "cpus" | "memGB">) => ({
+/** What one service reserves: its own CPU/memory, plus the GPUs of the role it plays. */
+export const serviceLease = (s: Pick<ServiceSpec, "cpus" | "memGB" | "role" | "gpus">) => ({
   cpus: s.cpus ?? 1,
   memGB: s.memGB ?? 1,
+  gpus: s.role ? (s.gpus ?? 0) : 0,
 });
+
+/** A resource request of one role: the run's `main`, or a service that plays a role. */
+export interface RoleRequest {
+  role: string;
+  gpus: number;
+  gpuMemGB?: number;
+  gpuIds?: string[];
+  cpus: number;
+  memGB: number;
+}
 
 export const CheckpointPolicy = z.object({
   /** Maximum saved writable layer plus checkpoint files, excluding shared base layers. */
@@ -293,6 +319,8 @@ export const RunSpec = z
     volumeMounts: z.array(VolumeMount).default([]),
     /** PID limit of the run's own container. */
     pidsLimit: z.number().int().positive().optional(),
+    /** Override the image's ENTRYPOINT of the run's own container. */
+    entrypoint: z.string().min(1).optional(),
     /**
      * Shell commands run once `command` has exited, in the run's container (kept for them) or in a
      * service, before anything is collected (e.g. Harbor's `[[verifier.collect]]` snapshots).
@@ -382,6 +410,13 @@ function servicesProblem(s: {
     return plain ? null : "networks and dependsOn need services";
   }
   if (s.backend !== "docker") return "services need the docker backend";
+  // A role's GPUs are wired into that service's container, which only exists next to the run.
+  const roleGpus = s.services.filter((x) => x.role && (x.gpus ?? 0) > 0);
+  if (roleGpus.length) {
+    if (s.hostNetwork) return "services with GPUs do not work with host networking";
+    if (s.services.some((x) => !x.role && (x.gpus ?? 0) > 0))
+      return "only services with a role may request GPUs";
+  }
   if (s.hostNetwork) return "services do not work with host networking";
   const names = s.services.map((x) => x.name);
   if (names.includes("main")) return "service name `main` is the run's own container";
@@ -412,12 +447,51 @@ export function serviceOrder<T extends { name: string; dependsOn: string[] }>(
 }
 
 /** What a run leases: its own resources plus its services' (GPUs stay with the run's container). */
+/**
+ * The lease a run needs, per role (design §9.4): `main`, plus each service with a `role` (a
+ * simulator, a policy server) and its own GPU/memory request. Services without a role reserve CPU
+ * and memory only, as before. `allocateRoles` decides the assignments together, so a run never
+ * starts with half of a heterogeneous requirement.
+ */
+export function roleRequests(s: Pick<RunSpec, "resources" | "services">): RoleRequest[] {
+  const roles: RoleRequest[] = [
+    {
+      role: "main",
+      gpus: s.resources.gpus,
+      ...(s.resources.gpuMemGB ? { gpuMemGB: s.resources.gpuMemGB } : {}),
+      ...(s.resources.gpuIds ? { gpuIds: s.resources.gpuIds } : {}),
+      cpus: s.resources.cpus,
+      memGB: s.resources.memGB,
+    },
+  ];
+  for (const x of s.services)
+    if (x.role)
+      roles.push({
+        role: x.role,
+        gpus: x.gpus ?? 0,
+        ...(x.gpuMemGB ? { gpuMemGB: x.gpuMemGB } : {}),
+        ...(x.gpuFeatures ? { gpuFeatures: x.gpuFeatures } : {}),
+        cpus: x.cpus ?? 1,
+        memGB: x.memGB ?? 1,
+      } as RoleRequest);
+  return roles;
+}
+
+/** The whole run's request: CPU, memory and GPUs summed over its roles. */
 export function leaseRequest(s: Pick<RunSpec, "resources" | "services">): ResourceRequest {
-  const extra = s.services.map(serviceLease);
+  const roles = roleRequests(s);
+  const extra = s.services.filter((x) => !x.role).map(serviceLease);
   return {
     ...s.resources,
-    cpus: s.resources.cpus + extra.reduce((a, x) => a + x.cpus, 0),
-    memGB: s.resources.memGB + extra.reduce((a, x) => a + x.memGB, 0),
+    gpus: roles.reduce((n, r) => n + r.gpus, 0),
+    cpus:
+      s.resources.cpus +
+      extra.reduce((a, x) => a + x.cpus, 0) +
+      roles.slice(1).reduce((a, r) => a + r.cpus, 0),
+    memGB:
+      s.resources.memGB +
+      extra.reduce((a, x) => a + x.memGB, 0) +
+      roles.slice(1).reduce((a, r) => a + r.memGB, 0),
   };
 }
 

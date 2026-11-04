@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { cp } from "node:fs/promises";
 import { runDirs } from "../config/paths.ts";
+import type { RoleAllocation } from "../contracts/index.ts";
 import {
   isTerminal,
   leaseRequest,
@@ -54,7 +55,7 @@ export function mirrors(ctx: Context): Run[] {
     .filter((r) => r.remote);
 }
 
-export function placeRemote(ctx: Context, run: Run, node: string, gpuIds: string[]): Run {
+export function placeRemote(ctx: Context, run: Run, node: string, roles: RoleAllocation[]): Run {
   run.state = "starting";
   run.remote = true;
   run.node = node;
@@ -63,7 +64,8 @@ export function placeRemote(ctx: Context, run: Run, node: string, gpuIds: string
     id: `lease-${run.id}`,
     runId: run.id,
     node,
-    gpuIds,
+    gpuIds: roles.flatMap((x) => x.gpuIds),
+    roles,
     cpus: leaseRequest(run.spec).cpus,
     memGB: leaseRequest(run.spec).memGB,
     state: "active",
@@ -79,7 +81,11 @@ export function placeRemote(ctx: Context, run: Run, node: string, gpuIds: string
       cancel: false,
       done: false,
     });
-    ctx.save(run, "placed", `node ${node}${gpuIds.length ? `, GPUs ${gpuIds.join(", ")}` : ""}`);
+    ctx.save(
+      run,
+      "placed",
+      `node ${node}${roles.length ? `, roles ${roles.map((x) => `${x.role}:${x.gpuIds.length}`).join(" ")}` : ""}`,
+    );
   });
   void ctx.dispatchRemote(run.id);
   return run;

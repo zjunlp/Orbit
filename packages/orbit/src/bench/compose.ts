@@ -368,6 +368,7 @@ export function parseCompose(
       hostPid: false,
       hostCgroup: false,
       noNetwork: false,
+      gpuFeatures: [],
     };
     if (s.restart !== undefined) {
       const r = String(s.restart);

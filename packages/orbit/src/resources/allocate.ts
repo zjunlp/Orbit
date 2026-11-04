@@ -1,4 +1,5 @@
-import type { Lease, NodeResources, ResourceRequest } from "../contracts/index.ts";
+import type { Lease, NodeResources, ResourceRequest, RoleAllocation } from "../contracts/index.ts";
+import type { RoleRequest } from "../contracts/runs.ts";
 
 /** Keep this fraction of host memory out of leases for the OS and the daemon. */
 export const MEM_LEASABLE_FRACTION = 0.9;
@@ -84,4 +85,63 @@ export function allocate(req: ResourceRequest, r: NodeResources, leases: Lease[]
     return { ok: false, reason: `waiting for GPUs (${free.length}/${req.gpus} free${why})` };
   }
   return { ok: true, gpuIds: free.slice(0, req.gpus).map((g) => g.uuid) };
+}
+
+export type RoleAllocationResult =
+  | { ok: true; gpuIds: string[]; roles: RoleAllocation[] }
+  | { ok: false; reason: string };
+
+/**
+ * Allocate a run's roles (its own container, a simulator, a policy server) together (design §9.4).
+ * Roles never share a card, so a heterogeneous requirement (a RTX card for the simulator, a large
+ * card for the policy) is satisfied or the run waits: a half-started run would hold GPUs while
+ * waiting for the rest. CPU and memory were already summed by `leaseRequest`.
+ */
+export function allocateRoles(
+  roles: RoleRequest[],
+  r: NodeResources,
+  leases: Lease[],
+): RoleAllocationResult {
+  const total = roles.reduce((n, x) => n + x.gpus, 0);
+  const whole = allocate(
+    {
+      gpus: total,
+      cpus: roles.reduce((n, x) => n + x.cpus, 0),
+      memGB: roles.reduce((n, x) => n + x.memGB, 0),
+    } as ResourceRequest,
+    r,
+    leases,
+  );
+  if (!whole.ok) return whole;
+  if (total === 0)
+    return {
+      ok: true,
+      gpuIds: [],
+      roles: roles.map((x) => ({ role: x.role, gpuIds: [], cpus: x.cpus, memGB: x.memGB })),
+    };
+
+  const leased = new Set(leases.flatMap((l) => l.gpuIds));
+  const taken = new Set<string>();
+  const out: RoleAllocation[] = [];
+  for (const role of roles) {
+    const free = r.gpus
+      .filter((g) => !leased.has(g.uuid) && !taken.has(g.uuid) && g.available)
+      .filter((g) => gpuMemFits(g, role as ResourceRequest))
+      .filter(
+        (g) =>
+          !role.gpuIds?.length || role.gpuIds.some((id) => id === g.uuid || id === String(g.index)),
+      )
+      .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index);
+    if (free.length < role.gpus) {
+      const named = (role as RoleRequest & { gpuFeatures?: string[] }).gpuFeatures ?? [];
+      return {
+        ok: false,
+        reason: `waiting for GPUs (role ${role.role}: ${free.length}/${role.gpus} free${named.length ? ` for ${named.join(",")}` : ""})`,
+      };
+    }
+    const picked = free.slice(0, role.gpus).map((g) => g.uuid);
+    for (const id of picked) taken.add(id);
+    out.push({ role: role.role, gpuIds: picked, cpus: role.cpus, memGB: role.memGB });
+  }
+  return { ok: true, gpuIds: out.flatMap((x) => x.gpuIds), roles: out };
 }

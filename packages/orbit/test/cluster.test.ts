@@ -236,6 +236,7 @@ describe("remote placement", () => {
       id: `l-${runId}`,
       runId,
       node: "w1",
+      roles: [],
       gpuIds: ["GPU-0"],
       cpus: 1,
       memGB: 1,

@@ -15,6 +15,7 @@ import {
   leaseRequest,
   type NodeResources,
   type RemoteSubmit,
+  type RoleAllocation,
   type Run,
   type RunDeletion,
   type RunEvent,
@@ -23,6 +24,7 @@ import {
   RunSpec,
   type RunSpecInput,
   type RunState,
+  roleRequests,
   type ServiceSpec,
 } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
@@ -30,7 +32,7 @@ import type { Prepared } from "../harness/index.ts";
 import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { Redactor } from "../lib/redact.ts";
-import { allocate } from "../resources/allocate.ts";
+import { allocate, allocateRoles } from "../resources/allocate.ts";
 import { resolveAgentRef } from "../sessions/index.ts";
 import type { RunFilter, Store } from "../store/index.ts";
 import type { DatasetRegistry } from "../workspace/datasets.ts";
@@ -645,9 +647,9 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       if (run?.state !== "queued") continue;
       if (blocked) reasons.push([this.node, blocked]);
       else {
-        const a = allocate(leaseRequest(run.spec), res, this.store.activeLeases());
+        const a = allocateRoles(roleRequests(run.spec), res, this.store.activeLeases());
         if (a.ok) {
-          this.leaseLocal(run, a.gpuIds);
+          this.leaseLocal(run, a.roles);
           res.memory.availableGB -= leaseRequest(run.spec).memGB;
           continue;
         }
@@ -663,8 +665,8 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
           reasons.push([n.name, why]);
           continue;
         }
-        const a = allocate(
-          leaseRequest(run.spec),
+        const a = allocateRoles(
+          roleRequests(run.spec),
           n.resources as NodeResources,
           nodeLeases(n, mirrors),
         );
@@ -672,7 +674,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
           reasons.push([n.name, a.reason]);
           continue;
         }
-        mirrors.push(this.placeRemote(run, n.name, a.gpuIds));
+        mirrors.push(this.placeRemote(run, n.name, a.roles));
         placed = true;
         break;
       }
@@ -689,12 +691,14 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     return remoteRuns.refusal(this.context, key);
   }
 
-  private leaseLocal(run: Run, gpuIds: string[]): void {
+  private leaseLocal(run: Run, roles: RoleAllocation[]): void {
+    const gpuIds = roles.flatMap((x) => x.gpuIds);
     const lease: Lease = {
       id: `lease-${run.id}`,
       runId: run.id,
       node: this.node,
       gpuIds,
+      roles,
       cpus: leaseRequest(run.spec).cpus,
       memGB: leaseRequest(run.spec).memGB,
       state: "active",
@@ -724,8 +728,8 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
    * Mark the run as placed on `node` with a predicted lease (kept in the run record only; it counts
    * against that node until the node reports its own lease) and send it.
    */
-  private placeRemote(run: Run, node: string, gpuIds: string[]): Run {
-    return remoteRuns.placeRemote(this.context, run, node, gpuIds);
+  private placeRemote(run: Run, node: string, roles: RoleAllocation[]): Run {
+    return remoteRuns.placeRemote(this.context, run, node, roles);
   }
 
   private async dispatchRemote(id: string): Promise<void> {

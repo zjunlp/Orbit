@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Lease, NodeResources } from "../src/contracts/index.ts";
 import { ResourceRequest } from "../src/contracts/index.ts";
-import { allocate, CPU_RAMP_MS, cpuOutside, infeasible } from "../src/resources/allocate.ts";
+import {
+  allocate,
+  allocateRoles,
+  CPU_RAMP_MS,
+  cpuOutside,
+  infeasible,
+} from "../src/resources/allocate.ts";
 import { CpuMeter, parseProcStat } from "../src/resources/probe.ts";
 
 const gpu = (index: number, over: Partial<NodeResources["gpus"][number]> = {}) => ({
@@ -36,6 +42,7 @@ const lease = (gpuIds: string[], cpus = 4, memGB = 16): Lease => ({
   id: "l",
   runId: "r",
   node: "n",
+  roles: [],
   gpuIds,
   cpus,
   memGB,
@@ -128,5 +135,43 @@ describe("CPU use outside Orbit", () => {
     const after = m.sample({ busy: 300, total: 600 }, 8, 5, 6000); // idle for 2 s
     expect(after).toBeGreaterThan(7);
     expect(after).toBeLessThan(8);
+  });
+});
+
+describe("role allocation", () => {
+  const req = (role: string, gpus: number, extra: object = {}) => ({
+    role,
+    gpus,
+    cpus: 2,
+    memGB: 4,
+    ...extra,
+  });
+
+  it("gives each role its own cards, never the same one twice", () => {
+    const a = allocateRoles([req("main", 0), req("sim", 1), req("policy", 1)], node, []);
+    expect(a.ok && a.roles).toEqual([
+      { role: "main", gpuIds: [], cpus: 2, memGB: 4 },
+      // GPU-1 is busy outside Orbit in this fixture, so the roles take the free cards.
+      { role: "sim", gpuIds: ["GPU-0"], cpus: 2, memGB: 4 },
+      { role: "policy", gpuIds: ["GPU-2"], cpus: 2, memGB: 4 },
+    ]);
+    expect(a.ok && a.gpuIds).toEqual(["GPU-0", "GPU-2"]);
+  });
+
+  it("waits instead of starting half of a heterogeneous requirement", () => {
+    const small = node.gpus.slice(0, 1).map((g) => ({ ...g }));
+    const half = { ...node, gpus: small };
+    const a = allocateRoles([req("sim", 1), req("policy", 1)], half, []);
+    expect(a).toMatchObject({ ok: false });
+    // The whole requirement is checked first: two roles, one free card.
+    expect(!a.ok && a.reason).toMatch(/waiting for GPUs \(1\/2 free\)/);
+  });
+
+  it("counts the cards another lease already holds", () => {
+    // Three cards: GPU-0 held by another lease, GPU-1 busy outside Orbit.
+    const busy = { ...node, gpus: node.gpus.slice(0, 3) };
+    const held = { ...lease(["GPU-0"]) } as Lease;
+    const a = allocateRoles([req("main", 1)], busy, [held]);
+    expect(a.ok && a.roles[0]?.gpuIds).toEqual(["GPU-2"]);
   });
 });
