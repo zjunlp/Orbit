@@ -10,7 +10,8 @@ gated task/assets snapshots are unavailable.
 ## Preparation
 
 Prepare the clean pinned OSWorld-V2 checkout and original `uv.lock`
-dependencies with `uv sync --frozen` (Python 3.12+). Obtain access to the
+dependencies with `uv sync --frozen` (Python 3.12+). The Docker SDK must be
+`7.1.0`; the adapter rejects other SDK versions. Obtain access to the
 upstream gated Hugging Face tasks/assets using the project's documented
 process. Credentials never belong in Orbit config or the repository.
 

@@ -104,10 +104,10 @@ def prerequisites(root, config, release):
     except (OSError, subprocess.SubprocessError):
         reasons.append("The release-pinned Docker VM runtime image is not prepared")
     try:
-        result = subprocess.run([p["python"], "-B", "-c", "import sys; assert sys.version_info >= (3,12); import dotenv; dotenv.load_dotenv=lambda *a, **k: False; import desktop_env.desktop_env, lib_run_single"],
+        result = subprocess.run([p["python"], "-B", "-c", "import sys; assert sys.version_info >= (3,12); import dotenv; dotenv.load_dotenv=lambda *a, **k: False; import docker; assert docker.__version__ == '7.1.0'; import desktop_env.desktop_env, lib_run_single"],
                                 env={**os.environ, "PYTHONPATH": str(root), "PYTHONDONTWRITEBYTECODE": "1"}, capture_output=True, timeout=25)
         if result.returncode:
-            reasons.append("Prepare original Python dependencies from frozen uv.lock")
+            reasons.append("Prepare original Python dependencies from frozen uv.lock, including docker==7.1.0")
     except (OSError, subprocess.SubprocessError):
         reasons.append("Prepared OSWorld Python interpreter is unavailable")
     return reasons

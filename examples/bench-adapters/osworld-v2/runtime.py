@@ -137,6 +137,8 @@ def run(plan_path):
         import dotenv
         dotenv.load_dotenv = lambda *args, **kwargs: False
         import docker.models.containers
+        if docker.__version__ != "7.1.0":
+            raise ValueError("Original Docker SDK 7.1.0 is required")
         from task_loader import load_task_from_file
         from desktop_env import desktop_env
         import lib_run_single
