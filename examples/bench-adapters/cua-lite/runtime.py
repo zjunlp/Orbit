@@ -100,7 +100,11 @@ async def run(plan_path, output):
         method = plan['method']
         if method['agent'] == 'empty':
             await env.reset()
-            await env.step([make_tool_call('terminate', {'status': 'success', 'reason': ''}, call_id='empty-finish')])
+            if plan.get('deferred_judge'):
+                from lite.core.messages.final import make_no_tool_call_final_actions
+                await env.step(make_no_tool_call_final_actions(''))
+            else:
+                await env.step([make_tool_call('terminate', {'status': 'success', 'reason': ''}, call_id='empty-finish')])
         else:
             phase = 'policy_start'
             for name in method.get('passEnv', []):
