@@ -24,6 +24,7 @@ import { nowIso } from "../lib/ids.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, containerName, GENERIC_DIRS, usesRunNetworks } from "./execution.ts";
 import { keepsContainer, runCommand, writePhaseScript } from "./phases.ts";
+import { volumeName } from "./services.ts";
 
 type Context = Pick<
   RunContext,
@@ -286,6 +287,11 @@ export function containerSpec(
     mounts.push({ source, target: m.target, mode: m.mode });
   }
   const workdirOut = s.workdir === "image" ? null : (s.workdir ?? workdir);
+  const volumes = s.volumeMounts.map((v) => ({
+    name: volumeName(run.id, v.volume),
+    target: v.target,
+    mode: v.mode,
+  }));
   const env: Record<string, string> = {
     ...s.env,
     ORBIT_RUN_ID: run.id,
@@ -313,6 +319,8 @@ export function containerSpec(
     workdir: workdirOut,
     network: !s.network ? "none" : s.hostNetwork ? "host" : "bridge",
     user,
+    ...(volumes.length ? { volumes } : {}),
+    ...(s.pidsLimit ? { pidsLimit: s.pidsLimit } : {}),
   };
 }
 

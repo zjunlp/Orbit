@@ -67,6 +67,23 @@ class AdapterTests(unittest.TestCase):
         self.assertFalse(rows["miniwob.enter-text"]["supported"])
         self.assertFalse(rows["miniwob.unsupported-fixture"]["supported"])
 
+    def test_catalog_is_the_full_pinned_registration(self):
+        self.assertEqual(len(adapter.TASKS), 125)
+        rows = {r["id"]: r for r in adapter.tasks(self.req)["tasks"]}
+        # Registered but without original HTML here: listed, not runnable.
+        self.assertEqual(rows["miniwob.enter-text"]["reason"], "Missing original task HTML")
+        self.assertIn("Not registered", rows["miniwob.unsupported-fixture"]["reason"])
+        self.assertIn("125 tasks", adapter.tasks(self.req)["capabilities"]["conditions"]["Coverage"])
+
+    def test_backend_suites_are_refused_not_run_under_changed_conditions(self):
+        for suite in ("webarena", "visualwebarena", "workarena"):
+            self.req["benchmark"]["config"]["suite"] = suite
+            with self.assertRaisesRegex(ValueError, "exclusive task scheduling"):
+                adapter.tasks(self.req)
+        self.req["benchmark"]["config"]["suite"] = "nope"
+        with self.assertRaisesRegex(ValueError, "Unknown BrowserGym suite"):
+            adapter.tasks(self.req)
+
     def test_catalog_declares_supported_methods_and_fixed_conditions(self):
         self.req["benchmark"]["config"].update(actionSet="bid", maxSteps="7")
         caps = adapter.tasks(self.req)["capabilities"]

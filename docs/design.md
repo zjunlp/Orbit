@@ -609,13 +609,19 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
    `environment/docker-compose.yaml`（`bench/compose.ts`）翻译成服务容器：`main` 取 `environment`、`working_dir`、
    `depends_on`、`networks`（其 `command` 是 Harbor 的保活命令，忽略；task 的 `[environment.env]` 覆盖 compose 的值），
    其他服务取 build/image、command、environment、working_dir、cpus、mem_limit、healthcheck、depends_on（started /
-   healthy）、networks、init、read_only、tmpfs、cap_add/drop、security_opt、pids_limit、shm_size；`main` 的 `image`
-   只接受与 `[environment] docker_image` 相同的值；`[[verifier.collect]]` 变成 hooks；顶层 networks 只认 `internal`。
+   healthy）、networks、init、read_only、tmpfs、cap_add/drop、security_opt、pids_limit、shm_size、restart、
+   `network_mode: none`、volumes（顶层声明的命名卷，或任务 environment 目录内的相对路径 bind）；`pid: host` /
+   `cgroup: host` 只在登记时 `-c hostNamespaces=allow` 后接受（资源监控容器能看到本机全部进程）。`main` 另取 volumes 与
+   pids_limit；`main` 的 `image` 只接受与 `[environment] docker_image` 相同的值；`[[verifier.collect]]` 变成 hooks；
+   顶层 networks 只认 `internal`，顶层 volumes 只认无配置的项目卷。命名卷随 Run 创建（`orbit-<run>-<name>`，带
+   `orbit.parent` 标签），清理时在容器与网络之后删除。服务名允许 `_`（与 Compose 一致）。
    插值同 Compose（`${VAR}`、`${VAR:-d}`、`${VAR-d}`、`$$`），变量为 CONTEXT_DIR、CPUS、MEMORY、PREBUILT_IMAGE_NAME 与
-   任务变量；未知变量、其他键（volumes、ports 等）都列为不支持。`service = "<名>"` 的 artifacts 从该服务采集。
+   任务变量；未知变量、其他键（ports、外部卷等）都列为不支持。`service = "<名>"` 的 artifacts 从该服务采集。
    未实现的设置一律标为不支持而不是忽略（否则分数不再对应任务条件）：compose 中未实现的键、
-   复用 compose 环境的 separate verifier、`allowlist` 网络、非 linux、`gpu_types`/`tpu`、`mcp_servers`、`skills_dir`、`healthcheck`、`[agent]`/`[verifier]`
-   `user`、`[[verifier.collect]]` 的 `user`、`[[steps]]`、`${VAR}` 变量模板；Harbor 也忽略的未知字段照样忽略。
+   复用 compose 环境的 separate verifier、`allowlist` 网络（登记 `-c allowlistNetwork=public` 时按公网运行并记为偏差）、非 linux、`gpu_types`/`tpu`、`mcp_servers`、`skills_dir`、`healthcheck`、`[agent]`/`[verifier]`
+   `user`、`[[verifier.collect]]` 的 `user`、`[[steps]]`、没有默认值的 `${VAR}` 变量模板（整值 `${VAR:-d}` 取默认值，
+   记为偏差，因为 Harbor 读宿主环境）；Harbor 也忽略的未知字段照样忽略。允许的偏差写入任务 tag `deviations`，
+   并作为 `deviation: …` issue 记在每个 trial 上。
    指标：主指标 `resolved`（reward ≥ 1 的 trial，%，即 Terminal-Bench 的 resolution rate），`score` 标为 Reward（平均 reward）。
 2. **原生包装**（`bench/asi.ts`，ASI-Bench seed31415）：solve Run 以 **process 后端**运行
    `config.python -m ai4sci_bench.cli run`（单实例、单 prompt level，`--output-dir $ORBIT_OUTPUT/native`）；Agent 方法走
@@ -911,10 +917,10 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | --- | --- | --- |
 | P1 Agent 注册表 | 已完成；bench 契约断点已修复（R1） | §6；codex、claude-code 与容器内安装的 dsh 经真实 bench trial 验证 |
 | P2 样本身份与官方聚合 | 已实现：failure / episode、OfficialRule 与官方值、报告修订；attempt/retry 计数与批量 Run 后置 | 契约与统计测试；fixture adapter 真实 job 与重新评分验证 |
-| P3 两个小而完整的接入 | 扩展 BrowserGym 全套；一个保持原条件的 EFE CPU 任务（先列兼容清单） | 准备、检查、执行、评分、查看、取消与清理全部走通；偏差逐项记录 |
+| P3 两个小而完整的接入 | 已完成：MiniWoB++ 全量 125；EFE MetaWorld+ standard（compose 卷、restart、偏差登记） | empty 125/125；EFE oracle 1 / empty 0 |
 | P4 Policy 路线 | 按角色分配、service GPU、gang lease、PolicySpec；vla-eval 固定任务/episode 集合（`--no-docker` 于 main） | 原版指标、预算与故障行为对齐；policy + sim 无超卖 |
-| P5 扩大覆盖 | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
-| P6 CLI Agent 桥 | computer-use 工具（CLI + MCP）、EFE 客户端集成、能力检查 | Claude Code 在 MiniWoB / OSWorld 子集与 EFE CPU 任务跑通并有统一轨迹 |
+| P5 扩大覆盖（adapter 部分由并行线 A，见 tasks/20261104-p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
+| P6 CLI Agent 桥（并行线 B，见 tasks/20261104-p6） | computer-use 工具（CLI + MCP）、EFE 客户端集成、能力检查 | Claude Code 在 MiniWoB / OSWorld 子集与 EFE CPU 任务跑通并有统一轨迹 |
 | P7 规模优化 | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |
 

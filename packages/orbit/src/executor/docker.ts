@@ -84,6 +84,13 @@ export interface ContainerSpec {
   capDrop?: string[];
   securityOpt?: string[];
   pidsLimit?: number;
+  /** Named volumes (already created) mounted into the container. */
+  volumes?: { name: string; target: string; mode: "ro" | "rw" }[];
+  /** Docker restart policy, e.g. `on-failure:6`. */
+  restart?: string;
+  /** Share the host's PID / cgroup namespace. */
+  hostPid?: boolean;
+  hostCgroup?: boolean;
 }
 
 export interface ContainerStatus {
@@ -127,6 +134,16 @@ export function runArgs(s: ContainerSpec): string[] {
       ].join(","),
     );
   }
+  for (const v of s.volumes ?? [])
+    args.push(
+      "--mount",
+      [
+        "type=volume",
+        csvField(`source=${v.name}`),
+        csvField(`target=${v.target}`),
+        ...(v.mode === "ro" ? ["readonly"] : []),
+      ].join(","),
+    );
   for (const [k, v] of Object.entries(s.env)) args.push("-e", `${k}=${v}`);
   if (s.envFile) args.push("--env-file", s.envFile);
   if (s.shmGB) args.push("--shm-size", `${Math.ceil(s.shmGB * 1024)}m`);
@@ -154,6 +171,9 @@ export function runArgs(s: ContainerSpec): string[] {
   for (const c of s.capDrop ?? []) args.push("--cap-drop", c);
   for (const o of s.securityOpt ?? []) args.push("--security-opt", o);
   if (s.pidsLimit) args.push("--pids-limit", String(s.pidsLimit));
+  if (s.restart && s.restart !== "no") args.push("--restart", s.restart);
+  if (s.hostPid) args.push("--pid", "host");
+  if (s.hostCgroup) args.push("--cgroupns", "host");
   if (s.user) args.push("--user", s.user);
   if (s.workdir) args.push("-w", s.workdir);
   args.push(s.image, ...s.command);
@@ -506,6 +526,31 @@ export async function removeNetwork(name: string): Promise<boolean> {
   const r = await docker(["network", "rm", name]);
   if (r.code === 0) return true;
   return /not found|no such network/i.test(r.stderr);
+}
+
+/** Create a labelled named volume; returns an error line or null. */
+export async function createVolume(
+  name: string,
+  labels: Record<string, string>,
+): Promise<string | null> {
+  const args = ["volume", "create"];
+  for (const [k, v] of Object.entries(labels)) args.push("--label", `${k}=${v}`);
+  const r = await docker([...args, name]);
+  return r.code === 0 ? null : (r.stderr.trim().split("\n")[0] ?? `exit ${r.code}`);
+}
+
+/** Names of volumes with this label, or null when docker fails. */
+export async function volumesWithLabel(label: string, value: string): Promise<string[] | null> {
+  const r = await docker(["volume", "ls", "-q", "--filter", `label=${label}=${value}`]);
+  if (r.code !== 0) return null;
+  return r.stdout.split("\n").filter(Boolean);
+}
+
+/** Remove a volume; resolves true when it is gone. */
+export async function removeVolume(name: string): Promise<boolean> {
+  const r = await docker(["volume", "rm", name]);
+  if (r.code === 0) return true;
+  return /no such volume|not found/i.test(r.stderr);
 }
 
 /** Ids of containers (running or not) with this label. */

@@ -49,6 +49,10 @@ export async function startServices(
     images.set(s.name, await ctx.serviceImage(run, dirs, s));
   }
   const labels = { [docker.LABEL_PARENT]: id, [docker.LABEL_HOME]: ctx.homeLabel };
+  for (const v of run.spec.volumes) {
+    const err = await docker.createVolume(volumeName(id, v), labels);
+    if (err) throw new Error(`volume ${v}: ${err}`);
+  }
   for (const n of ctx.networkNames(run)) {
     const err = await docker.createNetwork(n.name, n.internal, labels);
     if (err) throw new Error(`network ${n.short}: ${err}`);
@@ -150,13 +154,25 @@ export function serviceContainer(
     gpuMode: ctx.gpuMode,
     cpus: s.cpus ?? null,
     memGB: s.memGB ?? null,
-    mounts: [],
+    mounts: s.binds.map((b) => ({ source: b.source, target: b.target, mode: b.mode })),
+    volumes: s.volumes.map((v) => ({
+      name: volumeName(run.id, v.volume),
+      target: v.target,
+      mode: v.mode,
+    })),
     env: s.env,
     workdir: s.workdir ?? null,
-    network: "bridge",
-    networks: nets
-      .filter((n) => s.networks.includes(n.short))
-      .map((n) => ({ name: n.name, aliases: [s.name] })),
+    network: s.noNetwork ? "none" : "bridge",
+    ...(s.noNetwork
+      ? {}
+      : {
+          networks: nets
+            .filter((n) => s.networks.includes(n.short))
+            .map((n) => ({ name: n.name, aliases: [s.name] })),
+        }),
+    ...(s.restart ? { restart: s.restart } : {}),
+    ...(s.hostPid ? { hostPid: true } : {}),
+    ...(s.hostCgroup ? { hostCgroup: true } : {}),
     user: null,
     init: s.init,
     shm: false,
@@ -225,11 +241,18 @@ export async function cleanupServices(ctx: Context, run: Run): Promise<boolean> 
   const nets = await docker.networksWithLabel(docker.LABEL_PARENT, run.id);
   if (nets === null) return false;
   const gone = await Promise.all(nets.map((n) => docker.removeNetwork(n)));
-  if (children.length + nets.length > 0)
+  // Volumes go last: the run's own container (removed before this) may still have used them.
+  const vols = await docker.volumesWithLabel(docker.LABEL_PARENT, run.id);
+  if (vols === null) return false;
+  const volsGone = await Promise.all(vols.map((v) => docker.removeVolume(v)));
+  if (children.length + nets.length + vols.length > 0)
     ctx.store.addEvent(
       run.id,
       "cleanup",
-      `removed ${children.length} service container(s) and ${nets.length} network(s)`,
+      `removed ${children.length} service container(s), ${nets.length} network(s) and ${vols.length} volume(s)`,
     );
-  return gone.every(Boolean);
+  return gone.every(Boolean) && volsGone.every(Boolean);
 }
+
+/** Docker name of a run's volume. */
+export const volumeName = (runId: string, volume: string) => `orbit-${runId}-${volume}`;
