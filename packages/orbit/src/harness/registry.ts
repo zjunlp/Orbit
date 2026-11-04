@@ -228,6 +228,12 @@ export class AgentRegistry {
       throw new AgentError(`${parsed.name} is a reserved method kind, not an Agent name`);
     const problem = definitionProblem(parsed);
     if (problem) throw new AgentError(problem);
+    const home = parsed.auth?.home;
+    if (
+      home !== undefined &&
+      (!/^\/orbit\/agent\/[^/]/.test(home) || home.split("/").includes(".."))
+    )
+      throw new AgentError(`${parsed.name}: auth.home must be a directory below /orbit/agent`);
     const agents = [...this.user().filter((a) => a.name !== parsed.name), parsed].sort((a, b) =>
       a.name.localeCompare(b.name),
     );
@@ -309,11 +315,26 @@ export function builtinRegistry(): AgentRegistry {
 export function renderCommand(
   def: AgentDefinition,
   phase: "run" | "resume",
-  vars: { instruction: string; model?: string; effort?: string; session?: string; home: string },
+  vars: {
+    instruction: string;
+    model?: string;
+    effort?: string;
+    session?: string;
+    home: string;
+    mcp?: boolean;
+  },
 ): string[] {
   const tokens = phase === "resume" ? def.command.resume : def.command.run;
   if (!tokens) throw new AgentError(`${def.name} cannot continue a session`);
-  const argv = renderTemplate(tokens, {
+  const mcp = def.command.mcp;
+  const configured =
+    vars.mcp && mcp.kind === "claude-json"
+      ? tokens.flatMap((t) =>
+          // Claude's variadic config option otherwise consumes the following instruction.
+          t.includes("{instruction}") ? [`${mcp.flag}=${vars.home}/orbit-mcp.json`, t] : [t],
+        )
+      : tokens;
+  const argv = renderTemplate(configured, {
     instruction: vars.instruction,
     model: vars.model,
     effort: vars.effort,

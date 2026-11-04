@@ -10,6 +10,7 @@
 需要已部署网站且共享后端状态的 BrowserGym 套件（WebArena、WebArena Verified、VisualWebArena、WorkArena、
 AssistantBench）登记时用 `-c suite=<name>` 会被明确拒绝：任务之间会通过共享网站相互影响，而 Orbit 还没有共享后端的
 独占调度（design §9.6 第 5 条）。不在改变条件的情况下运行它们。
+GUI episode、HTTP 幂等和证据签名由 [共享服务](../../tools/orbit-gui-service/README.md) 管理；BrowserGym 后端只负责原生环境动作和观测。旧 BrowserGym 证据格式与 rescore 保持兼容。
 方法支持 `external`、`empty` 和任意已注册的 CLI Agent（`cli` 能力声明）；没有参考 oracle。CLI 的可用性还取决于镜像的安装工具链、模型连接与 Agent 的图片读取能力。
 
 ## 准备与校准
@@ -24,7 +25,7 @@ ORBIT_GUI_ADAPTER="$(pwd)/examples/bench-adapters/browsergym"
 ORBIT_MINIWOB_DIR=/path/to/new/miniwob-plusplus
 git clone https://github.com/Farama-Foundation/miniwob-plusplus.git "$ORBIT_MINIWOB_DIR"
 git -C "$ORBIT_MINIWOB_DIR" checkout --detach 7fd85d71a4b60325c6585396ec4f48377d049838
-docker build -t orbit-browsergym:0.14.3-2 "$ORBIT_GUI_ADAPTER"
+docker build -t orbit-browsergym:0.14.3-3 "$ORBIT_GUI_ADAPTER"
 
 orbit bench add miniwob "$ORBIT_MINIWOB_DIR" \
   --adapter "$ORBIT_GUI_ADAPTER/adapter.py" \
@@ -184,3 +185,5 @@ Python 单测使用明确的文件 fixture，不代表浏览器验证。
 
 上游：[BrowserGym MiniWoB](https://github.com/ServiceNow/BrowserGym/tree/main/browsergym/miniwob) ·
 [固定 MiniWoB 源码](https://github.com/Farama-Foundation/miniwob-plusplus/tree/7fd85d71a4b60325c6585396ec4f48377d049838)。
+
+CLI solve 声明 `orbit-computer` MCP server，由 Orbit 的 Agent 配置渲染统一接线；镜像不再修改 Claude/Codex 配置。固定指令模板同时允许 CLI 与 MCP，实际 MCP 工具名记录在 trial review details 的 `mcpToolsUsed`。

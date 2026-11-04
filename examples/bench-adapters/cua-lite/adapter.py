@@ -1,6 +1,7 @@
 #!/usr/bin/env -S python3 -B
 """Pinned CUA-Lite native browser environments, one episode per Orbit trial."""
 import json
+from importlib import import_module
 import os
 from pathlib import Path
 import re
@@ -12,6 +13,15 @@ from evidence import COMMIT, MINIWOB_COMMIT, read, validate, write
 from web_suites import ONLINE_BUILD_VERSIONS, ONLINE_SOURCE_LAYOUT, WEB_SUITES, suite_for
 
 HERE = Path(__file__).resolve().parent
+sys.path.append(str(HERE.parents[1] / 'tools'))
+gui_adapter = import_module('orbit-gui-service.adapter')
+gui_evidence = import_module('orbit-gui-service.evidence')
+CLI_TASKS = {'click-test', 'click-button', 'click-dialog', 'enter-text', 'choose-list', 'click-checkboxes'}
+
+
+def is_cli(req):
+    return req['trial']['method']['agent'] not in ('empty', 'external', 'oracle', 'policy')
+
 TASKS = set(read(HERE / 'miniwob_tasks.json')['tasks'])
 CONFIG = {'image', 'miniwob', 'maxSteps', 'webVoyagerMaxSteps', 'onlineMind2WebMaxSteps', 'agentDir',
           'webVoyagerImage', 'onlineMind2WebImage'}
@@ -116,12 +126,16 @@ def tasks(req):
                 reason += '; /dev/kvm is not readable/writable'
         rows.append({'id': f'suite:{suite}', 'title': f'{suite} (suite availability, not an episode)',
                      'supported': False, 'reason': reason, 'tags': {'suite': suite, 'rowKind': 'suite'}})
-    return {'tasks': rows, 'capabilities': {'kind': 'browser', 'methods': ['external', 'empty'],
+    return {'tasks': rows, 'capabilities': {'kind': 'browser', 'methods': ['external', 'empty', 'cli'], 'requires': ['gui'],
         'scoreKind': 'binary',
         'rescore': 'none' if any(c.get(s['image']) for s in WEB_SUITES.values()) else 'evidence',
         'conditions': {
+            'CLI instructions': gui_adapter.CLI_TEMPLATE,
+            'CLI route': 'CLI Agent via Orbit GUI service; observations are screenshots only',
+            'CLI subset': ', '.join(sorted(CLI_TASKS)),
+            'CLI web suites': 'Unsupported for WebVoyager / Online-Mind2Web; external and empty unchanged',
             'CUA-Lite source': COMMIT, 'BrowserGym': '0.14.3', 'MiniWoB source': MINIWOB_COMMIT,
-            'Execution': 'One native environment/sample per trial; no rollout queue, retries or result-directory resume',
+            'Execution': 'One native environment episode per trial; no rollout queue, retries or result-directory resume',
             'Observation': 'Original screenshot-first CUA-Lite defaults, including cursor overlay; no DOM/a11y override',
             'Actions': 'Original canonical Lite tool calls; normalized coordinates [0,1000]',
             'Step limit': str(steps), 'Native MiniWoB timeout': 'CUA-Lite default 30 seconds (upstream page default is 5 seconds)', 'Seed': 'Orbit trial seed forwarded to native environment; live websites are not seeded',
@@ -148,6 +162,8 @@ def solve(req):
     t, m = req['trial'], req['trial']['method']
     suite = suite_for(t['task'])
     web = WEB_SUITES.get(suite)
+    if is_cli(req) and (web or t['task'].split('@', 1)[-1] not in CLI_TASKS):
+        raise ValueError('CLI unsupported: only the calibrated CUA-Lite MiniWoB subset is enabled; WebVoyager / Online-Mind2Web need a separate bridge calibration')
     mini = None if web else miniwob(c)
     unavailable = readiness(c)
     if unavailable:
@@ -165,9 +181,9 @@ def solve(req):
         raise ValueError('Only registered MiniWoB or reviewed web episodes are supported')
     if t.get('options') or t.get('hostNetwork'):
         raise ValueError('Trial options and host networking are not supported')
-    if m['agent'] not in ('empty', 'external'):
-        raise ValueError('Use external or empty; there is no generic MiniWoB oracle')
-    if m.get('effort'):
+    if m['agent'] in ('oracle', 'policy'):
+        raise ValueError('Use CLI, external or empty; there is no generic MiniWoB oracle')
+    if not is_cli(req) and m.get('effort'):
         raise ValueError('CUA-Lite does not define a common effort setting; use native method config')
     if m['agent'] == 'external' and not re.fullmatch(r'[A-Za-z0-9_@.:-]+', m.get('entrypoint', '')):
         raise ValueError('Use a native agent id or module:factory entrypoint')
@@ -177,6 +193,8 @@ def solve(req):
         raise ValueError('This adapter supports CPU browser environments and remote models only')
     stage = Path(t['staging'])
     stage.mkdir(parents=True, exist_ok=True)
+    if is_cli(req):
+        return cli_solve(req, root, mini, c, resources, stage, steps)
     for file in ('runtime.py', 'evidence.py', 'web_suites.py', 'judge.py'):
         shutil.copyfile(HERE / file, stage / file)
     write(stage / 'plan.json', {'schema': 1, 'commit': COMMIT, 'miniwob_commit': MINIWOB_COMMIT,
@@ -215,7 +233,58 @@ def solve(req):
     return {'spec': spec}
 
 
+def cli_solve(req, root, mini, config, resources, stage, steps):
+    trial = req['trial']
+    shutil.copyfile(HERE / 'server.py', stage / 'server.py')
+    gui_adapter.stage_shared(stage)
+    plan = {'schema': 1, 'backend': 'cua-lite', 'browsergym_version': '0.14.3',
+        'commit': COMMIT, 'miniwob_commit': MINIWOB_COMMIT, 'action_set': 'canonical',
+        'task': trial['task'], 'seed': trial['seed'], 'method': trial['method'], 'max_steps': steps}
+    return gui_adapter.cli_spec(trial, config.get('image', 'orbit-cua-lite:2af6926'), resources,
+        stage, plan, [{'source': str(root / 'lite'), 'target': '/upstream/lite', 'mode': 'ro'},
+                      {'source': str(root / 'pyproject.toml'), 'target': '/upstream/pyproject.toml', 'mode': 'ro'},
+                      {'source': str(mini / 'miniwob/html'), 'target': '/miniwob', 'mode': 'ro'}],
+        {'PYTHONPATH': '/upstream', 'BROWSERGYM_CACHE': '/tmp/lite-browsergym',
+         'MINIWOB_PORT': '7560', 'MINIWOB_URL': 'http://127.0.0.1:7560/miniwob/'},
+        gui_adapter.instruction('CUA-Lite MiniWoB', trial['task']))
+
+
+def cli_score(req):
+    prefix = 'services/gui/evidence/'
+    output = Path(req['solve']['output']) / prefix
+    review = {'files': [
+        {'label': 'GUI trajectory', 'phase': 'solve', 'path': prefix + 'trajectory-review.json', 'kind': 'trajectory', 'fallback': 'json'},
+        {'label': 'Native observations/actions', 'phase': 'solve', 'path': prefix + 'trajectory.jsonl', 'kind': 'text'},
+        {'label': 'Native result', 'phase': 'solve', 'path': prefix + 'result.json', 'kind': 'json'},
+        {'label': 'Evidence validation', 'phase': 'verify', 'path': 'validation.json', 'kind': 'json'}]}
+    try:
+        report = gui_evidence.validate(output, gui_adapter.trusted_public_key(req))
+        if report != read(Path(req['verify']['output']) / 'validation.json'):
+            raise ValueError('Verifier disagrees with signed service evidence')
+        plan, result = read(output / 'plan.json'), read(output / 'result.json')
+        if any(plan[k] != req['trial'][k] for k in ('task', 'seed', 'method')):
+            raise ValueError('Evidence belongs to another trial')
+        final = json.loads((output / 'trajectory.jsonl').read_text().splitlines()[-1])
+        review['details'] = {'environment': 'CUA-Lite ' + COMMIT, 'observation': 'screenshot',
+            'action_set': 'canonical tool calls, normalized [0,1000]', 'steps': str(report['steps']),
+            'evaluation': 'Native reward; signed service evidence verification'}
+        return {'score': report['reward'], 'maxScore': 1, 'invalid': False, 'issues': [],
+            'review': review, 'episode': {'steps': report['steps'], 'terminated': final['terminated'],
+                'truncated': final['truncated'], 'endedBy': result['stop_reason'],
+                'successSignal': 'original CUA-Lite terminal reward'}}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return {'score': None, 'maxScore': 1, 'invalid': True, 'failure': 'scorer_error',
+            'issues': [f'CUA-Lite service evidence: {error}'], 'review': review}
+
+
 def verify(req):
+    if is_cli(req):
+        return {'spec': {'image': req['benchmark']['config'].get('image', 'orbit-cua-lite:2af6926'),
+            'command': ['python', '/validator/evidence.py', '/solve'], 'network': False,
+            'env': {gui_evidence.PUBLIC_KEY_ENV: gui_adapter.trusted_public_key(req)},
+            'resources': {'cpus': 1, 'memGB': 1, 'gpus': 0}, 'timeoutMin': 1,
+            'mounts': [{'source': str(gui_adapter.HERE / 'evidence.py'), 'target': '/validator/evidence.py', 'mode': 'ro'},
+                       {'source': str(Path(req['solve']['output']) / 'services/gui/evidence'), 'target': '/solve', 'mode': 'ro'}]}}
     return {'spec': {'image': req['benchmark']['config'].get('image', 'orbit-cua-lite:2af6926'),
         'command': ['python', '/validator/evidence.py', '/solve'], 'network': False,
         'resources': {'cpus': 1, 'memGB': 1, 'gpus': 0}, 'timeoutMin': 1,
@@ -224,6 +293,8 @@ def verify(req):
 
 
 def score(req):
+    if is_cli(req):
+        return cli_score(req)
     review = {'files': [{'label': 'Native observations/actions', 'phase': 'solve', 'path': 'events.jsonl', 'kind': 'text'},
         {'label': 'Native result', 'phase': 'solve', 'path': 'result.json', 'kind': 'json'},
         {'label': 'Evidence validation', 'phase': 'verify', 'path': 'validation.json', 'kind': 'json'}]}

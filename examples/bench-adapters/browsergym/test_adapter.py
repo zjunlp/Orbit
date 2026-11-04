@@ -143,6 +143,7 @@ class AdapterTests(unittest.TestCase):
         self.req["trial"]["method"] = {"name": "cli", "agent": "codex", "auth": "fixture"}
         spec, plan = self.plan()
         self.assertIn("agentTask", spec)
+        self.assertEqual(spec["agentTask"]["tools"], [{"name": "orbit-computer", "command": ["orbit-computer", "mcp"]}])
         self.assertNotIn("command", spec)
         self.assertIn("observe", spec["agentTask"]["instruction"])
         self.assertEqual(plan["review_prefix"], "services/gui/evidence/")

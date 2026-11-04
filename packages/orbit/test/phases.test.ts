@@ -377,3 +377,19 @@ it("leaves nothing the run planted at a destination whose copy failed", async ()
     rmSync(output, { recursive: true, force: true });
   }
 });
+
+it("replaces an output root symlink before collecting trusted service evidence", async () => {
+  const root = mkdtempSync(join(tmpdir(), "orbit-collect-root-"));
+  const output = join(root, "output");
+  const outside = join(root, "outside");
+  mkdirSync(outside);
+  symlinkSync(outside, output);
+  try {
+    const dest = join(output, "services", "gui", "evidence");
+    expect(await copyCollected("c", "/evidence", dest, output)).toBeNull();
+    expect(readFileSync(dest, "utf8")).toBe("evidence");
+    expect(readdirSync(outside)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

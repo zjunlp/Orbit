@@ -50,8 +50,7 @@ export function solveVerdict(solve: Run): {
   return { verify: true };
 }
 
-export const shouldCheckAgentFailure = (solve: Run): boolean =>
-  solveVerdict(solve).verify && !solve.spec.after;
+export const shouldCheckAgentFailure = (solve: Run): boolean => solveVerdict(solve).verify;
 
 export const agentFailureIssue = (failure: AgentFailure): string =>
   `Agent stopped: ${failure.kind} (${failure.message})`;

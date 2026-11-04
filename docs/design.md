@@ -372,6 +372,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   `{baseUrl}` / `{home}`）、`baseUrlEnv`、`modelEnv`、`home` + `homeEnv`（CLI 自己的状态目录，位于 `/orbit/agent/<name>`）。
 - `command`：`run` 与可选 `resume` 的 argv 模板（不是 shell 字符串），占位符 `{instruction}` `{model}` `{effort}`
   `{session}` `{home}`，可选参数写成 `{when:model} … {end}` 组；`transcript` 给出 CLI 自己的会话轨迹 glob 与格式。
+- `command.mcp`（默认 `{kind:"none"}`）声明 MCP 接线：`claude-json` 的 flag 指向 Agent home 的 `orbit-mcp.json`；`codex-toml` 向该 home 的 `config.toml` 增加 server 表。工具声明通过 trial 私有 bundle 随原启动流程写入，保留已有配置、拒绝同名 server；未接线但声明 MCP 能力的定义在 `agent show` 显示 `MCP declared, not wired`。
 - `capabilities`：`oneShot` / `multiTurn` / `mcp` / `gui`，在提交 bench trial 前与 benchmark 的要求比对。
 - `verified`：该定义在本机真实跑出过预期结果。内置的 codex 与 claude-code 为 true，其余为 false，直到
   `orbit agent test` 验证。
@@ -488,7 +489,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   非 bench Run 的事件在查询 trial 前跳过。trial 完成时通过未完成 trial 的部分索引判断 job 是否完成；job 列表用一次
   SQL 聚合查询取得各方法计数和有效 trial 的精简指标字段，再用共享指标函数计算逐任务均值与跨任务统计，
   保留原来的浮点累加顺序与响应形状，不加载或 zod 解析完整 trial。
-  取消先保存 cancelled job 并取消关联 Run，再在后台串行推进 trial；HTTP 不等待适配器评分，CLI / Web 仍显示 job 状态。
+  取消先保存 cancelled job 并取消关联 Run，再在后台串行推进 trial；HTTP 不等待适配器评分，CLI / Web 仍显示 job 状态。已持久化 cancel 意图的 Run 不重复取消，避免更新事件反复触发同一请求。
 - **重新评分**（`POST /bench/jobs/:id/rescore`，`orbit bench rescore <job> [-t task] [-m method] [--trial id]`，
   Web job 页与 trial 页的 Rescore）：不重跑 Agent。只对已结束 job 中已完成、solve 输出仍在本机且需要 verify 的
   trial；当前 `{verifyRunId, outcome, endedAt}` 移入 `Trial.history`，trial 回到 `solving`（solve Run 不变），
@@ -503,13 +504,13 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 | solve 未启动（镜像构建、租约、认证失败） | invalid（环境问题，不是方法的结果） |
 | solve 失败或超时 | 照常 verify（方法的结果；超时记入 issues） |
 | solve 因内存不足被杀（`usage.oomKilled`，资源申请的问题，不是方法的结果；仍照常 verify 并保留分数） | invalid |
-| solve 内的 Agent 最后一轮以认证、额度、模型不可用或连不上模型结束，或最后一轮未结束而 Run 日志停在 Codex 重连模型（如超时被停）（`sessions.runAgentFailure` 读 Run 的 Agent home 与日志尾；`harness.agentErrorKind` 先看结构化错误码——Codex `codex_error_info` 及其 HTTP 状态码、Claude Code 的 `error`——再看文本；对所有适配器生效）：不提交 verify，记 `verify skipped` 并保留 OOM、服务失败等问题；显式 rescore 时照常评分并保留分数 | invalid |
+| solve 内的 Agent 从未产生成功模型回复，且最后一轮以明确的认证、额度、模型不可用或连接错误结束，或未结束但可信 CLI 日志尾部明确停在模型重连/认证刷新拒绝（`sessions.runAgentFailure` 读 Run 的 Agent home 与日志尾；`harness.agentErrorKind` 先看结构化错误码——Codex `codex_error_info` 及其 HTTP 状态码、Claude Code 的 `error`——再看文本；对所有适配器生效）：不提交 verify，记 `verify skipped` 并保留 OOM、服务失败等问题；显式 rescore 时照常评分并保留分数 | invalid |
 | verify 未启动、超时、内存不足，没有分数，或适配器判为无效（无 reward、scorer 内部错误、judge 不可用、模型不可用且 0 分） | invalid |
 | 其余 | valid |
 
   只有 `valid` 的分数进入均分；无效或未知单独列出，不静默计入。清理状态按 failed > pending > done 汇总 Run 的 `cleanup`。
-  Agent 失败检查在推进、评分和归并时共用同一条件：`solveVerdict(run).verify` 且无 after 阶段，包括正常退出的 solve；
-  已恢复或正常完成的最后一轮不算失败，after 阶段按 verifier 自身结果评分。
+  Agent 失败检查在推进、评分和归并时共用同一条件：`solveVerdict(run).verify`，包括正常退出与 after 阶段的 solve；
+  成功模型回复后的失败仍正常评分；用户文本、工具输出、非零退出或没有 GUI 动作都不能单独作为模型故障证据。after 已有分数保留，评测有效性独立判定。错误摘要先脱敏再截断。
   BenchService 启动时对 done 且 outcome.cleanup 为 pending 的 trial 重算其全部关联 Run（含评分历史）的清理状态，
   逐条记录修复的 trial ID；重复启动不再写入已修复结果。后续 Run 通知也使用同一汇总规则。
 - **重试归并**：`POST /bench/jobs/:id/consolidate` / `orbit bench consolidate <job> [sources...]`
@@ -564,7 +565,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
-- `capabilities` 描述环境类别、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`，Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
+- `capabilities` 描述环境类别、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - `contracts/trajectory.ts`：`GuiStepContext`（step 的 `actionId` / `at`，用于把 Agent 会话中的工具调用与 GUI step 精确对齐，不按时钟猜）与
   `EpisodeTrajectory`（版本 1、`kind: "episode"`：多相机帧/视频、动作与本体感知曲线、奖励；只含保存的媒体和数值，不含可执行动作）。
@@ -572,9 +573,9 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 - CLI Agent 驱动 GUI 时，环境运行在可信 service 中，Agent 只经 `orbit-computer`（CLI / MCP）拿观测、发动作；证据只由 service 写出并在
   收集时进入 `services/<name>/`。service 每个 trial 生成 Ed25519 密钥，私钥只在 service 内，公钥写进 solve Run 的 service env；
   verify 与 score 用 Run 记录里的公钥核验签名，伪造或缺失签名记 `scorer_error`（无效）。daemon 采集时只写入真实目录（不跟随运行
-  预置的符号链接），复制失败时目标处不留运行自己写的内容。
+  预置的符号链接，含 output 根目录），复制失败时目标处不留运行自己写的内容。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
-  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction }` 二选一。Agent 方法（codex / claude-code）的
+  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction, tools? }` 二选一。`tools` 最多 8 个 stdio MCP server（`name`、非空 `command` argv、可选 `env`），只交给 Agent 启动，不能覆盖 Orbit 管理的 Run 字段；旧 adapter 无需增加字段。Agent 方法（codex / claude-code）的
   solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染），并设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
   `command`；external 也给 adapter 自己的 `command`，Orbit 只加方法的 solve `passEnv`，不注入 CLI 或强改网络。
@@ -830,6 +831,11 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
 | Policy × 仿真 | 原生协议直连（vla-eval HELLO/EPISODE_START/OBS/ACTION，sync/live） | Orbit 不在每步路径上，避免延迟 |
 | VLM agent × GUI | hub 原生 rollout | 先对齐官方分数 |
 
+已实现的 GUI 桥只有一个 `examples/tools/orbit-gui-service`：服务持有 episode、动作 id 去重、预算、finish 与签名；
+backend 只实现 `spec/reset/step/close`。BrowserGym 保留原高层动作语言，CUA-Lite MiniWoB 使用原生 canonical tool call 与截图权限；
+WebVoyager / Online-Mind2Web 的 CLI 路径仍明确拒绝。`orbit-computer` 可经 CLI 或 MCP 使用，实际 MCP 工具名来自会话并显示在 review details；
+签名证据布局与旧 BrowserGym 重评兼容。服务只连接 Run 内部 gui 网络，模型连接仍由 main 使用。
+
 桥的协议规则（来自 CUA-Lite / EFE）：step 非幂等，不盲目重发。协议支持操作查询（如 EFE `eai-standard/2.4` 的 operation id）时
 按 id 查询；不支持时（如 RoboTwin 样例的 2.1）记录"动作结果未知"，终止本次尝试并确认清理；重建实例后以新尝试身份继续，
 不续接原 episode，且不额外授予重试次数。容量不足用可重试错误（503 + Retry-After）与真实失败区分。
@@ -901,6 +907,12 @@ NVIDIA count + capabilities:[gpu] reservation 与 x-gpu-memory-gb；其他 deplo
   MobileWorld `traj.json`、AgentLab step、OSWorld `traj.jsonl`、BrowserGym JSONL。
 - 完整度标注：会话完整 / 只有环境记录 / 只有原生日志 / 截断；现有 `GuiTrajectory` 作为 GUI 视图的输入之一。
 
+P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE MetaWorld+ standard/2.1 的 journal、已执行动作矩阵、最终奖励与 render 视频，
+产出既有 `EpisodeTrajectory`。daemon 在评分后写 solve 的 `orbit-trajectory.json` 并追加 episode review；导入失败只加 issue，不改分数或有效性。
+原始 NumPy 数据仍保留；预览抽样保留调用边界，未保存的 proprioception 不补造。新增可选 `completeness`（complete/environment-only/truncated）、
+sample 的 `sessionMessageIndexes`（引用同一 Run 会话）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
+Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目录归还 daemon 用户，再运行 adapter hooks，保证会话可读与凭据清理；不改变模拟器评分。
+
 ### 9.9 Web：按场景的视图
 
 - **作业中心**（参考 MobileWorld eval-server，但状态来自 daemon）：选 bench 家族 → 任务子集 → Agent/Policy × seed，显示资源预估与
@@ -944,7 +956,7 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | P3 两个小而完整的接入 | 已完成：MiniWoB++ 全量 125；EFE MetaWorld+ standard（compose 卷、restart、偏差登记） | empty 125/125；EFE oracle 1 / empty 0 |
 | P4 Policy 路线 | 已完成：`Lease.roles` 按角色分配、service GPU 与 `entrypoint`、vla-eval 适配器（LIBERO 真实任务） | 角色独占卡、整组排队；LIBERO empty 0 分 valid |
 | P5 扩大覆盖（核心能力与 GUI hub 适配器已完成；EFE GPU 原版校准、Arena 未做；见 tasks/20261104-p5-core、p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
-| P6 CLI Agent 桥（子任务 B 已完成 BrowserGym 桥与轨迹视图；主线见 tasks/20261104-p6-mainline） | computer-use 工具（CLI + MCP）、EFE 客户端集成、能力检查 | Claude Code 在 MiniWoB / OSWorld 子集与 EFE CPU 任务跑通并有统一轨迹 |
+| P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 按实际诊断保留能力限制；OSWorld 等 KVM 后端后置 |
 | P6.5 接入层（§9.14） | calibrate / coverage、L2 SDK、L1 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按层级接入成本达标；迁移前后校准一致 |
 | P7 规模优化 | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |

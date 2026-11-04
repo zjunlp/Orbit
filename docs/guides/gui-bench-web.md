@@ -39,12 +39,16 @@ adapter 可在 `review.files` 声明 `kind: "episode"`、`fallback: "json"`。�
 
 - `samples` 按严格递增的秒时间戳排列，包含动作/本体状态数组、reward、terminated/truncated，以及可选 late/stall。
   数组维度必须与 channel names 一致。
-- 每路 camera 选择时间戳图片列表或一个视频（可带 offsetSec）；移动统一时间轴会同步选择各路画面。当前文件 API 无视频 MIME/Range 支持，Web 对 MP4/WebM/Ogg 提供每个 episode 合计最多 64 MiB 的本地预览（按视频相机数量均分预算）；更大视频提示下载，不在内存中无限加载。
+- 每路 camera 选择时间戳图片列表或一个视频（可带 offsetSec 与 timeMap）；移动统一时间轴会同步选择各路画面。当前文件 API 无视频 MIME/Range 支持，Web 对 MP4/WebM/Ogg 提供每个 episode 合计最多 64 MiB 的本地预览（按视频相机数量均分预算）；更大视频提示下载，不在内存中无限加载。
 - action chunks 记录起止秒与可选标签；点击边界可跳转。动作/关节曲线使用 uPlot，悬停可选择对应时间。
 - producer/trust 与视频 live/render 来源如实显示，缺失时标为未记录。
 
-这是保存产物的复盘视图，不控制仿真、不恢复状态。当前由明确的测试 fixture 验证格式和视图；
-实际具身 adapter 需要按此索引产出媒体和数字样本后才能使用。
+EFE MetaWorld+ standard/2.1 的 Harbor trial 会在评分后自动生成 `orbit-trajectory.json`：原生 journal 调用边界、已执行动作曲线、最终 reward 和 render 视频。
+**Agent at this time** 显示按调用时间关联的会话；完整度标注会话完整、只有环境或记录截断。原版 sidecar 没有保存 proprioception 时不显示身体状态曲线。
+导入失败会显示 issue，分数仍由原版 verifier 决定。索引和媒体都是保存产物的复盘视图，不控制仿真、不恢复状态。
+
+CLI GUI 由共享服务承载，BrowserGym 使用原高层动作字符串，CUA-Lite MiniWoB 使用自己的 canonical JSON tool call；权限和时间限制在 Conditions 中显示。
+`agentTask.tools` 声明的 MCP 由 Orbit 自动接入支持的 Agent；Details 的 `mcpToolsUsed` 只列会话中真正调用过的 MCP 工具。
 
 ## Compare methods
 

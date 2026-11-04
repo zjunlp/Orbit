@@ -12,9 +12,12 @@ import type { AfterPhase, AfterStatus, RunPhase, RunSpec } from "../contracts/in
 import * as docker from "../executor/docker.ts";
 import { nowIso } from "../lib/ids.ts";
 import { writePrivateJson } from "../lib/private-json.ts";
+import { realDirs } from "../lib/safe-fs.ts";
 import { safeJoin } from "../records/index.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, sleep } from "./execution.ts";
+
+export { realDirs };
 
 type Context = Pick<
   RunContext,
@@ -524,23 +527,6 @@ export async function collectAfter(ctx: Context, id: string, containerId: string
       );
   }
   if (failures.length) throw new PhaseFailure(failures.join("; "));
-}
-
-/**
- * Make `dir` and every directory between `root` and it a real directory. The run's container can
- * write under its output, so a symlink or file it planted there is removed instead of followed out
- * of the output directory.
- */
-export function realDirs(root: string, dir: string): void {
-  const rel = relative(root, dir);
-  if (rel.startsWith("..")) throw new Error(`${dir} leaves ${root}`);
-  let at = root;
-  for (const part of rel ? rel.split(sep) : []) {
-    at = join(at, part);
-    const st = lstatSync(at, { throwIfNoEntry: false });
-    if (st && !st.isDirectory()) rmSync(at, { force: true });
-    if (!st?.isDirectory()) mkdirSync(at);
-  }
 }
 
 /**

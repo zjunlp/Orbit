@@ -5,15 +5,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 
-from episode import Episode
+from episode import shared
+Episode = shared.Episode
 import evidence
 from server import Bridge, RequestError
-
-
-class Screenshot:
-    shape = (120, 160, 3)
 
 
 class FakeEnvironment:
@@ -22,29 +18,20 @@ class FakeEnvironment:
         self.calls = 0
         self.crash = False
 
+    def reset(self):
+        return {"screenshot": b"explicit PNG fixture", "goal": "fixture goal", "last_action": "", "last_action_error": ""}
+
+    def spec(self):
+        return {"action_set": "coord", "action_description": "original fixture actions", "stop_action": "noop()"}
+
     def step(self, action):
         self.calls += 1
         if self.crash:
             raise RuntimeError("injected environment failure")
-        return ({"screenshot": Screenshot(), "goal": "fixture goal", "last_action": action,
-                 "last_action_error": ""}, 0, False, False, {"task_info": {"RAW_REWARD_GLOBAL": 0}})
+        return ({**self.reset(), "last_action": action}, 0, False, False, {"task_info": {"RAW_REWARD_GLOBAL": 0}})
 
     def close(self):
         self.events.append("environment")
-
-
-def capture_fixture(output, obs, action_set, step, action, reward, terminated, truncated, info, action_id=None):
-    path = f"screenshots/{step:04d}.png"
-    (output / path).write_bytes(b"explicit PNG fixture")
-    row = {"step": step, "goal": obs["goal"], "last_action": action or "",
-           "last_action_error": "", "action": action, "reward": reward,
-           "terminated": terminated, "truncated": truncated, "task_info": info["task_info"],
-           "screenshot": path}
-    if action_id:
-        row.update(action_id=action_id, at="2026-11-04T00:00:00+00:00")
-    with (output / "trajectory.jsonl").open("a") as stream:
-        stream.write(json.dumps(row) + "\n")
-    return row
 
 
 class ServerTests(unittest.TestCase):
@@ -56,20 +43,13 @@ class ServerTests(unittest.TestCase):
                      "method": {"name": "fixture", "agent": "codex"}, "max_steps": 3,
                      "action_set": "coord", "browsergym_version": evidence.BROWSERGYM_VERSION,
                      "miniwob_commit": evidence.MINIWOB_COMMIT}
-        self.patch = patch("episode.capture", side_effect=capture_fixture)
-        self.patch.start()
-        self.addCleanup(self.patch.stop)
 
     def episode(self, **plan):
         self.plan.update(plan)
         evidence.write(self.root / "plan.json", self.plan)
-        e = Episode(self.root / "plan.json", self.root / "out")
-        e.obs = {"screenshot": Screenshot(), "goal": "fixture goal"}
         self.events = []
-        e.env = FakeEnvironment(self.events)
-        e.actions = type("Actions", (), {"describe": lambda *_args, **_kwargs: "original fixture actions"})()
-        e.rows.append(capture_fixture(e.output, e.obs, "coord", 0, None, 0, False, False,
-                                      {"task_info": {"RAW_REWARD_GLOBAL": 0}}))
+        e = Episode(self.root / "plan.json", self.root / "out", FakeEnvironment(self.events))
+        e.start()
         return e
 
     def test_duplicate_id_returns_original_observation_without_repeating_step(self):
@@ -79,7 +59,7 @@ class ServerTests(unittest.TestCase):
         bridge.dispatch("POST", "/act", {"id": "two", "action": "noop()"})
         duplicate = bridge.dispatch("POST", "/act", {"id": "one", "action": "mouse_click(1, 2)"})
         self.assertEqual(first, duplicate)
-        self.assertEqual(e.env.calls, 2)
+        self.assertEqual(e.backend.calls, 2)
         with self.assertRaisesRegex(RequestError, "different action"):
             bridge.dispatch("POST", "/act", {"id": "one", "action": "noop()"})
 
@@ -100,7 +80,7 @@ class ServerTests(unittest.TestCase):
         bridge = Bridge(e)
         first = bridge.dispatch("POST", "/finish", {})
         self.assertEqual(bridge.dispatch("POST", "/finish", {}), first)
-        self.assertEqual(e.env.calls, 1)
+        self.assertEqual(e.backend.calls, 1)
         self.assertEqual(e.result["stop_reason"], "agent_stop")
         self.assertEqual(evidence.validate(e.output)["reward"], 0)
         self.assertNotIn("task_info", first)
@@ -118,15 +98,28 @@ class ServerTests(unittest.TestCase):
 
     def test_failed_action_is_not_retried_and_evidence_is_invalid(self):
         e = self.episode()
-        e.env.crash = True
+        e.backend.crash = True
         bridge = Bridge(e)
         for _ in range(2):
             with self.assertRaisesRegex(RequestError, "RuntimeError"):
                 bridge.dispatch("POST", "/act", {"id": "one", "action": "noop()"})
-        self.assertEqual(e.env.calls, 1)
+        self.assertEqual(e.backend.calls, 1)
         self.assertEqual(e.result["error_stage"], "environment_step")
         with self.assertRaisesRegex(ValueError, "did not complete"):
             evidence.validate(e.output)
+
+    def test_backend_request_error_does_not_end_or_consume_episode(self):
+        e = self.episode()
+        bridge = Bridge(e)
+        original = e.backend.step
+        e.backend.step = lambda action: (_ for _ in ()).throw(RequestError(400, "Bad canonical input"))
+        with self.assertRaisesRegex(RequestError, "Bad canonical input"):
+            bridge.dispatch("POST", "/act", {"id": "bad", "action": "malformed"})
+        self.assertFalse(e.finished)
+        self.assertEqual(e.result["steps"], 0)
+        e.backend.step = original
+        bridge.dispatch("POST", "/finish", {})
+        self.assertTrue(evidence.validate(e.output)["valid"])
 
     def test_service_evidence_paths_and_metadata_are_verified(self):
         e = self.episode(review_prefix="services/gui/evidence/")

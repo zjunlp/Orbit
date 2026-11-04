@@ -34,7 +34,8 @@ export function parseEpisode(text: string): EpisodeTrajectory {
     !Array.isArray(value.chunks) ||
     value.chunks.length > 100_000 ||
     !choice(value.producer, ["agent", "sidecar", "verifier", "monitor"]) ||
-    !choice(value.trust, ["trusted", "self-reported"])
+    !choice(value.trust, ["trusted", "self-reported"]) ||
+    !choice(value.completeness, ["complete", "environment-only", "truncated"])
   )
     throw new Error("Unsupported or incomplete episode index.");
   let previous = -1;
@@ -48,6 +49,12 @@ export function parseEpisode(text: string): EpisodeTrajectory {
       (sample.reward !== null && !number(sample.reward)) ||
       typeof sample.terminated !== "boolean" ||
       typeof sample.truncated !== "boolean" ||
+      (sample.sessionMessageIndexes !== undefined &&
+        (!Array.isArray(sample.sessionMessageIndexes) ||
+          sample.sessionMessageIndexes.length > 200 ||
+          sample.sessionMessageIndexes.some(
+            (index) => !Number.isSafeInteger(index) || index < 0,
+          ))) ||
       [sample.late, sample.stall].some((flag) => flag !== undefined && typeof flag !== "boolean")
     )
       throw new Error("Invalid episode sample, vector or timestamp.");
@@ -67,9 +74,29 @@ export function parseEpisode(text: string): EpisodeTrajectory {
       camera.video !== undefined &&
       (!object(camera.video) ||
         !safeTrajectoryPath(camera.video.path) ||
-        (camera.video.offsetSec !== undefined && !time(camera.video.offsetSec)))
+        (camera.video.offsetSec !== undefined && !time(camera.video.offsetSec)) ||
+        (camera.video.timeMap !== undefined && !Array.isArray(camera.video.timeMap)))
     )
       throw new Error("Unsafe episode video path or offset.");
+    if (object(camera.video) && camera.video.timeMap !== undefined) {
+      const map = camera.video.timeMap;
+      if (!Array.isArray(map) || !map.length || map.length > 100_000)
+        throw new Error("Invalid video time mapping.");
+      let previousTime = -1;
+      let previousVideoTime = -1;
+      for (const frame of map) {
+        if (
+          !object(frame) ||
+          !time(frame.time) ||
+          !time(frame.videoTime) ||
+          frame.time <= previousTime ||
+          frame.videoTime <= previousVideoTime
+        )
+          throw new Error("Invalid video time mapping.");
+        previousTime = frame.time;
+        previousVideoTime = frame.videoTime;
+      }
+    }
     if (camera.frames !== undefined) {
       if (!Array.isArray(camera.frames) || !camera.frames.length || camera.frames.length > 100_000)
         throw new Error("Invalid camera frames.");
@@ -107,4 +134,14 @@ export function sampleAt(trace: EpisodeTrajectory, at: number) {
     else high = middle - 1;
   }
   return low;
+}
+
+export function episodeVideoTime(
+  video: NonNullable<EpisodeTrajectory["cameras"][number]["video"]>,
+  at: number,
+): number {
+  return (
+    video.timeMap?.findLast((frame) => frame.time <= at)?.videoTime ??
+    Math.max(0, at - (video.offsetSec ?? 0))
+  );
 }

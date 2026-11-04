@@ -73,7 +73,8 @@ export async function finalize(
 export function finishAuth(ctx: Context, run: Run): void {
   const name = run.spec.auth as string;
   const entry = ctx.deps.auth?.get(name) ?? null;
-  const { refreshed } = finishHarness(entry, ctx.dirs(run.id).agent);
+  const def = entry ? (ctx.deps.agents?.get(entry.profile.harness) ?? null) : null;
+  const { refreshed } = finishHarness(entry, ctx.dirs(run.id).agent, def);
   if (refreshed) {
     ctx.deps.auth?.updateSecret(name, refreshed);
     ctx.store.addEvent(run.id, "auth", `refreshed login saved to profile ${name}`);

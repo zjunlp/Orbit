@@ -1,6 +1,6 @@
 # CUA-Lite adapter
 
-Experimental external adapter for CUA-Lite's original MiniWoB, WebHarbor/WebVoyager and Online-Mind2Web environments. One trial is one environment and one native `agent.sample(env)` call; there is no rollout service, hub queue, database, retry or directory resume.
+Experimental adapter for CUA-Lite's original MiniWoB, WebHarbor/WebVoyager and Online-Mind2Web environments. One trial is one native environment episode; external/empty methods call native `agent.sample(env)`, and CLI methods use the shared GUI service. There is no rollout service, hub queue, database, retry or directory resume.
 
 ## Preparation
 
@@ -38,6 +38,21 @@ orbit bench run cua-lite \
 ```
 
 MiniWoB uses live native terminal rewards. The two Web suites use the original terminal evaluator after policy exit, as described below. Missing/contradictory evidence and setup/step/model/judge failures are invalid, never valid zero. Review includes native events/results and a saved-frame GUI trajectory; if a native terminal action supplies no screenshot, the visual prefix stops without inventing a terminal frame. The complete terminal verdict remains in native events/results and, for Web suites, `judge-result.json`. MiniWoB offline verify/rescore checks identity and evidence hashes, not environment replay. Current Orbit refuses to rescore after-phase trials, so a registration configured with a Web backend declares `rescore=none`; keep a separate MiniWoB-only registration for its evidence rescore. External policy code is trusted; hashes are not an adversarial integrity boundary. No official aggregation is declared without denominator parity validation.
+
+## CLI agents on MiniWoB
+
+The `cli` method supports the calibrated tasks `browsergym.miniwob@click-test`, `click-button`, `click-dialog`, `enter-text`, `choose-list` and `click-checkboxes` (each uses the same `browsergym.miniwob@` prefix). Other MiniWoB tasks and both Web suites reject CLI with an explicit subset reason. Their existing external/empty paths are unchanged.
+
+```sh
+orbit bench run cua-lite -t browsergym.miniwob@click-test \
+  -m cli=claude-code,auth=<existing-profile>
+```
+
+The CLI path uses the [shared GUI service](../../tools/orbit-gui-service/README.md). The Agent receives the `orbit-computer` CLI/MCP tool and `ORBIT_GUI_URL`; the private `gui` service alone mounts native task sources and the signing key. Orbit wires the declared MCP server into supported Agents. Use the same immutable client image as the native calibration; it must provide OpenSSL for Ed25519 evidence signing.
+
+`spec` returns CUA-Lite's original tool schemas. Submit canonical JSON calls with `type: "function"`, `function: {name, arguments}` and optional `id`; the `computer` family uses normalized `[0,1000]` coordinates. For example, its arguments contain `actions: [{action: "click", coordinate: [500,500]}]`. `finish` uses the native terminate tool. Native screenshot overlays, step budgets, seed and 30-second MiniWoB page timeout are retained. The Agent receives screenshots and the reset goal, without DOM or accessibility observations. If a terminal call has no new screenshot, review explicitly identifies the repeated preceding frame.
+
+CLI evidence is signed and verified against the key saved in the solve Run, including on rescore. It uses `services/gui/evidence/` and the shared GUI review format. Native external/empty evidence remains at its existing paths. GUI service setup errors, signature mismatches and missing native terminal verdicts remain invalid; intermediate native `null` rewards are preserved.
 
 ## Web backends and terminal judges
 

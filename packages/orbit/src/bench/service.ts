@@ -46,7 +46,7 @@ import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { dirBytes } from "../records/index.ts";
 import { NotFoundError, type RunService, UserError } from "../runs/service.ts";
-import { type AgentFailure, runAgentFailure } from "../sessions/index.ts";
+import { type AgentFailure, loadRunAgentTranscript, runAgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
 import { gitSource } from "../workspace/snapshot.ts";
 import { classify, cleanupOf, shouldCheckAgentFailure, solveVerdict } from "./classify.ts";
@@ -66,6 +66,7 @@ import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { applyOverride, loadResources, resolveResources, usageRows } from "./resources.ts";
 import { buildReport, sameReport } from "./summary.ts";
+import { addEfeTrajectory } from "./trajectory-artifacts.ts";
 
 export interface BenchServiceDeps {
   store: Store;
@@ -249,6 +250,10 @@ export class BenchService {
     }
     const def = this.agents.get(m.agent);
     if (!def) throw new UserError(`${m.name}: unknown Agent ${m.agent}; see \`orbit agent ls\``);
+    if (requires.includes("mcp") && def.command.mcp.kind === "none")
+      throw new UserError(
+        `${m.name}: this benchmark requires MCP, but ${m.agent} has no MCP wiring`,
+      );
     const lacking = requires.filter((k) => !def.capabilities[k]);
     if (lacking.length)
       throw new UserError(
@@ -733,14 +738,16 @@ export class BenchService {
 
   /** A job cancelled while a run was being submitted: cancel that run too. */
   private async cancelIfJobCancelled(jobId: string, t: Trial, runId: string): Promise<void> {
-    if (this.cancelled(jobId, t)) await this.deps.runs.cancel(runId).catch(() => undefined);
+    if (this.cancelled(jobId, t) && this.deps.store.getRun(runId)?.stopRequested !== "cancel")
+      await this.deps.runs.cancel(runId).catch(() => undefined);
   }
 
   /** Why the Agent in a solve run could not work (credentials, quota, model endpoint), or null. */
   private agentFailure(solve: Run): Promise<AgentFailure | null> {
     if (!shouldCheckAgentFailure(solve)) return Promise.resolve(null);
     const dirs = this.deps.runs.dirs(solve.id);
-    return runAgentFailure(dirs.agent, dirs.log).catch(() => null);
+    const redactor = this.deps.runs.redactor(solve);
+    return runAgentFailure(dirs.agent, dirs.log, (text) => redactor.apply(text)).catch(() => null);
   }
 
   private skipped(t: Trial, evaluation: Outcome["evaluation"], issue: string): void {
@@ -786,7 +793,14 @@ export class BenchService {
       const { b, trial } = this.context(job, t);
       const reply = await this.adapter(b).solve(trial);
       spec = applyOverride(
-        toRunSpec(reply.spec, trial.method, b, "solve", () => this.agentDef(trial.method)),
+        toRunSpec(
+          reply.spec,
+          trial.method,
+          b,
+          "solve",
+          () => this.agentDef(trial.method),
+          trial.staging,
+        ),
         job.resources?.[t.task],
         job.spec.timeoutMin,
       );
@@ -811,7 +825,8 @@ export class BenchService {
     // An Agent that could not reach or use its model left nothing worth verifying; an explicit
     // rescore (history kept) verifies anyway, and an after phase has already verified.
     const agent = t.history.length === 0 ? await this.agentFailure(solve) : null;
-    if (agent) return this.finish(t, classify(solve, null, null, t.issues, agent));
+    if (agent && !solve.spec.after)
+      return this.finish(t, classify(solve, null, null, t.issues, agent));
     if (!sv.verify || this.cancelled(job.id, t)) {
       const outcome = classify(solve, null, null, t.issues);
       if (sv.verify) {
@@ -871,6 +886,26 @@ export class BenchService {
           invalid: true,
         };
       }
+    }
+    if (score) {
+      const dirs = this.deps.runs.dirs(solve.id);
+      const transcript = await loadRunAgentTranscript(dirs.agent).catch(() => null);
+      const messages = transcript?.messages ?? [];
+      const mcpTools = [
+        ...new Set(
+          messages
+            .filter(
+              (message) => message.kind === "tool_call" && /^mcp[_.]/.test(message.name ?? ""),
+            )
+            .map((message) => message.name as string),
+        ),
+      ];
+      if (mcpTools.length) {
+        score.review ??= { files: [], items: [], details: {} };
+        score.review.details = { ...score.review.details, mcpToolsUsed: mcpTools.join(", ") };
+      }
+      if (this.context(job, t).b.adapter === "harbor" && t.task.startsWith("metaworldplus-"))
+        await addEfeTrajectory(dirs.output, solve, score, messages, t.task);
     }
     const agent = await this.agentFailure(solve);
     const outcome = classify(solve, verify, score, t.issues, agent);

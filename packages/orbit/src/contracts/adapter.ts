@@ -10,6 +10,7 @@ import {
   ResourceOverride,
   Review,
 } from "./bench.ts";
+import { EnvName } from "./common.ts";
 import { Run } from "./runs.ts";
 
 const MetricSpecs = z
@@ -46,6 +47,24 @@ export const ORBIT_OWNED_SPEC_FIELDS = [
   "passEnv",
 ] as const;
 
+/** A stdio server launched by the Agent inside its run, never by the daemon. */
+export const AgentTool = z.object({
+  name: z.string().regex(/^[a-z0-9-]+$/),
+  command: z
+    .array(z.string())
+    .min(1)
+    .refine((a) => Boolean(a[0]), "command must name a program"),
+  env: z.record(EnvName, z.string()).optional(),
+});
+export type AgentTool = z.infer<typeof AgentTool>;
+export const AgentTools = z
+  .array(AgentTool)
+  .max(8)
+  .refine(
+    (tools) => new Set(tools.map((t) => t.name)).size === tools.length,
+    "tool names must be unique",
+  );
+
 /**
  * A run as an adapter describes it: RunSpec fields (validated as a RunSpec once Orbit has added its
  * own) with either `command`, or `agentTask` for Agent methods, which Orbit turns into the method's
@@ -54,7 +73,9 @@ export const ORBIT_OWNED_SPEC_FIELDS = [
 export const AdapterRunSpec = z
   .looseObject({
     command: z.array(z.string()).min(1).optional(),
-    agentTask: z.object({ instruction: z.string().min(1) }).optional(),
+    agentTask: z
+      .object({ instruction: z.string().min(1), tools: AgentTools.optional() })
+      .optional(),
   })
   .refine((s) => !ORBIT_OWNED_SPEC_FIELDS.some((k) => k in s), {
     message: `adapter run specs may not set ${ORBIT_OWNED_SPEC_FIELDS.join(", ")}`,

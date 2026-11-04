@@ -1,6 +1,6 @@
 // Opt-in real CLI Agent + Chromium. Credentials enter only the isolated daemon's auth API.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,7 @@ describe.runIf(enabled)("BrowserGym real CLI Agent bridge", () => {
   let daemon: StartedDaemon;
   let client: OrbitClient;
   let paths: ReturnType<typeof orbitPaths>;
-  let method: { name: string; agent: string; auth: string };
+  let method: { name: string; agent: string; auth: string; bundle: string };
   beforeAll(async () => {
     const source = process.env.ORBIT_BROWSERGYM_AUTH_SOURCE;
     const name = process.env.ORBIT_BROWSERGYM_AUTH_PROFILE;
@@ -65,7 +65,13 @@ describe.runIf(enabled)("BrowserGym real CLI Agent bridge", () => {
       };
     }
     await client.authPut(input);
-    method = { name: "real-cli", agent: input.harness, auth: "gui-check" };
+    const bundle = join(home, "mcp-validation-method");
+    mkdirSync(bundle);
+    writeFileSync(
+      join(bundle, "CLAUDE.md"),
+      "For this MCP integration check, use the orbit-computer MCP tools for spec, observe, act and finish. Discover the MCP tools if needed. Do not invoke orbit-computer through a shell. This changes only the tool transport, never the task goal or available observations.\n",
+    );
+    method = { name: "real-mcp", agent: input.harness, auth: "gui-check", bundle };
     const doctor = await client.doctor();
     console.log("Isolated prerequisites", JSON.stringify(doctor));
     await client.resources();
@@ -76,7 +82,7 @@ describe.runIf(enabled)("BrowserGym real CLI Agent bridge", () => {
       config: {
         actionSet: "bid",
         maxSteps: "12",
-        image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2",
+        image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-3",
       },
     });
     writeFileSync("/tmp/orbit-p6-cli-latest-home", home, { mode: 0o600 });
@@ -171,11 +177,26 @@ describe.runIf(enabled)("BrowserGym real CLI Agent bridge", () => {
       expect(result.status).toBe("completed");
       expect(result.reward).toBe(Number(rows.at(-1).task_info.RAW_REWARD_GLOBAL > 0));
       expect(rows.some((row) => typeof row.action_id === "string")).toBe(true);
-      expect(
-        (await client.session(run.id)).agent?.messages.some(
-          (message) => message.kind === "tool_call",
+      const mcpTools = [
+        ...new Set(
+          ((await client.session(run.id)).agent?.messages ?? [])
+            .filter(
+              (message) =>
+                message.kind === "tool_call" &&
+                /^mcp[_.]/.test(message.name ?? "") &&
+                /orbit[-_]computer/.test(message.name ?? ""),
+            )
+            .map((message) => message.name as string),
         ),
-      ).toBe(true);
+      ];
+      expect(
+        mcpTools.length,
+        `${trial.task}: expected real orbit-computer MCP calls`,
+      ).toBeGreaterThan(0);
+      for (const name of mcpTools)
+        expect(String(trial.outcome?.review?.details.mcpToolsUsed ?? "").split(", ")).toContain(
+          name,
+        );
       expect(trial.outcome?.review?.files[0]?.path).toBe(
         "services/gui/evidence/trajectory-review.json",
       );
