@@ -76,7 +76,7 @@ describe.runIf(enabled)("BrowserGym real CLI Agent bridge", () => {
       config: {
         actionSet: "bid",
         maxSteps: "12",
-        image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2",
+        image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-3",
       },
     });
     writeFileSync("/tmp/orbit-p6-cli-latest-home", home, { mode: 0o600 });
@@ -171,11 +171,24 @@ describe.runIf(enabled)("BrowserGym real CLI Agent bridge", () => {
       expect(result.status).toBe("completed");
       expect(result.reward).toBe(Number(rows.at(-1).task_info.RAW_REWARD_GLOBAL > 0));
       expect(rows.some((row) => typeof row.action_id === "string")).toBe(true);
-      expect(
-        (await client.session(run.id)).agent?.messages.some(
-          (message) => message.kind === "tool_call",
+      const mcpTools = [
+        ...new Set(
+          ((await client.session(run.id)).agent?.messages ?? [])
+            .filter(
+              (message) =>
+                message.kind === "tool_call" &&
+                /^mcp[_.]/.test(message.name ?? "") &&
+                /orbit[-_]computer/.test(message.name ?? ""),
+            )
+            .map((message) => message.name as string),
         ),
-      ).toBe(true);
+      ];
+      expect(
+        mcpTools.length,
+        `${trial.task}: expected real orbit-computer MCP calls`,
+      ).toBeGreaterThan(0);
+      for (const name of mcpTools)
+        expect(trial.outcome?.review?.details.mcpToolsUsed?.split(", ")).toContain(name);
       expect(trial.outcome?.review?.files[0]?.path).toBe(
         "services/gui/evidence/trajectory-review.json",
       );

@@ -11,6 +11,3 @@ RUN pip install --no-cache-dir browsergym-miniwob==0.14.3 \
 RUN mv /root/.cache/ms-playwright /ms-playwright && chmod -R a+rX /ms-playwright
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-
-COPY entrypoint.py /opt/orbit-browsergym-entrypoint.py
-ENTRYPOINT ["python", "/opt/orbit-browsergym-entrypoint.py"]

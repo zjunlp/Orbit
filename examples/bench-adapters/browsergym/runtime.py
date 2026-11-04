@@ -23,13 +23,13 @@ def run(plan_path, output):
             module, factory = method["entrypoint"].split(":")
             policy = getattr(importlib.import_module(module), factory)(
                 {"method": method, "seed": plan["seed"], "action_set": plan["action_set"],
-                 "action_description": episode.actions.describe(with_examples=True)})
+                 "action_description": episode.backend.actions.describe(with_examples=True)})
             episode.policy = policy
             if not callable(getattr(policy, "get_action", None)):
                 raise TypeError("Policy factory must return an object with get_action")
         while not episode.finished:
             episode.phase = "policy_action"
-            action = (policy.get_action(observation(episode.obs, plan["action_set"]))
+            action = (policy.get_action(observation(episode.backend.raw_obs, plan["action_set"]))
                       if policy is not None else None)
             if action is None:
                 episode.finish("empty" if policy is None else "agent_stop")
