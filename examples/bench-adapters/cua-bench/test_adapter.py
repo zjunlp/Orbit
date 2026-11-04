@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -138,6 +139,20 @@ class AdapterTest(unittest.TestCase):
                 self.assertFalse(report['invalid'])
                 self.assertEqual(report['score'], 1)
         self.assertEqual(calls, ['session', 'sandbox', 'session', 'sandbox'])
+
+    def test_optional_media_failure_does_not_replace_the_original_reward(self):
+        out = self.capture({'reward': 1, 'evaluation': [1], 'success': True})
+        result = evidence.read(out / 'result.json')
+        env = SimpleNamespace(tracing=SimpleNamespace(_rows=[
+            {'event_name': 'reset', 'data_images': [object()], 'data_json': '{}'}]))
+        runtime.capture_review(result, env, out, 'Explicit invalid media fixture')
+        self.assertEqual(result['trajectory_error_type'], 'AttributeError')
+        evidence.write(out / 'result.json', result)
+        evidence.write(out / 'manifest.json',
+                       {n: evidence.digest(out / n) for n in ('plan.json', 'result.json')})
+        report = evidence.validate(out)
+        self.assertFalse(report['invalid'])
+        self.assertEqual(report['score'], 1)
 
     def test_missing_changed_and_nonfinite_evidence(self):
         out = self.capture()

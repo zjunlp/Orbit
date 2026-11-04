@@ -12,6 +12,15 @@ import time
 from evidence import digest, read, write
 
 
+def capture_review(result, env, output, goal):
+    try:
+        from trajectory import capture
+        capture(env.tracing._rows, output, goal)
+    except Exception as error:
+        result['trajectory_error_type'] = type(error).__name__
+        print(f'Optional native frame review unavailable: {type(error).__name__}', file=sys.stderr)
+
+
 async def close_connections(result, session, sandbox):
     errors = {}
     for name, resource, method in [('session', session, 'close'), ('sandbox', sandbox, 'disconnect')]:
@@ -88,11 +97,7 @@ async def run(plan_path, output):
         phase = 'policy_act'
         episode = await run_episode(env, row['variant'], opts, output / 'native', session=session)
         result['native'] = asdict(episode)
-        from trajectory import capture
-        try:
-            capture(env.tracing._rows, output, row['title'])
-        except (OSError, ValueError, TypeError):
-            print('Optional native frame review unavailable', file=sys.stderr)
+        capture_review(result, env, output, row['title'])
     except Exception as error:
         result.update(failure=phase, error_type=type(error).__name__)
         print(f'Cua {phase}: {type(error).__name__}', file=sys.stderr)
