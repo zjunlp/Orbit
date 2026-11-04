@@ -133,6 +133,7 @@ def solve(req):
                     'volumeMounts': [{'volume': 'desktop-token', 'target': '/run/cua', 'mode': 'ro'}],
                     'services': [{'name': 'desktop', 'image': DESKTOP_IMAGE,
                         'cpus': 2, 'memGB': 4, 'shmGB': 2, 'networks': ['gui'],
+                        'env': {'CUA_ENV_AWAIT_TOKEN_FILE': '0'},
                         'volumes': [{'volume': 'desktop-token', 'target': '/run/cua', 'mode': 'rw'}],
                         'healthcheck': {'command': ['sh', '-c', 'test -s /run/cua/env-token'],
                                         'intervalSec': 2, 'timeoutSec': 2, 'retries': 60}}]}}

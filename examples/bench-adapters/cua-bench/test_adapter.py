@@ -41,6 +41,7 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual(len(spec['services']), 1)
         self.assertEqual(spec['services'][0]['image'], evidence.DESKTOP_IMAGE)
         self.assertEqual(spec['services'][0]['shmGB'], 2)
+        self.assertEqual(spec['services'][0]['env']['CUA_ENV_AWAIT_TOKEN_FILE'], '0')
         self.assertEqual(spec['services'][0]['healthcheck']['command'][0], 'sh')
         self.assertEqual(spec['volumeMounts'][0]['mode'], 'ro')
         self.assertNotIn('collect', spec['services'][0])
