@@ -1,5 +1,5 @@
 # P5-A：GUI hub 外部适配器（并行线 A）
-branch: feat/p5a-gui-hub-adapters · status: in_progress · updated: 2026-11-04 · owner: Codex（主线由 Claude 负责）
+branch: feat/p5a-gui-hub-adapters · status: blocked · updated: 2026-11-04 · owner: Codex（主线由 Claude 负责）
 
 本文是交给实现者的任务书，完成后在同一文件补写 Changes / Validation，作为该 Part 的记录。
 动手前按 [AGENTS.md](../../AGENTS.md) §1 阅读 design.md（重点 §7 适配器协议、§9）、status.md、
@@ -86,20 +86,20 @@ KVM / 大镜像 / 外网导致无法真实运行时，如实记 not_run 与原�
 | --- | --- | --- | --- |
 | Cua 文件 fixture / RunSpec schema | 当前分支 | passed | 8 个 Python fixture 测试；服务 healthcheck 使用真实 command argv，私有 token 卷不进入 collect；TypeScript 规划校验通过。并非真实桌面结果。 |
 | Cua 注册 / tasks | cua 2829e00b1 | passed | 隔离 daemon 的 bench add/tasks 枚举 145 个变体；镜像未准备时全部明确 unsupported，准备后首批仅 basic 68 个可选。 |
-| Cua 客户端镜像 | cua SDK 0.10.1 / bench 0.3.1 | passed | Orbit 构建并真实 import；固定原版源码只读挂载。实际客户端 imageId 4310967a1b23…；不等同桌面验收。 |
-| Cua ≥5 empty / oracle / 故障 / 服务清理 | cua 2829e00b1 | not_run | 固定原版桌面 digest 正在外网拉取；尚未启动真实桌面，不宣称校准完成。 |
+| Cua 客户端镜像 | cua SDK 0.10.1 / bench 0.3.1 | passed | Orbit 构建并真实 import；固定原版源码只读挂载。实际客户端 imageId 4310967a1b23…；另在固定源码挂载下真实 cb.make / tasks_config / AgentOptions / Sandbox 导入通过（20261104-111207-g0y4）；不等同桌面验收。 |
+| Cua ≥5 empty / oracle / 故障 / 服务清理 | cua 2829e00b1 | not_run | 固定原版桌面 digest 的 1.60 GB 压缩镜像拉取约 40 分钟仍剩三个大层；取消并清理等待 Run，未启动真实桌面，不宣称校准完成。 |
 | CUA-Lite 文件 fixtures | lite 2af6926 | passed | 5 个明确文件 fixture 测试：原版 reward / final verdict、异常 invalid、篡改、trial identity、单 episode 规划；不代替 Chromium。 |
 | CUA-Lite 注册 / tasks | lite 2af6926 / MiniWoB 7fd85d7 | passed | 独立 ORBIT_HOME / ORBIT_DATA / 空闲端口；bench add/tasks 1083 行，125 supported；其余有明确原因。 |
 | CUA-Lite ≥5 empty | 同上 | passed | click-test / click-button / click-dialog / enter-text / choose-list 原版 Chromium 均 valid 0；对应开发检查 20261104-110201-ekcn。 |
 | 与现有 BrowserGym 开发校准对照 | BrowserGym 0.14.3 / Lite 2af6926 | passed | 补跑 click-checkboxes（20261104-110904-en3d）valid 0，与 B 线 click-test / click-button / click-checkboxes / enter-text / choose-list 五个 empty 的原版奖励一致；页面 budget / 动作和正例观测权限不同，不声明同条件性能等价。 |
 | CUA-Lite 截图脚本正校准 / rescore | 同上 | passed | click-test 原始奖励 valid 1；离线证据重评仍 valid 1、保留历史；20261104-110202-ns9d。脚本仅使用原始截图，不是模型 baseline。 |
 | CUA-Lite 环境故障注入 | 同上 | passed | 故意提供 Python 3.11 客户端：原版环境无法导入，invalid / env_start / score=null；20261104-110203-r5fy。开发中缺 jsonschema 亦 invalid / env_step，补依赖后负校准通过。 |
-| CUA-Lite 取消 / 清理 / GUI 证据 | 同上 | passed | 真实 reset 后等待策略取消：execution cancelled、evaluation unknown、cleanup done；20261104-110240-kp4g。21 个相关 Run 的 orbit.run / orbit.parent 容器、网络、卷为 0；实际截图路径和 GuiTrajectory schema 通过。 |
+| CUA-Lite 取消 / 清理 / GUI 证据 | 同上 | passed | 真实 reset 后等待策略取消：execution cancelled、evaluation unknown、cleanup done；20261104-110240-kp4g。最终 34 个开发 Run 均终结、cleanup done、租约 released，orbit.run / orbit.parent 容器、网络、卷为 0；独立 daemon 已停止；实际截图路径和 GuiTrajectory schema 通过。 |
 | CUA-Lite 客户端镜像 | Python 3.12.16 / Playwright 1.44.0 | passed | 开发验收复用只读 BrowserGym 系统层，加入相同 Bookworm Python 3.12 和固定依赖；真实导入、Chromium、评分均通过；最终 imageId a240b2b6b967…；未改用户/B线镜像。 |
 | 通用外部模型 Agent | 两个 hub | not_run | 已实现原生注册 Agent / 自定义入口；真实校准覆盖脚本 external，未验证通用模型。CLI Agent 不属本线。 |
 | CUA-Lite 独立标准 Dockerfile 重建 | 固定 Python digest / dependencies | not_run | 早期浮动 Debian 基础不兼容已修正；Bookworm 全量 apt 下载过慢取消，实际校准用上述语义相同的派生镜像。独立标准文件未重跑完整构建。 |
-| 构建阶段自动取消 | Orbit 4184d4c | failed | starting/build 取消未中止构建；仅对明确自有 CLI 温和终止后，Orbit cleanup done、lease released。见 Next，不能计为自动取消通过。 |
-| 全仓库检查 | 本线代码 / main 4184d4c | passed | pnpm verify（格式、lint、类型、模块边界、tests、build）通过；交付前 rebase 后再检查。 |
+| 构建 / 拉取阶段自动取消 | Orbit 4184d4c | failed | starting/build 和 pull 取消未中止准备；仅对明确自有 CLI 温和终止后，Orbit cleanup done、lease released。见 Next，不能计为自动取消通过。 |
+| 全仓库检查 | 本线代码 / main 4184d4c | passed | 已 rebase 本地 main 4184d4c；代码提交 8c5f91f / 3420cd5 的 pnpm verify（格式、lint、类型、模块边界、tests、build）再次通过。 |
 | MobileWorld / OSWorld-V2 | a026188 / d995367 | not_run | /dev/kvm 不存在；未接通独立 adapter，不用 fake 或软件仿真替代。 |
 
 ## Next / open issues
@@ -107,4 +107,4 @@ KVM / 大镜像 / 外网导致无法真实运行时，如实记 not_run 与原�
 - Cua 原版桌面实际校准仍待完成；KiCad / workflows 应用依赖与账号条件未映射，继续 unsupported。
 - CUA-Lite MiniWoB 已接通；WebVoyager（原版 WebHarbor 回放服务）、Online-Mind2Web 的独立后端 / judge / 登录过滤不能在条件未映射时启用。
 - MobileWorld 与 OSWorld-V2 按顺序留后续；本机 /dev/kvm 不存在，禁止悄悄启用软件仿真。MobileWorld 须原版 mw eval 单任务、max-concurrency=1、pass-k=1、auto-retry=0 并只用本 trial 拥有的模拟器。OSWorld Docker provider 使用 SDK 创建无标签容器，CLI shim 不足；需主线提供可审计生命周期/标签配置，并使被原版吞为 0 的 evaluator 异常可分类为 invalid。
-- 核心取消构建缺口：Run 处于 starting/docker build 时重复 orbit cancel 仍继续构建并保留租约；本次明确核对任务 build CLI 的父 PID / 唯一 tag 后仅发一次 SIGTERM，由 Orbit 终结为 failed、cleanup done、lease released，无对应构建 CLI 残留。这是人工清理，不是自动取消通过；主线应将构建 / 拉取的 AbortSignal 贯通。
+- 核心取消构建缺口：Run 处于 starting/docker build 或 pull 时重复 orbit cancel 仍继续准备并保留租约；本次明确核对任务 CLI 的父 PID / 唯一 tag 或固定 digest / 已取消 Run 后分别发一次 SIGTERM，由 Orbit 终结为 failed、cleanup done、lease released，无对应 CLI 残留。这是人工清理，不是自动取消通过；主线应将构建 / 拉取的 AbortSignal 贯通。

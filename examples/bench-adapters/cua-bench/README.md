@@ -1,6 +1,6 @@
 # Cua Bench adapter
 
-Experimental external adapter for the original Cua Bench episode runner. One Orbit trial runs one native task variant. It does not use BatchRunner, upstream queues, SQLite, resume, or a parallel runner.
+Experimental external adapter for the original Cua Bench episode runner; native desktop calibration is not yet completed (see the task record). One Orbit trial runs one native task variant. It does not use BatchRunner, upstream queues, SQLite, resume, or a parallel runner.
 
 ## Preparation
 
