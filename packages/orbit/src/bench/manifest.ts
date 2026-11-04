@@ -2,7 +2,16 @@
 // an image, how to list tasks, the run of each calibration/external method and where the result is —
 // instead of an adapter program. It compiles to adapter protocol 1 like any other adapter.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
@@ -218,22 +227,52 @@ const inside = (dir: string, rel: string) => {
   return p;
 };
 
+/** A path this user owns that is not a link (the listing cache lives in the shared temp dir). */
+function owned(path: string) {
+  const st = lstatSync(path, { throwIfNoEntry: false });
+  return st && !st.isSymbolicLink() && st.uid === process.getuid?.() ? st : null;
+}
+
 function listTasks(m: Manifest): BenchTask[] {
   if ("list" in m.tasks)
     return m.tasks.list.map((t) =>
       BenchTask.parse({ title: null, supported: true, reason: null, ...t }),
     );
-  const args = ["run", "--rm", "--network", "none"];
+  // Listed once per manifest and image (the adapter answers within Orbit's 120 s budget); the
+  // listing container is labelled, limited and removed even when it overruns.
+  const key = createHash("sha256")
+    .update(JSON.stringify([m.image, m.tasks]))
+    .digest("hex")
+    .slice(0, 16);
+  const cache = join(tmpdir(), `orbit-manifest-tasks-${process.getuid?.() ?? "u"}`, `${key}.json`);
+  const cached = lstatSync(cache, { throwIfNoEntry: false })?.isFile()
+    ? readFileSync(cache, "utf8")
+    : null;
+  if (cached) return (JSON.parse(cached) as unknown[]).map((t) => BenchTask.parse(t));
+  const name = `orbit-manifest-tasks-${key}-${process.pid}`;
+  const args = [
+    "run",
+    "--rm",
+    "--name",
+    name,
+    "--network",
+    "none",
+    "--label",
+    "orbit.manifest-tasks=1",
+  ];
+  args.push("--cpus", "2", "--memory", "4g");
   if (m.tasks.entrypoint) args.push("--entrypoint", m.tasks.entrypoint);
   const r = spawnSync("docker", [...args, m.image, ...m.tasks.command], {
     encoding: "utf8",
-    timeout: 600_000,
+    timeout: 100_000,
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (r.status !== 0)
+  if (r.status !== 0) {
+    spawnSync("docker", ["rm", "-f", name], { timeout: 20_000 });
     throw new Error(
-      `listing tasks failed: ${(r.stderr || r.error?.message || "").trim().split("\n").pop()}`,
+      `listing tasks failed${r.error ? " (timed out; pull the image first)" : ""}: ${(r.stderr || r.error?.message || "").trim().split("\n").pop()}`,
     );
+  }
   const line = r.stdout
     .trim()
     .split("\n")
@@ -241,7 +280,7 @@ function listTasks(m: Manifest): BenchTask[] {
     .find((l) => l.startsWith("["));
   if (!line) throw new Error("the task listing printed no JSON array");
   const idTemplate = m.tasks.id;
-  return (JSON.parse(line) as Record<string, unknown>[]).map((row) =>
+  const tasks = (JSON.parse(line) as Record<string, unknown>[]).map((row) =>
     BenchTask.parse({
       id: render(idTemplate, row),
       title: typeof row.title === "string" && row.title ? row.title : null,
@@ -254,6 +293,10 @@ function listTasks(m: Manifest): BenchTask[] {
       ),
     }),
   );
+  mkdirSync(dirname(cache), { recursive: true, mode: 0o700 });
+  if (owned(dirname(cache))?.isDirectory() && !lstatSync(cache, { throwIfNoEntry: false }))
+    writeFileSync(cache, JSON.stringify(tasks), { mode: 0o600, flag: "wx" });
+  return tasks;
 }
 
 function capabilities(m: Manifest) {
@@ -282,7 +325,12 @@ function resultFiles(out: string, pattern: string): string[] {
       try {
         names = readdirSync(d).sort();
       } catch {}
-      for (const n of names) if (re.test(n)) next.push(join(d, n));
+      for (const n of names) {
+        if (!re.test(n)) continue;
+        // The run wrote this tree: follow no links out of it.
+        const st = lstatSync(join(d, n), { throwIfNoEntry: false });
+        if (st && (st.isFile() || st.isDirectory())) next.push(join(d, n));
+      }
     }
     dirs = next;
   }
@@ -292,7 +340,11 @@ function resultFiles(out: string, pattern: string): string[] {
 /** The trial's result from the files a run left, as protocol 1's score reply. */
 export function readResult(m: Manifest, out: string): ScoreReply & { file: string | null } {
   const files = resultFiles(out, m.result.file);
-  const file = files[files.length - 1] ?? null;
+  const file = files.filter((f) => lstatSync(f).isFile()).pop() ?? null;
+  const several =
+    files.length > 1
+      ? [`${files.length} files match ${m.result.file}; the last by name is used`]
+      : [];
   const fail = (issue: string, failure: FailureKind = "scorer_error") => ({
     score: null,
     maxScore: m.result.maxScore,
@@ -305,15 +357,17 @@ export function readResult(m: Manifest, out: string): ScoreReply & { file: strin
   let doc: unknown;
   try {
     doc = JSON.parse(readFileSync(file, "utf8"));
-  } catch (e) {
-    return fail(`result is not JSON: ${(e as Error).message}`);
+  } catch {
+    return fail("the result file is not valid JSON");
   }
   for (const rule of m.result.invalid) {
     const vs = select(doc, rule.path);
     if (rule.when === "present" ? vs.length > 0 : reduce(vs, "any") === 1)
       return fail(rule.issue, rule.failure);
   }
-  const s = reduce(select(doc, m.result.score.path), m.result.score.reduce);
+  // A missing score is the grader's problem, never a 0 (count/any would otherwise give 0).
+  const picked = select(doc, m.result.score.path);
+  const s = picked.length ? reduce(picked, m.result.score.reduce) : null;
   if (s === null) return fail(`no numeric score at ${m.result.score.path}`);
   const metrics: Record<string, number> = {};
   for (const [k, sel] of Object.entries(m.result.metrics)) {
@@ -324,7 +378,7 @@ export function readResult(m: Manifest, out: string): ScoreReply & { file: strin
     score: s * m.result.score.scale,
     maxScore: m.result.maxScore,
     invalid: false,
-    issues: [],
+    issues: several,
     metrics,
     file,
   };
@@ -358,7 +412,14 @@ export const manifestAdapter: AdapterHandlers = {
         config: trial.method.config ?? {},
       },
     };
-    const run = renderDeep({ ...m.solve, ...method } as ManifestRun, ctx);
+    // Methods override solve per key; resources and env merge, so a method's GPU keeps solve's CPUs.
+    const merged: ManifestRun = {
+      ...m.solve,
+      ...method,
+      resources: { ...m.solve.resources, ...method.resources },
+      env: { ...m.solve.env, ...method.env },
+    };
+    const run = renderDeep(merged, ctx);
     if (!run.command) throw new Error(`the ${trial.method.agent} method has no command`);
     mkdirSync(trial.staging, { recursive: true });
     for (const [name, text] of Object.entries(m.files))

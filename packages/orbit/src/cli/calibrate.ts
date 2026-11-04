@@ -140,18 +140,29 @@ export function judgeCalibration(
     });
   else {
     const before = new Map(t.map((x) => [x.id, x.outcome?.score ?? null]));
-    const bad = rescored.trials
+    // Only trials that were actually scored again count; skipped ones keep their old outcome.
+    const again = rescored.trials.filter(
+      (x) => x.history.length > (t.find((y) => y.id === x.id)?.history.length ?? 0),
+    );
+    const bad = again
       .filter(
         (x) => x.outcome?.evaluation !== "valid" || before.get(x.id) !== (x.outcome?.score ?? null),
       )
       .map((x) => `${x.task}/${x.method}#${x.seed}`);
+    const note = rescoreNote ? ` (${rescoreNote})` : "";
     checks.push(
-      check(
-        "rescore reproduces scores",
-        bad,
-        "saved evidence gives the same scores",
-        rescored.trials.length,
-      ),
+      again.length
+        ? check(
+            "rescore reproduces scores",
+            bad,
+            `saved evidence gives the same scores for ${again.length}/${t.length} trial(s)${note}`,
+            again.length,
+          )
+        : {
+            name: "rescore reproduces scores",
+            result: "not_run",
+            detail: `no trial was rescored${note}`,
+          },
     );
   }
   return checks;

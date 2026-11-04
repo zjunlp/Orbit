@@ -167,11 +167,23 @@ function allocateDevices(
   return { ok: true, devices: out };
 }
 
-/** Whether a card is one of the acceptable models (none listed: any card). */
+const tokens = (name: string) =>
+  name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+/**
+ * Whether a card is one of the acceptable models (none listed: any card). A model matches whole
+ * words of the card name in order: `L4` is "NVIDIA L4", not "NVIDIA L40S"; `A10` is not "A100".
+ */
 export function modelMatches(name: string, models: string[] | undefined): boolean {
   if (!models?.length) return true;
-  const card = name.toLowerCase();
-  return models.some((m) => card.includes(m.trim().toLowerCase()));
+  const card = tokens(name);
+  return models.some((m) => {
+    const want = tokens(m);
+    return want.length > 0 && card.some((_, i) => want.every((w, j) => card[i + j] === w));
+  });
 }
 
 const DECLARED_GPU_CAPABILITIES = new Set(["egl", "vulkan", "cuda"]);

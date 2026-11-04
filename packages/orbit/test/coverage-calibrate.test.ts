@@ -96,8 +96,15 @@ it("passes a well-behaved integration and names what fails", () => {
     trial("t", "oracle", 1, 1),
     trial("t", "oracle", 2, 1),
   ]);
-  const checks = judgeCalibration(good, good);
+  const again = detail(
+    (good.trials as unknown as { history: unknown[] }[]).map((x) => ({ ...x, history: [{}] })),
+  );
+  const checks = judgeCalibration(good, again);
   expect(checks.every((c) => c.result === "passed")).toBe(true);
+  // Trials the rescore skipped (e.g. solved on a worker) do not count as reproduced.
+  const skipped = judgeCalibration(good, good, "4 trial(s) not rescored").pop();
+  expect(skipped).toMatchObject({ result: "not_run" });
+  expect(skipped?.detail).toMatch(/no trial was rescored \(4 trial\(s\) not rescored\)/);
 
   const bad = detail([
     trial("t", "empty", 1, 0),

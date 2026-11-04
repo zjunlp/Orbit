@@ -166,3 +166,37 @@ it("keeps the Python adapter SDK's failure kinds equal to the contract", async (
   const kinds = [...block.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
   expect(kinds.sort()).toEqual([...FAILURE_KINDS].sort());
 });
+
+it("never scores a missing value as 0 and merges method resources with solve", () => {
+  const { m } = loadManifest(benchmark);
+  const out = join(dir, "out-count");
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, "A_result.json"), JSON.stringify({ renamed: [] }));
+  const counting = {
+    ...m,
+    result: {
+      ...m.result,
+      score: { path: "episodes[*].success", reduce: "count" as const, scale: 1 },
+    },
+  };
+  expect(readResult(counting, out)).toMatchObject({
+    score: null,
+    invalid: true,
+    failure: "scorer_error",
+  });
+  writeFileSync(
+    join(dir, "merge.yaml"),
+    MANIFEST.replace("  empty: {}", "  empty: { resources: { gpus: 1 }, env: { X: '1' } }").replace(
+      "  resources: { cpus: 2, memGB: 4 }",
+      "  resources: { cpus: 6, memGB: 9 }\n  env: { BASE: '1' }",
+    ),
+  );
+  const spec = manifestAdapter.solve({
+    protocol: 1,
+    op: "solve",
+    benchmark: { ...benchmark, config: { manifest: "merge.yaml" } },
+    trial: trial("empty"),
+  } as never).spec;
+  expect(spec.resources).toMatchObject({ cpus: 6, memGB: 9, gpus: 1 });
+  expect(spec.env).toEqual({ BASE: "1", X: "1" });
+});
