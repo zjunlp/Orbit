@@ -104,6 +104,15 @@ export const DoctorCheck = z.object({
 });
 export type DoctorCheck = z.infer<typeof DoctorCheck>;
 
+/** One reconciliation round (`orbit reconcile`): leftovers of finished runs removed, leaks released. */
+export const ReconcileReport = z.object({
+  removed: z.array(z.string()),
+  failed: z.array(z.string()),
+  released: z.array(z.string()),
+  skipped: z.boolean(),
+});
+export type ReconcileReport = z.infer<typeof ReconcileReport>;
+
 export const DoctorReport = z.object({
   ok: z.boolean(),
   checks: z.array(DoctorCheck),

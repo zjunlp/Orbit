@@ -9,6 +9,7 @@ import {
   type Ledger,
   NotifyPairInput,
   type NotifyTarget,
+  type ReconcileReport,
 } from "../../contracts/index.ts";
 import { AgentError } from "../../harness/registry.ts";
 import { NotFoundError, UserError } from "../../runs/service.ts";
@@ -19,6 +20,7 @@ export function registerSettingsRoutes(api: Hono, deps: AppDeps): void {
   const { runs, auth, agents, notifyStore, notifier, feishu, cluster } = deps;
   api.get("/resources", async (c) => c.json(await runs.resources(true)));
   api.get("/doctor", async (c) => c.json(await runDoctor(deps.paths, deps.agents)));
+  api.post("/reconcile", async (c) => c.json<ReconcileReport>(await runs.reconcile()));
   api.get("/ledger", async (c) =>
     c.json<Ledger>({
       resources: await runs.resources(),

@@ -46,6 +46,7 @@ import {
   NodeStatus,
   NotifyTarget,
   type NotifyTargetInput,
+  ReconcileReport,
   Run,
   RunDeletion,
   RunEvents,
@@ -97,6 +98,7 @@ export class OrbitClient {
   loginCode = () => this.call(LoginCode, "/login-code", { method: "POST" });
   resources = () => this.call(NodeResources, "/resources");
   doctor = () => this.call(DoctorReport, "/doctor");
+  reconcile = () => this.call(ReconcileReport, "/reconcile", { method: "POST" });
   ledger = () => this.call(Ledger, "/ledger");
 
   submit = (spec: RunSpecInput, folder?: string) =>

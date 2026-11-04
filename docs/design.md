@@ -883,6 +883,15 @@ Agent 本身用 GPU）；否则由第一个不在宿主命名空间里的服务�
 拆成 Docker 的可执行文件与前置参数。`[environment] gpu_types` 变成拥有该组卡的角色的 `gpuModels`（任一型号，
 名称包含匹配），本机没有这些型号时提交即给出原因；登记 `-c gpuTypes=any` 时不限制型号并记为偏差。
 
+**P7 实现**：第 6 条对账回收在 `runs/reconcile.ts`：daemon 每 10 分钟（`orbit reconcile` 立即）列出带本 home 标签的容器、
+网络与卷，只删除其 Run 已结束且清理确认、或 Run 记录已不存在的资源；没有 Run 标签的、仍在被观察的 Run 的一律不动；
+任何一个列表失败则整轮跳过。活动租约若其 Run 已结束且清理确认（或已删除）则释放。第 3 条主机保护在租约之前：数据盘
+剩余不足 5 GB 时本机不启动新 Run；同时处于 starting 的 Run 超过 `ORBIT_MAX_STARTING`（默认 4）时其余排队并写明原因
+（镜像拉取、构建、VM 解包不再同时发生）。多节点放置对设备与 GPU 型号逐角色判定（`remoteBlocker` → `infeasible` 带角色）。
+**后置（有具体 hub 需要时再做）**：第 4 条 `slots`（目前没有需要内部并发的 hub）；第 5 条 pooled / singleton 实例账本
+（需要新的实例状态机，等 WebArena 共享后端或 OSWorld VM 复用接入时与其一起设计与验收）；高级回放与 LeRobot/ATIF 导出
+（统一轨迹导入器更多后）；两台真机验收（无第二台机器）。
+
 ### 9.7 结果、有效性与可复现
 
 - `Outcome` 增加 `episode { steps, terminated, truncated, endedBy, successSignal }`、`official { metrics, aggregation }`（原样保存）、
@@ -963,8 +972,8 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | P4 Policy 路线 | 已完成：`Lease.roles` 按角色分配、service GPU 与 `entrypoint`、vla-eval 适配器（LIBERO 真实任务） | 角色独占卡、整组排队；LIBERO empty 0 分 valid |
 | P5 扩大覆盖（核心能力与 GUI hub 适配器已完成；EFE GPU 原版校准、Arena 未做；见 tasks/20261104-p5-core、p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
 | P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 按实际诊断保留能力限制；OSWorld 等 KVM 后端后置 |
-| P6.5 接入层（§9.14） | calibrate / coverage、L2 SDK、L1 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按层级接入成本达标；迁移前后校准一致 |
-| P7 规模优化 | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
+| P6.5 接入层（§9.14，已完成；见 tasks/20261104-p65-integration） | calibrate / coverage、L2 SDK、L1 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按层级接入成本达标；迁移前后校准一致 |
+| P7 规模优化（对账回收、主机保护与启动限流、能力路由、[catalog](catalog.md) 已完成；暖池/实例账本、slots、导出、两台真机后置，见 §9.6 P7 实现） | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |
 
 ### 9.14 后续改进方向：接入层（2026-11-04 复盘）

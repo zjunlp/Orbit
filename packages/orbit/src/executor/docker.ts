@@ -535,6 +535,39 @@ export async function createNetwork(
   return r.code === 0 ? null : (r.stderr.trim().split("\n")[0] ?? `exit ${r.code}`);
 }
 
+export interface LabelledResource {
+  kind: "container" | "network" | "volume";
+  /** Container id, network or volume name. */
+  id: string;
+  /** The run it belongs to (`orbit.run`, else `orbit.parent`), or "" when unlabelled. */
+  run: string;
+}
+
+/**
+ * Every container, network and volume labelled with this Orbit home, or null when any listing
+ * fails (a reconciler must then skip the round rather than act on a partial picture).
+ */
+export async function labelledResources(home: string): Promise<LabelledResource[] | null> {
+  const filter = ["--filter", `label=${LABEL_HOME}=${home}`];
+  const fmt = `{{.Label "${LABEL_RUN}"}}\t{{.Label "${LABEL_PARENT}"}}`;
+  const lists = await Promise.all([
+    docker(["ps", "-a", "--no-trunc", ...filter, "--format", `{{.ID}}\t${fmt}`]),
+    docker(["network", "ls", ...filter, "--format", `{{.Name}}\t${fmt}`]),
+    docker(["volume", "ls", ...filter, "--format", `{{.Name}}\t${fmt}`]),
+  ]);
+  if (lists.some((r) => r.code !== 0)) return null;
+  const kinds = ["container", "network", "volume"] as const;
+  return lists.flatMap((r, i) =>
+    r.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [id = "", run = "", parent = ""] = line.split("\t");
+        return { kind: kinds[i] as LabelledResource["kind"], id, run: run || parent };
+      }),
+  );
+}
+
 /** Names of networks with this label, or null when docker fails. */
 export async function networksWithLabel(label: string, value: string): Promise<string[] | null> {
   const r = await docker([

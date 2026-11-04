@@ -32,7 +32,7 @@ import type { Prepared } from "../harness/index.ts";
 import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { Redactor } from "../lib/redact.ts";
-import { allocate, allocateRoles } from "../resources/allocate.ts";
+import { allocate, allocateRoles, hostProtection } from "../resources/allocate.ts";
 import { resolveAgentRef } from "../sessions/index.ts";
 import type { RunFilter, Store } from "../store/index.ts";
 import type { DatasetRegistry } from "../workspace/datasets.ts";
@@ -55,6 +55,7 @@ import {
 import * as preflight from "./preflight.ts";
 import { SECRET_NAME } from "./process.ts";
 import * as processBackend from "./process-backend.ts";
+import { type ReconcileResult, reconcile as reconcileRuns } from "./reconcile.ts";
 import * as remoteRuns from "./remote.ts";
 import * as sampling from "./sampling.ts";
 import * as services from "./services.ts";
@@ -76,6 +77,13 @@ export interface RunServiceDeps {
   datasets?: DatasetRegistry;
   /** Scheduler period; the loop also runs after every submit/finish. */
   tickMs?: number;
+  /** Period of reconciling Docker resources and leases with the ledger (default 10 min; 0 disables). */
+  reconcileMs?: number;
+  /**
+   * Runs that may be starting (pulling, building, creating containers and services) at once on this
+   * node; more wait (default `ORBIT_MAX_STARTING` or 4). Heavy environments unpack images and VMs.
+   */
+  maxStarting?: number;
   /**
    * Command prefix that runs this orbit binary (`node [execArgv] <entry>`); process runs get a
    * `docker` shim calling `<prefix> __docker-shim`. Without it process runs are rejected.
@@ -119,6 +127,8 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
   private readonly gpuMode = docker.detectGpuMode();
   private cached: { at: number; value: NodeResources } | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private reconcileTimer: NodeJS.Timeout | null = null;
+  private reconciling: Promise<ReconcileResult> | null = null;
   private ticking: Promise<void> | null = null;
   private tickAgain = false;
   private stopped = false;
@@ -250,6 +260,32 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     void this.measureMissing();
     this.timer = setInterval(() => void this.tick(), this.deps.tickMs ?? 3000);
     void this.tick();
+    const every = this.deps.reconcileMs ?? 600_000;
+    if (every > 0) {
+      this.reconcileTimer = setInterval(() => void this.reconcile(), every);
+      this.reconcileTimer.unref();
+      // A first round soon after start: leftovers of a crash are found without waiting a period.
+      setTimeout(
+        () => void (this.stopped ? null : this.reconcile()),
+        Math.min(every, 60_000),
+      ).unref();
+    }
+  }
+
+  /** One reconciliation round (at most one at a time); see `runs/reconcile.ts`. */
+  reconcile(): Promise<ReconcileResult> {
+    this.reconciling ??= reconcileRuns(this.context)
+      .then((r) => {
+        if (r.removed.length || r.released.length || r.failed.length)
+          console.error(
+            `orbit reconcile: removed ${r.removed.length}, released ${r.released.length} lease(s)${r.failed.length ? `, ${r.failed.length} removal(s) failed` : ""}`,
+          );
+        return r;
+      })
+      .finally(() => {
+        this.reconciling = null;
+      });
+    return this.reconciling;
   }
 
   /** This node's name in the cluster. */
@@ -268,8 +304,10 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.timer = null;
     await this.ticking;
+    await this.reconciling?.catch(() => null);
     for (const a of this.active.values()) {
       a.logs?.kill();
       clearTimeout(a.timeout);
@@ -640,9 +678,13 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     const res = structuredClone(await this.resources(true));
     const nodes = this.remoteNodes();
     const mirrors = nodes.length ? this.mirrors() : [];
+    let starting = this.store
+      .listRuns({ states: ["starting"], limit: 10_000 })
+      .filter((r) => !r.remote).length;
     for (const q of queued) {
       const reasons: [string, string][] = [];
-      const blocked = await this.localBlocker(q.spec);
+      const blocked =
+        hostProtection(res, starting, this.maxStarting) ?? (await this.localBlocker(q.spec));
       // Re-read after the awaits: a cancel may have ended the run meanwhile. No await from here on
       // until it is leased, placed or its reason saved.
       const run = this.store.getRun(q.id);
@@ -653,6 +695,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
         if (a.ok) {
           this.leaseLocal(run, a.roles);
           res.memory.availableGB -= leaseRequest(run.spec).memGB;
+          starting++;
           continue;
         }
         reasons.push([this.node, a.reason]);
@@ -687,6 +730,11 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
         this.save(run);
       }
     }
+  }
+
+  private get maxStarting(): number {
+    const env = Number(process.env.ORBIT_MAX_STARTING);
+    return this.deps.maxStarting ?? (Number.isInteger(env) && env > 0 ? env : 4);
   }
 
   private refusal(key: string): string | null {
