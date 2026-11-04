@@ -140,12 +140,38 @@ class CliTests(unittest.TestCase):
             self.assertEqual(observed, [])
             call = {'type': 'function', 'function': {'name': 'terminate', 'arguments': {}}}
             obs, reward, terminal, truncated, info = backend.step(json.dumps(call))
-            self.assertEqual(observed, [call])
+            self.assertEqual(observed, [{**call, 'id': 'orbit-gui-1'}])
             self.assertEqual(obs['screenshot'], b'previous fixture')
             self.assertEqual(obs['frame_source'], 'previous_observation')
             self.assertIn('preceding observation', obs['text'])
             self.assertEqual((reward, terminal, truncated), (0, True, False))
             self.assertEqual(info['task_info']['native_reward'], 0)
+
+
+    def test_missing_native_ids_receive_unique_ids_and_return_frames(self):
+        backend = CuaLiteBackend({})
+        self.addCleanup(backend.close)
+        backend.obs = {'screenshot': b'old fixture', 'goal': 'fixture goal'}
+        identifiers = []
+        async def step(calls):
+            identifier = calls[0].get('id')
+            identifiers.append(identifier)
+            result = SimpleNamespace(images=[identifier.encode()], error='native feedback')
+            return SimpleNamespace(results=[result] if identifier else [], reward=None,
+                                   terminated=False, truncated=False, info={})
+        async def close():
+            pass
+        backend.env = SimpleNamespace(step=step, close=close)
+        validator = SimpleNamespace(validate_lite_tool_call=lambda call, where, require_id: None)
+        call = {'type': 'function', 'function': {'name': 'computer', 'arguments': {'actions': []}}}
+        with patch.dict(sys.modules, {'lite.core.tools.calls': validator}):
+            for expected in ('orbit-gui-1', 'orbit-gui-2'):
+                obs, *_ = backend.step(json.dumps(call))
+                self.assertEqual(obs['screenshot'], expected.encode())
+                self.assertEqual(obs['last_action_error'], 'native feedback')
+                self.assertEqual(obs['frame_source'], 'native_step')
+            backend.step(json.dumps({**call, 'id': 'caller-supplied'}))
+        self.assertEqual(identifiers, ['orbit-gui-1', 'orbit-gui-2', 'caller-supplied'])
 
 
 if __name__ == '__main__':

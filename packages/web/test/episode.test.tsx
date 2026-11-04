@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { EpisodeTrajectory } from "@zjunlp/orbit/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { parseEpisode, sampleAt } from "../src/lib/episode.ts";
+import { episodeVideoTime, parseEpisode, sampleAt } from "../src/lib/episode.ts";
 import { EpisodeViewer } from "../src/pages/trial/Episode.tsx";
 
 vi.mock("../src/lib/router.ts", () => ({ onLinkClick: vi.fn() }));
@@ -26,6 +26,16 @@ describe("saved embodied episode", () => {
     expect(sampleAt(trace, 0.1)).toBe(0);
     expect(sampleAt(trace, 0.2)).toBe(1);
     expect(sampleAt(trace, 10)).toBe(1);
+    const video = {
+      path: "replay.mp4",
+      timeMap: [
+        { time: 0, videoTime: 0 },
+        { time: 0.025, videoTime: 0.04 },
+        { time: 0.0375, videoTime: 0.08 },
+      ],
+    };
+    expect(episodeVideoTime(video, 0.0375)).toBe(0.08);
+    expect(episodeVideoTime(video, 0.03)).toBe(0.04);
   });
   it("rejects unsafe media, bad vectors and reversed time in both validators", () => {
     const cases = [
@@ -37,6 +47,15 @@ describe("saved embodied episode", () => {
       },
       (t: ReturnType<typeof fixture>) => {
         t.trust = ["trusted"];
+      },
+      (t: ReturnType<typeof fixture>) => {
+        t.completeness = "fake";
+      },
+      (t: ReturnType<typeof fixture>) => {
+        t.samples[0].sessionMessageIndexes = [-1];
+      },
+      (t: ReturnType<typeof fixture>) => {
+        t.cameras[1].video.timeMap = [{ time: 0, videoTime: -1 }];
       },
       (t: ReturnType<typeof fixture>) => {
         t.cameras[0].frames[0].path = "../escape.png";
@@ -89,6 +108,31 @@ describe("saved embodied episode", () => {
     expect(html).not.toContain('src="/api/v1/runs/fixture/files/camera/front1.png"');
     expect(html).toContain('aria-label="Episode time"');
     expect(html).toContain("Loading saved video");
+  });
+  it("renders completeness and the referenced Agent messages", () => {
+    const trace = parseEpisode(source);
+    trace.completeness = "environment-only";
+    if (trace.samples[0]) trace.samples[0].sessionMessageIndexes = [1];
+    const html = renderToStaticMarkup(
+      <EpisodeViewer
+        trace={trace}
+        runId="fixture"
+        files={new Set()}
+        messages={[
+          { at: null, role: "assistant", kind: "text", text: "Unrelated" },
+          {
+            at: null,
+            role: "assistant",
+            kind: "tool_call",
+            name: "Bash",
+            text: "Inspect the robot",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Environment only");
+    expect(html).toContain("Inspect the robot");
+    expect(html).not.toContain("Unrelated");
   });
   it("keeps the timeline available when camera artifacts are absent", () => {
     const html = renderToStaticMarkup(

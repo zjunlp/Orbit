@@ -199,6 +199,17 @@ export function toRunSpec(
     spec.agentBundle = agentToolsBundle(agentDef(), method.bundle, agentTask?.tools, staging);
     spec.network = true;
   }
+  if (agentTask && spec.root && spec.backend !== "process") {
+    const uid = process.getuid?.();
+    const gid = process.getgid?.();
+    if (uid === undefined || gid === undefined)
+      throw new AdapterError("root Agent runs require Unix file ownership support");
+    // Root CLIs write private transcripts; return them before an adapter hook stops the container.
+    spec.hooks = [
+      { command: `chown -hR ${uid}:${gid} /orbit/agent`, timeoutSec: 30 },
+      ...(spec.hooks ?? []),
+    ];
+  }
   if (phase === "solve" && method.agent === "external") {
     spec.passEnv = method.passEnv ?? [];
   }

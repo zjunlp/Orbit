@@ -153,10 +153,10 @@ describe("MCP configuration in the existing Agent bundle path", () => {
     writeFileSync(join(userBundle, "AGENTS.md"), "method instructions");
     const planned = spec("claude-code", join(dir, "staging"), userBundle);
     expect(planned.command).toEqual(
-      expect.arrayContaining(["--mcp-config", "/orbit/agent/claude/orbit-mcp.json"]),
+      expect.arrayContaining(["--mcp-config=/orbit/agent/claude/orbit-mcp.json"]),
     );
-    const flag = planned.command?.indexOf("--mcp-config") as number;
-    expect(planned.command?.[flag + 2]).toBe("use either CLI or MCP");
+    const flag = planned.command?.findIndex((arg) => arg.startsWith("--mcp-config=")) as number;
+    expect(planned.command?.[flag + 1]).toBe("use either CLI or MCP");
     await prepare("claude-code", dir);
     installBundle(planned.agentBundle as string, dir, requireAgent("claude-code"));
     const home = join(dir, "claude");
@@ -284,10 +284,10 @@ describe("MCP configuration in the existing Agent bundle path", () => {
       },
     });
     const resumed = resumeSpec(run);
-    const flag = resumed.command?.indexOf("--mcp-config") as number;
+    const flag = resumed.command?.findIndex((arg) => arg.startsWith("--mcp-config=")) as number;
     expect(flag).toBeGreaterThan(0);
-    expect(resumed.command?.[flag + 1]).toBe("/orbit/agent/claude/orbit-mcp.json");
-    expect(resumed.command?.[flag + 2]).toContain("Continue the interrupted task");
+    expect(resumed.command?.[flag]).toBe("--mcp-config=/orbit/agent/claude/orbit-mcp.json");
+    expect(resumed.command?.[flag + 1]).toContain("Continue the interrupted task");
   });
 
   it("rejects Agent homes outside the run's mounted Agent directory", () => {
@@ -347,4 +347,72 @@ it("agent show identifies declared MCP capability without wiring", async () => {
   );
   await command.parseAsync(["agent", "show", "kimi-cli"], { from: "user" });
   expect(output[0]).toContain("MCP declared, not wired");
+});
+
+it("returns root Agent transcripts to the daemon before adapter hooks", () => {
+  const kill = { command: "kill -TERM 1", timeoutSec: 3 };
+  const input = {
+    image: "fixture",
+    root: true,
+    agentTask: { instruction: "short reply" },
+    hooks: [kill],
+  };
+  const plan = (over = {}) =>
+    toRunSpec({ ...input, ...over }, method("claude-code"), benchmark, "solve", () =>
+      requireAgent("claude-code"),
+    );
+  expect(plan().hooks).toEqual([
+    {
+      command: `chown -hR ${process.getuid?.()}:${process.getgid?.()} /orbit/agent`,
+      timeoutSec: 30,
+    },
+    kill,
+  ]);
+  expect(plan({ root: false }).hooks).toEqual([kill]);
+  expect(plan({ backend: "process", image: undefined, hooks: [] }).hooks).toEqual([]);
+  const native = toRunSpec(
+    { image: "fixture", root: true, command: ["true"], hooks: [kill] },
+    method("claude-code"),
+    benchmark,
+    "solve",
+    () => requireAgent("claude-code"),
+  );
+  expect(native.hooks).toEqual([kill]);
+});
+
+it("keeps the prompt separate from Claude's variadic MCP configuration option", () => {
+  const def = requireAgent("claude-code");
+  const prompt = "Complete the task using --tools, with spaces and quoted text.";
+  const parseCommand = (argv: string[]) =>
+    new Command()
+      .exitOverride()
+      .option("-p, --print")
+      .option("--dangerously-skip-permissions")
+      .option("--mcp-config <configs...>")
+      .option("--resume <session>")
+      .option("--model <model>")
+      .option("--effort <level>")
+      .argument("[prompt]")
+      .parse(argv.slice(1), { from: "user" });
+  const argv = agentCommand(
+    def,
+    { ...method("claude-code"), model: "fixture-model" },
+    prompt,
+    true,
+  );
+  const parsed = parseCommand(argv);
+  expect(parsed.opts().mcpConfig).toEqual(["/orbit/agent/claude/orbit-mcp.json"]);
+  expect(parsed.args).toEqual([prompt]);
+  const resumed = parseCommand(resumeAgentCommand(def, {}, { sessionId: "fixture-session" }, true));
+  expect(resumed.opts().mcpConfig).toEqual(["/orbit/agent/claude/orbit-mcp.json"]);
+  expect(resumed.args[0]).toContain("Continue the interrupted task");
+  const custom = {
+    ...def,
+    command: { ...def.command, run: ["claude", "-p", "{instruction}", "--model", "{model}"] },
+  };
+  const trailing = parseCommand(
+    agentCommand(custom, { ...method("claude-code"), model: "fixture-model" }, prompt, true),
+  );
+  expect(trailing.opts().model).toBe("fixture-model");
+  expect(trailing.args).toEqual([prompt]);
 });

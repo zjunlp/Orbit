@@ -46,7 +46,7 @@ import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { dirBytes } from "../records/index.ts";
 import { NotFoundError, type RunService, UserError } from "../runs/service.ts";
-import { type AgentFailure, runAgentFailure } from "../sessions/index.ts";
+import { type AgentFailure, loadRunAgentTranscript, runAgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
 import { gitSource } from "../workspace/snapshot.ts";
 import { classify, cleanupOf, shouldCheckAgentFailure, solveVerdict } from "./classify.ts";
@@ -66,6 +66,7 @@ import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { applyOverride, loadResources, resolveResources, usageRows } from "./resources.ts";
 import { buildReport, sameReport } from "./summary.ts";
+import { addEfeTrajectory } from "./trajectory-artifacts.ts";
 
 export interface BenchServiceDeps {
   store: Store;
@@ -737,7 +738,8 @@ export class BenchService {
 
   /** A job cancelled while a run was being submitted: cancel that run too. */
   private async cancelIfJobCancelled(jobId: string, t: Trial, runId: string): Promise<void> {
-    if (this.cancelled(jobId, t)) await this.deps.runs.cancel(runId).catch(() => undefined);
+    if (this.cancelled(jobId, t) && this.deps.store.getRun(runId)?.stopRequested !== "cancel")
+      await this.deps.runs.cancel(runId).catch(() => undefined);
   }
 
   /** Why the Agent in a solve run could not work (credentials, quota, model endpoint), or null. */
@@ -884,6 +886,26 @@ export class BenchService {
           invalid: true,
         };
       }
+    }
+    if (score) {
+      const dirs = this.deps.runs.dirs(solve.id);
+      const transcript = await loadRunAgentTranscript(dirs.agent).catch(() => null);
+      const messages = transcript?.messages ?? [];
+      const mcpTools = [
+        ...new Set(
+          messages
+            .filter(
+              (message) => message.kind === "tool_call" && /^mcp[_.]/.test(message.name ?? ""),
+            )
+            .map((message) => message.name as string),
+        ),
+      ];
+      if (mcpTools.length) {
+        score.review ??= { files: [], items: [], details: {} };
+        score.review.details = { ...score.review.details, mcpToolsUsed: mcpTools.join(", ") };
+      }
+      if (this.context(job, t).b.adapter === "harbor" && t.task.startsWith("metaworldplus-"))
+        await addEfeTrajectory(dirs.output, solve, score, messages, t.task);
     }
     const agent = await this.agentFailure(solve);
     const outcome = classify(solve, verify, score, t.issues, agent);

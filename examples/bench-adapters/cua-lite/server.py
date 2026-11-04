@@ -26,6 +26,7 @@ class CuaLiteBackend:
         self.env = self.server = None
         self.obs = None
         self.details = {}
+        self.call_number = 0
 
     def reset(self):
         if any(version(p) != "0.14.3" for p in ("browsergym-miniwob", "browsergym-core")):
@@ -63,6 +64,9 @@ class CuaLiteBackend:
         error = validate_lite_tool_call(call, "GUI action", require_id=False)
         if error:
             raise service.RequestError(400, error)
+        if "id" not in call:
+            self.call_number += 1
+            call["id"] = f"orbit-gui-{self.call_number}"
         reply = self.loop.run_until_complete(self.env.step([call]))
         frames = [image for result in reply.results for image in result.images]
         errors = [result.error for result in reply.results if result.error]

@@ -42,7 +42,17 @@ export const EpisodeTrajectory = z
               .min(1)
               .max(100_000)
               .optional(),
-            video: z.object({ path: ArtifactPath, offsetSec: Time.optional() }).optional(),
+            video: z
+              .object({
+                path: ArtifactPath,
+                offsetSec: Time.optional(),
+                timeMap: z
+                  .array(z.object({ time: Time, videoTime: Time }))
+                  .min(1)
+                  .max(100_000)
+                  .optional(),
+              })
+              .optional(),
             source: z.enum(["live", "render"]).optional(),
           })
           .refine(
@@ -60,6 +70,7 @@ export const EpisodeTrajectory = z
           reward: z.number().nullable(),
           terminated: z.boolean(),
           truncated: z.boolean(),
+          sessionMessageIndexes: z.array(z.number().int().nonnegative()).max(200).optional(),
           late: z.boolean().optional(),
           stall: z.boolean().optional(),
         }),
@@ -73,6 +84,7 @@ export const EpisodeTrajectory = z
           .refine((chunk) => chunk.end >= chunk.start, "chunk end precedes start"),
       )
       .max(100_000),
+    completeness: z.enum(["complete", "environment-only", "truncated"]).optional(),
     producer: z.enum(["agent", "sidecar", "verifier", "monitor"]).optional(),
     trust: z.enum(["trusted", "self-reported"]).optional(),
   })
@@ -84,6 +96,14 @@ export const EpisodeTrajectory = z
     for (const camera of trace.cameras)
       if (camera.frames && !ordered(camera.frames.map((frame) => frame.time)))
         ctx.addIssue({ code: "custom", message: "camera frame times must strictly increase" });
+    for (const camera of trace.cameras) {
+      const map = camera.video?.timeMap;
+      if (
+        map &&
+        (!ordered(map.map((frame) => frame.time)) || !ordered(map.map((frame) => frame.videoTime)))
+      )
+        ctx.addIssue({ code: "custom", message: "video mapping times must strictly increase" });
+    }
     for (const sample of trace.samples)
       if (
         sample.action.length !== trace.actionNames.length ||

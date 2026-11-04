@@ -67,7 +67,7 @@ describe.runIf(enabled)("BrowserGym real service bridge", () => {
         name: "bridge-check",
         path: process.env.ORBIT_MINIWOB_PATH,
         config: {
-          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2",
+          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-3",
           actionSet: "bid",
           maxSteps: "5",
         },
@@ -224,7 +224,7 @@ result={'status':'completed','steps':1,'reward':1,'stop_reason':'terminated','er
       benchmark: {
         name: "bridge-check",
         path: process.env.ORBIT_MINIWOB_PATH,
-        config: { image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2" },
+        config: { image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-3" },
       },
       trial: {
         task: "miniwob.click-test",

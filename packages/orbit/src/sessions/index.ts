@@ -432,7 +432,21 @@ export async function runAgentFailure(
     const claude = (await jsonlBelow(join(agentDir, "claude", "projects"), 2))[0];
     if (!claude) return null;
     for await (const e of jsonLines(claude.file)) {
-      if (e.type !== "assistant" || e.isSidechain === true) continue;
+      if (e.isSidechain === true) continue;
+      if (e.type === "system" && e.subtype === "api_error") {
+        const error = e.error as
+          | { message?: unknown; formatted?: unknown; status?: unknown }
+          | undefined;
+        text =
+          typeof error?.message === "string"
+            ? error.message
+            : typeof error?.formatted === "string"
+              ? error.formatted
+              : "API error";
+        code = error?.status === 401 || error?.status === 403 ? "authentication_error" : e.error;
+        continue;
+      }
+      if (e.type !== "assistant") continue;
       responded ||= claudeModelResponse(e);
       const content = (e.message as { content?: unknown } | undefined)?.content;
       const message =

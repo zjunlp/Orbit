@@ -51,3 +51,10 @@
 .episode-values {
   font: 12px var(--font-mono);
 }
+
+.episode-session pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow: auto;
+}

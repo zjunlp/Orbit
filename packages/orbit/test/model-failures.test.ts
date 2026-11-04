@@ -86,6 +86,79 @@ describe("final model failures before any successful response", () => {
     expect(await runAgentFailure(root)).toBeNull();
   });
 
+  it.each([
+    [{ message: "401 Invalid token", status: 401 }, "model_authentication_failed"],
+    [{ status: 401 }, "model_authentication_failed"],
+    [{ status: 403, formatted: "Authentication refused" }, "model_authentication_failed"],
+    [{ formatted: "401 Invalid token" }, "model_authentication_failed"],
+    [{ message: "fetch failed", status: null }, "model_unreachable"],
+  ])(
+    "recognizes Claude system API retries before any successful response: %#",
+    async (error, kind) => {
+      const root = transcript("claude", [
+        { type: "system", subtype: "api_error", error, retryAttempt: 1 },
+        { type: "system", subtype: "api_error", error, retryAttempt: 2 },
+        { type: "last-prompt", lastPrompt: "Complete the task" },
+        { type: "cost-state", cost: 0 },
+      ]);
+      expect(await runAgentFailure(root)).toMatchObject({ kind });
+    },
+  );
+
+  it.each([true, false])(
+    "keeps Claude system API failures scoreable when a reply exists (reply first: %s)",
+    async (first) => {
+      const response = {
+        type: "assistant",
+        message: { content: [{ type: "text", text: "Done" }] },
+      };
+      const failure = { type: "system", subtype: "api_error", error: { status: 401 } };
+      const root = transcript("claude", first ? [response, failure] : [failure, response]);
+      expect(await runAgentFailure(root)).toBeNull();
+    },
+  );
+
+  it("ignores Claude sidechain, user and unrelated system API error lookalikes", async () => {
+    const error = { message: "401 Invalid token", status: 401 };
+    for (const rows of [
+      [{ type: "system", subtype: "api_error", error, isSidechain: true }],
+      [{ type: "system", subtype: "other", error }],
+      [{ type: "user", subtype: "api_error", error }],
+      [
+        {
+          type: "user",
+          message: { content: [{ type: "tool_result", content: JSON.stringify(error) }] },
+        },
+      ],
+      [{ type: "last-prompt" }, { type: "cost-state", cost: 0 }],
+      [
+        { type: "system", subtype: "api_error", error },
+        {
+          type: "system",
+          subtype: "api_error",
+          error: { status: 400, message: "Invalid request shape" },
+        },
+      ],
+    ])
+      expect(await runAgentFailure(transcript("claude", rows))).toBeNull();
+  });
+
+  it("redacts Claude system API errors before clipping", async () => {
+    const secret = `fixture-not-a-key-${"x".repeat(240)}`;
+    const redactor = new Redactor([secret]);
+    const root = transcript("claude", [
+      {
+        type: "system",
+        subtype: "api_error",
+        error: { status: 401, message: `Invalid token: ${secret}` },
+      },
+    ]);
+    expect(await runAgentFailure(root, undefined, (text) => redactor.apply(text))).toEqual({
+      kind: "model_authentication_failed",
+      message: "Invalid token: [redacted]",
+    });
+  });
+
   it("ignores user/tool error text and unrelated terminal errors", async () => {
     for (const agent of ["codex", "claude"] as const) {
       const rows =

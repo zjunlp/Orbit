@@ -535,7 +535,7 @@ export function realDirs(root: string, dir: string): void {
   const rel = relative(root, dir);
   if (rel.startsWith("..")) throw new Error(`${dir} leaves ${root}`);
   let at = root;
-  for (const part of rel ? rel.split(sep) : []) {
+  for (const part of ["", ...(rel ? rel.split(sep) : [])]) {
     at = join(at, part);
     const st = lstatSync(at, { throwIfNoEntry: false });
     if (st && !st.isDirectory()) rmSync(at, { force: true });

@@ -1,16 +1,18 @@
-import type { EpisodeTrajectory } from "@zjunlp/orbit/contracts";
+import type { EpisodeTrajectory, SessionMessage } from "@zjunlp/orbit/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, PALETTE } from "../../components/Chart.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
-import { parseEpisode, sampleAt } from "../../lib/episode.ts";
+import { episodeVideoTime, parseEpisode, sampleAt } from "../../lib/episode.ts";
 import { episodeVideo, MAX_VIDEO_BYTES } from "../../lib/episode-video.ts";
 import { useAsync } from "../../lib/use.ts";
 import "./episode.css";
 
 const MAX_BYTES = 2 * 1024 * 1024;
+const seconds = (value: number) => Number(value.toFixed(4)).toString();
 
 export function EpisodeFile({ run, file }: { run: Run; file: ReviewFile }) {
+  const session = useAsync(() => api.session(run.id), [run.id, run.state]);
   const artifacts = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
   const entry = artifacts.data?.files.find((item) => item.path === file.path);
   const source = useAsync(async () => {
@@ -50,6 +52,7 @@ export function EpisodeFile({ run, file }: { run: Run; file: ReviewFile }) {
           trace={source.data}
           runId={run.id}
           files={files}
+          messages={session.data?.agent?.messages ?? []}
         />
       )}
     </div>
@@ -75,7 +78,7 @@ function Camera({
       ? camera.video.path
       : undefined
     : frame?.path;
-  const seek = Math.max(0, time - (camera.video?.offsetSec ?? 0));
+  const seek = camera.video ? episodeVideoTime(camera.video, time) : 0;
   return (
     <figure className="episode-camera">
       <figcaption>
@@ -169,10 +172,12 @@ export function EpisodeViewer({
   trace,
   runId,
   files,
+  messages = [],
 }: {
   trace: EpisodeTrajectory;
   runId: string;
   files: Set<string>;
+  messages?: SessionMessage[];
 }) {
   const videoLimit = Math.floor(
     MAX_VIDEO_BYTES / Math.max(1, trace.cameras.filter((camera) => camera.video).length),
@@ -222,6 +227,15 @@ export function EpisodeViewer({
         <b>{trace.goal || "Saved episode"}</b>
         <span className="chip">{trace.producer ?? "producer not recorded"}</span>
         <span className="chip">{trace.trust ?? "trust not recorded"}</span>
+        {trace.completeness && (
+          <span className="chip">
+            {trace.completeness === "complete"
+              ? "Session complete"
+              : trace.completeness === "environment-only"
+                ? "Environment only"
+                : "Partial record"}
+          </span>
+        )}
       </div>
       <div className="episode-controls">
         <button
@@ -259,7 +273,7 @@ export function EpisodeViewer({
         {sample.stall && <span className="chip warn">Stall</span>}
         {chunks.map((chunk) => (
           <span key={`${chunk.start}-${chunk.end}-${chunk.label}`} className="chip">
-            Chunk {chunk.label ?? `${chunk.start}–${chunk.end}s`}
+            Chunk {chunk.label ?? `${seconds(chunk.start)}–${seconds(chunk.end)}s`}
           </span>
         ))}
       </div>
@@ -288,7 +302,8 @@ export function EpisodeViewer({
                 setIndex(sampleAt(trace, chunk.start));
               }}
             >
-              {chunk.label ?? `Chunk at ${chunk.start}s`} · {chunk.start}–{chunk.end}s
+              {chunk.label ?? `Chunk at ${seconds(chunk.start)}s`} · {seconds(chunk.start)}–
+              {seconds(chunk.end)}s
             </button>
           ))
         ) : (
@@ -316,6 +331,27 @@ export function EpisodeViewer({
             </span>
           ))}
         </div>
+      </section>
+      <section aria-label="Agent at this time" className="episode-session">
+        <h3>Agent at this time</h3>
+        {sample.sessionMessageIndexes?.some((index) => messages[index]) ? (
+          sample.sessionMessageIndexes.map((index) => {
+            const message = messages[index];
+            return message ? (
+              <details key={index} open={message.kind === "thinking"}>
+                <summary>
+                  {message.kind.replace("_", " ")}
+                  {message.name ? ` · ${message.name}` : ""}
+                </summary>
+                <pre>{message.text}</pre>
+              </details>
+            ) : null;
+          })
+        ) : (
+          <p className="faint">
+            No session messages linked at this time. The full Agent session remains available.
+          </p>
+        )}
       </section>
       <p className="faint">
         Saved media only. Moving the timeline does not send actions or restore the environment.

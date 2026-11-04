@@ -2,6 +2,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setImmediate } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthStore } from "../src/auth/index.ts";
@@ -329,6 +330,58 @@ it("lists jobs with one trial aggregate query and the same counts and task-weigh
   );
   expect(f.bench.jobs(0)).toEqual({ jobs: [] });
 });
+
+it.each(["solving", "verifying"] as const)(
+  "does not repeat cancellation when %s run changes synchronously notify bench",
+  async (state) => {
+    const f = fixture();
+    const active = Run.parse({
+      ...f.run,
+      id: "active",
+      state: "running",
+      exitCode: null,
+      cleanup: "pending",
+      endedAt: null,
+      spec: { ...f.run.spec, tags: { bench: "fixture" } },
+    });
+    f.store.putJob(f.job);
+    f.store.putRun(f.run);
+    f.store.putRun(active);
+    f.store.putTrial({
+      ...f.trial,
+      state,
+      solveRunId: state === "solving" ? active.id : f.run.id,
+      verifyRunId: state === "verifying" ? active.id : null,
+    });
+    let notifications = 0;
+    const cancel = vi.spyOn(f.runs, "cancel").mockImplementation(async (id) => {
+      const run = f.store.getRun(id);
+      if (!run) throw new Error("missing fixture run");
+      const requested = { ...run, stopRequested: "cancel" as const };
+      f.store.putRun(requested);
+      // Bound the explicit fake so a regression fails without starving the test runner.
+      if (++notifications <= 3) f.runs.emit("change", { run: requested });
+      return requested;
+    });
+    await f.bench.cancel(f.job.id);
+    await setImmediate();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(f.store.getTrial(f.trial.id)?.state).toBe(state);
+
+    const stopped = {
+      ...active,
+      state: "cancelled" as const,
+      cleanup: "done" as const,
+      stopRequested: "cancel" as const,
+      exitCode: 143,
+      endedAt: at,
+    };
+    f.store.putRun(stopped);
+    f.runs.emit("change", { run: stopped });
+    await expect.poll(() => f.store.getTrial(f.trial.id)?.state).toBe("done");
+    expect(cancel).toHaveBeenCalledTimes(1);
+  },
+);
 
 it("ignores ordinary run events before looking up trials, retaining tags and legacy groups", () => {
   const f = fixture();

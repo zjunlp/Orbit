@@ -163,7 +163,12 @@ export function resumeSpec(
       // The method's model and effort are baked into the command; a resume only needs the id.
       {},
       checkpoint.session as NonNullable<typeof checkpoint.session>,
-      def.command.mcp.kind === "claude-json" && run.spec.command.includes(def.command.mcp.flag),
+      def.command.mcp.kind === "claude-json" &&
+        run.spec.command.some(
+          (arg) =>
+            def.command.mcp.kind === "claude-json" &&
+            (arg === def.command.mcp.flag || arg.startsWith(`${def.command.mcp.flag}=`)),
+        ),
     );
   }
   return {

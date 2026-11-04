@@ -324,7 +324,8 @@ export function renderCommand(
   const configured =
     vars.mcp && mcp.kind === "claude-json"
       ? tokens.flatMap((t) =>
-          t.includes("{instruction}") ? [mcp.flag, `${vars.home}/orbit-mcp.json`, t] : [t],
+          // Claude's variadic config option otherwise consumes the following instruction.
+          t.includes("{instruction}") ? [`${mcp.flag}=${vars.home}/orbit-mcp.json`, t] : [t],
         )
       : tokens;
   const argv = renderTemplate(configured, {
