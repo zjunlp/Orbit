@@ -6,21 +6,42 @@ export interface ActionOverlay {
   text?: string;
 }
 
+const NUM = String.raw`(-?\d+(?:\.\d+)?)`;
+const STR = String.raw`('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")`;
+const REST = String.raw`\s*(?:,[^()]*)?`;
+// BrowserGym's coordinate action set (browsergym.core.action.functions).
+const POINT = new RegExp(
+  String.raw`^\s*(?:mouse_click|mouse_dblclick|mouse_move|mouse_down|mouse_up)\(\s*${NUM}\s*,\s*${NUM}${REST}\)\s*$`,
+);
+const DRAG = new RegExp(
+  String.raw`^\s*mouse_drag_and_drop\(\s*${NUM}\s*,\s*${NUM}\s*,\s*${NUM}\s*,\s*${NUM}\s*\)\s*$`,
+);
+const TYPE = new RegExp(String.raw`^\s*keyboard_type\(\s*(?:text\s*=\s*)?${STR}\s*\)\s*$`);
+const FILL = new RegExp(
+  String.raw`^\s*fill\(\s*(?:bid\s*=\s*)?${STR}\s*,\s*(?:value\s*=\s*)?${STR}${REST}\)\s*$`,
+);
+
+/** The text of a Python string literal, for display only. */
+function literal(quoted: string): string {
+  return quoted.slice(1, -1).replace(/\\(.)/g, (_, c: string) => (c === "n" ? "\n" : c));
+}
+
 /** Read a small display-only subset of original BrowserGym calls; never evaluate Python. */
 export function actionOverlay(action: string | null): ActionOverlay {
   if (!action || action.length > 20_000) return {};
-  const match =
-    /^\s*(mouse_click|mouse_dblclick|mouse_move|mouse_drag)\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)(?:\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?))?\s*\)\s*$/.exec(
-      action,
-    );
-  if (match) {
-    const point: [number, number] = [Number(match[2]), Number(match[3])];
-    if (match[1] === "mouse_drag" && match[4] !== undefined && match[5] !== undefined)
-      return { point, end: [Number(match[4]), Number(match[5])] };
-    if (match[1] !== "mouse_drag" && match[4] === undefined) return { point };
-  }
-  const text = /^\s*(?:keyboard_type|fill)\((.*)\)\s*$/.exec(action);
-  return text ? { text: text[1]?.slice(0, 2000) } : {};
+  const point = POINT.exec(action);
+  if (point) return { point: [Number(point[1]), Number(point[2])] };
+  const drag = DRAG.exec(action);
+  if (drag)
+    return {
+      point: [Number(drag[1]), Number(drag[2])],
+      end: [Number(drag[3]), Number(drag[4])],
+    };
+  const typed = TYPE.exec(action);
+  if (typed?.[1]) return { text: literal(typed[1]).slice(0, 2000) };
+  const filled = FILL.exec(action);
+  if (filled?.[2]) return { text: literal(filled[2]).slice(0, 2000) };
+  return {};
 }
 
 export function stepMessages(trace: GuiTrace, index: number, messages: SessionMessage[]) {

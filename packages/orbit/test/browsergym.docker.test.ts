@@ -66,7 +66,7 @@ def waiting(context):
           actionSet,
           agentDir: policy,
           maxSteps: "3",
-          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3",
+          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2",
         },
         passEnv: ["ORBIT_GUI_TEST_GRADER_KEY"],
         resources: join(adapter, "resources.json"),

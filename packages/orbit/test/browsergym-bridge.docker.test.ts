@@ -67,7 +67,7 @@ describe.runIf(enabled)("BrowserGym real service bridge", () => {
         name: "bridge-check",
         path: process.env.ORBIT_MINIWOB_PATH,
         config: {
-          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3",
+          image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2",
           actionSet: "bid",
           maxSteps: "5",
         },
@@ -192,7 +192,7 @@ time.sleep(3600)
       ),
     ).toMatchObject({ status: "completed", steps: 2 });
   }, 200_000);
-  it("rejects an Agent-precreated archive even when its fake evidence hashes are consistent", async () => {
+  it("replaces an Agent-precreated archive with the service evidence instead of trusting or nesting it", async () => {
     const run = await submit(
       "forged-archive",
       `import hashlib, json, os
@@ -214,8 +214,9 @@ result={'status':'completed','steps':1,'reward':1,'stop_reason':'terminated','er
     expect((await client.wait(run.id, 180)).cleanup).toBe("done");
     const output = runDirs(paths, run.id).output;
     const root = join(output, "services/gui/evidence");
-    expect(JSON.parse(readFileSync(join(root, "result.json"), "utf8")).reward).toBe(1);
-    expect(existsSync(join(root, "evidence/result.json"))).toBe(true);
+    // The collected copy replaces what the Agent planted: the service's own (unacted) episode.
+    expect(JSON.parse(readFileSync(join(root, "result.json"), "utf8")).reward).toBe(0);
+    expect(existsSync(join(root, "evidence"))).toBe(false);
     const solve = await client.get(run.id);
     const request = {
       protocol: 1,
@@ -223,7 +224,7 @@ result={'status':'completed','steps':1,'reward':1,'stop_reason':'terminated','er
       benchmark: {
         name: "bridge-check",
         path: process.env.ORBIT_MINIWOB_PATH,
-        config: { image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3" },
+        config: { image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2" },
       },
       trial: {
         task: "miniwob.click-test",
@@ -239,7 +240,7 @@ result={'status':'completed','steps':1,'reward':1,'stop_reason':'terminated','er
       }),
     );
     const verifier = await client.submit({ ...verify.spec, name: "forged evidence verification" });
-    expect((await client.wait(verifier.id, 180)).state).toBe("failed");
+    expect((await client.wait(verifier.id, 180)).state).toBe("succeeded");
     const score = JSON.parse(
       execFileSync(join(adapter, "adapter.py"), ["score"], {
         input: JSON.stringify({
@@ -253,6 +254,6 @@ result={'status':'completed','steps':1,'reward':1,'stop_reason':'terminated','er
         encoding: "utf8",
       }),
     );
-    expect(score).toMatchObject({ score: null, invalid: true, failure: "scorer_error" });
+    expect(score).toMatchObject({ score: 0, invalid: false });
   }, 200_000);
 });

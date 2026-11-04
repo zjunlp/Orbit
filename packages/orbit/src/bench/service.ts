@@ -9,6 +9,7 @@ import type { AuthEntry, AuthStore } from "../auth/index.ts";
 import type { OrbitPaths } from "../config/paths.ts";
 import {
   type AdapterTasksResponse,
+  type AgentCapabilities,
   type AgentDefinition,
   type BenchCompare,
   type BenchConsolidateInput,
@@ -167,7 +168,7 @@ export class BenchService {
         throw new UserError(`${b.name} does not support ${m.agent} methods`);
       const asi = b.adapter === "asi" ? asiMethodProblem(m) : null;
       if (asi) throw new UserError(`${m.name}: ${asi}`);
-      this.checkMethod(m);
+      this.checkMethod(m, info.capabilities?.requires ?? []);
     }
     if (spec.tasks.length === 0) spec.tasks = all.filter((t) => t.supported).map((t) => t.id);
     for (const id of spec.tasks) {
@@ -239,7 +240,7 @@ export class BenchService {
     return def;
   }
 
-  private checkMethod(m: Method): void {
+  private checkMethod(m: Method, requires: readonly (keyof AgentCapabilities)[] = []): void {
     if (m.agent === "external") return;
     if (!isCliMethod(m)) {
       if (m.auth || m.bundle || m.model)
@@ -248,6 +249,11 @@ export class BenchService {
     }
     const def = this.agents.get(m.agent);
     if (!def) throw new UserError(`${m.name}: unknown Agent ${m.agent}; see \`orbit agent ls\``);
+    const lacking = requires.filter((k) => !def.capabilities[k]);
+    if (lacking.length)
+      throw new UserError(
+        `${m.name}: this benchmark needs Agent capabilities ${lacking.join(", ")}, which ${m.agent} does not declare`,
+      );
     const entry = m.auth ? this.deps.auth?.get(m.auth) : null;
     if (!entry) throw new UserError(`${m.name}: auth profile not found: ${m.auth}`);
     if (!def.auth.kinds.includes(entry.profile.kind))

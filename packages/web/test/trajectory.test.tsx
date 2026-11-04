@@ -145,10 +145,18 @@ describe("GUI action overlays and Agent alignment", () => {
     const { actionOverlay } = await import("../src/lib/gui-action.ts");
     const { ActionMarker } = await import("../src/pages/trial/Trajectory.tsx");
     expect(actionOverlay("mouse_click(12, 30)")).toEqual({ point: [12, 30] });
-    expect(actionOverlay("mouse_drag(12, 30, 45, 50)")).toEqual({ point: [12, 30], end: [45, 50] });
+    expect(actionOverlay("mouse_click(12, 30, button='right')")).toEqual({ point: [12, 30] });
+    expect(actionOverlay("mouse_drag_and_drop(12, 30, 45, 50)")).toEqual({
+      point: [12, 30],
+      end: [45, 50],
+    });
+    expect(actionOverlay("mouse_drag(12, 30, 45, 50)")).toEqual({});
+    expect(actionOverlay("fill('13', 'hello, world')")).toEqual({ text: "hello, world" });
+    expect(actionOverlay(String.raw`keyboard_type("it\'s")`)).toEqual({ text: "it's" });
+    expect(actionOverlay("drag_and_drop('13', '14')")).toEqual({});
     expect(actionOverlay("__import__('os').system('bad')")).toEqual({});
     const html = renderToStaticMarkup(
-      <ActionMarker action="mouse_drag(12, 30, 45, 50)" width={160} height={200} />,
+      <ActionMarker action="mouse_drag_and_drop(12, 30, 45, 50)" width={160} height={200} />,
     );
     expect(html).toContain("Drag path");
     expect(html).toContain('x1="12"');

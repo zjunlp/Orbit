@@ -363,3 +363,17 @@ it("collects into real directories instead of following links the run planted in
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it("leaves nothing the run planted at a destination whose copy failed", async () => {
+  const output = mkdtempSync(join(tmpdir(), "orbit-collect-fail-"));
+  try {
+    const dest = join(output, "services", "gui", "evidence");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "result.json"), '{"reward":0}');
+    vi.mocked(docker.copyFromContainer).mockResolvedValueOnce("no such container");
+    expect(await copyCollected("c", "/evidence", dest, output)).toBe("no such container");
+    expect(existsSync(dest)).toBe(false);
+  } finally {
+    rmSync(output, { recursive: true, force: true });
+  }
+});

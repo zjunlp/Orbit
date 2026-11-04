@@ -107,7 +107,7 @@ process.stdin.on("end", () => {
   fs.appendFileSync(${JSON.stringify(requests)}, JSON.stringify(req) + "\\n");
   if (req.op === "tasks") return say({
     tasks: [{ id: ${JSON.stringify(task)}, title: "Fixture", supported: true, reason: null }],
-    capabilities: { kind: "browser", methods: ["empty"], conditions: { actionSet: req.benchmark.config.actionSet }, scoreKind: "binary", rescore: "evidence" }
+    capabilities: { kind: "browser", methods: ["empty", "cli"], requires: ["gui"], conditions: { actionSet: req.benchmark.config.actionSet }, scoreKind: "binary", rescore: "evidence" }
   });
   if (req.op === "score") return say({ score: req.benchmark.config.actionSet === "coord" ? 1 : 0 });
   say({ spec: { backend: "process", command: ["echo", req.benchmark.config.actionSet] } });
@@ -124,6 +124,12 @@ process.stdin.on("end", () => {
   await expect(
     f.bench.submit({ benchmark: "fixture", methods: [{ name: "bad", agent: "oracle" }] }),
   ).rejects.toThrow("does not support oracle");
+  await expect(
+    f.bench.submit({
+      benchmark: "fixture",
+      methods: [{ name: "c", agent: "codex", auth: "p" }],
+    }),
+  ).rejects.toThrow("needs Agent capabilities gui, which codex does not declare");
   expect(f.store.listJobs()).toHaveLength(0);
   const submitted = await f.bench.submit({
     benchmark: "fixture",

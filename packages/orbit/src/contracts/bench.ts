@@ -107,6 +107,8 @@ export const BenchCapabilities = z.object({
   conditions: z.record(z.string().max(80), z.string().max(2000)),
   scoreKind: z.enum(["binary", "scalar"]),
   rescore: z.enum(["evidence", "score", "none"]),
+  /** Agent capabilities (registry `capabilities`) a CLI method needs; checked on submission. */
+  requires: z.array(z.enum(["oneShot", "multiTurn", "mcp", "gui"])).default([]),
 });
 export type BenchCapabilities = z.infer<typeof BenchCapabilities>;
 

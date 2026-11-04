@@ -93,6 +93,14 @@ solve Run
 - 更新使用指南与独立 opt-in Docker/真实 CLI 验收；未修改禁改核心目录，未引入上游队列或数据库。
 - 复查修正 GUI 会话对齐：返回结果必须同时匹配动作 id 与 step，连续工具结果不再带入上一个无关结果；新增精确关联与 MCP 嵌套结果回归。
 
+### 主线验收修正（Claude）
+
+- 证据采集：合并 P5 core 后 `copyCollected` 每次替换目标；另在 daemon 中只向真实目录采集（运行预置的符号链接/文件被移除而不跟随），复制失败时目标不留运行自写内容。Agent 预建 `services/gui/evidence` 不再能让真实证据嵌套、把 trial 变成无效。
+- Web 动作解析按 BrowserGym 原名：`mouse_click/dblclick/move/down/up(x, y, …)`（含 `button=`）、`mouse_drag_and_drop(x1, y1, x2, y2)`；`fill(bid, value)` 只显示 value，`keyboard_type` 显示解码后的字符串；`drag_and_drop(bid, bid)` 不画坐标。
+- 能力检查：`BenchCapabilities.requires`（默认空）；BrowserGym 声明 `requires: ["gui"]`，提交时未声明 `gui` 的 Agent（如 codex）被拒绝。
+- 默认镜像标签改为 `orbit-browsergym:0.14.3-2`（Dockerfile 变更后不复用旧本地镜像）；README 与 opt-in Docker 测试同步。
+- design.md 补 `contracts/trajectory.ts`、review `episode` kind、证据签名与采集规则；status 行如实收窄。
+
 ## Validation
 
 提交号引用 rebase 后的等价实现；首次验证基线与新主线复查分别注明。
@@ -111,6 +119,9 @@ solve Run
 | P4 主线集成复查 | main `4993f5f` / `9207f5d` | passed | 已 rebase 新 main；状态文档保留 P4 与 GUI 两边进展。pnpm verify：Orbit 425、Web 61，类型/边界/构建通过；固定既有镜像的真实 Chromium CLI/MCP 协议 4/4 再通过（显式脚本客户端，无模型调用）。本轮 5 个 Run 全部 cleanup done、租约 released，无 orbit.run/orbit.parent 资源残留，测试 daemon 已停止。 |
 | 真实浏览器查看 | `fb4645f7` | passed | 隔离 Orbit 中的 Chromium 打开真实 Claude step 与显式 GUI/具身 fixture；确认比例叠加、对应会话、双相机、video currentTime=0.2s 定位、uPlot 和紧凑布局，无 pageerror。仓库外保留 gui-agent-session.png、gui-overlay.png、episode-timeline.png 与 browser-check.json，交付时提供位置。 |
 | Codex GUI 模型连接 | 签名前开发前置检查 | failed | 已尝试，但现有认证/容器模型连接未通过；没有冒称完成 GUI 任务或开启其 gui 能力。可复现的核心识别缺口见 Next。 |
+| 主线验收修正 | feat/p6-cli-agent-bridge（合并 P5 后） | passed | `pnpm verify`：Orbit 491 / 26 skipped、Web 61；BrowserGym Python 单测通过；新增符号链接/失败复制、动作名、`requires` 拒绝回归。 |
+| 主线修正真实协议 | 同上 | passed | `browsergym-bridge.docker.test.ts` 4/4（既有 `p6-cli-check` 镜像、显式脚本客户端、无模型调用）；Agent 预建的伪造 archive 现被 service 真实证据替换，验证通过、score 0 valid；自建资源无残留 |
+| 新标签镜像构建 / 真实 Claude 重跑 | — | not_run | 本机 `docker build` 的 pip/playwright 安装失败或超时；Claude 五任务未重跑（执行协议未改，沿用上表） |
 | 其他 CLI / 实际具身 adapter | 本任务范围外 | not_run | 其余 CLI 未逐一真实验证；具身仅实现约定格式和视图，后续由主线 adapter 生产索引。 |
 
 ## Next / open issues

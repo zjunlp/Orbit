@@ -544,8 +544,9 @@ export function realDirs(root: string, dir: string): void {
 }
 
 /**
- * Retry-safe directory copies: Docker always sees a fresh target, then evidence is replaced. Every
- * directory from `root` (the output directory) down to `dest` is made real first.
+ * Retry-safe directory copies: Docker always sees a fresh target, then evidence is replaced; a failed
+ * copy leaves nothing at `dest`. Every directory from `root` (the output directory) down to `dest`
+ * is made real first.
  */
 export async function copyCollected(
   containerId: string,
@@ -558,7 +559,9 @@ export async function copyCollected(
   rmSync(temporary, { recursive: true, force: true });
   const error = await docker.copyFromContainer(containerId, path, temporary);
   if (error) {
+    // Whatever the run itself left at the destination is not collected evidence.
     rmSync(temporary, { recursive: true, force: true });
+    rmSync(dest, { recursive: true, force: true });
     return error;
   }
   rmSync(dest, { recursive: true, force: true });

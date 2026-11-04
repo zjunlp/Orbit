@@ -150,6 +150,7 @@ describe("bench jobs", () => {
       conditions: { actionSet: "coord" },
       scoreKind: "binary",
       rescore: "evidence",
+      requires: [],
     });
     expect(info.metrics[0]?.name).toBe("answer");
     expect(await client.benchTasks(registration.name)).toEqual(info.tasks);

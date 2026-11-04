@@ -76,7 +76,7 @@ describe.runIf(enabled)("BrowserGym real CLI Agent bridge", () => {
       config: {
         actionSet: "bid",
         maxSteps: "12",
-        image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3",
+        image: process.env.ORBIT_BROWSERGYM_IMAGE ?? "orbit-browsergym:0.14.3-2",
       },
     });
     writeFileSync("/tmp/orbit-p6-cli-latest-home", home, { mode: 0o600 });

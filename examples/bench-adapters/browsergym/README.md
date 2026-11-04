@@ -24,7 +24,7 @@ ORBIT_GUI_ADAPTER="$(pwd)/examples/bench-adapters/browsergym"
 ORBIT_MINIWOB_DIR=/path/to/new/miniwob-plusplus
 git clone https://github.com/Farama-Foundation/miniwob-plusplus.git "$ORBIT_MINIWOB_DIR"
 git -C "$ORBIT_MINIWOB_DIR" checkout --detach 7fd85d71a4b60325c6585396ec4f48377d049838
-docker build -t orbit-browsergym:0.14.3 "$ORBIT_GUI_ADAPTER"
+docker build -t orbit-browsergym:0.14.3-2 "$ORBIT_GUI_ADAPTER"
 
 orbit bench add miniwob "$ORBIT_MINIWOB_DIR" \
   --adapter "$ORBIT_GUI_ADAPTER/adapter.py" \

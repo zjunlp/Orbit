@@ -22,6 +22,7 @@ const caps: BenchCapabilities = {
   conditions: { observation: "screenshot", maxSteps: "20" },
   scoreKind: "binary",
   rescore: "evidence",
+  requires: [],
 };
 const tasks: BenchTask[] = [
   { id: "click", title: null, supported: true, reason: null, tags: {} },
