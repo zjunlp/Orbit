@@ -1,6 +1,6 @@
 # Cua Bench adapter
 
-Experimental external adapter for the original Cua Bench episode runner; native desktop calibration is not yet completed (see the task record). One Orbit trial runs one native task variant. It does not use BatchRunner, upstream queues, SQLite, resume, or a parallel runner.
+External adapter for the original Cua Bench episode runner, with native desktop calibration on five basic task families. One Orbit trial runs one native task variant. It does not use BatchRunner, upstream queues, SQLite, resume, or a parallel runner.
 
 ## Preparation
 
@@ -40,4 +40,8 @@ Live evaluation calls the original task hook. Reward is independent of `EpisodeR
 
 ## Validation
 
-`python3 -B -m unittest discover -s examples/bench-adapters/cua-bench` uses explicit file/source fixtures. The shared TypeScript test validates the generated service plan against the real Run schema. Real-machine validation and outstanding limits are recorded in [the task record](../../../docs/tasks/20261104-p5a-gui-hub-adapters.md).
+`python3 -B -m unittest discover -s examples/bench-adapters/cua-bench` passes 10 explicit file/source fixtures. The shared TypeScript test validates the generated service plan against the real Run schema.
+
+Native validation on 2026-11-04 used an isolated Orbit daemon and the pinned original desktop image. For the `@0` variants of `click-button`, `click-icon`, `color-picker`, `typing-input` and `toggle-switch`, all five `empty` episodes returned valid zero rewards and all five original `oracle` episodes returned valid full rewards. All ten produced schema-valid GUI trajectories, PNG frames and original ATIF files. Saved-evidence rescore preserved the original solve and full reward.
+
+Explicit development agents exercised failure paths after real native setup: a native evaluator transport failure produced invalid evaluation with no score; connection-close failures preserved a completed valid zero reward; cancellation completed cleanup. All owned containers, networks and token volumes were removed and leases released. These agents are failure fixtures, not model-agent calibration. General external agents and the remaining basic variants are not yet calibrated; KiCad and workflow variants remain unsupported. See [the task record](../../../docs/tasks/20261104-p5a-gui-hub-adapters.md) for validation limits and remaining work.
