@@ -59,6 +59,14 @@ export const AdapterRunSpec = z
   .refine((s) => !ORBIT_OWNED_SPEC_FIELDS.some((k) => k in s), {
     message: `adapter run specs may not set ${ORBIT_OWNED_SPEC_FIELDS.join(", ")}`,
   })
+  .superRefine((spec, ctx) => {
+    // A role's GPUs are wired into that service's container, which only exists next to a docker run.
+    // (Runs with services already stay on the submitting node; a host-path mount changes nothing.)
+    const s = spec as { services?: { role?: string }[]; backend?: string };
+    if (!s.services?.some((x) => x.role !== undefined)) return;
+    if (s.backend === "process")
+      ctx.addIssue({ code: "custom", message: "services with a role need the docker backend" });
+  })
   .refine((s) => Boolean(s.command) !== Boolean(s.agentTask), {
     message: "an adapter run spec needs exactly one of command or agentTask",
   });

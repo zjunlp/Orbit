@@ -918,7 +918,7 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | P1 Agent 注册表 | 已完成；bench 契约断点已修复（R1） | §6；codex、claude-code 与容器内安装的 dsh 经真实 bench trial 验证 |
 | P2 样本身份与官方聚合 | 已实现：failure / episode、OfficialRule 与官方值、报告修订；attempt/retry 计数与批量 Run 后置 | 契约与统计测试；fixture adapter 真实 job 与重新评分验证 |
 | P3 两个小而完整的接入 | 已完成：MiniWoB++ 全量 125；EFE MetaWorld+ standard（compose 卷、restart、偏差登记） | empty 125/125；EFE oracle 1 / empty 0 |
-| P4 Policy 路线 | 按角色分配、service GPU、gang lease、PolicySpec；vla-eval 固定任务/episode 集合（`--no-docker` 于 main） | 原版指标、预算与故障行为对齐；policy + sim 无超卖 |
+| P4 Policy 路线 | 已完成：`Lease.roles` 按角色分配、service GPU 与 `entrypoint`、vla-eval 适配器（LIBERO 真实任务） | 角色独占卡、整组排队；LIBERO empty 0 分 valid |
 | P5 扩大覆盖（adapter 部分由并行线 A，见 tasks/20261104-p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
 | P6 CLI Agent 桥（并行线 B，见 tasks/20261104-p6） | computer-use 工具（CLI + MCP）、EFE 客户端集成、能力检查 | Claude Code 在 MiniWoB / OSWorld 子集与 EFE CPU 任务跑通并有统一轨迹 |
 | P7 规模优化 | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |

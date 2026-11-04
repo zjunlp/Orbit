@@ -48,6 +48,8 @@ export interface ContainerSpec {
   image: string;
   /** Empty keeps the image's command. */
   command: string[];
+  /** Replaces the image's ENTRYPOINT. */
+  entrypoint?: string;
   labels: Record<string, string>;
   gpuIds: string[];
   gpuMode: GpuMode;
@@ -176,6 +178,7 @@ export function runArgs(s: ContainerSpec): string[] {
   if (s.hostCgroup) args.push("--cgroupns", "host");
   if (s.user) args.push("--user", s.user);
   if (s.workdir) args.push("-w", s.workdir);
+  if (s.entrypoint) args.push("--entrypoint", s.entrypoint);
   args.push(s.image, ...s.command);
   return args;
 }

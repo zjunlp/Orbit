@@ -126,7 +126,7 @@ export async function launch(ctx: Context, id: string): Promise<void> {
     if (ctl.cancel) void docker.stopContainer(containerId);
 
     const st = await docker.inspectContainer(containerId);
-    const want = [...(run.lease?.gpuIds ?? [])].sort().join(",");
+    const want = [...mainGpus(run)].sort().join(",");
     const got = [...(st?.gpuIds ?? [])].sort().join(",");
     if (want !== got) {
       // Stop it, then collect logs and outputs as for any failure before the container goes.
@@ -309,8 +309,9 @@ export function containerSpec(
     name: containerName(run.id),
     image,
     command: runCommand(s),
+    ...(s.entrypoint ? { entrypoint: s.entrypoint } : {}),
     labels: { [docker.LABEL_RUN]: run.id, [docker.LABEL_HOME]: ctx.homeLabel },
-    gpuIds: run.lease?.gpuIds ?? [],
+    gpuIds: mainGpus(run),
     gpuMode: ctx.gpuMode,
     cpus: s.resources.cpus,
     memGB: s.resources.memGB,
@@ -349,3 +350,13 @@ export const realOr = (p: string) => {
     return p;
   }
 };
+
+/**
+ * GPUs of the run's own container: its `main` role on leases written by role, else the whole lease
+ * (a single-container run, or a lease from before roles existed).
+ */
+export function mainGpus(run: Run): string[] {
+  const roles = run.lease?.roles ?? [];
+  const main = roles.find((x) => x.role === "main");
+  return main ? main.gpuIds : (run.lease?.gpuIds ?? []);
+}

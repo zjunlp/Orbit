@@ -5,10 +5,11 @@ import {
   leaseRequest,
   type NodeResources,
   type RunSpec,
+  roleRequests,
 } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
 
-import { allocate, infeasible } from "../resources/allocate.ts";
+import { allocateRoles, infeasible } from "../resources/allocate.ts";
 import { diskCheck, lowFreeGB } from "../resources/disk.ts";
 import type { RunContext } from "./context.ts";
 import { joinReasons, nodeLeases, type RemoteNode, remoteBlocker } from "./placement.ts";
@@ -143,7 +144,11 @@ export async function startCheck(
   const ahead = ctx.store.queuedRuns().length;
   const queue = ahead ? `; ${ahead} run(s) already queued may go first` : "";
   if (here) {
-    const a = allocate(leaseRequest(spec), await ctx.resources(true), ctx.store.activeLeases());
+    const a = allocateRoles(
+      roleRequests(spec),
+      await ctx.resources(true),
+      ctx.store.activeLeases(),
+    );
     if (a.ok)
       return {
         name: "placement",
@@ -160,7 +165,7 @@ export async function startCheck(
       continue;
     }
     const r = n.resources as NodeResources;
-    const a = allocate(leaseRequest(spec), r, nodeLeases(n, mirrors));
+    const a = allocateRoles(roleRequests(spec), r, nodeLeases(n, mirrors));
     if (!a.ok) {
       waits.push([n.name, a.reason]);
       continue;

@@ -81,11 +81,31 @@ export const ResourceRequest = z.object({
 });
 export type ResourceRequest = z.infer<typeof ResourceRequest>;
 
+/**
+ * Which part of a run holds a resource: the run's own container, or one of its services (`sim`,
+ * `policy`, …). Absent on leases recorded before allocations were per role.
+ */
+export const LeaseRole = z
+  .string()
+  .regex(/^[a-z0-9_-]{1,41}$/, "a role is a service name or `main`");
+export type LeaseRole = z.infer<typeof LeaseRole>;
+
+/** GPUs assigned to one role. A run without roles keeps a single `main` assignment. */
+export const RoleAllocation = z.object({
+  role: LeaseRole,
+  gpuIds: z.array(z.string()),
+  cpus: z.number(),
+  memGB: z.number(),
+});
+export type RoleAllocation = z.infer<typeof RoleAllocation>;
+
 export const Lease = z.object({
   id: z.string(),
   runId: z.string(),
   node: z.string(),
   gpuIds: z.array(z.string()),
+  /** Per role; the union of `gpuIds` equals `roles[].gpuIds` on new leases. */
+  roles: z.array(RoleAllocation).default([]),
   cpus: z.number(),
   memGB: z.number(),
   state: z.enum(["active", "released"]),
