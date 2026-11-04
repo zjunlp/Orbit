@@ -10,6 +10,10 @@ import sys
 from catalog import catalog
 from evidence import COMMIT, DESKTOP_IMAGE, read, validate, write
 
+# The shared adapter SDK (examples/sdk/orbit_bench): protocol entry point and score replies.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
+from orbit_bench import main as protocol_main  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 CONFIG = {'image', 'maxSteps', 'agentDir'}
 
@@ -173,18 +177,5 @@ def score(req):
                 'issues': [f'Cua evidence: {error}'], 'review': review}
 
 
-def main():
-    try:
-        op = sys.argv[1]
-        req = json.load(sys.stdin)
-        if req.get('protocol') != 1 or req.get('op') != op:
-            raise ValueError('Expected protocol 1 and matching operation')
-        json.dump({'tasks': tasks, 'solve': solve, 'verify': verify, 'score': score}[op](req),
-                  sys.stdout, ensure_ascii=False, allow_nan=False)
-    except Exception as error:
-        print(f'{type(error).__name__}: {error}', file=sys.stderr)
-        sys.exit(1)
-
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    sys.exit(protocol_main(tasks, solve, verify, score))

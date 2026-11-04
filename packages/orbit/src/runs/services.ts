@@ -6,6 +6,7 @@ import * as docker from "../executor/docker.ts";
 import { safeJoin } from "../records/index.ts";
 import type { RunContext } from "./context.ts";
 import { type Control, containerName, LOG_DRAIN_TIMEOUT_MS, sleep } from "./execution.ts";
+import { mainGpus } from "./launch.ts";
 import { checkWatching, copyCollected, realDirs } from "./phases.ts";
 
 type Context = Pick<
@@ -158,7 +159,7 @@ export function serviceContainer(
     command: s.command ?? [],
     ...(s.entrypoint ? { entrypoint: s.entrypoint } : {}),
     labels: { [docker.LABEL_PARENT]: run.id, [docker.LABEL_HOME]: ctx.homeLabel },
-    gpuIds: s.role ? (run.lease?.roles.find((x) => x.role === s.role)?.gpuIds ?? []) : [],
+    gpuIds: serviceGpus(run, s),
     devices: s.role
       ? (run.lease?.roles.find((r) => r.role === s.role)?.devices.flatMap((d) => d.paths) ?? [])
       : [],
@@ -207,6 +208,14 @@ export function serviceContainer(
     securityOpt: s.securityOpt,
     ...(s.pidsLimit ? { pidsLimit: s.pidsLimit } : {}),
   };
+}
+
+/** A service's GPUs: its role's, or (with `gpusOf`) another role's, seen without leasing more. */
+export function serviceGpus(run: Run, s: Pick<ServiceSpec, "role" | "gpusOf">): string[] {
+  const of = s.role ?? s.gpusOf;
+  if (!of) return [];
+  if (of === "main" && !s.role) return mainGpus(run);
+  return run.lease?.roles.find((x) => x.role === of)?.gpuIds ?? [];
 }
 
 export async function stopServices(ctx: Context, id: string): Promise<void> {

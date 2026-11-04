@@ -8,7 +8,8 @@
 | --- | --- | --- |
 | Harbor 任务目录（`task.toml` + `instruction.md` + `environment/` + `tests/` + `solution/`），verifier 为 separate 或 shared 模式 | 内置 `harbor` 适配器 | 否 |
 | ASI-Bench seed31415 | 内置 `asi` 适配器 | 否 |
-| 其他任何形态 | 写一个外部适配器（任意语言的可执行文件），登记时 `--adapter /path/to/adapter` | 否 |
+| 有镜像、入口命令、结果 JSON 文件（策略作为 service、结果由上游写出） | 声明式清单 `orbit-bench.yaml` + 内置 `manifest` 适配器（§2a） | 否 |
+| 其他任何形态（需要交互桥、特殊证据） | 写一个外部适配器（任意语言），Python 可用 SDK `examples/sdk/orbit_bench`（§3），登记时 `--adapter /path/to/adapter` | 否 |
 
 外部适配器和内置适配器走同一套协议，Orbit 不需要重新构建或重启。适配器文件放在 benchmark 仓库或任意目录。
 示例：[ResearchClawBench](../../examples/bench-adapters/researchclawbench/) ·
@@ -75,12 +76,64 @@ Orbit 读取的 `task.toml` 字段：
 | `[metadata] domain / field / subfield` | 任务标签 |
 
 `orbit bench tasks` 会列出不支持的设置（如 compose 中未实现的键、`allowlist` 网络、`mcp_servers`、`${VAR}` 模板），
-这些任务不会运行，以免在不同条件下打分。
+这些任务不会运行，以免在不同条件下打分。`orbit bench coverage <名>` 按 suite 汇总能运行的任务数和各原因的任务数。
+
+GPU：compose 中没有 `x-orbit-role` 的 NVIDIA reservation 按 Compose 单机语义共享一组卡（`main` 有 reservation 时由
+main 租用，否则由第一个非监控服务租用；监控服务看到同一组卡）；带 `x-orbit-role` 的服务独占自己的卡。
+`[environment] gpu_types` 限定可用型号；本机没有这些型号时可登记 `-c gpuTypes=any`（记为偏差）。
 
 verifier 必须把分数写到 `/logs/verifier/reward.txt`（一个数）或 `reward.json`（`reward` 键或唯一键），满分为 1。
 `environment/docker-compose.yaml` 中的其他服务作为服务容器与 solve Run 一起启动（就绪后才启动 Agent），`service = "<名>"` 的 artifacts 从该服务采集；服务日志在 solve Run 的 `output/services/<名>/log`。shared 模式（默认）的 verifier 在 solve Run 的同一容器里、方法结束后运行（after 阶段），这类 trial 不能 `bench rescore`。
 
+## 2a. 声明式清单（L1）
+
+```bash
+orbit bench add libero examples/bench-manifests/vla-eval-libero --adapter manifest
+orbit bench coverage libero
+orbit bench calibrate libero --sample 2
+```
+
+目录里的 `orbit-bench.yaml`（或 `-c manifest=<相对路径>`）描述：
+
+| 键 | 含义 |
+| --- | --- |
+| `version: 1`、`image` | 所有 Run 的默认镜像；不是 `@sha256:` digest 时作为条件与 issue 记录"可变标签" |
+| `kind`、`scoreKind`、`conditions`、`metrics`、`official` | 同适配器 `tasks` 回复（能力、固定条件、指标、官方口径） |
+| `tasks.list` 或 `tasks.command` (+`entrypoint`, `id`) | 固定任务表；或在镜像内无网络运行命令，最后一行 JSON 数组为任务，`id` 模板默认 `{{id}}`，字符串字段成为 tag |
+| `files` | 写入 trial 私有 staging、只读挂在 `/orbit-config` 的文件模板 |
+| `solve` | 各方法共用的 Run 设置：`image entrypoint command env resources network root timeoutMin mounts services` |
+| `methods.empty / oracle / external` | 允许的方法，各自覆盖 `solve`（例如 empty 的零动作策略服务、external 的模型服务镜像） |
+| `result.file` | solve 输出里的结果 JSON（`*` 只匹配一段，按名字取最后一个） |
+| `result.score` / `metrics` | `{path, reduce, scale}`：路径如 `tasks[*].episodes[*].metrics.success`，`reduce` 为 mean/sum/min/max/first/last/count/all/any |
+| `result.invalid` | `{path, when: truthy\|present, failure, issue}`：命中即无效并记封闭的失败类型（如上游 episode 报错 → `env_step`） |
+
+模板写 `{{task.id}}`、`{{task.tags.X}}`、`{{seed}}`、`{{option.X}}`、`{{method.entrypoint}}`、`{{method.config.X}}`；
+`{{json:…}}` 输出 JSON 编码值，argv 中单独一项 `{{argv:method.config.command}}` 展开为列表。`mounts` 与服务 `binds`
+的 source 是清单目录内的相对路径。verify Run 只复制结果文件，score 要求复制件与 solve 输出一致。分数计算是上游的
+（清单只选取它写出的值），因此只适用于上游自己写结果文件的 benchmark；需要重新计算或交互桥的，用 §3。
+
 ## 3. 写一个外部适配器
+
+Python 适配器用 SDK（标准库即可）：
+
+```python
+import sys
+from pathlib import Path
+sys.path.insert(0, "/path/to/orbit/examples/sdk")
+from orbit_bench import main, valid, invalid, pinned
+
+def tasks(req): ...
+def solve(req): return {"spec": {...}}
+def verify(req): return {"spec": {...}}
+def score(req): return valid(1.0) if ok else invalid("env_step", "simulator crashed")
+
+if __name__ == "__main__":
+    sys.exit(main(tasks, solve, verify, score))
+```
+
+`main` 校验协议与 op、写 JSON、出错时写 stderr 并非 0 退出；`invalid` 只接受封闭的失败类型（与
+`contracts/bench.ts` 一致，Orbit 的测试会核对）。GUI 交互桥用 `examples/tools/orbit-gui-service`（可信 service、
+幂等动作、签名证据）。本仓库的 9 个 Python 适配器都用这个入口。
 
 适配器是一个可执行文件（带 shebang，`chmod +x`）。Orbit 以 `<adapter> <op>` 调用它，cwd 为 benchmark 目录，
 stdin 是一个 JSON 请求，stdout 必须是一个 JSON 回复；出错时写 stderr 并以非 0 退出。每次调用 120 s 内结束，
@@ -258,7 +311,15 @@ orbit bench usage <job>... --suggest  # 只输出建议改动，资源文件片�
 
 ## 5. 接入验收
 
-每个新 benchmark（包括 Harbor 路线的新任务集）都要有这三项证据，写进任务记录：
+先运行自动校准，它覆盖下面第 1、2 项以及有效性、重复一致、清理与重评：
+
+```bash
+orbit bench calibrate tbs --sample 3          # 按 suite 抽 3 个任务，empty + oracle × 2 seed
+orbit bench calibrate efe -t <task> --seeds 2 --json > calibration.json
+```
+
+任一检查 FAIL 时退出码为 1；`n/a` 表示该项不适用（例如没有参考解）。每个新 benchmark（包括 Harbor 路线的新任务集）
+都要有这三项证据，写进任务记录：
 
 1. **oracle 满分**：`-m oracle` 在抽样任务上全部 valid 且为满分（没有参考解的 benchmark 省略，并写明）。
 2. **空答案零分**：`-m empty` 全部 valid 且为 0。invalid 说明适配器把"没有产出"当成了环境错误，要修。

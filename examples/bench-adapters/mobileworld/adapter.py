@@ -12,6 +12,10 @@ from urllib.parse import urlparse
 
 from evidence import read, validate, write
 
+# The shared adapter SDK (examples/sdk/orbit_bench): protocol entry point and score replies.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
+from orbit_bench import main as protocol_main  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 COMMIT = "a026188705f4a494a12d14ddab3786a23fd2c537"
 CONFIG = {"python", "image", "maxSteps", "readyTimeoutSec"}
@@ -183,12 +187,4 @@ def score(req):
 
 
 if __name__ == "__main__":
-    try:
-        request = json.load(sys.stdin)
-        operation = sys.argv[1]
-        if request.get("protocol") != 1 or request.get("op") != operation:
-            raise ValueError("Expected adapter protocol 1 and matching operation")
-        json.dump({"tasks": tasks, "solve": solve, "verify": verify, "score": score}[operation](request), sys.stdout, allow_nan=False)
-    except Exception as error:
-        print(f"{type(error).__name__}: {error}", file=sys.stderr)
-        sys.exit(1)
+    sys.exit(protocol_main(tasks, solve, verify, score))

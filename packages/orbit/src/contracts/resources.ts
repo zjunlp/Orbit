@@ -116,6 +116,8 @@ export const ResourceRequest = z.object({
   gpuMemGB: z.number().positive().optional(),
   /** Pin specific GPUs by UUID or index. */
   gpuIds: z.array(z.string()).optional(),
+  /** Acceptable GPU models, any of them (case-insensitive part of the card name, e.g. `L40S`). */
+  gpuModels: z.array(z.string().trim().min(1).max(40)).max(16).optional(),
   cpus: z.number().positive().default(4),
   memGB: z.number().positive().default(16),
   devices: z.array(DeviceRequest).default([]),

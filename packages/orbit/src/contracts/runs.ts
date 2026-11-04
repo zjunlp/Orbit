@@ -139,6 +139,13 @@ export const ServiceSpec = z
     /** GPUs of this service's role (only with `role`). */
     gpus: z.number().int().min(0).optional(),
     gpuMemGB: z.number().positive().optional(),
+    /** Acceptable GPU models of this service's role, any of them (see `ResourceRequest.gpuModels`). */
+    gpuModels: z.array(z.string().trim().min(1).max(40)).max(16).optional(),
+    /**
+     * See the GPUs leased to another role (`main` or a service role) without leasing any: a monitor
+     * that measures that role's GPU use, as Compose gives every reservation on one host the same card.
+     */
+    gpusOf: LeaseRole.optional(),
     /** GPU models the role needs, e.g. `rtx` (advisory: checked against the card name). */
     gpuFeatures: z.array(z.string().max(20)).default([]),
   })
@@ -232,6 +239,8 @@ export interface RoleRequest {
   gpuIds?: string[];
   devices?: DeviceRequest[];
   gpuFeatures?: string[];
+  /** Acceptable models, any of them. */
+  gpuModels?: string[];
   cpus: number;
   memGB: number;
 }
@@ -332,6 +341,8 @@ export const RunSpec = z
     volumeMounts: z.array(VolumeMount).default([]),
     /** PID limit of the run's own container. */
     pidsLimit: z.number().int().positive().optional(),
+    /** Size of the run container's /dev/shm in GB (default: half its memory, 1–16 GB). */
+    shmGB: z.number().positive().max(256).optional(),
     /** Override the image's ENTRYPOINT of the run's own container. */
     entrypoint: z.string().min(1).optional(),
     /**
@@ -413,6 +424,7 @@ function servicesProblem(s: {
   dependsOn: string[];
   backend: string;
   hostNetwork: boolean;
+  resources: { gpus: number };
 }): string | null {
   const vols = new Set(s.volumes);
   for (const m of [...s.volumeMounts, ...s.services.flatMap((x) => x.volumes)])
@@ -433,8 +445,16 @@ function servicesProblem(s: {
   if (roles.includes("main") || new Set(roles).size !== roles.length)
     return "service roles must be distinct and cannot be main";
   // A role's GPUs are wired into that service's container, which only exists next to the run.
-  if (s.services.some((x) => !x.role && (x.gpus ?? 0) > 0))
+  if (s.services.some((x) => !x.role && ((x.gpus ?? 0) > 0 || x.gpuModels?.length)))
     return "only services with a role may request GPUs";
+  for (const x of s.services.filter((y) => y.gpusOf)) {
+    if (x.role || x.gpus) return `service ${x.name}: gpusOf excludes its own role and GPUs`;
+    const owner =
+      x.gpusOf === "main"
+        ? s.resources.gpus
+        : (s.services.find((y) => y.role === x.gpusOf)?.gpus ?? 0);
+    if (owner <= 0) return `service ${x.name}: gpusOf ${x.gpusOf} names no role with GPUs`;
+  }
   const roleGpus = s.services.filter((x) => x.role && (x.gpus ?? 0) > 0);
   if (roleGpus.length) {
     if (s.hostNetwork) return "services with GPUs do not work with host networking";
@@ -485,6 +505,7 @@ export function roleRequests(
       gpus: s.resources.gpus,
       ...(s.resources.gpuMemGB ? { gpuMemGB: s.resources.gpuMemGB } : {}),
       ...(s.resources.gpuIds ? { gpuIds: s.resources.gpuIds } : {}),
+      ...(s.resources.gpuModels?.length ? { gpuModels: s.resources.gpuModels } : {}),
       cpus:
         s.resources.cpus + s.services.filter((x) => !x.role).reduce((n, x) => n + (x.cpus ?? 1), 0),
       memGB:
@@ -500,6 +521,7 @@ export function roleRequests(
         gpus: x.gpus ?? 0,
         ...(x.gpuMemGB ? { gpuMemGB: x.gpuMemGB } : {}),
         ...(x.gpuFeatures ? { gpuFeatures: x.gpuFeatures } : {}),
+        ...(x.gpuModels?.length ? { gpuModels: x.gpuModels } : {}),
         cpus: x.cpus ?? 1,
         memGB: x.memGB ?? 1,
       });
@@ -512,8 +534,10 @@ export function leaseRequest(
 ): ResourceRequest {
   const roles = roleRequests(s);
   const extra = s.services.filter((x) => !x.role).map(serviceLease);
+  // Model restrictions are per role (see `roleRequests`), not of the summed GPUs.
+  const { gpuModels: _models, ...resources } = s.resources;
   return {
-    ...s.resources,
+    ...resources,
     gpus: roles.reduce((n, r) => n + r.gpus, 0),
     devices: roles.flatMap((r) => r.devices ?? []),
     cpus:

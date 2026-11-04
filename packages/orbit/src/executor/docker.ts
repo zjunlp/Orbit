@@ -126,7 +126,7 @@ export function runArgs(s: ContainerSpec): string[] {
   if (s.cpus !== null) args.push("--cpus", String(s.cpus));
   if (s.memGB !== null) {
     args.push("--memory", `${Math.ceil(s.memGB * 1024)}m`);
-    if (s.shm !== false)
+    if (s.shm !== false && !s.shmGB)
       args.push("--shm-size", `${Math.max(1, Math.min(16, Math.floor(s.memGB / 2)))}g`);
   }
   for (const m of s.mounts) {

@@ -3,7 +3,7 @@
 // (environment_mode = "separate"), with the declared artifacts copied across. Settings Orbit cannot
 // honour mark the task unsupported instead of being ignored, so scores keep the task's conditions.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { BenchTask, FailureKind, Method } from "../contracts/index.ts";
 import type { AdapterHandlers, RunDescription, ScoreReply } from "./adapter.ts";
@@ -76,9 +76,11 @@ export interface HarborOptions {
   hostNamespaces?: string;
   /** `public`: run an `allowlist` agent network as public internet (a recorded deviation). */
   allowlistNetwork?: string;
+  /** `any`: do not restrict `[environment] gpu_types` to those models (a recorded deviation). */
+  gpuTypes?: string;
 }
 
-const HARBOR_CONFIG = new Set(["hostNamespaces", "allowlistNetwork"]);
+const HARBOR_CONFIG = new Set(["hostNamespaces", "allowlistNetwork", "gpuTypes"]);
 
 export function harborOptions(config: Record<string, string>): HarborOptions {
   const unknown = Object.keys(config).filter((k) => !HARBOR_CONFIG.has(k));
@@ -87,6 +89,7 @@ export function harborOptions(config: Record<string, string>): HarborOptions {
     throw new Error("hostNamespaces must be allow");
   if (config.allowlistNetwork && config.allowlistNetwork !== "public")
     throw new Error("allowlistNetwork must be public");
+  if (config.gpuTypes && config.gpuTypes !== "any") throw new Error("gpuTypes must be any");
   return config;
 }
 
@@ -94,6 +97,17 @@ interface Resources {
   cpus: number;
   memGB: number;
   gpus: number;
+  gpuModels?: string[];
+}
+
+/** `[environment] gpu_types`: GPU models any of which Harbor may provision. */
+function gpuTypes(v: unknown, problems: string[]): string[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v) || !v.every((x) => typeof x === "string" && x.trim() && x.length <= 40)) {
+    problems.push("[environment] gpu_types must be a list of GPU model names");
+    return [];
+  }
+  return [...new Set(v.map((x) => (x as string).trim()))].slice(0, 16);
 }
 
 type Table = Record<string, unknown>;
@@ -234,7 +248,7 @@ function unsupportedSettings(toml: Table): string[] {
   ] as const) {
     check((str(env.os) ?? "linux").toLowerCase() !== "linux", `${label} os "${str(env.os)}"`);
     for (const k of ["gpu_types", "tpu", "mcp_servers", "skills_dir", "healthcheck"])
-      check(nonEmpty(env[k]), `${label} ${k}`);
+      if (k !== "gpu_types" || label !== "[environment]") check(nonEmpty(env[k]), `${label} ${k}`);
   }
   check(nonEmpty(agent.user), "[agent] user");
   check(nonEmpty(verifier.user), "[verifier] user");
@@ -375,6 +389,21 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     opts,
     deviations,
   );
+  if (compose?.mainGpus) envRes.gpus = Math.max(envRes.gpus, compose.mainGpus);
+  const gpuModels = gpuTypes(environment.gpu_types, problems);
+  if (gpuModels.length) {
+    const owner = compose?.sharedGpuOwner ?? (envRes.gpus > 0 ? "main" : null);
+    if (!owner) problems.push("[environment] gpu_types without a GPU reservation");
+    else if (opts.gpuTypes === "any")
+      deviations.push(
+        `gpu_types ${gpuModels.join(" / ")} not enforced (registration allows any GPU)`,
+      );
+    else if (owner === "main") envRes.gpuModels = gpuModels;
+    else {
+      const svc = compose?.services.find((x) => x.role === owner);
+      if (svc) svc.gpuModels = gpuModels;
+    }
+  }
   const tags: Record<string, string> = {};
   for (const k of ["domain", "field", "subfield"]) {
     const v = str(meta[k]);
@@ -447,11 +476,16 @@ export function findHarborTasks(root: string, opts: HarborOptions = {}): HarborT
   for (const d of dirs) counts.set(basename(d), (counts.get(basename(d)) ?? 0) + 1);
   return dirs.map((d) => {
     const id = (counts.get(basename(d)) ?? 0) > 1 ? relative(base, d) : basename(d);
+    let task: HarborTask;
     try {
-      return parseHarborTask(d, id, opts);
+      task = parseHarborTask(d, id, opts);
     } catch (e) {
-      return brokenTask(d, id, `task.toml: ${(e as Error).message}`);
+      task = brokenTask(d, id, `task.toml: ${(e as Error).message}`);
     }
+    // Hubs group tasks in suite directories (tasks/<suite>/<task>); coverage reports by suite.
+    const parts = relative(base, d).split(sep);
+    if (parts.length > 1 && !task.tags.suite) task.tags.suite = parts[0] as string;
+    return task;
   });
 }
 
@@ -508,7 +542,14 @@ export function harborSolveSpec(
   const c = t.compose;
   const run = {
     ...imageFields(t.env.image),
-    resources: { gpus: t.env.gpus, cpus: t.env.cpus, memGB: t.env.memGB },
+    resources: {
+      gpus: t.env.gpus,
+      cpus: t.env.cpus,
+      memGB: t.env.memGB,
+      ...(t.env.gpuModels?.length ? { gpuModels: t.env.gpuModels } : {}),
+      ...(c?.mainGpuMemGB ? { gpuMemGB: c.mainGpuMemGB } : {}),
+    },
+    ...(c?.mainShmGB ? { shmGB: c.mainShmGB } : {}),
     mounts,
     env,
     network: t.env.network,

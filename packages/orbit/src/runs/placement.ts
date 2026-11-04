@@ -8,6 +8,7 @@ import {
   type NodeResources,
   type Run,
   type RunSpec,
+  roleRequests,
 } from "../contracts/index.ts";
 import { infeasible } from "../resources/allocate.ts";
 
@@ -63,7 +64,7 @@ export function remoteBlocker(spec: RunSpec, node: RemoteNode): string | null {
     if (!p) return `auth profile ${spec.auth} not configured there`;
     if (!p.cli) return `${p.harness} CLI not installed there`;
   }
-  return infeasible(leaseRequest(spec), node.resources);
+  return infeasible(leaseRequest(spec), node.resources, roleRequests(spec));
 }
 
 /**

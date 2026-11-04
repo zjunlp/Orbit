@@ -139,6 +139,7 @@ export const AdapterTasksResponse = z.object({
   official: OfficialRule.optional(),
 });
 export type AdapterTasksResponse = z.infer<typeof AdapterTasksResponse>;
+export type AdapterTasksResponseInput = z.input<typeof AdapterTasksResponse>;
 export const AdapterSpecResponse = z.object({
   spec: AdapterRunSpec,
   /** Recorded on the trial (e.g. artifacts the solve run did not produce). */

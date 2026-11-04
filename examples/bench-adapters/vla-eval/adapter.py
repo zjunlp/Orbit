@@ -21,6 +21,10 @@ import shlex
 import subprocess
 import sys
 
+# The shared adapter SDK (examples/sdk/orbit_bench): protocol entry point and score replies.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
+from orbit_bench import main as protocol_main  # noqa: E402
+
 CONFIG = {"image", "benchmark", "episodesPerTask", "timeoutMin", "params", "policyImage"}
 CONTAINER_CONFIG = "/orbit-config/vla-eval.yaml"
 POLICY_PORT = 8000
@@ -32,6 +36,7 @@ HERE = Path(__file__).resolve().parent
 # Runs inside the benchmark image: the task list without running an episode.
 TASKS_SCRIPT = """
 import json, sys
+
 module, cls, params = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
 mod = __import__(module, fromlist=[cls])
 bench = getattr(mod, cls)(**params)
@@ -296,17 +301,5 @@ def score(req):
         }
 
 
-def main():
-    try:
-        op = sys.argv[1]
-        req = json.load(sys.stdin)
-        if req.get("protocol") != 1 or req.get("op") != op:
-            raise ValueError("Expected adapter protocol 1 and a matching operation")
-        json.dump({"tasks": tasks, "solve": solve, "verify": verify, "score": score}[op](req),
-                  sys.stdout, ensure_ascii=False, allow_nan=False)
-    except Exception as exc:
-        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
-
-
 if __name__ == "__main__":
-    main()
+    sys.exit(protocol_main(tasks, solve, verify, score))

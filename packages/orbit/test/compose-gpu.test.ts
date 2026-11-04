@@ -48,9 +48,78 @@ describe("Compose GPU service reservations", () => {
     });
   });
 
-  it("does not infer a role from a service name", () => {
-    const { problems } = parse({ deploy: reservation() });
-    expect(problems).toContain("compose service simulator: GPU services require x-orbit-role");
+  it("leases unroled reservations once, as Compose shares them on one host (EFE standard)", () => {
+    const { plan, problems } = parse(
+      { deploy: reservation(), "x-gpu-memory-gb": 3 },
+      {
+        monitor: {
+          image: "mon",
+          pid: "host",
+          network_mode: "none",
+          deploy: reservation(),
+          "x-gpu-memory-gb": 1,
+        },
+      },
+    );
+    expect(problems.filter((p) => !p.includes("hostNamespaces"))).toEqual([]);
+    expect(plan.sharedGpuOwner).toBe("simulator");
+    expect(plan.services[0]).toMatchObject({ role: "simulator", gpus: 1, gpuMemGB: 4 });
+    expect(plan.services[1]).toMatchObject({ gpusOf: "simulator" });
+    expect(plan.services[1]?.gpus).toBeUndefined();
+  });
+
+  it("gives main's reservation to main and lets a monitor see it (EFE privileged)", () => {
+    const file = join(dir, "docker-compose.yaml");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        services: {
+          main: { deploy: reservation(), "x-gpu-memory-gb": 13, shm_size: "8gb" },
+          monitor: { image: "mon", deploy: reservation() },
+        },
+      }),
+    );
+    const problems: string[] = [];
+    const plan = parseCompose(file, dir, null, null, {}, problems);
+    expect(problems).toEqual([]);
+    expect(plan).toMatchObject({ mainGpus: 1, mainGpuMemGB: 13, mainShmGB: 8 });
+    expect(plan.services[0]).toMatchObject({ gpusOf: "main" });
+    const spec = RunSpec.parse({
+      image: "x",
+      command: ["x"],
+      resources: { gpus: 1, cpus: 1, memGB: 1 },
+      services: plan.services,
+    });
+    expect(roleRequests(spec).map((r) => [r.role, r.gpus])).toEqual([["main", 1]]);
+    expect(() => RunSpec.parse({ image: "x", command: ["x"], services: plan.services })).toThrow(
+      /gpusOf main names no role with GPUs/,
+    );
+  });
+
+  it("refuses unroled reservations of different sizes or owned only by monitors", () => {
+    expect(
+      parse(
+        { deploy: reservation() },
+        {
+          other: {
+            image: "o",
+            deploy: reservation({ driver: "nvidia", count: 2, capabilities: ["gpu"] }),
+          },
+        },
+      ).problems,
+    ).toContain("compose GPU reservations without x-orbit-role must request the same count");
+  });
+
+  it("maps a list entrypoint to Docker's executable and leading arguments", () => {
+    const { plan, problems } = parse({
+      entrypoint: ["sh", "-c", 'stage && exec "$$@"', "stage"],
+      command: ["python", "/srv/server.py"],
+    });
+    expect(problems).toEqual([]);
+    expect(plan.services[0]).toMatchObject({
+      entrypoint: "sh",
+      command: ["-c", 'stage && exec "$@"', "stage", "python", "/srv/server.py"],
+    });
   });
 
   it("accepts numeric values after Compose interpolation", () => {
@@ -124,7 +193,7 @@ describe("Compose GPU service reservations", () => {
       ).problems,
     ).toContain("compose service another: x-orbit-role sim is already assigned to another service");
     expect(parse({ "x-orbit-role": "sim", "x-gpu-memory-gb": 5 }).problems).toContain(
-      "compose service simulator: x-gpu-memory-gb needs a GPU reservation and x-orbit-role",
+      "compose service simulator: x-gpu-memory-gb needs a GPU reservation",
     );
     expect(
       parse({ "x-orbit-role": "sim", deploy: reservation(), "x-gpu-memory-gb": -1 }).problems,

@@ -6,6 +6,10 @@ import math
 from pathlib import Path
 import sys
 
+# The shared adapter SDK (examples/sdk/orbit_bench): protocol entry point and score replies.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
+from orbit_bench import main as protocol_main  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 IDENTITY = ("task_domain", "dataset_name", "task_id")
 RUNNERS = {"codex": "codex/run_codex_longds.py",
@@ -219,18 +223,5 @@ def score(req):
                 "issues": [f"LongDS evaluation: {exc}"], "review": review}
 
 
-def main():
-    try:
-        op = sys.argv[1]
-        req = json.load(sys.stdin)
-        if req.get("protocol") != 1 or req.get("op") != op:
-            raise ValueError("Expected adapter protocol 1 and a matching operation")
-        json.dump({"tasks": tasks, "solve": solve, "verify": verify, "score": score}[op](req),
-                  sys.stdout, ensure_ascii=False, allow_nan=False)
-    except Exception as exc:
-        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-
 if __name__ == "__main__":
-    main()
+    sys.exit(protocol_main(tasks, solve, verify, score))

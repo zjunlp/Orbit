@@ -1,0 +1,105 @@
+# vla-eval LIBERO (libero_spatial) as a declarative Orbit benchmark (design §9.14, L1).
+# The same conditions as examples/bench-adapters/vla-eval: the benchmark image runs the upstream
+# `vla-eval run --no-docker` entry, the policy is the `policy` service, scoring is vla-eval's own
+# mean_success. Register with: orbit bench add libero <this directory> --adapter manifest
+version: 1
+image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
+scoreKind: scalar
+conditions:
+  Benchmark: vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark
+  Benchmark params: '{"suite": "libero_spatial", "seed": 7}'
+  Episodes per task: "1"
+  Entry: vla-eval run --no-docker (the command the benchmark image itself uses)
+  Policy: "external: the model-server image as service `policy`; empty: a zero-action server from the benchmark image"
+metrics:
+  - { name: success, label: Success, unit: "%", primary: true, description: "vla-eval's mean_success for the episode" }
+official: { name: vla-eval mean_success, version: "1", errors: fail, unit: sample }
+
+tasks:
+  entrypoint: bash
+  command:
+    - -lc
+    - conda run --no-capture-output -n libero python -c "$0" "$@"
+    - |
+      import json, sys
+      from vla_eval.benchmarks.libero.benchmark import LIBEROBenchmark
+      tasks = LIBEROBenchmark(suite="libero_spatial", seed=7).get_tasks()
+      print(json.dumps([{"name": t.get("name", ""), "title": t.get("name", ""), "suite": t.get("suite", ""),
+                         "index": str(t.get("task_id", i))} for i, t in enumerate(tasks)]))
+  id: "{{suite}}:{{name}}"
+
+files:
+  vla-eval.yaml: |
+    server:
+      url: "ws://policy:8000"
+    logging:
+      level: INFO
+    benchmarks:
+      - benchmark: "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark"
+        episodes_per_task: 1
+        params:
+          suite: "libero_spatial"
+          seed: 7
+
+solve:
+  # The image's ENTRYPOINT is `conda run -n libero vla-eval`; run conda explicitly with the same environment.
+  entrypoint: /opt/conda/bin/conda
+  command:
+    - run
+    - --no-capture-output
+    - -n
+    - libero
+    - vla-eval
+    - run
+    - --no-docker
+    - --config
+    - /orbit-config/vla-eval.yaml
+    - --output-dir
+    - /orbit/output
+    - --benchmark-field
+    - episodes_per_task=1
+    - --benchmark-field
+    - max_tasks=1
+    - --benchmark-field
+    - 'tasks=[{{json:task.tags.name}}]'
+  # LIBERO keeps its configuration under /root/.libero in the image.
+  root: true
+  network: true
+  resources: { cpus: 4, memGB: 16, gpus: 0 }
+  timeoutMin: 30
+
+methods:
+  empty:
+    services:
+      - name: policy
+        image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
+        role: policy
+        gpus: 0
+        entrypoint: /opt/conda/bin/conda
+        command: [run, --no-capture-output, -n, libero, python, /orbit-adapter/zero_policy.py, --port, "8000"]
+        cpus: 1
+        memGB: 2
+        binds: [{ source: zero_policy.py, target: /orbit-adapter/zero_policy.py, mode: ro }]
+        healthcheck: { command: [bash, -c, "exec 3<>/dev/tcp/127.0.0.1/8000"], intervalSec: 5, timeoutSec: 5, startPeriodSec: 5, retries: 60 }
+  external:
+    # `entrypoint` is the model-server image; config `command` is its argv (a JSON array), `gpus` its cards.
+    services:
+      - name: policy
+        image: "{{method.entrypoint}}"
+        role: policy
+        gpus: 1
+        command: ["{{argv:method.config.command}}"]
+        cpus: 4
+        memGB: 16
+        healthcheck: { command: [bash, -c, "exec 3<>/dev/tcp/127.0.0.1/8000"], intervalSec: 10, timeoutSec: 5, startPeriodSec: 120, retries: 120 }
+
+result:
+  file: "*_aggregate.json"
+  score: { path: "tasks[*].episodes[*].metrics.success", reduce: mean }
+  maxScore: 1
+  metrics:
+    success: { path: "tasks[*].episodes[*].metrics.success", reduce: mean, scale: 100 }
+  invalid:
+    - path: "tasks[*].episodes[*].failure_reason"
+      failure: env_step
+      issue: an episode errored upstream (vla-eval counts it as a failure)
