@@ -33,6 +33,7 @@ const node: NodeResources = {
     gpu(3, { memUsedMiB: 500 }),
   ],
   gpuError: null,
+  devices: [],
   cpu: { count: 16, load1: 0, busy: 0 },
   memory: { totalGB: 100, availableGB: 80 },
   disk: { path: "/", totalGB: 1, freeGB: 1 },
@@ -150,10 +151,10 @@ describe("role allocation", () => {
   it("gives each role its own cards, never the same one twice", () => {
     const a = allocateRoles([req("main", 0), req("sim", 1), req("policy", 1)], node, []);
     expect(a.ok && a.roles).toEqual([
-      { role: "main", gpuIds: [], cpus: 2, memGB: 4 },
+      { role: "main", devices: [], gpuIds: [], cpus: 2, memGB: 4 },
       // GPU-1 is busy outside Orbit in this fixture, so the roles take the free cards.
-      { role: "sim", gpuIds: ["GPU-0"], cpus: 2, memGB: 4 },
-      { role: "policy", gpuIds: ["GPU-2"], cpus: 2, memGB: 4 },
+      { role: "sim", devices: [], gpuIds: ["GPU-0"], cpus: 2, memGB: 4 },
+      { role: "policy", devices: [], gpuIds: ["GPU-2"], cpus: 2, memGB: 4 },
     ]);
     expect(a.ok && a.gpuIds).toEqual(["GPU-0", "GPU-2"]);
   });

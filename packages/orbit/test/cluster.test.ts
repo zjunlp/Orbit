@@ -173,6 +173,7 @@ const resources = (n: number): NodeResources => ({
   probedAt: "2026-09-30T00:00:00Z",
   gpus: Array.from({ length: n }, (_, i) => gpu(i)),
   gpuError: null,
+  devices: [],
   cpu: { count: 16, load1: 0, busy: 0 },
   memory: { totalGB: 64, availableGB: 60 },
   disk: { path: "/", totalGB: 100, freeGB: 50 },

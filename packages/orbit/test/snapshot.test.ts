@@ -207,6 +207,7 @@ describe("snapshotProject", () => {
         probedAt: new Date().toISOString(),
         gpus: [],
         gpuError: null,
+        devices: [],
         cpu: { count: 4, load1: 0, busy: 0 },
         memory: { totalGB: 8, availableGB: 8 },
         disk: { path: home, totalGB: 10, freeGB: 10 },

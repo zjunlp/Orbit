@@ -30,11 +30,53 @@ export const Gpu = z.object({
 });
 export type Gpu = z.infer<typeof Gpu>;
 
+export const DeviceClass = z.string().regex(/^[a-z][a-z0-9:._-]{0,79}$/);
+export type DeviceClass = z.infer<typeof DeviceClass>;
+
+export const DeviceRequest = z.object({
+  class: DeviceClass,
+  count: z.number().int().positive(),
+});
+export type DeviceRequest = z.infer<typeof DeviceRequest>;
+
+const DevicePath = z.string().refine(
+  (p) =>
+    p.startsWith("/dev/") &&
+    !/[\s:]/.test(p) &&
+    p
+      .split("/")
+      .slice(2)
+      .every((part) => part && part !== "." && part !== ".."),
+  "device paths must be literal paths under /dev without traversal",
+);
+
+export const NodeDevice = z.object({
+  class: DeviceClass,
+  count: z.number().int().min(0),
+  /** When true, the class can be leased to only one run at a time. */
+  exclusive: z.boolean().default(false),
+  /**
+   * When true, many runs may use the same device node at once (KVM, TUN, DRI render nodes are
+   * multiplexed by the kernel); leasing then only checks presence and records the holders.
+   */
+  shared: z.boolean().default(false),
+  detail: z.string().optional(),
+  /** Concrete device nodes; capability-only classes (e.g. adb) have no paths. */
+  paths: z.array(DevicePath).default([]),
+});
+export type NodeDevice = z.infer<typeof NodeDevice>;
+
+export const DeviceAllocation = DeviceRequest.extend({
+  paths: z.array(DevicePath).default([]),
+});
+export type DeviceAllocation = z.infer<typeof DeviceAllocation>;
+
 export const NodeResources = z.object({
   node: z.string(),
   probedAt: z.string(),
   gpus: z.array(Gpu),
   gpuError: z.string().nullable(),
+  devices: z.array(NodeDevice).default([]),
   cpu: z.object({
     count: z.number().int(),
     load1: z.number(),
@@ -76,6 +118,7 @@ export const ResourceRequest = z.object({
   gpuIds: z.array(z.string()).optional(),
   cpus: z.number().positive().default(4),
   memGB: z.number().positive().default(16),
+  devices: z.array(DeviceRequest).default([]),
   /** Pin the run to this node; default: any node that can run it. */
   node: z.string().optional(),
 });
@@ -93,6 +136,7 @@ export type LeaseRole = z.infer<typeof LeaseRole>;
 /** GPUs assigned to one role. A run without roles keeps a single `main` assignment. */
 export const RoleAllocation = z.object({
   role: LeaseRole,
+  devices: z.array(DeviceAllocation).default([]),
   gpuIds: z.array(z.string()),
   cpus: z.number(),
   memGB: z.number(),
