@@ -13,6 +13,7 @@ import sys
 from threading import Thread
 
 from evidence import digest, read, write
+from web_suites import capture_judge
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -58,10 +59,11 @@ async def run(plan_path, output):
             stream.flush()
 
     try:
-        if any(version(p) != '0.14.3' for p in ('browsergym-miniwob', 'browsergym-core')):
-            raise ValueError('Expected BrowserGym 0.14.3')
-        server = ThreadingHTTPServer(('127.0.0.1', 7560), partial(QuietHandler, directory='/miniwob'))
-        Thread(target=server.serve_forever, daemon=True).start()
+        if not plan.get('deferred_judge'):
+            if any(version(p) != '0.14.3' for p in ('browsergym-miniwob', 'browsergym-core')):
+                raise ValueError('Expected BrowserGym 0.14.3')
+            server = ThreadingHTTPServer(('127.0.0.1', 7560), partial(QuietHandler, directory='/miniwob'))
+            Thread(target=server.serve_forever, daemon=True).start()
         import lite.gym as gym
         from lite.gym.wrappers import EnvWrapper
         from lite.core.tools import make_tool_call
@@ -74,6 +76,8 @@ async def run(plan_path, output):
                 phase = 'reset_failed'
                 observation = await self.env.reset()
                 record({'kind': 'reset', **asdict(observation)})
+                if plan.get('deferred_judge') and observation.metadata.get('navigation_error'):
+                    raise RuntimeError('Original task page could not be loaded')
                 phase = 'policy_act'
                 return observation
 
@@ -84,10 +88,15 @@ async def run(plan_path, output):
                 phase = 'env_step'
                 reply = await self.env.step(actions)
                 record({'kind': 'step', 'actions': actions, **asdict(reply)})
+                if plan.get('deferred_judge') and (reply.terminated or reply.truncated):
+                    capture_judge(self.env, output, plan)
                 phase = 'policy_act'
                 return reply
 
-        env = Capture(gym.make(plan['task'], seed=plan['seed'], max_steps=plan['max_steps']))
+        kwargs = {'seed': plan['seed'], 'max_steps': plan['max_steps']}
+        if plan.get('deferred_judge'):
+            kwargs['skip_eval'] = True
+        env = Capture(gym.make(plan['task'], **kwargs))
         method = plan['method']
         if method['agent'] == 'empty':
             await env.reset()
@@ -126,7 +135,7 @@ async def run(plan_path, output):
             try:
                 await env.close()
             except Exception as error:
-                result.update(failure='server_unreachable', error_type=type(error).__name__)
+                result.update(native_close_failed=True, cleanup_error_type=type(error).__name__)
         if server is not None:
             server.shutdown()
             server.server_close()

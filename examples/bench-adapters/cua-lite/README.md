@@ -1,6 +1,6 @@
 # CUA-Lite adapter
 
-Experimental external adapter for CUA-Lite's original native BrowserGym environment. One trial is one environment and one native `agent.sample(env)` call; there is no rollout service, hub queue, database, retry or directory resume.
+Experimental external adapter for CUA-Lite's original MiniWoB, WebHarbor/WebVoyager and Online-Mind2Web environments. One trial is one environment and one native `agent.sample(env)` call; there is no rollout service, hub queue, database, retry or directory resume.
 
 ## Preparation
 
@@ -22,7 +22,7 @@ Python 3.12 is required by the fixed CUA-Lite checkout. The Bookworm base is req
 
 ## Coverage and methods
 
-All 125 registered MiniWoB tasks are listed. Missing corpus files or a prepared client image make them unsupported. WebVoyager and Online-Mind2Web tasks from the fixed checkout are listed but unsupported: this WebVoyager implementation needs its original WebHarbor replay backend, and browser-service/judge/account requirements have not been mapped and calibrated. Desktop, mobile, shared-backend and grounding suites have explicit **suite availability** rows, not fabricated individual task catalogs. KVM is checked for a clear reason, but those suites remain refused even when the device exists; KVM allocation is outside the Orbit ledger.
+All 125 registered MiniWoB tasks are listed. Missing corpus files or a prepared client image make them unsupported. All 643 WebVoyager and 300 Online-Mind2Web tasks are also listed; five explicitly reviewed read-only tasks per suite have an execution path, gated on a prepared original backend image. Other tasks remain unsupported with a subset reason. This is a source-reviewed eligibility subset, not a claim that the live websites or full scored Web suites have been calibrated. Desktop, mobile, shared-backend and grounding suites have explicit **suite availability** rows, not fabricated individual task catalogs. KVM is checked for a clear reason, but those suites remain refused even when the device exists; KVM allocation is outside the Orbit ledger.
 
 Observations/actions are CUA-Lite defaults: screenshots with its cursor overlay and original normalized `[0,1000]` canonical tool calls. No DOM, accessibility tree or extra BrowserGym action set is enabled. The default native step budget is 10, configurable through benchmark `maxSteps`. The trial seed goes directly to the native environment. CUA-Lite itself sets MiniWoB page timeout to 30 seconds instead of the HTML default 5 seconds; this is preserved and differs from a default BrowserGym-only run. The browser allocation defaults to 2 CPU and 4 GiB.
 
@@ -37,8 +37,50 @@ orbit bench run cua-lite \
   -t browsergym.miniwob@click-test
 ```
 
-Live native terminal rewards are the sole score. Missing/contradictory evidence and setup/step/model failures are invalid, never valid zero. Review includes native events/results and a saved-frame GUI trajectory; if a native terminal action supplies no screenshot, the visual prefix stops without inventing a terminal frame. The complete terminal verdict remains in native events/results. Offline verify/rescore checks identity and evidence hashes, not environment replay. External policy code is trusted; hashes are not an adversarial integrity boundary. No official aggregation is declared without denominator parity validation.
+MiniWoB uses live native terminal rewards. The two Web suites use the original terminal evaluator after policy exit, as described below. Missing/contradictory evidence and setup/step/model/judge failures are invalid, never valid zero. Review includes native events/results and a saved-frame GUI trajectory; if a native terminal action supplies no screenshot, the visual prefix stops without inventing a terminal frame. The complete terminal verdict remains in native events/results and, for Web suites, `judge-result.json`. MiniWoB offline verify/rescore checks identity and evidence hashes, not environment replay. Current Orbit refuses to rescore after-phase trials, so a registration configured with a Web backend declares `rescore=none`; keep a separate MiniWoB-only registration for its evidence rescore. External policy code is trusted; hashes are not an adversarial integrity boundary. No official aggregation is declared without denominator parity validation.
+
+## Web backends and terminal judges
+
+Each Web trial owns one fresh native backend service, with `instances=1`; it never attaches to a shared host service. WebVoyager keeps the original WebHarbor mirror sites and their image-baked initial data on a private network. Online-Mind2Web retains the original live-site browser and outbound network. Neither service receives model or judge keys. Each service reserves 2 CPU and 4 GiB in addition to the client allocation. The native step defaults are 15 and 30 respectively (`maxSteps` overrides them); the trial seed does not freeze external website content.
+
+Prepare each native image by copying the fixed checkout's original build context:
+
+```sh
+python3 examples/bench-adapters/cua-lite/prepare_backend.py \
+  /path/to/cua-lite online_mind2web /tmp/lite-online-backend
+# Run the printed `orbit run --dockerfile ...` command, then orbit wait/show its Run.
+python3 examples/bench-adapters/cua-lite/prepare_backend.py \
+  /path/to/cua-lite webharbor.webvoyager /tmp/lite-webvoyager-backend
+# Build this printed command separately; WebHarbor includes its original site assets.
+```
+
+The helper preserves native build instructions and sources, adding source/suite labels and moving the original startup script from `ENTRYPOINT` to the same default `CMD`. This lets the image-build check exit; service startup still runs the original script. It refuses to overwrite an existing context. The upstream Dockerfiles contain floating OS/package dependencies: the final immutable image ID is the recorded execution condition, **not** a promise of byte-reproducible future builds. Register only the resulting `sha256:...` ID (or repository digest); source/suite labels are checked. A normal browser image is refused.
+
+```sh
+# OPENAI_API_KEY must be available to the isolated daemon, not placed in config.
+orbit bench add lite-web /path/to/cua-lite \
+  --adapter /path/to/orbit/examples/bench-adapters/cua-lite/adapter.py \
+  -c image=sha256:<client-image-id> \
+  -c onlineMind2WebImage=sha256:<native-online-image-id> \
+  -c webVoyagerImage=sha256:<native-webvoyager-image-id> \
+  --pass-env OPENAI_API_KEY
+orbit bench tasks lite-web
+orbit bench run lite-web -m empty=empty -t webharbor.webvoyager@allrecipes.0
+```
+
+The explicit subset is defined in `web_suites.py`:
+
+- WebVoyager: `allrecipes.0`, `.1`, `.10`, `.11`, `.12`, all read-only recipe queries in the fixed mirror corpus.
+- Online-Mind2Web: `512fd4deab099b8dc0dcfc0ec48a3c63` (public GitHub issue search), `d9d8b7d84a3f8d057e368254fe8d65e2` (public GitHub commit search), `75a1b5dcd2c28508a971d98d51fe5767` (recipe reviews), `71f8de1834599fba443f40dbbfab8edd` (arXiv search), and `2207bb4f21786690cfed20b37253fb8b` (public weather lookup). Their instructions require no account; live availability can change. A navigation failure is invalid/reset_failed.
+
+Adapter protocol 1 exposes only benchmark name/path/config, not its `passEnv` names. Consequently `tasks` can check prepared images and subset eligibility, but cannot confirm judge-key forwarding. The after phase checks the original judge dependency/key requirements and reports missing configuration as invalid/judge_unavailable; it never converts it to zero.
+
+To keep benchmark `passEnv` out of the policy process, Web execution sets the native `skip_eval=True` only during interaction. At the terminal step it saves the **exact native evaluator buffer**, before the native agent closes its environment. Orbit's existing `after` phase then reconstructs the original evaluator and calls its original `_evaluate`, with native prompts, image selection, models (`gpt-4.1` / `o4-mini`) and verdict parsing. Online-Mind2Web image judgments run with one worker. No browser action is replayed and no grading algorithm is copied into this adapter.
+
+This is deferred terminal grading: the policy sees no final numerical reward during `sample`, so this condition must not be mixed with methods that depend on terminal reward feedback. The original raw events keep `reward=null`; `judge-result.json` stores the native evaluator return separately, and the after phase saves `validation.json` for Orbit's score operation. WebVoyager's native no-answer return is `None` with `eval_skip_reason=no_agent_response`; its original agent accumulates only non-null rewards, yielding episode return zero. The adapter follows that specific negative-calibration convention after checking the original required judge dependencies/key. Other missing verdicts, missing keys, provider errors and incomplete captures remain invalid. A model-based positive calibration is still required before using either Web suite for reported benchmark scores.
 
 ## Validation
 
 `python3 -B -m unittest discover -s examples/bench-adapters/cua-lite` uses explicit file fixtures; real Chromium and screenshot-only calibration checks are recorded in [the task record](../../../docs/tasks/20261104-p5a-gui-hub-adapters.md).
+
+`ORBIT_LITE_NATIVE_TEST=1` additionally enables the original evaluator boundary tests, requiring Python 3.12 with the pinned source on `PYTHONPATH`. These use explicit image-buffer fixtures, check the original no-answer/key/dependency behavior, and make no model calls. They do not replace live browser or model calibration. Run them inside the prepared client with the adapter mounted at `/adapter`, the fixed `lite/` at `/upstream/lite`, its `pyproject.toml` at `/upstream/pyproject.toml`, `PYTHONPATH=/adapter:/upstream`, and `python -B -m unittest discover -s /adapter` through Orbit.

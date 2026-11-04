@@ -22,7 +22,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def validate(output):
+def validate(output, *, allow_pending_judge=False):
     plan, result, manifest = [read(output / n) for n in ('plan.json', 'result.json', 'manifest.json')]
     if plan['commit'] != COMMIT or plan['miniwob_commit'] != MINIWOB_COMMIT:
         raise ValueError('Unexpected source version')
@@ -53,13 +53,47 @@ def validate(output):
         return {'score': None, 'maxScore': 1, 'invalid': True, 'failure': 'server_unreachable',
                 'issues': ['Native environment reported an unreachable backend']}
     reward = final['reward']
-    if isinstance(reward, bool) or not isinstance(reward, (int, float)) or not math.isfinite(reward) or reward not in (0, 1):
-        raise ValueError('Missing native MiniWoB binary reward')
     if result['reward'] != reward or result['steps'] != len(events) - 1:
         raise ValueError('Result differs from native step evidence')
+    signal = 'original BrowserGym reward'
+    if plan.get('deferred_judge'):
+        if reward is not None or 'judge-input.json' not in manifest:
+            raise ValueError('Deferred web evaluation lacks native inputs')
+        state = read(output / 'judge-input.json')
+        suite, task = plan['task'].split('@', 1)
+        expected_model = {'webharbor.webvoyager': 'gpt-4.1', 'online_mind2web': 'o4-mini'}[suite]
+        if (state.get('schema') != 1 or state.get('suite') != suite or state.get('task_id') != task
+                or state.get('model') != expected_model or state.get('max_steps') != plan['max_steps']):
+            raise ValueError('Native judge input belongs to another episode or configuration')
+        if not isinstance(state.get('images'), list) or not state['images']:
+            raise ValueError('Native judge image buffer is missing')
+        for index, name in enumerate(state['images']):
+            if name != f'judge-input/{index:04d}.png' or name not in manifest:
+                raise ValueError('Native judge image is missing or out of order')
+        if allow_pending_judge:
+            return {'score': None, 'maxScore': 1, 'invalid': True, 'failure': 'judge_unavailable',
+                    'issues': ['Native terminal judge has not run yet']}
+        if 'judge-result.json' not in manifest:
+            raise ValueError('Native terminal judge did not produce evidence')
+        judged = read(output / 'judge-result.json')
+        if (judged.get('commit') != COMMIT or judged.get('suite') != suite or judged.get('task_id') != task
+                or judged.get('input_sha256') != digest(output / 'judge-input.json')):
+            raise ValueError('Native judge result belongs to another capture')
+        if judged.get('failure'):
+            if judged['failure'] not in {'judge_unavailable', 'scorer_error'}:
+                raise ValueError('Unknown native judge failure')
+            return {'score': None, 'maxScore': 1, 'invalid': True, 'failure': judged['failure'],
+                    'issues': [f"Native judge: {judged.get('error_type', 'failed')}"]}
+        reward = judged['reward']
+        if (reward is None and suite == 'webharbor.webvoyager' and not state.get('agent_response')
+                and judged['info'].get('eval_skip_reason') == 'no_agent_response'):
+            reward = 0
+        signal = 'original CUA-Lite terminal judge (after phase)'
+    if isinstance(reward, bool) or not isinstance(reward, (int, float)) or not math.isfinite(reward) or reward not in (0, 1):
+        raise ValueError('Missing native binary reward')
     return {'score': reward, 'maxScore': 1, 'invalid': False, 'issues': [], 'episode': {
         'steps': result['steps'], 'terminated': final['terminated'], 'truncated': final['truncated'],
-        'endedBy': 'native_environment', 'successSignal': 'original BrowserGym reward'}}
+        'endedBy': 'native_environment', 'successSignal': signal}}
 
 
 if __name__ == '__main__':

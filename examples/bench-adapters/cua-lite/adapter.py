@@ -9,10 +9,11 @@ import subprocess
 import sys
 
 from evidence import COMMIT, MINIWOB_COMMIT, read, validate, write
+from web_suites import WEB_SUITES, suite_for
 
 HERE = Path(__file__).resolve().parent
 TASKS = set(read(HERE / 'miniwob_tasks.json')['tasks'])
-CONFIG = {'image', 'miniwob', 'maxSteps', 'agentDir'}
+CONFIG = {'image', 'miniwob', 'maxSteps', 'agentDir', 'webVoyagerImage', 'onlineMind2WebImage'}
 OTHER_SUITES = ['osworld', 'osworld_v2', 'windowsarena', 'cua.basic', 'cua.kicad', 'cua.workflows',
                 'androidworld', 'androidlab', 'mobileworld', 'mobilegym',
                 'browsergym.webarena', 'browsergym.visualwebarena', 'webgym', 'osworld_g', 'screenspot_pro']
@@ -48,6 +49,21 @@ def readiness(c):
     return None
 
 
+def web_readiness(c, suite):
+    image = c.get(WEB_SUITES[suite]['image'], '')
+    if not re.fullmatch(r'(?:sha256:|[^\s]+@sha256:)[a-f0-9]{64}', image):
+        return f"Register an immutable {WEB_SUITES[suite]['image']} built from the native backend; see README"
+    try:
+        details = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image],
+            stderr=subprocess.DEVNULL, timeout=10))[0]
+        labels = details.get('Config', {}).get('Labels') or {}
+        if labels.get('orbit.cua-lite.source') != COMMIT or labels.get('orbit.cua-lite.suite') != suite:
+            return 'Backend image lacks matching pinned source/suite labels; use prepare_backend.py'
+    except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError):
+        return 'The pinned native browser backend image is not prepared locally'
+    return readiness(c)
+
+
 def miniwob(c):
     if 'miniwob' not in c:
         raise ValueError('Register -c miniwob=/path/to/the/fixed/miniwob-plusplus checkout')
@@ -70,11 +86,14 @@ def tasks(req):
              'supported': problem is None and t not in missing,
              'reason': problem or ('Original MiniWoB HTML is missing' if t in missing else None),
              'tags': {'suite': 'browsergym.miniwob', 'fidelity': 'experimental'}} for t in sorted(TASKS)]
-    for suite, path in [('webharbor.webvoyager', 'webharbor/webvoyager'), ('online_mind2web', 'online_mind2web')]:
-        for key, task in read(root / 'lite/gym/envs' / path / 'data/tasks.json').items():
+    for suite, detail in WEB_SUITES.items():
+        problem = web_readiness(c, suite)
+        for key, task in read(root / 'lite/gym/envs' / detail['path'] / 'data/tasks.json').items():
+            reason = ('Outside the explicitly reviewed read-only, login-free task subset'
+                      if key not in detail['tasks'] else problem)
             rows.append({'id': f'{suite}@{key}', 'title': task.get('instruction') or task.get('confirmed_task'),
-                'supported': False, 'reason': 'Native browser service and judge are not mapped/calibrated; no verified login-free subset',
-                'tags': {'suite': suite, 'fidelity': 'unsupported'}})
+                'supported': reason is None, 'reason': reason,
+                'tags': {'suite': suite, 'fidelity': 'experimental' if reason is None else 'unsupported'}})
     for suite in OTHER_SUITES:
         reason = ('Requires an isolated website backend or a static grounding adapter' if suite in
                   ('browsergym.webarena', 'browsergym.visualwebarena', 'webgym', 'osworld_g', 'screenspot_pro') else
@@ -87,13 +106,23 @@ def tasks(req):
         rows.append({'id': f'suite:{suite}', 'title': f'{suite} (suite availability, not an episode)',
                      'supported': False, 'reason': reason, 'tags': {'suite': suite, 'rowKind': 'suite'}})
     return {'tasks': rows, 'capabilities': {'kind': 'browser', 'methods': ['external', 'empty'],
-        'scoreKind': 'binary', 'rescore': 'evidence', 'conditions': {
+        'scoreKind': 'binary',
+        'rescore': 'none' if any(c.get(s['image']) for s in WEB_SUITES.values()) else 'evidence',
+        'conditions': {
             'CUA-Lite source': COMMIT, 'BrowserGym': '0.14.3', 'MiniWoB source': MINIWOB_COMMIT,
             'Execution': 'One native environment/sample per trial; no rollout queue, retries or result-directory resume',
             'Observation': 'Original screenshot-first CUA-Lite defaults, including cursor overlay; no DOM/a11y override',
             'Actions': 'Original canonical Lite tool calls; normalized coordinates [0,1000]',
             'Step limit': str(steps), 'Native MiniWoB timeout': 'CUA-Lite default 30 seconds (upstream page default is 5 seconds)', 'Seed': 'Orbit trial seed forwarded to native BrowserGymEnv',
             'Isolation': 'Private container and loopback MiniWoB HTTP server; no host singleton',
+            'Web backends': 'One original browser service per trial; instances=1; immutable image IDs recorded in solve plan',
+            'WebVoyager image': c.get('webVoyagerImage', 'not prepared'),
+            'Online-Mind2Web image': c.get('onlineMind2WebImage', 'not prepared'),
+            'Web evaluation': 'Original terminal judge deferred to after phase; no judge key or terminal reward given to the policy',
+            'Web rescore': 'Current Orbit does not rescore after-phase trials; use a separate MiniWoB registration for evidence rescore',
+            'Web judges': 'Native gpt-4.1 / o4-mini; OPENAI_API_KEY via benchmark passEnv; image_judge_workers=1',
+            'Web step limits': f"WebVoyager {c.get('maxSteps', '15')}; Online-Mind2Web {c.get('maxSteps', '30')}",
+            'Web subset': 'Five reviewed read-only tasks per suite; live-site availability is checked during reset',
             'Unsupported suites': 'Explicit suite rows are availability records, not individual benchmark episodes',
             'KVM': 'Not in Orbit ledger; desktop/mobile suites refused; host exclusivity required',
             'Evidence': 'Live original reward; offline verify checks saved evidence only'}},
@@ -102,13 +131,21 @@ def tasks(req):
 
 def solve(req):
     root, c, steps = settings(req)
-    mini = miniwob(c)
+    t, m = req['trial'], req['trial']['method']
+    suite = suite_for(t['task'])
+    web = WEB_SUITES.get(suite)
+    mini = None if web else miniwob(c)
     unavailable = readiness(c)
     if unavailable:
         raise ValueError(unavailable)
-    t, m = req['trial'], req['trial']['method']
-    if t['task'] not in {f'browsergym.miniwob@{name}' for name in TASKS}:
-        raise ValueError('Only registered MiniWoB episodes are supported')
+    if web:
+        if t['task'].split('@', 1)[-1] not in web['tasks']:
+            raise ValueError('Task is outside the reviewed login-free web subset')
+        if issue := web_readiness(c, suite):
+            raise ValueError(issue)
+        steps = int(c.get('maxSteps', str(web['steps'])))
+    elif t['task'] not in {f'browsergym.miniwob@{name}' for name in TASKS}:
+        raise ValueError('Only registered MiniWoB or reviewed web episodes are supported')
     if t.get('options') or t.get('hostNetwork'):
         raise ValueError('Trial options and host networking are not supported')
     if m['agent'] not in ('empty', 'external'):
@@ -123,25 +160,42 @@ def solve(req):
         raise ValueError('This adapter supports CPU browser environments and remote models only')
     stage = Path(t['staging'])
     stage.mkdir(parents=True, exist_ok=True)
-    for file in ('runtime.py', 'evidence.py'):
+    for file in ('runtime.py', 'evidence.py', 'web_suites.py', 'judge.py'):
         shutil.copyfile(HERE / file, stage / file)
     write(stage / 'plan.json', {'schema': 1, 'commit': COMMIT, 'miniwob_commit': MINIWOB_COMMIT,
-        'task': t['task'], 'seed': t['seed'], 'method': m, 'max_steps': steps})
+        'task': t['task'], 'seed': t['seed'], 'method': m, 'max_steps': steps,
+        **({'deferred_judge': True, 'backend_image': c[web['image']]} if web else {})})
     mounts = [{'source': str(stage), 'target': '/adapter', 'mode': 'ro'},
               {'source': str(root / 'lite'), 'target': '/upstream/lite', 'mode': 'ro'},
-              {'source': str(root / 'pyproject.toml'), 'target': '/upstream/pyproject.toml', 'mode': 'ro'},
-              {'source': str(mini / 'miniwob/html'), 'target': '/miniwob', 'mode': 'ro'}]
+              {'source': str(root / 'pyproject.toml'), 'target': '/upstream/pyproject.toml', 'mode': 'ro'}]
+    if mini is not None:
+        mounts.append({'source': str(mini / 'miniwob/html'), 'target': '/miniwob', 'mode': 'ro'})
     if m['agent'] == 'external' and 'agentDir' in c:
         path = Path(c['agentDir']).expanduser().resolve()
         if not path.is_dir():
             raise ValueError('agentDir must be a directory')
         mounts.append({'source': str(path), 'target': '/agent', 'mode': 'ro'})
-    return {'spec': {'image': c.get('image', 'orbit-cua-lite:2af6926'),
+    spec = {'image': c.get('image', 'orbit-cua-lite:2af6926'),
         'command': ['python', '/adapter/runtime.py', '/adapter/plan.json'], 'mounts': mounts,
         'resources': resources, 'timeoutMin': t.get('timeoutMin') or 5,
         'network': m['agent'] == 'external', 'env': {'PYTHONPATH': '/upstream:/agent',
             'PYTHONDONTWRITEBYTECODE': '1', 'BROWSERGYM_CACHE': '/tmp/lite-browsergym',
-            'MINIWOB_PORT': '7560', 'MINIWOB_URL': 'http://127.0.0.1:7560/miniwob/'}}}
+            'MINIWOB_PORT': '7560', 'MINIWOB_URL': 'http://127.0.0.1:7560/miniwob/'}}
+    if web:
+        prefix = web['prefix']
+        spec['env'] = {'PYTHONPATH': '/upstream:/agent', 'PYTHONDONTWRITEBYTECODE': '1',
+                       f'{prefix}_RPC_URL': 'http://browser:8000'}
+        spec.update(network=True, networks=[{'name': 'browser', 'internal': True}],
+            runNetworks=['default', 'browser'], dependsOn=['browser'],
+            after={'command': ['python', '/adapter/judge.py'], 'timeoutMin': 30, 'network': True},
+            services=[{'name': 'browser', 'image': c[web['image']],
+                'cpus': 2, 'memGB': 4, 'shmGB': 1, 'init': True,
+                'networks': ['default', 'browser'] if suite == 'online_mind2web' else ['browser'],
+                'env': {f'{prefix}_INSTANCES': '1'},
+                'healthcheck': {'command': ['python', '-c',
+                    "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3))['ok']"],
+                    'intervalSec': 2, 'timeoutSec': 5, 'startPeriodSec': 120, 'retries': 15}}])
+    return {'spec': spec}
 
 
 def verify(req):
@@ -160,6 +214,9 @@ def score(req):
     if (output / 'trajectory-review.json').is_file():
         review['files'].insert(0, {'label': 'GUI trajectory', 'phase': 'solve', 'path': 'trajectory-review.json',
                                   'kind': 'trajectory', 'fallback': 'json'})
+    if (output / 'judge-result.json').is_file():
+        review['files'].append({'label': 'Native terminal judge', 'phase': 'solve',
+                                'path': 'judge-result.json', 'kind': 'json'})
     try:
         report = validate(output)
         if report != read(Path(req['verify']['output']) / 'validation.json'):
