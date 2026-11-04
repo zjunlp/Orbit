@@ -1,13 +1,19 @@
 """Validate saved live rewards; this is not a replay or an independent task regrade."""
 
+import base64
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 
 BROWSERGYM_VERSION = "0.14.3"
+PUBLIC_KEY_ENV = "ORBIT_GUI_EVIDENCE_PUBLIC_KEY"
+PRIVATE_KEY_FILE = "evidence-private.pem"
+
 MINIWOB_COMMIT = "7fd85d71a4b60325c6585396ec4f48377d049838"
 
 
@@ -24,18 +30,60 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def trajectory_review(rows, result):
+def trajectory_review(rows, result, prefix=""):
+    if prefix not in ("", "services/gui/evidence/"):
+        raise ValueError("Unknown evidence review prefix")
     return {"version": 1, "goal": rows[0].get("goal", ""),
-            "steps": [{"step": row["step"], "screenshot": row["screenshot"],
+            "steps": [{"step": row["step"], "screenshot": prefix + row["screenshot"],
                        "action": row["action"], "reward": row["reward"],
                        "actionError": row.get("last_action_error") or "",
                        "terminated": row["terminated"], "truncated": row["truncated"],
-                       "observation": row.get("axtree_txt", "")} for row in rows],
+                       "observation": row.get("axtree_txt", ""),
+                       **({"actionId": row["action_id"], "at": row["at"]} if "action_id" in row else {})} for row in rows],
             "stopReason": result.get("stop_reason") or
             f"{result.get('error_stage', 'unknown')}: {result.get('error_type', 'incomplete')}"}
 
 
-def validate(root):
+
+class SignatureError(ValueError):
+    pass
+
+
+def verify_signature(root, public_key):
+    try:
+        public = base64.b64decode(public_key, validate=True)
+        signature = read(root / "evidence-signature.json")
+        if not isinstance(signature, dict) or signature.get("algorithm") != "Ed25519":
+            raise ValueError("Unsupported evidence signature")
+        raw = base64.b64decode(signature["signature"], validate=True)
+        if len(public) != 44 or len(raw) != 64:
+            raise ValueError("Invalid evidence key or signature size")
+        with tempfile.TemporaryDirectory(prefix="orbit-evidence-") as directory:
+            directory = Path(directory)
+            (directory / "public.der").write_bytes(public)
+            (directory / "signature").write_bytes(raw)
+            process = subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-keyform", "DER",
+                                      "-inkey", str(directory / "public.der"), "-rawin",
+                                      "-in", str(root / "result.json"), "-sigfile", str(directory / "signature")],
+                                     capture_output=True, timeout=10)
+        if process.returncode:
+            raise ValueError("Evidence signature does not match the service public key")
+    except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError) as exc:
+        raise SignatureError("Missing or invalid service evidence signature") from exc
+
+
+def sign_result(root, private_key):
+    process = subprocess.run(["openssl", "pkeyutl", "-sign", "-inkey", str(private_key),
+                              "-rawin", "-in", str(root / "result.json")], capture_output=True, timeout=10)
+    if process.returncode or len(process.stdout) != 64:
+        raise ValueError("Service evidence signing failed")
+    write(root / "evidence-signature.json", {"algorithm": "Ed25519",
+                                            "signature": base64.b64encode(process.stdout).decode()})
+
+
+def validate(root, public_key=None):
+    if public_key is not None:
+        verify_signature(root, public_key)
     result = read(root / "result.json")
     if result.get("status") != "completed":
         raise ValueError(f"Episode did not complete: {result.get('error_stage', 'unknown stage')}: "
@@ -94,7 +142,7 @@ def validate(root):
     hashes = result["sha256"]
     if (root / "trajectory-review.json").is_file():
         required.add("trajectory-review.json")
-        if read(root / "trajectory-review.json") != trajectory_review(rows, result):
+        if read(root / "trajectory-review.json") != trajectory_review(rows, result, plan.get("review_prefix", "")):
             raise ValueError("Trajectory review disagrees with the recorded observations")
     if set(hashes) != required or any(digest(root / name) != hashes[name] for name in required):
         raise ValueError("Saved evidence is missing or changed")
@@ -104,7 +152,7 @@ def validate(root):
 
 if __name__ == "__main__":
     try:
-        report = validate(Path(sys.argv[1]))
+        report = validate(Path(sys.argv[1]), os.environ.get(PUBLIC_KEY_ENV))
         write(Path(os.environ["ORBIT_OUTPUT"]) / "validation.json", report)
     except Exception as exc:
         write(Path(os.environ["ORBIT_OUTPUT"]) / "validation.json",

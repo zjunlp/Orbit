@@ -101,7 +101,7 @@ def solve(req):
     revision = checkout_revision(root)
     staging = Path(t["staging"])
     staging.mkdir(parents=True, exist_ok=True)
-    for name in ("runtime.py", "evidence.py"):
+    for name in ("runtime.py", "episode.py", "evidence.py"):
         shutil.copyfile(HERE / name, staging / name)
     plan = {"schema": 1, "task": t["task"], "seed": t["seed"], "method": method,
             "max_steps": steps, "action_set": c.get("actionSet", "coord"),
