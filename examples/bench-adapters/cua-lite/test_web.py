@@ -11,7 +11,7 @@ import adapter
 import evidence
 import judge
 import prepare_backend
-from web_suites import ONLINE_BUILD_VERSIONS, WEB_SUITES, capture_judge
+from web_suites import ONLINE_BUILD_VERSIONS, ONLINE_SOURCE_LAYOUT, WEB_SUITES, capture_judge
 
 
 class WebAdapterTest(unittest.TestCase):
@@ -58,6 +58,7 @@ class WebAdapterTest(unittest.TestCase):
             self.assertIn('labels', adapter.web_readiness(config, suite))
         image[0]['Config']['Labels'] = {'orbit.cua-lite.source': evidence.COMMIT, 'orbit.cua-lite.suite': suite}
         image[0]['Config']['Labels'].update({'orbit.cua-lite.' + k: v for k, v in ONLINE_BUILD_VERSIONS.items()})
+        image[0]['Config']['Labels']['orbit.cua-lite.source-layout'] = ONLINE_SOURCE_LAYOUT
         with patch.object(adapter.subprocess, 'check_output', return_value=json.dumps(image).encode()), \
              patch.object(adapter, 'readiness', return_value=None):
             self.assertIsNone(adapter.web_readiness(config, suite))
@@ -189,7 +190,9 @@ class WebAdapterTest(unittest.TestCase):
         suite = 'online_mind2web'
         source = self.root / 'lite/gym/envs/online_mind2web/docker'
         source.mkdir(parents=True)
-        original = 'FROM python:fixture\nRUN pip install --no-cache-dir playwright\nENTRYPOINT ["/usr/local/bin/entrypoint.sh"]\n'
+        original = ('FROM python:fixture\nRUN pip install --no-cache-dir playwright\n'
+                    'RUN git fetch -q --depth 1 origin "${ONLINE_MIND2WEB_SHA}" && git checkout -q FETCH_HEAD\n'
+                    'ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]\n')
         (source / 'Dockerfile').write_text(original)
         destination = self.root / 'copy'
         with patch.object(prepare_backend, 'checkout'):
@@ -200,6 +203,8 @@ class WebAdapterTest(unittest.TestCase):
         self.assertIn('RUN pip install --no-cache-dir playwright', result.read_text())
         self.assertIn('playwright==1.44.0', (destination / 'orbit-constraints.txt').read_text())
         self.assertIn('orbit.cua-lite.playwright="1.44.0"', result.read_text())
+        self.assertIn('git sparse-checkout set src script', result.read_text())
+        self.assertIn('test "$(git rev-parse HEAD)" = "${ONLINE_MIND2WEB_SHA}"', result.read_text())
         self.assertIn('orbit.cua-lite.source', result.read_text())
         self.assertIn('CMD ["/usr/local/bin/entrypoint.sh"]', result.read_text())
 

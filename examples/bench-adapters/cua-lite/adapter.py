@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from evidence import COMMIT, MINIWOB_COMMIT, read, validate, write
-from web_suites import ONLINE_BUILD_VERSIONS, WEB_SUITES, suite_for
+from web_suites import ONLINE_BUILD_VERSIONS, ONLINE_SOURCE_LAYOUT, WEB_SUITES, suite_for
 
 HERE = Path(__file__).resolve().parent
 TASKS = set(read(HERE / 'miniwob_tasks.json')['tasks'])
@@ -62,6 +62,8 @@ def web_readiness(c, suite):
         if suite == 'online_mind2web' and any(labels.get('orbit.cua-lite.' + name) != version
                                              for name, version in ONLINE_BUILD_VERSIONS.items()):
             return 'Backend image lacks matching fixed dependency labels; use prepare_backend.py'
+        if suite == 'online_mind2web' and labels.get('orbit.cua-lite.source-layout') != ONLINE_SOURCE_LAYOUT:
+            return 'Backend image lacks the recorded Online-Mind2Web source layout; use prepare_backend.py'
     except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError):
         return 'The pinned native browser backend image is not prepared locally'
     return readiness(c)
@@ -122,6 +124,7 @@ def tasks(req):
             'WebVoyager image': c.get('webVoyagerImage', 'not prepared'),
             'Online-Mind2Web image': c.get('onlineMind2WebImage', 'not prepared'),
             'Online-Mind2Web build dependencies': ', '.join(f'{name}=={v}' for name, v in ONLINE_BUILD_VERSIONS.items()),
+            'Online-Mind2Web source layout': 'Fixed original root files/src/script; unused reference data/images excluded',
             'Web evaluation': 'Original terminal judge deferred to after phase; no judge key or terminal reward given to the policy',
             'Web rescore': 'Current Orbit does not rescore after-phase trials; use a separate MiniWoB registration for evidence rescore',
             'Web judges': 'Native gpt-4.1 / o4-mini; OPENAI_API_KEY via benchmark passEnv; image_judge_workers=1',

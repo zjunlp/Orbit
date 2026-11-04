@@ -56,6 +56,8 @@ python3 examples/bench-adapters/cua-lite/prepare_backend.py \
 
 The helper keeps the original native build sources, adding source/suite labels and moving the original startup script from `ENTRYPOINT` to the same default `CMD`. This lets the image-build check exit; service startup still runs the original script. It refuses to overwrite an existing context. For Online-Mind2Web it also constrains the original unversioned Python installs to `playwright==1.44.0`, `fastapi==0.115.12`, `uvicorn==0.34.2` and `pydantic==2.10.6`; these versions are recorded in conditions and checked image labels. This fixes a real build failure where the unconstrained resolver selected a Python-3.12-incompatible greenlet. The pinned Playwright browser is an explicit execution condition, not a claim of equivalence to every upstream build. Other OS/package dependencies still float: the final immutable image ID is the recorded execution condition, **not** a promise of byte-reproducible future builds. Register only the resulting `sha256:...` ID (or repository digest). A normal browser image is refused.
 
+Online-Mind2Web preparation uses a sparse checkout of the same original git SHA, verifies `HEAD`, and keeps all root files (including the original requirements), `src/` and `script/`. Its large reference `data/` and `images/` assets are excluded: the fixed RPC server does not read them, and task definitions and evaluation remain in the mounted fixed CUA-Lite source. This source layout is recorded in conditions and image labels. WebVoyager keeps all original WebHarbor site assets because those are the actual browser environment.
+
 ```sh
 # OPENAI_API_KEY must be available to the isolated daemon, not placed in config.
 orbit bench add lite-web /path/to/cua-lite \
