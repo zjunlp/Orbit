@@ -204,3 +204,41 @@
     min-height: 200px;
   }
 }
+.gui-image-wrap {
+  max-width: 100%;
+  min-width: 0;
+}
+.gui-image-position {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+.gui-action-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+.gui-action-overlay circle {
+  fill: #ef444466;
+  stroke: white;
+  stroke-width: 2;
+}
+.gui-action-overlay line {
+  stroke: #ef4444;
+  stroke-width: 3;
+}
+.gui-image-caption {
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.gui-screen.original .gui-image-wrap,
+.gui-screen.original .gui-image-position {
+  max-width: none;
+  flex-shrink: 0;
+}

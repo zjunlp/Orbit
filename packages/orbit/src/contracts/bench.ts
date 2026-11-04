@@ -170,7 +170,15 @@ export type Evaluation = z.infer<typeof Evaluation>;
  * an adapter picks a kind, it never sends markup or styles. Unknown kinds are kept and shown with
  * their `fallback` kind, else by file extension, else as text.
  */
-export const REVIEW_KINDS = ["markdown", "image", "text", "json", "table", "trajectory"] as const;
+export const REVIEW_KINDS = [
+  "markdown",
+  "image",
+  "text",
+  "json",
+  "table",
+  "trajectory",
+  "episode",
+] as const;
 export type ReviewKind = (typeof REVIEW_KINDS)[number];
 
 /** Row zero is the initial observation; later rows contain each action's resulting observation. */

@@ -1,14 +1,14 @@
 # GUI evaluation in Web
 
 运行 `orbit web --open`，进入 **Bench**。先由维护者准备并登记环境与策略；Web 不安装 BrowserGym 或自动实现模型策略。
-目前 BrowserGym 适配器只覆盖五个 MiniWoB 接入校准任务；详见[准备指南](../../examples/bench-adapters/browsergym/README.md)。
+BrowserGym 适配器覆盖固定版本注册的 125 个 MiniWoB++ 任务；详见[准备指南](../../examples/bench-adapters/browsergym/README.md)。
 
 ## Create an evaluation
 
 选择 **New evaluation**，或在已有评测中选择 **Copy and create**：
 
 1. **Environment & tasks**：选择已登记的环境和支持的任务。观察方式、动作空间、步数上限等预设条件只读。
-2. **Methods**：配置方法，复制已有评测的方法，或导入方法 JSON。BrowserGym 声明只支持 external 和 empty；密钥应由 daemon 环境提供，这里只填写变量名。
+2. **Methods**：配置方法，复制已有评测的方法，或导入方法 JSON。BrowserGym 声明支持 external、empty 和已注册 CLI Agent；密钥应由 daemon 环境提供，这里只填写变量名。
 3. **Review & start**：检查任务 × 方法 × 重复次数、名称和超时。点击 **Start evaluation** 后进入详情。
 
 登记成功不表示浏览器或模型连接已经检查。复制使用当前登记，页面提示其与来源配置的差异；新 job 固定登记配置，但不会冻结路径下的策略代码或远端模型。
@@ -22,9 +22,29 @@
 进入 Trial 的 **Trajectory**：左侧选择步骤，中间查看 **Before / After**，右侧显示动作和反馈。
 初始观察为 step 0；第 k 个动作连接截图 k−1 和截图 k。支持左右键、进度条、**Copy step link**、**100% / Fit** 和原图；输入控件获得焦点时不抢占快捷键。
 只加载当前截图，步骤列表窗口化；JSON 预览上限为 2 MiB。缺图、截断列表或格式不支持时有明确提示，原始文件与 Markdown 仍可访问。
-旧 GUI 记录继续以 Markdown 展示；模型对话、每步时延和费用只有实际记录后才能展示，当前 BrowserGym 不采集这些字段。
+坐标点击/移动以圆点叠加在截图上，拖拽显示起止位置与连线；输入文本与动作错误显示在图下。叠加使用原图像素坐标，缩放时同步缩放；无法识别的原版动作仍保留原文，不猜测坐标。
+
+CLI 桥记录动作调用 id；右侧 **Agent at this step** 仅按返回结果中的精确 id 显示关联的 thinking/tool_call/tool_result。
+未记录 id、会话缺失或旧 external 轨迹时明确显示无关联，仍可打开完整 Agent session。初始帧和结束流程的 noop 没有伪造的会话对齐。
+模型每步时延和费用只有实际记录后才能展示，当前 BrowserGym 不采集这些字段。
 
 BrowserGym 的 **Recheck evidence** 只验证保存的奖励、轨迹和哈希；不重新执行 Agent、不回放浏览器。重查过程中保留历史证据入口，结果历史与当前核验状态分开显示。
+
+## Embodied episodes
+
+adapter 可在 `review.files` 声明 `kind: "episode"`、`fallback: "json"`。索引为
+`EpisodeTrajectory` 版本 1（`packages/orbit/src/contracts/trajectory.ts`）：`kind`、`goal`、
+`actionNames`、`proprioNames`、`cameras`、`samples` 和 `chunks`。媒体路径相对同一 Run 输出根目录；
+索引预览上限 2 MiB，高频原始数组和视频仍保留为产物，不进入数据库。
+
+- `samples` 按严格递增的秒时间戳排列，包含动作/本体状态数组、reward、terminated/truncated，以及可选 late/stall。
+  数组维度必须与 channel names 一致。
+- 每路 camera 选择时间戳图片列表或一个视频（可带 offsetSec）；移动统一时间轴会同步选择各路画面。当前文件 API 无视频 MIME/Range 支持，Web 对 MP4/WebM/Ogg 提供每个 episode 合计最多 64 MiB 的本地预览（按视频相机数量均分预算）；更大视频提示下载，不在内存中无限加载。
+- action chunks 记录起止秒与可选标签；点击边界可跳转。动作/关节曲线使用 uPlot，悬停可选择对应时间。
+- producer/trust 与视频 live/render 来源如实显示，缺失时标为未记录。
+
+这是保存产物的复盘视图，不控制仿真、不恢复状态。当前由明确的测试 fixture 验证格式和视图；
+实际具身 adapter 需要按此索引产出媒体和数字样本后才能使用。
 
 ## Compare methods
 

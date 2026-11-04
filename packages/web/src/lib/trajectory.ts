@@ -1,4 +1,4 @@
-import type { GuiTrajectory } from "@zjunlp/orbit/contracts";
+import type { GuiTrace } from "@zjunlp/orbit/contracts";
 
 const record = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
@@ -15,7 +15,7 @@ export function safeTrajectoryPath(path: unknown): path is string {
 }
 
 /** Artifacts are untrusted input; validate before selecting an observation or requesting an image. */
-export function parseTrajectory(text: string): GuiTrajectory {
+export function parseTrajectory(text: string): GuiTrace {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -48,11 +48,23 @@ export function parseTrajectory(text: string): GuiTrajectory {
     for (const key of ["actionError", "observation"])
       if (row[key] !== undefined && typeof row[key] !== "string")
         throw new Error(`Step ${index} has invalid ${key}.`);
+    if (
+      row.actionId !== undefined &&
+      (typeof row.actionId !== "string" || !row.actionId || row.actionId.length > 128)
+    )
+      throw new Error(`Step ${index} has an invalid action id.`);
+    if (
+      row.at !== undefined &&
+      (typeof row.at !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T/.test(row.at) ||
+        !Number.isFinite(Date.parse(row.at)))
+    )
+      throw new Error(`Step ${index} has an invalid timestamp.`);
     for (const key of ["terminated", "truncated"])
       if (row[key] !== undefined && typeof row[key] !== "boolean")
         throw new Error(`Step ${index} has invalid ${key}.`);
   }
-  return value as GuiTrajectory;
+  return value as GuiTrace;
 }
 
 export function trajectoryStep(raw: string | null, count: number): number {
@@ -60,7 +72,7 @@ export function trajectoryStep(raw: string | null, count: number): number {
   return Number.isSafeInteger(n) ? Math.min(n, Math.max(0, count - 1)) : 0;
 }
 
-export function trajectoryFrame(trajectory: GuiTrajectory, step: number, before: boolean) {
+export function trajectoryFrame(trajectory: GuiTrace, step: number, before: boolean) {
   const index = Math.max(0, Math.min(step, trajectory.steps.length - 1));
   const action = trajectory.steps[index];
   const observation = trajectory.steps[before && index > 0 ? index - 1 : index];
