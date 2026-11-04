@@ -495,7 +495,7 @@ it.each(["failed", "succeeded"] as const)(
 );
 
 it.each(["cancelled", "lost", "unstarted", "after"] as const)(
-  "does not reclassify Agent errors for a %s solve",
+  "only reclassifies model failures in scoreable solves: %s",
   async (kind) => {
     const f = fixture();
     const run = f.runs.get("target.b-solve");
@@ -535,8 +535,21 @@ it.each(["cancelled", "lost", "unstarted", "after"] as const)(
       })}\n`,
     );
     const before = f.bench.job("target");
-    expect((await f.bench.consolidate("target", { dryRun: false })).reclassified).toEqual([]);
-    expect(f.bench.job("target")).toEqual(before);
+    const result = await f.bench.consolidate("target", { dryRun: false });
+    if (kind === "after") {
+      expect(result.reclassified).toEqual([
+        { job: "target", trial: "target.b", task: "b", kind: "model_unreachable" },
+      ]);
+      const previous = before.trials.find((t) => t.id === "target.b")?.outcome;
+      expect(f.store.getTrial("target.b")?.outcome).toMatchObject({
+        evaluation: "invalid",
+        failure: "model_unavailable",
+        score: previous?.score,
+      });
+    } else {
+      expect(result.reclassified).toEqual([]);
+      expect(f.bench.job("target")).toEqual(before);
+    }
   },
 );
 

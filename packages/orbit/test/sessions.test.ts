@@ -245,7 +245,7 @@ describe("how the Agent inside a run ended", () => {
     expect(await runAgentFailure(agent, log)).toBeNull();
   });
 
-  it("reports a Claude Code session whose last reply is an API error", async () => {
+  it("reports a Claude Code final API error only before any model reply", async () => {
     const agent = join(root, "fail-claude");
     const dir = join(agent, "claude", "projects", "-task");
     mkdirSync(dir, { recursive: true });
@@ -255,8 +255,10 @@ describe("how the Agent inside a run ended", () => {
       message: { content: [{ type: "text", text }] },
     });
     const f = join(dir, "0b6c2a1e-5f3d-4c7a-9e21-7d4b8f2a6c11.jsonl");
-    writeFileSync(f, jl([reply("working", false), reply("Credit balance is too low", true)]));
+    writeFileSync(f, jl([reply("Credit balance is too low", true)]));
     expect(await runAgentFailure(agent)).toMatchObject({ kind: "model_quota_exhausted" });
+    writeFileSync(f, jl([reply("working", false), reply("Credit balance is too low", true)]));
+    expect(await runAgentFailure(agent)).toBeNull();
     writeFileSync(f, jl([reply("Credit balance is too low", true), reply("done", false)]));
     expect(await runAgentFailure(agent)).toBeNull();
     writeFileSync(f, jl([{ ...reply("API Error", true), error: "authentication_failed" }]));

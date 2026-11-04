@@ -259,7 +259,7 @@ export function agentErrorKind(text: string, code?: unknown): string | null {
   if (structured) return structured;
   const t = text.toLowerCase();
   if (
-    /invalid_api_key|authentication_error|unauthorized|token_revoked|invalidated oauth token|oauth token has expired|invalid api key|please run \/login|missing bearer/.test(
+    /invalid_api_key|authentication_error|unauthorized|token_revoked|invalidated oauth token|oauth token has expired|invalid api key|\b401\b|please run \/login|missing bearer/.test(
       t,
     )
   )
@@ -279,7 +279,7 @@ export function agentErrorKind(text: string, code?: unknown): string | null {
     return "model_unavailable";
   if (/overloaded_error|internal server error|api error: 5\d\d/.test(t)) return "model_unavailable";
   if (
-    /stream disconnected|error sending request|connection (reset|refused|failed|error)|workspace routing discovery|waiting for network|exceeded retry limit|request timed out|unable to connect to api|econnrefused|econnreset|enotfound|etimedout/.test(
+    /stream disconnected|fetch failed|error sending request|connection (reset|refused|failed|error)|workspace routing discovery|waiting for network|exceeded retry limit|request timed out|unable to connect to api|econnrefused|econnreset|enotfound|etimedout/.test(
       t,
     )
   )
@@ -305,13 +305,16 @@ function agentErrorCodeKind(code: unknown): string | null {
       {
         unauthorized: "model_authentication_failed",
         authentication_failed: "model_authentication_failed",
+        authentication_error: "model_authentication_failed",
+        invalid_api_key: "model_authentication_failed",
+        api_connection_error: "model_unreachable",
         usage_limit_exceeded: "model_quota_exhausted",
         billing_error: "model_quota_exhausted",
         rate_limit: "model_quota_exhausted",
         server_overloaded: "model_unavailable",
         internal_server_error: "model_unavailable",
         server_error: "model_unavailable",
-      }[code] ?? null
+      }[code.toLowerCase()] ?? null
     );
   if (!code || typeof code !== "object") return null;
   const [name, detail] = Object.entries(code)[0] ?? [];

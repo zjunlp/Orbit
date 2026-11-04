@@ -349,60 +349,119 @@ const errorText = (v: unknown): string => {
   return typeof m === "string" ? m : typeof v === "string" ? v : JSON.stringify(v ?? "");
 };
 
+/** Only CLI-owned response events count; user text and tool output never prove model access. */
+function codexModelResponse(e: Record<string, unknown>): boolean {
+  const p = (e.payload ?? {}) as Record<string, unknown>;
+  if (e.type === "response_item") {
+    if (p.type === "function_call" || p.type === "custom_tool_call")
+      return typeof p.name === "string" && p.name.length > 0;
+    if (p.type === "reasoning")
+      return (
+        (typeof p.encrypted_content === "string" && p.encrypted_content.length > 0) ||
+        (Array.isArray(p.summary) && p.summary.some((part) => Boolean(part?.text)))
+      );
+    return (
+      p.type === "message" &&
+      p.role === "assistant" &&
+      Array.isArray(p.content) &&
+      p.content.some((part) => typeof part?.text === "string" && part.text.length > 0)
+    );
+  }
+  if (e.type !== "event_msg") return false;
+  if (p.type === "agent_message") return typeof p.message === "string" && p.message.length > 0;
+  if (p.type === "agent_reasoning") return typeof p.text === "string" && p.text.length > 0;
+  return (
+    p.type === "task_complete" &&
+    !p.error &&
+    typeof p.last_agent_message === "string" &&
+    p.last_agent_message.length > 0
+  );
+}
+
+function claudeModelResponse(e: Record<string, unknown>): boolean {
+  if (e.type !== "assistant" || e.isApiErrorMessage === true || e.isSidechain === true)
+    return false;
+  const content = (e.message as { content?: unknown } | undefined)?.content;
+  if (typeof content === "string") return content.length > 0;
+  return (
+    Array.isArray(content) &&
+    content.some(
+      (part) =>
+        (part.type === "text" && Boolean(part.text)) ||
+        (part.type === "thinking" && Boolean(part.thinking)) ||
+        (part.type === "tool_use" && Boolean(part.name)),
+    )
+  );
+}
+
 /**
- * How the Agent that ran inside the run ended, when the CLI could not work (see
- * `harness.agentErrorKind`): the error of Codex's last turn (`task_complete.error`), or Claude Code's
- * last reply when it is an API error. Earlier, retried errors do not count. A Codex turn that never
- * completed counts when the run's `log` ends with the CLI still reconnecting to its model (it was
- * stopped, e.g. by the time limit, while the endpoint was down).
+ * An explicit final model error invalidates a run only if the session contains no successful
+ * model response. Errors in user/tool content are ignored; partial model work is still scored.
  */
 export async function runAgentFailure(
   agentDir: string,
   log?: string,
+  redact: (text: string) => string = (text) => text,
 ): Promise<AgentFailure | null> {
   let text: string | null = null;
   let code: unknown;
+  let responded = false;
   const codex = (await jsonlBelow(join(agentDir, "codex", "sessions"), 4))[0];
   if (codex) {
     let open = false;
     for await (const e of jsonLines(codex.file)) {
+      responded ||= codexModelResponse(e);
       const p = e.payload as { type?: unknown; error?: unknown } | undefined;
       if (e.type !== "event_msg") continue;
       if (p?.type === "task_started") {
         open = true;
         text = null;
+        code = undefined;
       } else if (p?.type === "task_complete") {
         open = false;
         text = p.error ? errorText(p.error) : null;
         code = (p.error as { codex_error_info?: unknown } | null)?.codex_error_info;
       }
     }
-    if (open && log) return reconnectingAtEnd(log);
+    if (responded) return null;
+    if (open && log) {
+      const failure = await codexFailureAtEnd(log);
+      return failure ? { ...failure, message: clip(redact(failure.message), 200).text } : null;
+    }
   } else {
     const claude = (await jsonlBelow(join(agentDir, "claude", "projects"), 2))[0];
     if (!claude) return null;
     for await (const e of jsonLines(claude.file)) {
-      if (e.type !== "assistant") continue;
+      if (e.type !== "assistant" || e.isSidechain === true) continue;
+      responded ||= claudeModelResponse(e);
       const content = (e.message as { content?: unknown } | undefined)?.content;
-      const first = Array.isArray(content)
-        ? (content[0] as { text?: unknown } | undefined)
-        : undefined;
-      text = e.isApiErrorMessage === true ? String(first?.text ?? "API error") : null;
+      const message =
+        typeof content === "string"
+          ? content
+          : Array.isArray(content)
+            ? content.map((part) => (typeof part?.text === "string" ? part.text : "")).join("\n")
+            : "API error";
+      text = e.isApiErrorMessage === true ? message : null;
       code = e.isApiErrorMessage === true ? e.error : undefined;
     }
   }
-  const kind = text ? agentErrorKind(text, code) : null;
-  return kind && text ? { kind, message: clip(text, 200).text } : null;
+  if (responded) return null;
+  const kind = text !== null ? agentErrorKind(text, code) : null;
+  return kind && text !== null
+    ? { kind, message: clip(redact(text || "API error"), 200).text }
+    : null;
 }
 
 /** Codex's stderr while it retries the model connection, e.g. `ERROR: Reconnecting... 3/5`. */
 const RECONNECTING = /^ERROR: Reconnecting\.\.\./;
+const TOKEN_REFRESH_REJECTED =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z ERROR codex_login::auth::manager: Failed to refresh token(?: status=|: (?:Failed to refresh token: )?)403 Forbidden$/;
 
 /**
- * Whether the run log ends with Codex reconnecting to its model; the reason is taken from the error
- * lines before (credentials, quota, ...) and is otherwise an unreachable endpoint.
+ * Codex may keep retrying without closing its transcript turn. Accept only native terminal errors;
+ * generic HTTP failures or user/tool text do not establish a model failure.
  */
-async function reconnectingAtEnd(log: string): Promise<AgentFailure | null> {
+async function codexFailureAtEnd(log: string): Promise<AgentFailure | null> {
   const fh = await open(log, "r").catch(() => null);
   if (!fh) return null;
   let tail: string;
@@ -419,7 +478,13 @@ async function reconnectingAtEnd(log: string): Promise<AgentFailure | null> {
     .map((l) => l.trim())
     .filter(Boolean);
   const last = lines.at(-1);
-  if (!last || !RECONNECTING.test(last)) return null;
+  if (!last) return null;
+  if (TOKEN_REFRESH_REJECTED.test(last))
+    return {
+      kind: "model_authentication_failed",
+      message: "model login token refresh rejected (403 Forbidden)",
+    };
+  if (!RECONNECTING.test(last)) return null;
   const kind = lines
     .slice(-40)
     .reverse()
@@ -427,6 +492,6 @@ async function reconnectingAtEnd(log: string): Promise<AgentFailure | null> {
     .find((k) => k !== null);
   return {
     kind: kind ?? "model_unreachable",
-    message: clip(`stopped while reconnecting to the model: ${last}`, 200).text,
+    message: `stopped while reconnecting to the model: ${last}`,
   };
 }

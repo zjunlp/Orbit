@@ -744,7 +744,8 @@ export class BenchService {
   private agentFailure(solve: Run): Promise<AgentFailure | null> {
     if (!shouldCheckAgentFailure(solve)) return Promise.resolve(null);
     const dirs = this.deps.runs.dirs(solve.id);
-    return runAgentFailure(dirs.agent, dirs.log).catch(() => null);
+    const redactor = this.deps.runs.redactor(solve);
+    return runAgentFailure(dirs.agent, dirs.log, (text) => redactor.apply(text)).catch(() => null);
   }
 
   private skipped(t: Trial, evaluation: Outcome["evaluation"], issue: string): void {
@@ -822,7 +823,8 @@ export class BenchService {
     // An Agent that could not reach or use its model left nothing worth verifying; an explicit
     // rescore (history kept) verifies anyway, and an after phase has already verified.
     const agent = t.history.length === 0 ? await this.agentFailure(solve) : null;
-    if (agent) return this.finish(t, classify(solve, null, null, t.issues, agent));
+    if (agent && !solve.spec.after)
+      return this.finish(t, classify(solve, null, null, t.issues, agent));
     if (!sv.verify || this.cancelled(job.id, t)) {
       const outcome = classify(solve, null, null, t.issues);
       if (sv.verify) {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AuthStore } from "../src/auth/index.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { BenchService, summarize } from "../src/bench/service.ts";
@@ -35,7 +36,8 @@ function fixture(adapter = "harbor") {
   ensureHome(paths);
   const store = new Store(paths.db);
   stores.push(store);
-  const runs = new RunService({ store, paths, probe: vi.fn() });
+  const auth = new AuthStore(paths.auth);
+  const runs = new RunService({ store, paths, probe: vi.fn(), auth });
   const registry = new BenchmarkRegistry(paths.benchmarks);
   const source = join(home, "checkout");
   mkdirSync(source);
@@ -45,6 +47,7 @@ function fixture(adapter = "harbor") {
     paths,
     runs,
     registry,
+    auth,
     self: [process.execPath, fileURLToPath(new URL("../src/bin.ts", import.meta.url))],
   });
   const run = Run.parse({
@@ -89,7 +92,7 @@ function fixture(adapter = "harbor") {
     store.putRun(queued);
     return queued;
   });
-  return { home, paths, source, store, runs, registry, bench, run, job, trial, submit };
+  return { home, paths, source, store, runs, registry, bench, run, job, trial, submit, auth };
 }
 
 it("retains registration settings through removal, restart and saved-output rescoring", async () => {
@@ -583,8 +586,152 @@ it.each([false, true])("scores an Agent failure with an after phase: %s", async 
   f.bench.start();
   await expect.poll(() => f.store.getTrial(f.trial.id)?.state).toBe("done");
   expect(f.store.getTrial(f.trial.id)?.outcome).toMatchObject({
-    evaluation: inline ? "valid" : "invalid",
+    evaluation: "invalid",
+    failure: "model_unavailable",
     score: 0.5,
-    issues: inline ? [] : [agentIssue],
+    issues: [agentIssue],
   });
 });
+
+it.each([
+  ["codex", "unavailable"],
+  ["claude-code", "unavailable"],
+  ["codex", "partial"],
+  ["claude-code", "partial"],
+  ["claude-code", "no-error"],
+] as const)(
+  "checks external agentTask transcripts for %s (%s), without inferring from missing actions",
+  async (agent, response) => {
+    const f = fixture();
+    const executable = join(f.home, "agent-adapter.cjs");
+    write(
+      executable,
+      `#!${process.execPath}
+let text = "";
+process.stdin.on("data", chunk => text += chunk);
+process.stdin.on("end", () => {
+  const req = JSON.parse(text), say = value => console.log(JSON.stringify(value));
+  if (req.op === "tasks") return say({ tasks: [{ id: "fixture", title: "Fixture", supported: true, reason: null }] });
+  if (req.op === "solve") return say({ spec: { image: "fixture", agentTask: { instruction: "Complete the GUI task" } } });
+  if (req.op === "verify") return say({ spec: { image: "fixture", command: ["true"] } });
+  if (req.op === "score") return say({ score: 0 });
+});
+`,
+    );
+    chmodSync(executable, 0o755);
+    f.registry.put({ name: "fixture", path: f.source, adapter: executable });
+    const secret = "fixture-not-a-real-model-key";
+    f.auth.put({ name: "fixture", harness: agent, kind: "api-key", secret });
+    let runCount = 0;
+    f.submit.mockImplementation(async (spec) => {
+      const queued = Run.parse({
+        ...f.run,
+        id: `run-${++runCount}`,
+        spec,
+        state: "queued",
+        startedAt: null,
+      });
+      f.store.putRun(queued);
+      return queued;
+    });
+    const job = await f.bench.submit({
+      benchmark: "fixture",
+      methods: [{ name: "agent", agent, auth: "fixture" }],
+    });
+    await expect.poll(() => f.store.trials(job.id)[0]?.state).toBe("solving");
+    const trial = f.store.trials(job.id)[0];
+    if (!trial?.solveRunId) throw new Error("missing solve");
+    const queued = f.runs.get(trial.solveRunId);
+    if (!queued) throw new Error("missing solve run");
+    expect(queued.spec.command).toContain("Complete the GUI task");
+    expect(queued.spec.auth).toBe("fixture");
+    const error = `Unauthorized: ${secret}`;
+    const rows: unknown[] = [];
+    if (agent === "codex") {
+      if (response === "partial")
+        rows.push({
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "I choose to finish without actions." }],
+          },
+        });
+      rows.push({
+        type: "event_msg",
+        payload: {
+          type: "task_complete",
+          error: { message: error, codex_error_info: "Unauthorized" },
+        },
+      });
+    } else {
+      if (response === "partial")
+        rows.push({
+          type: "assistant",
+          message: { content: [{ type: "text", text: "I choose to finish without actions." }] },
+        });
+      if (response !== "no-error")
+        rows.push({
+          type: "assistant",
+          isApiErrorMessage: true,
+          error: "authentication_failed",
+          message: { content: [{ type: "text", text: error }] },
+        });
+    }
+    const dir = f.runs.dirs(queued.id);
+    write(
+      join(
+        dir.agent,
+        agent === "codex"
+          ? "codex/sessions/2026/11/04/fixture.jsonl"
+          : "claude/projects/-task/fixture.jsonl",
+      ),
+      `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`,
+    );
+    mkdirSync(dir.output, { recursive: true });
+    const solve = {
+      ...queued,
+      state: "failed" as const,
+      exitCode: 1,
+      reason: "exit code 1",
+      startedAt: at,
+      endedAt: at,
+      cleanup: "done" as const,
+    };
+    f.store.putRun(solve);
+    f.runs.emit("change", { run: solve });
+    if (response === "unavailable") {
+      await expect.poll(() => f.store.getTrial(trial.id)?.state).toBe("done");
+      expect(f.submit).toHaveBeenCalledTimes(1);
+      expect(f.store.getTrial(trial.id)?.outcome).toMatchObject({
+        evaluation: "invalid",
+        failure: "model_unavailable",
+        score: null,
+      });
+      expect(f.store.getTrial(trial.id)?.outcome?.issues).toContain(
+        "Agent stopped: model_authentication_failed (Unauthorized: [redacted])",
+      );
+      expect(JSON.stringify(f.bench.job(job.id))).not.toContain(secret);
+      expect(f.bench.job(job.id).summary[0]?.valid).toBe(0);
+    } else {
+      await expect.poll(() => f.store.getTrial(trial.id)?.state).toBe("verifying");
+      const verifyId = f.store.getTrial(trial.id)?.verifyRunId;
+      const pending = verifyId ? f.runs.get(verifyId) : null;
+      if (!pending) throw new Error("missing verification");
+      mkdirSync(f.runs.dirs(pending.id).output, { recursive: true });
+      const verify = {
+        ...pending,
+        state: "succeeded" as const,
+        startedAt: at,
+        endedAt: at,
+        cleanup: "done" as const,
+        exitCode: 0,
+      };
+      f.store.putRun(verify);
+      f.runs.emit("change", { run: verify });
+      await expect.poll(() => f.store.getTrial(trial.id)?.state).toBe("done");
+      expect(f.store.getTrial(trial.id)?.outcome).toMatchObject({ evaluation: "valid", score: 0 });
+      expect(f.bench.job(job.id).summary[0]?.valid).toBe(1);
+    }
+  },
+);
