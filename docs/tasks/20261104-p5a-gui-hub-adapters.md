@@ -73,10 +73,22 @@ KVM / 大镜像 / 外网导致无法真实运行时，如实记 not_run 与原�
 
 ## Changes
 
-（实现后填写）
+- 新增 Cua Bench 外部 adapter：原版任务工厂发现 145 个本地变体；首批映射 68 个 basic Linux 变体。原版 Docker SDK 绕过 CLI shim，因此使用 Orbit service 持有固定桌面镜像，再通过原版 Sandbox.connect / RemoteDesktopSession.attach / run_episode 单 episode 路径接入；没有核心修改。
+- token 仅存于不收集的专属卷；桌面服务、私网、卷统一由 Orbit 清理。任务列表检查固定干净源码、runc、已准备客户端与桌面镜像；不满足则 unsupported。
+- 保留原始 evaluator reward 和失败分类（与 EpisodeResult.success 分离），提供原版 ATIF、明确时序的 GUI 帧及证据校验。固定源码、原版桌面 digest、客户端包版本和基础镜像 digest；详见两个 adapter README。
+- Cua tasksets 是 2829e00b1 checkout 的原版 datasets，不宣称等于 registry 1.0 指向的 6762bcf63 内容。runc、每 Run 私网替代 host loopback、服务资源和上游忽略的显示背景条件均明确记录。
 
 ## Validation
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
+| Cua 文件 fixture / RunSpec schema | 当前分支 | passed | 8 个 Python fixture 测试；服务 healthcheck 使用真实 command argv，私有 token 卷不进入 collect；TypeScript 规划校验通过。并非真实桌面结果。 |
+| Cua 注册 / tasks | cua 2829e00b1 | passed | 隔离 daemon 的 bench add/tasks 枚举 145 个变体；镜像未准备时全部明确 unsupported，准备后首批仅 basic 68 个可选。 |
+| Cua 客户端镜像 | cua SDK 0.10.1 / bench 0.3.1 | passed | Orbit 构建并真实 import；固定原版源码只读挂载。实际客户端 imageId 4310967a1b23…；不等同桌面验收。 |
+| Cua ≥5 empty / oracle / 故障 / 服务清理 | cua 2829e00b1 | not_run | 固定原版桌面 digest 正在外网拉取；尚未启动真实桌面，不宣称校准完成。 |
 
 ## Next / open issues
+
+- Cua 原版桌面实际校准仍待完成；KiCad / workflows 应用依赖与账号条件未映射，继续 unsupported。
+- CUA-Lite 的首批 MiniWoB 接入与真实检查继续进行；WebVoyager（原版 WebHarbor 回放服务）、Online-Mind2Web 的独立后端 / judge / 登录过滤不能在条件未映射时启用。
+- MobileWorld 与 OSWorld-V2 按顺序留后续；本机 /dev/kvm 不存在，禁止悄悄启用软件仿真。MobileWorld 须原版 mw eval 单任务、max-concurrency=1、pass-k=1、auto-retry=0 并只用本 trial 拥有的模拟器。OSWorld Docker provider 使用 SDK 创建无标签容器，CLI shim 不足；需主线提供可审计生命周期/标签配置，并使被原版吞为 0 的 evaluator 异常可分类为 invalid。
+- 核心取消构建缺口：Run 处于 starting/docker build 时重复 orbit cancel 仍继续构建并保留租约；本次明确核对任务 build CLI 的父 PID / 唯一 tag 后仅发一次 SIGTERM，由 Orbit 终结为 failed、cleanup done、lease released，无对应构建 CLI 残留。这是人工清理，不是自动取消通过；主线应将构建 / 拉取的 AbortSignal 贯通。
