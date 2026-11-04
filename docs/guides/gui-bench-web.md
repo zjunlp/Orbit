@@ -24,7 +24,7 @@ BrowserGym 适配器覆盖固定版本注册的 125 个 MiniWoB++ 任务；详�
 只加载当前截图，步骤列表窗口化；JSON 预览上限为 2 MiB。缺图、截断列表或格式不支持时有明确提示，原始文件与 Markdown 仍可访问。
 坐标点击/移动以圆点叠加在截图上，拖拽显示起止位置与连线；输入文本与动作错误显示在图下。叠加使用原图像素坐标，缩放时同步缩放；无法识别的原版动作仍保留原文，不猜测坐标。
 
-CLI 桥记录动作调用 id；右侧 **Agent at this step** 仅按返回结果中的精确 id 显示关联的 thinking/tool_call/tool_result。
+CLI 桥记录动作调用 id；右侧 **Agent at this step** 仅按返回结果中的精确 id 和 step 显示关联的 thinking/tool_call/tool_result，不把相邻工具结果归入同一步。
 未记录 id、会话缺失或旧 external 轨迹时明确显示无关联，仍可打开完整 Agent session。初始帧和结束流程的 noop 没有伪造的会话对齐。
 模型每步时延和费用只有实际记录后才能展示，当前 BrowserGym 不采集这些字段。
 

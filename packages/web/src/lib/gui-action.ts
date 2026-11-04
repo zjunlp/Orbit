@@ -28,10 +28,10 @@ export function stepMessages(trace: GuiTrace, index: number, messages: SessionMe
   if (!id) return [];
   // Match the returned operation id, not a guessed clock alignment or a repeated action string.
   const result = messages.findIndex(
-    (message) => message.kind === "tool_result" && resultHasId(message.text, id),
+    (message) => message.kind === "tool_result" && resultHasId(message.text, id, index),
   );
   if (result < 0) return [];
-  let start = result - 1;
+  let start = result;
   while (
     start > 0 &&
     messages[start - 1]?.kind !== "tool_result" &&
@@ -43,7 +43,7 @@ export function stepMessages(trace: GuiTrace, index: number, messages: SessionMe
     .filter((message) => ["thinking", "tool_call", "tool_result"].includes(message.kind));
 }
 
-function resultHasId(text: string, id: string, depth = 0): boolean {
+function resultHasId(text: string, id: string, step: number, depth = 0): boolean {
   if (depth > 3) return false;
   const values = [text, ...text.split("\n")];
   for (const candidate of values) {
@@ -51,7 +51,7 @@ function resultHasId(text: string, id: string, depth = 0): boolean {
       const value: unknown = JSON.parse(candidate);
       if (!value || typeof value !== "object" || Array.isArray(value)) continue;
       const object = value as Record<string, unknown>;
-      if (object.id === id && typeof object.step === "number") return true;
+      if (object.id === id && object.step === step) return true;
       if (
         Array.isArray(object.content) &&
         object.content.some((item: unknown) => {
@@ -60,7 +60,7 @@ function resultHasId(text: string, id: string, depth = 0): boolean {
           return (
             block.type === "text" &&
             typeof block.text === "string" &&
-            resultHasId(block.text, id, depth + 1)
+            resultHasId(block.text, id, step, depth + 1)
           );
         })
       )

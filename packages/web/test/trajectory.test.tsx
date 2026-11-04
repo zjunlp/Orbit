@@ -156,6 +156,25 @@ describe("GUI action overlays and Agent alignment", () => {
       renderToStaticMarkup(<ActionMarker action="mouse_click(999, 30)" width={160} height={200} />),
     ).toBe("");
   });
+  it("requires the returned step and excludes a preceding unrelated tool result", async () => {
+    const { stepMessages } = await import("../src/lib/gui-action.ts");
+    const t = parsed();
+    if (t.steps[1]) t.steps[1].actionId = "operation";
+    const unrelated = {
+      at: null,
+      role: "tool" as const,
+      kind: "tool_result" as const,
+      text: '{"id":"operation","step":2}',
+    };
+    const result = {
+      ...unrelated,
+      text: JSON.stringify({
+        content: [{ type: "text", text: JSON.stringify({ id: "operation", step: 1 }) }],
+      }),
+    };
+    expect(stepMessages(t, 1, [unrelated])).toEqual([]);
+    expect(stepMessages(t, 1, [unrelated, result])).toEqual([result]);
+  });
   it("shows only messages linked by the saved action id and preserves missing alignment", async () => {
     const { stepMessages } = await import("../src/lib/gui-action.ts");
     const t = parsed();
