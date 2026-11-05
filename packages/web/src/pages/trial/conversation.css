@@ -477,3 +477,26 @@
     display: none;
   }
 }
+.conv-verdict-why {
+  font-size: 13px;
+  color: var(--text-2);
+  max-width: 980px;
+}
+.conv-source {
+  font-size: 12px;
+  margin-bottom: -4px;
+}
+.conv-val {
+  all: unset;
+  cursor: pointer;
+  border-bottom: 1px dotted var(--text-3);
+}
+.conv-val pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 11.5px;
+}
+.conv-call-h .conv-actor {
+  white-space: nowrap;
+  flex: none;
+}

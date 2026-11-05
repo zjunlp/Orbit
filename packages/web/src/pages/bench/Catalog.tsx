@@ -659,6 +659,11 @@ function MethodsDetail({ e }: { e: CatalogEntry }) {
           </tbody>
         </table>
       )}
+      {e.capabilities?.conditions["Agent scaffold"] && (
+        <p className="catalog-note">
+          <b>How CLI Agents take this benchmark:</b> {e.capabilities.conditions["Agent scaffold"]}
+        </p>
+      )}
       {admitted.length > 0 && (
         <p className="faint">
           The adapter admits: {admitted.join(", ")}

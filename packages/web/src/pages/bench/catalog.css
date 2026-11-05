@@ -249,3 +249,9 @@ tr.click:hover .catalog-toggle {
 .catalog-detail td {
   font-size: 13px;
 }
+.catalog-note {
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+}

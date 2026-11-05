@@ -124,3 +124,13 @@ export function matches(e: ConversationEvent, q: string): boolean {
       : `${e.name} ${JSON.stringify(e.arguments)} ${typeof e.result === "string" ? e.result : JSON.stringify(e.result ?? "")} ${e.error ?? ""}`;
   return hay.toLowerCase().includes(q.toLowerCase());
 }
+
+/** Strings holding JSON (as checkers often report results) parsed, at any depth. */
+export function deepParse(v: unknown, depth = 0): unknown {
+  if (depth > 8) return v;
+  const p = parseResult(v);
+  if (Array.isArray(p)) return p.map((x) => deepParse(x, depth + 1));
+  if (p && typeof p === "object")
+    return Object.fromEntries(Object.entries(p).map(([k, x]) => [k, deepParse(x, depth + 1)]));
+  return p;
+}

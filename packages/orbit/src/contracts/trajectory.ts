@@ -185,6 +185,8 @@ export const ConversationTrajectory = z.object({
     /** The checker's own failure type, e.g. `multi_turn:instance_state_mismatch`. */
     type: z.string().max(200).optional(),
     message: z.string().max(20_000).optional(),
+    /** What the failure type means, in the benchmark's terms. */
+    explanation: z.string().max(4000).optional(),
     /** The turn where the checker first detected a failure; absent when it does not say. */
     failedTurn: z.number().int().nonnegative().nullable().optional(),
     checks: z.array(Check).max(500).default([]),

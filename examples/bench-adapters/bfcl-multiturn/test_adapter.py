@@ -72,7 +72,8 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(len(result["tasks"]), 1)
         self.assertEqual(result["capabilities"]["profiles"], ["local-state"])
         self.assertEqual(result["capabilities"]["category"], "tool-workflow")
-        self.assertEqual(result["capabilities"]["methods"], ["oracle", "empty"])
+        self.assertEqual(result["capabilities"]["methods"], ["oracle", "empty", "cli"])
+        self.assertEqual(result["capabilities"]["requires"], ["mcp"])
 
     def test_data_mutation_fails_closed(self):
         (self.root / adapter.data_files("multi_turn_base")[0]).write_text("{}\n")
@@ -94,8 +95,21 @@ class ProtocolTests(unittest.TestCase):
 
     def test_external_is_explicitly_rejected(self):
         self.req["trial"]["method"]["agent"] = "external"
-        with self.assertRaisesRegex(ValueError, "only oracle and empty"):
+        with self.assertRaisesRegex(ValueError, "external methods are not supported"):
             adapter.solve(self.req)
+
+    def test_cli_agents_get_the_mcp_server_without_ground_truth(self):
+        self.req["trial"]["method"] = {"name": "codex-sol", "agent": "codex", "auth": "p"}
+        spec = adapter.solve(self.req)["spec"]
+        self.assertNotIn("command", spec)
+        tool = spec["agentTask"]["tools"][0]
+        self.assertEqual((tool["name"], tool["env"]["BFCL_PAYLOAD"]), ("bfcl", "/bfcl-private/solve.json"))
+        self.assertIn("get_user_message", spec["agentTask"]["instruction"])
+        self.assertNotIn("ground_truth", json.loads((self.root / "staging/solve.json").read_text()))
+        self.assertIn({"source": str(self.root / "staging"), "target": "/bfcl-private", "mode": "rw"},
+                      spec["mounts"])
+        verify = adapter.verify(self.req)["spec"]
+        self.assertEqual(verify["command"][-1], "codex-sol")
 
     def test_score_ignores_subject_score(self):
         solve = self.root / "solve"
@@ -196,6 +210,47 @@ class UpstreamTests(unittest.TestCase):
         self.assertEqual([t["check"]["status"] for t in conv["turns"]], ["failed", "unchecked"])
         evidence, _ = runtime.replay(p, [["mkdir(unknown='x')"], []], self.api[0])
         self.assertEqual(runtime.call_event(evidence["turns"][0]["calls"][0])["status"], "rejected")
+
+    def test_mcp_conversation_records_evidence_that_verify_replays(self):
+        import bfcl_mcp
+        p = fixture()
+        del p["ground_truth"]
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            conv = bfcl_mcp.Conversation(p, out, self.api)
+            msgs = [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+                {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+                {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "call_function", "arguments": {"name": "mkdir"}}},
+                {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "get_user_message"}},
+                {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "list_functions"}},
+                {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "call_function", "arguments": {"name": "mkdir", "arguments": {"dir_name": "created"}}}},
+                {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "get_user_message", "arguments": {"response": "Done."}}},
+                {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "call_function", "arguments": {"name": "rm", "arguments": {}}}},
+            ]
+            stdout = io.StringIO()
+            bfcl_mcp.serve(conv, io.StringIO("".join(json.dumps(m) + "\n" for m in msgs)), stdout)
+            replies = {r["id"]: r for r in map(json.loads, stdout.getvalue().splitlines())}
+            self.assertEqual(sorted(replies), [1, 2, 3, 4, 5, 6, 7, 8])
+            self.assertEqual([t["name"] for t in replies[2]["result"]["tools"]],
+                             ["get_user_message", "list_functions", "call_function"])
+            self.assertTrue(replies[3]["result"]["isError"])  # before the first turn
+            first = json.loads(replies[4]["result"]["content"][0]["text"])
+            self.assertEqual((first["turn"], first["of"]), (1, 2))
+            self.assertIn("mkdir", [f["name"] for f in json.loads(replies[5]["result"]["content"][0]["text"])])
+            self.assertIn("Tool is unavailable: rm", replies[8]["result"]["content"][0]["text"])
+            evidence = json.loads((out / "evidence.json").read_text())
+            # The second turn was reached; the agent stopped before finishing it.
+            self.assertEqual([len(t["calls"]) for t in evidence["turns"]], [1, 1])
+            self.assertEqual(evidence["turns"][0]["final_response"], "Done.")
+            full = fixture()
+            result = runtime.verify_payload(full, evidence, out, self.api, "codex")
+            self.assertFalse(result["checker"]["valid"])
+            self.assertEqual(result["failed_turn"], 1)
+            conv = json.loads((out / "conversation.json").read_text())
+            self.assertEqual(conv["turns"][0]["events"][-1], {"type": "message", "actor": "agent", "text": "Done."})
+            self.assertEqual(conv["turns"][1]["events"][-1]["status"], "rejected")
 
     def test_tampered_results_states_and_score_do_not_change_score(self):
         p = fixture()

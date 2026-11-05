@@ -9,6 +9,7 @@ import {
   brief,
   type Conversation,
   callSummary,
+  deepParse,
   diffStates,
   matches,
   parseConversation,
@@ -148,6 +149,10 @@ export function ConversationViewer({ c }: { c: Conversation }) {
           </div>
         </aside>
         <main className="conv-main">
+          <div className="conv-source faint">
+            Tool results and states come from the verifier's independent replay of the recorded
+            calls; replies are the agent's own text. The Agent session tab has what the agent saw.
+          </div>
           {shown.map(({ t, events }) => (
             <section
               key={t.index}
@@ -158,6 +163,7 @@ export function ConversationViewer({ c }: { c: Conversation }) {
             >
               <header>
                 <b>{whole ? "Conversation" : `Turn ${t.index + 1}`}</b>
+                {!whole && <span className="faint mono">index {t.index}</span>}
                 {t.check && (
                   <span className={`conv-check st-${t.check.status}`}>
                     {STATUS_ICON[t.check.status]} {t.check.status}
@@ -189,7 +195,13 @@ export function ConversationViewer({ c }: { c: Conversation }) {
                   // biome-ignore lint/suspicious/noArrayIndexKey: messages have no id; order is fixed
                   <Message key={`m${i}`} actor={e.actor} text={e.text} label={label} />
                 ) : (
-                  <CallCard key={e.id} call={e} label={label} />
+                  <CallCard
+                    key={e.id}
+                    call={e}
+                    label={label}
+                    open0={t.check?.status === "failed"}
+                    onOpen={() => t.index !== selected && select(t.index, false)}
+                  />
                 ),
               )}
             </section>
@@ -232,7 +244,8 @@ function Verdict({ c, onJump }: { c: Conversation; onJump?: () => void }) {
         {v.type && <span className="chip mono">{v.type}</span>}
         {v.failedTurn != null && (
           <button type="button" className="btn sm" onClick={onJump}>
-            First detected at turn {v.failedTurn + 1} <kbd>e</kbd>
+            First detected at turn {v.failedTurn + 1}
+            <span className="faint">(index {v.failedTurn})</span> <kbd>e</kbd>
           </button>
         )}
         {v.passed === false && v.failedTurn == null && (
@@ -251,7 +264,15 @@ function Verdict({ c, onJump }: { c: Conversation; onJump?: () => void }) {
         )}
         {v.scorer && <span className="faint mono">{v.scorer}</span>}
       </div>
-      {v.message && <div className="conv-verdict-msg">{v.message}</div>}
+      {v.message && (
+        <div className="conv-verdict-msg">
+          {v.message}
+          {v.failedTurn != null && /turn \d/.test(v.message) && (
+            <span className="faint"> (the checker counts turns from 0)</span>
+          )}
+        </div>
+      )}
+      {v.explanation && <div className="conv-verdict-why">{v.explanation}</div>}
       {v.checks.length > 0 && (
         <div className="conv-checks">
           {v.checks
@@ -292,8 +313,19 @@ function Message({ actor, text, label }: { actor: string; text: string; label: L
   );
 }
 
-function CallCard({ call, label }: { call: ToolCall; label: Labels }) {
-  const [open, setOpen] = useState(call.status !== "ok");
+function CallCard({
+  call,
+  label,
+  open0 = false,
+  onOpen,
+}: {
+  call: ToolCall;
+  label: Labels;
+  /** Open from the start (calls of the failing turn). */
+  open0?: boolean;
+  onOpen?: () => void;
+}) {
+  const [open, setOpen] = useState(open0 || call.status !== "ok");
   const role = label[call.actor]?.role ?? call.actor;
   const result = parseResult(call.result);
   return (
@@ -304,6 +336,7 @@ function CallCard({ call, label }: { call: ToolCall; label: Labels }) {
         aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation();
+          if (!open) onOpen?.();
           setOpen(!open);
         }}
       >
@@ -376,7 +409,6 @@ function Inspector({
   wide: boolean;
   toggleWide: () => void;
 }) {
-  const isFailure = c.verdict.failedTurn === turn.index;
   const tabs: [InspectorTab, string][] = [
     ["check", "Check"],
     ...(turn.state ? [["state", "State"] as [InspectorTab, string]] : []),
@@ -384,8 +416,13 @@ function Inspector({
     ...(c.finalState?.length ? [["final", "Final state"] as [InspectorTab, string]] : []),
     ["raw", "Raw"],
   ];
+  // A failing turn opens on the evidence: the state diff when the state differs, else the check.
+  const stateDiffers = useMemo(() => {
+    const st = turn.state as { before: unknown; after: unknown; expected?: unknown } | undefined;
+    return st ? diffStates(st.before, st.after, st.expected).some((r) => r.mismatch) : false;
+  }, [turn.state]);
   const [tab, setTab] = useState<InspectorTab>(
-    turn.check?.status === "failed" && turn.state ? "state" : "check",
+    turn.check?.status === "failed" && stateDiffers ? "state" : "check",
   );
   const active = tabs.some(([k]) => k === tab) ? tab : "check";
   return (
@@ -397,14 +434,7 @@ function Inspector({
           {wide ? "Narrow" : "Widen"}
         </button>
       </div>
-      {isFailure && c.verdict.message && (
-        <div className="conv-fail conv-insp-fail">
-          <IconAlert size={13} />
-          <span>
-            <b>{c.verdict.type ?? "Failure"}</b> · {c.verdict.message}
-          </span>
-        </div>
-      )}
+
       <nav className="tabs conv-tabs">
         {tabs.map(([k, l]) => (
           <a
@@ -449,9 +479,10 @@ function CheckTab({ c, turn }: { c: Conversation; turn: Turn }) {
         <p className="muted">The benchmark checks the whole conversation, not each turn.</p>
       )}
       {turn.check?.detail && <p>{turn.check.detail}</p>}
+      {isFailure && c.verdict.explanation && <p>{c.verdict.explanation}</p>}
       {isFailure && c.verdict.details !== undefined && (
         <Field label="Checker details">
-          <Json v={c.verdict.details} />
+          <Json v={deepParse(c.verdict.details)} />
         </Field>
       )}
       {!turn.check &&
@@ -478,6 +509,19 @@ function CheckTab({ c, turn }: { c: Conversation; turn: Turn }) {
         Tool errors are behavior the agent may recover from; the checker decides task success.
       </p>
     </div>
+  );
+}
+
+/** A state value cut to one line; click to see all of it. */
+function Val({ v, has }: { v: unknown; has: boolean }) {
+  const [full, setFull] = useState(false);
+  if (!has) return <i>absent</i>;
+  const text = typeof v === "string" ? v : JSON.stringify(v, null, full ? 2 : undefined);
+  if (text.length <= 60) return <>{text}</>;
+  return (
+    <button type="button" className="conv-val" onClick={() => setFull(!full)} title="Show all">
+      {full ? <pre>{text}</pre> : brief(v, 60)}
+    </button>
   );
 }
 
@@ -524,9 +568,11 @@ function StateTab({ turn }: { turn: Turn }) {
             {shown.map((r) => (
               <tr key={r.path} className={r.mismatch ? "mismatch" : ""}>
                 <td className="mono">{r.path}</td>
-                <td className="mono">{"before" in r ? brief(r.before, 60) : <i>absent</i>}</td>
+                <td className="mono">
+                  <Val v={r.before} has={"before" in r} />
+                </td>
                 <td className={`mono${r.changed ? " changed" : ""}`}>
-                  {"after" in r ? brief(r.after, 60) : <i>absent</i>}
+                  <Val v={r.after} has={"after" in r} />
                 </td>
                 {hasExpected && (
                   <td className="mono">

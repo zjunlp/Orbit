@@ -219,7 +219,18 @@ def call_event(call):
     return event
 
 
-def conversation(payload, trace, truth_trace, result, failed_turn, method):
+EXPLAIN = {
+    "multi_turn:empty_turn_model_response":
+        "The agent made no function call in a turn whose reference makes calls. Text replies are not graded.",
+    "multi_turn:execution_response_mismatch":
+        "Results that the reference calls of this turn return are missing from all results the agent "
+        "obtained so far (order and earlier turns do not matter). See missing_items.",
+    "multi_turn:instance_state_mismatch":
+        "After this turn the environment state differs from the reference's. See differences.",
+}
+
+
+def conversation(payload, trace, truth_trace, result, failed_turn, method, saved=None):
     """The verifier's replay as a review conversation (Orbit `ConversationTrajectory`)."""
     entry = payload["entry"]
     passed = result["valid"]
@@ -229,6 +240,9 @@ def conversation(payload, trace, truth_trace, result, failed_turn, method):
         events = [{"type": "message", "actor": m.get("role", "user"), "text": str(m.get("content", ""))}
                   for m in row["messages"]]
         events += [call_event(c) for c in row["calls"]]
+        said = saved["turns"][index] if saved and index < len(saved.get("turns") or []) else {}
+        if isinstance(said, dict) and said.get("final_response"):
+            events.append({"type": "message", "actor": "agent", "text": str(said["final_response"])})
         if passed or failed_turn is None or index < failed_turn:
             check = {"status": "passed"}
         elif index == failed_turn:
@@ -245,6 +259,8 @@ def conversation(payload, trace, truth_trace, result, failed_turn, method):
             turn["note"] = "Tool update turn (no user message)" + (f": {', '.join(added)} available" if added else "")
         elif added:
             turn["note"] = "Newly available tools: " + ", ".join(added)
+        if isinstance(said, dict) and said.get("reached") is False:
+            turn["note"] = "The agent never reached this turn"
         tools = row["available_tools"]
         turns.append(turn)
     return {
@@ -258,6 +274,7 @@ def conversation(payload, trace, truth_trace, result, failed_turn, method):
         "verdict": {"passed": passed, **({} if passed else {"type": result.get("error_type", ""),
                                                                 "message": result.get("error_message", "")}),
                     "failedTurn": failed_turn, "details": details,
+                    **({"explanation": EXPLAIN[result.get("error_type")]} if result.get("error_type") in EXPLAIN else {}),
                     "scorer": f"bfcl-eval {VERSION} multi_turn_checker"},
         "completeness": "complete", "producer": "verifier", "trust": "trusted",
     }
@@ -279,7 +296,7 @@ def verify_payload(payload, saved, output, api=None, method="method"):
     result = check(payload, decoded, checker)
     failed_turn = None if result["valid"] else first_failed_turn(payload, decoded, checker)
     write_json(output / "conversation.json",
-               conversation(payload, trace, truth_trace, result, failed_turn, method))
+               conversation(payload, trace, truth_trace, result, failed_turn, method, saved))
     return {"checker": result, "failed_turn": failed_turn, "irrelevance_diagnostic": irrelevant(decoded, payload["ground_truth"]),
             "calls": sum(len(t) for t in calls), "reference_self_check": True}
 

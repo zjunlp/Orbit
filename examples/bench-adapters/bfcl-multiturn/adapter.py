@@ -23,6 +23,19 @@ DOCS = {
 }
 PINS = json.loads((HERE / "data-sha256.json").read_text())
 IMAGE = "orbit-bfcl-multiturn:" + VERSION
+CALIBRATION = ("oracle", "empty")
+INSTRUCTION = """You are being evaluated on a multi-turn function-calling task (BFCL). Work only
+through the `bfcl` MCP tools; do not use the shell, files or the network for the task.
+
+1. Call `get_user_message` to receive the user's first request.
+2. Call `list_functions` to see the functions you may use in this turn, then `call_function` with
+   keyword arguments as often as you need. Results are those of the real environment.
+3. When you have done what the user asked, call `get_user_message` again with your reply to the
+   user in `response`. It returns the next request, or `finished`.
+4. Repeat until `get_user_message` reports `finished`, then stop.
+
+Functions may become available in later turns. If a request cannot be done with the functions you
+have, say so in your reply instead of guessing."""
 
 
 def digest(path):
@@ -98,7 +111,8 @@ def tasks(req):
         "tasks": rows,
         "capabilities": {
             "category": "tool-workflow", "profiles": ["local-state"],
-            "methods": ["oracle", "empty"], "scoreKind": "binary", "rescore": "evidence",
+            "methods": ["oracle", "empty", "cli"], "requires": ["mcp"],
+            "scoreKind": "binary", "rescore": "evidence",
             "calibration": {"empty": "min", "oracle": "max", "repeat": "exact", "seedsVary": False},
             "conditions": {
                 "Identity": "Berkeley Function Calling Leaderboard (BFCL), multi-turn execution",
@@ -108,6 +122,9 @@ def tasks(req):
                 "Categories": ", ".join(categories),
                 "Trial": "One complete conversation; fixture random seeds remain upstream; trial seeds repeat it",
                 "IO": "Upstream user turns and tool schemas; literal Python function calls; final text is ungraded",
+                "Agent scaffold": "CLI Agents hold the conversation through an Orbit MCP server (get_user_message / "
+                                  "list_functions / call_function), not BFCL's native function-calling prompt; "
+                                  "scores are not leaderboard-comparable",
                 "Environment": "Dedicated local Python environments per Run; fresh reset; solve and verify offline",
                 "Resources": "Each phase: 1 CPU, 1 GiB, 0 GPU, 5 minutes; no API quota or devices",
                 "Scoring": "Unmodified multi_turn_checker: per-turn state and tool response checks; binary accuracy",
@@ -136,8 +153,10 @@ def plan(req, phase):
     reason = support_reason(entry, answers[trial["task"]])
     if reason:
         raise ValueError(reason)
-    if trial["method"]["agent"] not in ("oracle", "empty"):
-        raise ValueError("This sample implements only oracle and empty; no model API methods")
+    agent = trial["method"]["agent"]
+    if agent == "external":
+        raise ValueError("external methods are not supported; use a CLI Agent (through MCP), oracle or empty")
+    cli = agent not in CALIBRATION
     staging = Path(trial["staging"])
     staging.mkdir(parents=True, exist_ok=True)
     # Re-created for rescore; only the oracle solve receives ground truth.
@@ -145,12 +164,26 @@ def plan(req, phase):
                "digests": {n: PINS[n] for n in data_files(category)},
                "tools": {c: read_pinned(root, f"multi_turn_func_doc/{DOCS[c]}.json")
                          for c in entry["involved_classes"]}}
-    if phase == "verify" or trial["method"]["agent"] == "oracle":
+    if phase == "verify" or agent == "oracle":
         payload["ground_truth"] = answers[trial["task"]]
     if phase == "verify":
         payload["solve_failed"] = req["solve"].get("run", {}).get("state", "succeeded") != "succeeded"
     payload_path = staging / (phase + ".json")
     payload_path.write_text(json.dumps(payload, ensure_ascii=False))
+    if phase == "solve" and cli:
+        # The MCP server reads the conversation and deletes it, so later turns stay hidden.
+        return {"spec": {
+            "image": image,
+            "agentTask": {"instruction": INSTRUCTION, "tools": [{
+                "name": "bfcl", "command": ["python3", "-B", "/orbit-adapter/bfcl_mcp.py"],
+                "env": {"BFCL_PAYLOAD": "/bfcl-private/solve.json", "BFCL_OUTPUT": "/orbit/output",
+                        "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0", "TZ": "UTC"}}]},
+            "mounts": [{"source": str(HERE), "target": "/orbit-adapter", "mode": "ro"},
+                       {"source": str(staging), "target": "/bfcl-private", "mode": "rw"}],
+            "env": {"PYTHONDONTWRITEBYTECODE": "1", "TZ": "UTC"},
+            "resources": {"cpus": 2, "memGB": 4, "gpus": 0},
+            "timeoutMin": trial.get("timeoutMin") or 20,
+        }}
     mounts = [
         {"source": str(HERE), "target": "/orbit-adapter", "mode": "ro"},
         {"source": str(payload_path), "target": "/input.json", "mode": "ro"},
@@ -159,7 +192,7 @@ def plan(req, phase):
         mounts.append({"source": req["solve"]["output"], "target": "/solve", "mode": "ro"})
     return {"spec": {
         "image": image, "entrypoint": "python3",
-        "command": ["-B", "/orbit-adapter/runtime.py", phase, trial["method"]["agent"]],
+        "command": ["-B", "/orbit-adapter/runtime.py", phase, trial["method"].get("name", agent) if phase == "verify" else agent],
         "mounts": mounts, "network": False,
         "env": {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0", "TZ": "UTC"},
         "resources": {"cpus": 1, "memGB": 1, "gpus": 0},

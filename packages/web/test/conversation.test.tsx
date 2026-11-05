@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import {
   callSummary,
+  deepParse,
   diffStates,
   flatten,
   parseConversation,
@@ -106,6 +107,7 @@ it("summarizes calls, results and turns", () => {
   expect(callSummary({ name: "f", arguments: { "#0": 3, x: "y" } })).toBe("f(3, x=y)");
   expect(parseResult('{"a": 1}')).toEqual({ a: 1 });
   expect(parseResult("plain")).toBe("plain");
+  expect(deepParse({ missing: ['{"a": [1]}', "x"] })).toEqual({ missing: [{ a: [1] }, "x"] });
   expect(turnStats(conv.turns[1] as never)).toMatchObject({ calls: 1, rejected: 1, errors: 0 });
 });
 
