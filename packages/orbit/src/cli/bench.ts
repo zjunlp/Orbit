@@ -15,13 +15,14 @@ import {
   benchCategory,
   benchCoverage,
   CATEGORY_LABELS,
+  formatCalibration,
   type MethodSummary,
   type MetricSpec,
   trialRunIds,
 } from "../contracts/index.ts";
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "../contracts/metrics.ts";
 import type { Print } from "./auth.ts";
-import { calibrate, formatCalibration } from "./calibrate.ts";
+import { calibrate } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
 import { compactTable as table } from "./format.ts";
 import { kv, numericOption } from "./options.ts";
@@ -460,7 +461,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           rescore: o.rescore,
           ...(o.timeout ? { timeoutMin: o.timeout } : {}),
           waitMin: o.wait,
-          progress: o.json ? undefined : (t) => console.error(t),
+          progress: o.json ? undefined : (t) => t && console.error(t),
         });
         print(o.json, r, () => formatCalibration(r));
         if (!r.calibrated) process.exitCode = 1;

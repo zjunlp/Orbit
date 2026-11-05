@@ -216,6 +216,18 @@ export const BenchCapabilities = z
     /** Agent capabilities (registry `capabilities`) a CLI method needs; checked on submission. */
     requires: z.array(z.enum(["oneShot", "multiTurn", "mcp", "gui"])).default([]),
     calibration: CalibrationExpect.optional(),
+    /**
+     * Comparison with the benchmark's own runner or published results (design §9.10), which Orbit
+     * cannot establish by itself: `sample-aligned` (native runner on sampled tasks agrees) or
+     * `agent-compared` (a real Agent / policy scored as officially reported), with its evidence.
+     */
+    parity: z
+      .object({
+        level: z.enum(["sample-aligned", "agent-compared"]),
+        evidence: z.string().max(2000),
+        checkedAt: z.string().max(40).optional(),
+      })
+      .optional(),
   })
   .superRefine((c, ctx) => {
     if (!c.category) return;
@@ -265,8 +277,62 @@ export const Method = z
   });
 export type Method = z.infer<typeof Method>;
 
+/**
+ * Marks a calibration job (design §9.15), fixed at submission: tasks whose reference solution is
+ * partial or missing (their oracle trials are not judged) and whether to rescore once it ends.
+ */
+export const JobCalibration = z.object({
+  noOracle: z.array(z.string()).default([]),
+  rescore: z.boolean().default(true),
+});
+export type JobCalibration = z.infer<typeof JobCalibration>;
+
+/** `POST /bench/calibrations`: sample tasks (or take the given ones) and calibrate them. */
+export const CalibrationRequest = z.strictObject({
+  benchmark: ProfileName,
+  tasks: z.array(z.string()).default([]),
+  sample: z.number().int().min(1).max(100).default(3),
+  suite: z.string().optional(),
+  seeds: z.number().int().min(1).max(10).default(2),
+  oracle: z.boolean().default(true),
+  rescore: z.boolean().default(true),
+  timeoutMin: z.number().positive().optional(),
+});
+export type CalibrationRequestInput = z.input<typeof CalibrationRequest>;
+
+export const CheckResult = z.enum(["passed", "failed", "not_run"]);
+export type CheckResult = z.infer<typeof CheckResult>;
+export const CalibrationCheck = z.object({
+  name: z.string(),
+  result: CheckResult,
+  detail: z.string(),
+  /** Trials the check failed on, for links to their evidence. */
+  trials: z.array(z.string()).default([]),
+});
+export type CalibrationCheck = z.infer<typeof CalibrationCheck>;
+
+/** A calibration job's judgement, computed from its trials whenever it is read. */
+export const CalibrationReport = z.object({
+  benchmark: z.string(),
+  job: z.string(),
+  tasks: z.array(z.string()),
+  methods: z.array(z.string()),
+  seeds: z.number().int(),
+  /** `running`: trials not finished; `rescoring`: the rescore from saved evidence is in progress. */
+  phase: z.enum(["running", "rescoring", "done"]),
+  checks: z.array(CalibrationCheck),
+  /** Done, no check failed and at least one passed (`not_run` checks are listed, not counted). */
+  calibrated: z.boolean(),
+  createdAt: z.string(),
+  endedAt: z.string().nullable(),
+  /** The benchmark checkout at submission, so a later change can be told apart. */
+  source: z.object({ commit: z.string(), dirty: z.boolean() }).nullable(),
+});
+export type CalibrationReport = z.infer<typeof CalibrationReport>;
+
 export const BenchJobSpec = z.object({
   name: z.string().max(200).optional(),
+  calibration: JobCalibration.optional(),
   benchmark: ProfileName,
   /** Task ids; default: every supported task. */
   tasks: z.array(z.string()).default([]),
@@ -608,6 +674,11 @@ export const BenchJob = z.object({
     .nullable()
     .default(null),
   state: z.enum(["running", "done", "cancelled"]),
+  /**
+   * A calibration job's rescore step, run by the daemon once its trials have ended: `started` while
+   * rescoring, `done` afterwards (`note`: why it was skipped or partial).
+   */
+  rescore: z.object({ state: z.enum(["started", "done"]), note: z.string().optional() }).optional(),
   createdAt: z.string(),
   endedAt: z.string().nullable(),
 });
@@ -702,6 +773,8 @@ export const BenchJobDetail = z.object({
   job: BenchJob,
   trials: z.array(Trial),
   summary: z.array(MethodSummary),
+  /** For calibration jobs (`spec.calibration`). */
+  calibration: CalibrationReport.optional(),
 });
 export type BenchJobDetail = z.infer<typeof BenchJobDetail>;
 
@@ -711,6 +784,69 @@ export const BenchJobList = z.object({
 export type BenchJobList = z.infer<typeof BenchJobList>;
 
 export const BenchmarkList = z.object({ benchmarks: z.array(Benchmark) });
+
+/** A method that is not a calibration method, by what makes it the same method across jobs. */
+export const CatalogMethod = z.object({
+  /** `agent · model · effort` (or the external entrypoint). */
+  key: z.string(),
+  agent: z.string(),
+  model: z.string().nullable(),
+  jobs: z.number().int(),
+  /** The latest job that ran it. */
+  latest: z.object({
+    job: z.string(),
+    method: z.string(),
+    createdAt: z.string(),
+    state: z.string(),
+    summary: MethodSummary,
+  }),
+});
+export type CatalogMethod = z.infer<typeof CatalogMethod>;
+
+/**
+ * One registered benchmark on the catalog page (design §9.15): what it is and can run, whether its
+ * integration was calibrated, which real methods ran, and its parity with the original.
+ */
+export const CatalogEntry = z.object({
+  benchmark: Benchmark,
+  /** The adapter's task listing (cached by the daemon); null until the first listing finished. */
+  listing: z
+    .object({
+      at: z.string(),
+      capabilities: BenchCapabilities.nullable(),
+      metrics: z.array(MetricSpec),
+      official: OfficialRule.nullable(),
+      coverage: z.object({
+        total: z.number().int(),
+        supported: z.number().int(),
+        suites: z.array(
+          z.object({ suite: z.string(), total: z.number().int(), supported: z.number().int() }),
+        ),
+        reasons: z.array(
+          z.object({ reason: z.string(), tasks: z.number().int(), suites: z.array(z.string()) }),
+        ),
+      }),
+      /** Tasks with a full reference solution (`oracle` tag), when the adapter tags them. */
+      oracleTasks: z.number().int().nullable(),
+    })
+    .nullable(),
+  /** The listing's capabilities, else those of the newest job (so a row has a category early). */
+  capabilities: BenchCapabilities.nullable(),
+  /** The last listing failed (an earlier one may still be shown). */
+  listingError: z.string().nullable(),
+  /** A listing is being refreshed now. */
+  refreshing: z.boolean(),
+  /** Calibration jobs, newest first (at most five). */
+  calibrations: z.array(CalibrationReport),
+  /** Jobs of this benchmark (all methods). */
+  jobs: z.number().int(),
+  methods: z.array(CatalogMethod),
+  /** Highest fidelity level with evidence (design §9.10). */
+  fidelity: z.enum(["experimental", "calibrated", "sample-aligned", "agent-compared"]),
+});
+export type CatalogEntry = z.infer<typeof CatalogEntry>;
+export const BenchCatalog = z.object({ entries: z.array(CatalogEntry) });
+export type BenchCatalog = z.infer<typeof BenchCatalog>;
 export const BenchTaskList = z.object({
   tasks: z.array(BenchTask),
   metrics: z.array(MetricSpec).default([]),

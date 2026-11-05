@@ -1039,6 +1039,39 @@ Harbor 补全：共享 GPU 组、`gpu_types`、main `shm_size`、服务 `entrypo
 **仍未统一、需要正视的**：轨迹（Agent 会话与环境记录合成一份，§9.8，P6 主线第 4 项）；具身 bench 尚无真实
 coding agent / VLA 正向校准；覆盖数字在 `coverage` 落地前不对外宣称。
 
+### 9.15 Web：Catalog 与 C3/C4 对话视图（2026-11-05）
+
+依据 [Web UI 调研](research/web-ui/landscape.md)。原则：结果与证据一起出现；总览是紧凑分组表、逐层展开；对话是主视图、树与原始
+JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"四件事分开显示，不合成一个健康分。
+
+**校准成为一等记录**（取代只在 CLI 内存中判定）：
+
+- 判定逻辑（抽样、方法、期望、`judgeCalibration`）移到无依赖的 `contracts/calibration.ts`，CLI 与 daemon 共用一份。
+- `BenchJobSpec.calibration`（可选）：提交时固定 `noOracle` 任务、是否重评。带它的作业就是校准作业；不靠作业名猜测。
+- `POST /api/v1/bench/calibrations`：daemon 抽样、建作业；作业结束后若需重评，daemon 自动发起一次（重评前的分数留在 trial
+  `history`），全部结束后由 `GET /bench/jobs/:id` 的 `calibration` 字段给出报告（`running` / `rescoring` / `done` + 检查列表）。
+  报告按需从 trial 计算，不另建账本。`orbit bench calibrate` 改为调用这个 API，输出不变。
+- `GET /api/v1/bench/catalog`：每个已登记 benchmark 一行——登记信息、任务列表摘要（类别、profile、supported/listed、按 suite
+  的覆盖与原因；daemon 内存缓存、后台刷新，列表失败保留错误和上次成功时间）、最近 5 次校准（离散记录，不画连续健康条）、
+  真实方法（agent/model/effort 相同视为同一方法）最近一次的主指标与 valid/total、保真度。保真度级别沿用 §9.10，Web 显示名称而不是
+  `L*`（避免与接入层级 L0–L2 混淆）：校准通过由报告算出；样例对齐与真实对照由 adapter 在 `capabilities.parity` 声明证据，
+  未声明显示"未验证"。
+
+**C3/C4 对话轨迹**：新增 review kind `conversation`，契约 `ConversationTrajectory`（`contracts/trajectory.ts`）：
+
+- 参与者（agent / user / system / tool 环境，带显示名）；按原始用户轮次分组的事件：消息、工具调用（`callId`、调用者、名称、参数、
+  结果或错误、`rejected` 表示 scaffold 拒绝的非法调用）；轮次的 `check`（passed / failed / unchecked）与可选 before / after /
+  expected 状态；整体 `verdict`（上游 checker 的类型与说明、首次检测到失败的轮次，可为空，不猜）；`producer` / `trust` / `completeness`。
+- 由 **verify** 产生（独立重放，可信），原生文件照旧保留。BFCL：重放实际调用与参考调用，逐轮状态；对前缀依次运行原版
+  `multi_turn_checker` 得到首个失败轮次，之后的轮次标 `unchecked`。τ²：消息流按 `requestor` 区分 agent 与 user 的工具，终态 DB
+  的期望/实际与 action / communicate 检查来自原版 reward；没有逐消息 DB 快照，不画逐轮状态。
+- Web `pages/trial/Conversation.tsx`：轮次目录 / 对话 / 检查器三栏（窄屏单栏）；工具卡片按 `callId` 合并调用与结果，错误与失败相关
+  内容默认展开；检查器有 Checker、状态 diff（只看变化字段）、期望 vs 实际、Raw；顶部 verdict 横幅可跳到失败轮次。键位：`h/l` 轮次、
+  `/` 搜索、`e` 跳到失败证据。参考调用与实际调用的差异只作诊断，不当作判分规则。
+- Trial 页通用：上一 / 下一 trial、下一个失败（沿用作业内的排序与筛选）。
+
+**不做**：跨类别总榜或单一健康分；在 Web 复制 `docs/catalog.md`；从缺失证据推测成功或补 0；把 Rescore 表述为重跑 Agent。
+
 ## 10. 路线
 
 | 阶段 | 目标 | 验收 |

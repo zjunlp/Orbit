@@ -2,6 +2,7 @@ export * from "./adapter.ts";
 export * from "./agent.ts";
 export * from "./auth.ts";
 export * from "./bench.ts";
+export * from "./calibration.ts";
 export {
   BENCH_CATEGORIES,
   benchCategory,

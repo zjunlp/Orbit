@@ -1,7 +1,16 @@
 // Pure coverage and calibration judgement over explicit task and trial fixtures.
 import { expect, it } from "vitest";
-import { calibrationMethods, judgeCalibration, sampleTasks } from "../src/cli/calibrate.ts";
-import { type BenchJobDetail, benchCoverage, normalizeReason } from "../src/contracts/index.ts";
+import {
+  type BenchJob,
+  benchCoverage,
+  calibrationMethods,
+  calibrationReport,
+  expectations,
+  judgeCalibration,
+  normalizeReason,
+  sampleTasks,
+  type Trial,
+} from "../src/contracts/index.ts";
 
 const task = (id: string, suite: string | null, reason: string | null = null) => ({
   id,
@@ -88,8 +97,7 @@ const trial = (taskId: string, method: string, seed: number, score: number | nul
   createdAt: "",
   endedAt: "",
 });
-const detail = (trials: unknown[]) =>
-  ({ job: {}, trials, summary: [] }) as unknown as BenchJobDetail;
+const detail = (trials: unknown[]) => trials as Trial[];
 
 it("passes a well-behaved integration and names what fails", () => {
   const good = detail([
@@ -98,15 +106,22 @@ it("passes a well-behaved integration and names what fails", () => {
     trial("t", "oracle", 1, 1),
     trial("t", "oracle", 2, 1),
   ]);
-  const again = detail(
-    (good.trials as unknown as { history: unknown[] }[]).map((x) => ({ ...x, history: [{}] })),
-  );
-  const checks = judgeCalibration(good, again);
+  // A rescore keeps the first scoring in history; the same score again reproduces it.
+  const again = good.map((x) => ({
+    ...x,
+    history: [{ verifyRunId: "v0", outcome: x.outcome, endedAt: "" }],
+  }));
+  const checks = judgeCalibration(again as Trial[]);
   expect(checks.every((c) => c.result === "passed")).toBe(true);
-  // Trials the rescore skipped (e.g. solved on a worker) do not count as reproduced.
-  const skipped = judgeCalibration(good, good, "4 trial(s) not rescored").pop();
-  expect(skipped).toMatchObject({ result: "not_run" });
-  expect(skipped?.detail).toMatch(/no trial was rescored \(4 trial\(s\) not rescored\)/);
+  // Without any rescored trial the check is not run and says why.
+  const skipped = judgeCalibration(good, { rescoreNote: "4 trial(s) not rescored" }).pop();
+  expect(skipped).toMatchObject({ result: "not_run", detail: "4 trial(s) not rescored" });
+  // A rescore that changes a score fails and names the trial.
+  const changed = again.map((x, i) =>
+    i === 0 ? { ...x, outcome: { ...x.outcome, score: 1 } } : x,
+  );
+  const rescore = judgeCalibration(changed as Trial[]).pop();
+  expect(rescore).toMatchObject({ result: "failed", trials: ["t-empty-1"] });
 
   const bad = detail([
     trial("t", "empty", 1, 0),
@@ -114,7 +129,9 @@ it("passes a well-behaved integration and names what fails", () => {
     trial("t", "oracle", 1, null, { evaluation: "invalid", failure: "infra" }),
     trial("t", "oracle", 2, 1, { cleanup: "failed" }),
   ]);
-  const by = Object.fromEntries(judgeCalibration(bad, null, "skipped").map((c) => [c.name, c]));
+  const by = Object.fromEntries(
+    judgeCalibration(bad, { rescoreNote: "skipped" }).map((c) => [c.name, c]),
+  );
   expect(by["evaluation valid"]?.detail).toContain("t/oracle#1 (infra)");
   expect(by["empty scores the minimum"]?.result).toBe("failed");
   expect(by["oracle scores the maximum"]?.result).toBe("failed");
@@ -124,14 +141,13 @@ it("passes a well-behaved integration and names what fails", () => {
 });
 
 it("judges against the category's and benchmark's expectations", async () => {
-  const { expectations } = await import("../src/cli/calibrate.ts");
   const runs = detail([
     trial("t", "empty", 1, 1),
     trial("t", "empty", 2, 0),
     trial("t", "oracle", 1, 1),
   ]);
   const by = (exp: ReturnType<typeof expectations>) =>
-    Object.fromEntries(judgeCalibration(runs, null, "x", exp).map((c) => [c.name, c.result]));
+    Object.fromEntries(judgeCalibration(runs, { expect: exp }).map((c) => [c.name, c.result]));
   // Embodied policy: a still policy may succeed, and seeds are different initial states.
   const policy = by(expectations({ category: "embodied-policy" } as never));
   expect(policy["empty score"]).toBe("not_run");
@@ -158,12 +174,46 @@ it("samples tasks with a full reference first and does not judge oracle-less tas
   ];
   expect(sampleTasks(ts, 1, undefined, true)).toEqual(["a2"]);
   expect(sampleTasks(ts, 1)).toEqual(["a1"]);
-  const checks = judgeCalibration(
-    detail([trial("a1", "oracle", 1, 0)]),
-    null,
-    "x",
-    undefined,
-    new Set(["a1"]),
-  );
+  const checks = judgeCalibration(detail([trial("a1", "oracle", 1, 0)]), {
+    noOracle: new Set(["a1"]),
+  });
   expect(checks.find((c) => c.name === "oracle scores the maximum")?.result).toBe("not_run");
+});
+
+it("reports a calibration job by phase and only calls a finished one calibrated", () => {
+  const trials = detail([trial("t", "empty", 1, 0), trial("t", "oracle", 1, 1)]);
+  const job = {
+    id: "j",
+    spec: {
+      benchmark: "b",
+      tasks: ["t"],
+      methods: [{ name: "empty" }, { name: "oracle" }],
+      seeds: 1,
+      calibration: { noOracle: [], rescore: true },
+    },
+    state: "done",
+    source: null,
+    createdAt: "c",
+    endedAt: "e",
+  } as unknown as BenchJob;
+  // Ended, the rescore not started yet / in progress / finished.
+  expect(calibrationReport(job, trials)?.phase).toBe("done");
+  expect(calibrationReport({ ...job, rescore: { state: "started" } }, trials)).toMatchObject({
+    phase: "rescoring",
+    calibrated: false,
+  });
+  const done = calibrationReport({ ...job, rescore: { state: "done", note: "x" } }, trials);
+  expect(done).toMatchObject({ phase: "done", calibrated: true, endedAt: "e" });
+  expect(done?.checks.at(-1)).toMatchObject({ result: "not_run", detail: "x" });
+  expect(calibrationReport({ ...job, state: "running" }, trials)?.phase).toBe("running");
+  // A trial whose cleanup is still being confirmed is not judged yet.
+  const pending = trials.map((x, i) =>
+    i ? x : { ...x, outcome: { ...x.outcome, cleanup: "pending" } },
+  );
+  expect(
+    calibrationReport({ ...job, rescore: { state: "done" } }, pending as Trial[])?.phase,
+  ).not.toBe("done");
+  expect(
+    calibrationReport({ ...job, spec: { ...job.spec, calibration: undefined } }, trials),
+  ).toBeNull();
 });

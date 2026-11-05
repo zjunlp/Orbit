@@ -12,6 +12,7 @@ import {
   AuthProfile,
   type AuthProfileInput,
   AuthTestResult,
+  BenchCatalog,
   BenchCompare,
   type BenchConsolidateInput,
   BenchConsolidateResult,
@@ -27,6 +28,7 @@ import {
   BenchRescoreResult,
   BenchTaskList,
   BenchUsage,
+  type CalibrationRequestInput,
   CodeDiff,
   Dataset,
   type DatasetInput,
@@ -234,6 +236,13 @@ export class OrbitClient {
     this.call(BenchUsage, `/bench/usage?jobs=${ids.map(enc).join(",")}`);
   benchDeleteJob = (id: string) =>
     this.call(RunDeletion, `/bench/jobs/${enc(id)}`, { method: "DELETE", timeoutMs: 600_000 });
+  benchCatalog = (refresh: string[] = []) =>
+    this.call(
+      BenchCatalog,
+      `/bench/catalog${refresh.length ? `?refresh=${refresh.map(enc).join(",")}` : ""}`,
+    );
+  benchCalibrate = (body: CalibrationRequestInput) =>
+    this.call(BenchJob, "/bench/calibrations", { method: "POST", body, timeoutMs: 180_000 });
   benchJobs = (limit = 200) =>
     this.call(BenchJobList, `/bench/jobs?limit=${limit}`).then((r) => r.jobs);
   benchJob = (id: string) => this.call(BenchJobDetail, `/bench/jobs/${enc(id)}`);
