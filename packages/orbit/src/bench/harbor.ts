@@ -13,7 +13,13 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { parse as parseToml } from "smol-toml";
-import type { BenchTask, FailureKind, Method } from "../contracts/index.ts";
+import {
+  BENCH_CATEGORIES,
+  type BenchCategory,
+  type BenchTask,
+  type FailureKind,
+  type Method,
+} from "../contracts/index.ts";
 import type { AdapterHandlers, RunDescription, ScoreReply } from "./adapter.ts";
 import { type ComposePlan, composeFile, parseCompose } from "./compose.ts";
 
@@ -86,9 +92,21 @@ export interface HarborOptions {
   allowlistNetwork?: string;
   /** `any`: do not restrict `[environment] gpu_types` to those models (a recorded deviation). */
   gpuTypes?: string;
+  /**
+   * The integration category of the tasks (default agent-workspace); Harbor is only the format, so a
+   * dataset of games or tool workflows declares its own. `profiles` is a comma-separated list.
+   */
+  category?: string;
+  profiles?: string;
 }
 
-const HARBOR_CONFIG = new Set(["hostNamespaces", "allowlistNetwork", "gpuTypes"]);
+const HARBOR_CONFIG = new Set([
+  "hostNamespaces",
+  "allowlistNetwork",
+  "gpuTypes",
+  "category",
+  "profiles",
+]);
 
 export function harborOptions(config: Record<string, string>): HarborOptions {
   const unknown = Object.keys(config).filter((k) => !HARBOR_CONFIG.has(k));
@@ -98,6 +116,8 @@ export function harborOptions(config: Record<string, string>): HarborOptions {
   if (config.allowlistNetwork && config.allowlistNetwork !== "public")
     throw new Error("allowlistNetwork must be public");
   if (config.gpuTypes && config.gpuTypes !== "any") throw new Error("gpuTypes must be any");
+  if (config.category && !(BENCH_CATEGORIES as readonly string[]).includes(config.category))
+    throw new Error(`category must be one of ${BENCH_CATEGORIES.join(", ")}`);
   return config;
 }
 
@@ -857,18 +877,29 @@ export const harborAdapter: AdapterHandlers = {
   metrics: HARBOR_METRICS,
   tasks: (req) =>
     findHarborTasks(req.benchmark.path, harborOptions(req.benchmark.config)).map(toBenchTask),
-  info: (_req, tasks) => {
-    const profiles = [...new Set(tasks.map((t) => t.tags.profile ?? "terminal"))].sort();
+  info: (req, tasks) => {
+    const opts = harborOptions(req.benchmark.config);
+    const declared = opts.profiles
+      ?.split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const profiles =
+      declared ?? [...new Set(tasks.map((t) => t.tags.profile ?? "terminal"))].sort();
     const embodied = tasks.some((t) => t.tags.domain === "embodied");
     return {
       capabilities: {
-        category: "agent-workspace",
+        category: (opts.category ?? "agent-workspace") as BenchCategory,
         profiles,
         domains: embodied ? ["embodied"] : [],
         methods: ["oracle", "empty", "cli"],
-        conditions: { Format: "Harbor task directories; each task's own environment and verifier" },
+        conditions: {
+          Format: "Harbor task directories; each task's own environment and verifier",
+          ...(opts.category ? { Category: `${opts.category} (declared at registration)` } : {}),
+        },
         scoreKind: "scalar",
         rescore: "evidence",
+        // Every Harbor task ships solution/solve.sh; tasks tagged with a partial oracle are skipped.
+        calibration: { oracle: "max" },
       },
     };
   },

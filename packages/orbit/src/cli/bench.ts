@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
 import {
+  type BenchCapabilities,
   type BenchCompare,
   type BenchCoverage,
   type BenchJobDetail,
@@ -11,7 +12,9 @@ import {
   type BenchReport,
   type BenchTask,
   type BenchUsage,
+  benchCategory,
   benchCoverage,
+  CATEGORY_LABELS,
   type MethodSummary,
   type MetricSpec,
   trialRunIds,
@@ -72,6 +75,13 @@ function formatTasks(ts: BenchTask[]): string {
   for (const t of ts)
     rows.push([t.id, t.supported ? "yes" : "no", (t.supported ? t.title : t.reason) ?? ""]);
   return `${table(rows)}\n${ok}/${ts.length} supported`;
+}
+
+function categoryText(c: BenchCapabilities): string {
+  const cat = benchCategory(c);
+  if (!cat) return "undeclared";
+  const extra = [...c.profiles, ...c.domains];
+  return `${CATEGORY_LABELS[cat]}${extra.length ? ` (${extra.join(", ")})` : ""}`;
 }
 
 function formatCoverage(c: BenchCoverage, all: boolean): string {
@@ -174,7 +184,7 @@ function formatJob(d: BenchJobDetail): string {
       : []),
     ...(job.capabilities
       ? [
-          `environment: ${job.capabilities.kind} · recheck: ${job.capabilities.rescore}`,
+          `category: ${categoryText(job.capabilities)} · recheck: ${job.capabilities.rescore}`,
           ...Object.entries(job.capabilities.conditions).map(([key, value]) => `${key}: ${value}`),
         ]
       : []),
