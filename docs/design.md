@@ -678,6 +678,10 @@ Web `/bench/new` 支持环境/任务选择、方法配置或导入、复制已�
   `home/ben/task/final_model` 验证和评分，其他方法使用 `task/final_model`；仅 `native=empty` 挂载完整 checkout
   和 dotenv 并设置 `AGENT_ENV`，其他方法只挂载 `src/`，避免通过 `/repo/.env` 暴露凭据。
 - **接入验收（任意新 benchmark）**：oracle 满分（没有参考解时省略）、空答案零分、抽样与原版结果一致。
+- **BFCL multi-turn 示例**（[adapter](../examples/bench-adapters/bfcl-multiturn/)）：直接登记 C3 `tool-workflow` /
+  `local-state`，一 trial 一完整会话。独立离线 verify 从保存的调用文本重建原版 Python 工具环境，调用固定版本的
+  状态/响应 checker；不采用 solve 写出的分数、返回值或状态。包与数据固定，参考序列自检失败及环境异常为 invalid，
+  不能按工具开放顺序执行的上游参考任务显式 unsupported；沿用现有 Run、SDK 与 JSON review，无新增执行路径。
 - **GUI 第一阶段**（[BrowserGym/MiniWoB](../examples/bench-adapters/browsergym/README.md)）：外部 Python adapter/runtime，
   固定 BrowserGym 0.14.3 与 MiniWoB commit，五个 CPU 浏览器任务；单容器内完成原版 reset/step/validate。
   external 工厂接收截图、目标、动作错误（bid 模式另有 accessibility tree），返回原版高层动作；empty 为 noop 后停止。
@@ -882,6 +886,11 @@ Agent 本身用 GPU）；否则由第一个不在宿主命名空间里的服务�
 `x-gpu-memory-gb` 求和作为该卡的最小显存。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
 拆成 Docker 的可执行文件与前置参数。`[environment] gpu_types` 变成拥有该组卡的角色的 `gpuModels`（任一型号，
 名称整词顺序匹配），本机没有这些型号时提交即给出原因；登记 `-c gpuTypes=any` 时不限制型号并记为偏差。
+
+**启动看门狗**：镜像拉取与构建（`docker pull` / `docker build`）在启动阶段没有期限，网络或构建代理卡住时 Run 会一直停在
+starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_IMAGE_DEADLINE_MIN`（默认 60 分钟）的期限：到时先 SIGTERM
+再 SIGKILL docker 子进程，日志写明原因，Run 以失败结束并给出可读理由（属基础设施，bench 记为 invalid 而不是 0 分）。
+构建/拉取的输出仍完整保留在 Run 日志里，便于区分"慢"与"卡住"。
 
 **P7 实现**：第 6 条对账回收在 `runs/reconcile.ts`：daemon 每 10 分钟（`orbit reconcile` 立即）列出带本 home 标签的容器、
 网络与卷，只删除其 Run 已结束且清理确认、或 Run 记录已不存在的资源；没有 Run 标签的、仍在被观察的 Run 的一律不动；
