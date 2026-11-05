@@ -314,6 +314,14 @@ describe("upstream verifiers that write 0 when they themselves failed", () => {
     });
     // The same message with a real reward is left alone.
     expect(harborReward(dir2("✗ Could not reach game server\n", "1")).score).toBe(1);
+    expect(harborReward(dir2("✗ Game server returned 502: Bad Gateway\n")).invalid).toBe(true);
+  });
+
+  it("keeps an unfinished game (425) as the method's 0", () => {
+    expect(harborReward(dir2("✗ Game server returned 425: Too Early\n"))).toMatchObject({
+      score: 0,
+      invalid: false,
+    });
   });
 
   it("flags a crashed grader script but keeps a plain failed assertion as a 0", () => {

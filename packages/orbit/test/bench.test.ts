@@ -358,7 +358,7 @@ command = "true"
       command: [
         "sh",
         "-c",
-        "mkdir -p /logs/verifier /logs/agent && chmod +x /tests/test.sh && (/tests/test.sh) > /logs/verifier/test-stdout.txt 2>&1",
+        "mkdir -p /logs/verifier /logs/agent && chmod +x /tests/test.sh 2>/dev/null; (/tests/test.sh) > /logs/verifier/test-stdout.txt 2>&1",
       ],
       timeoutMin: 1.5,
       env: { G: "1" },

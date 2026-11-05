@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import type { AfterPhase, AfterStatus, RunPhase, RunSpec } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
@@ -585,6 +593,9 @@ while :; do sleep 3600; done
 export function writePhaseScript(dir: string): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "run.sh"), PHASE_SCRIPT, { mode: 0o755 });
+  // The run's own user (an image's USER, not root) writes main.pid and main.exit here; the files
+  // that decide whether a phase already ran live in `phaseStateDir`, outside the container.
+  chmodSync(dir, 0o777);
 }
 
 /** A small integer file the phase scripts write, or null while it does not exist (yet). */
