@@ -1,6 +1,6 @@
 # Orbit status
 
-- **Updated at:** 2026-11-04
+- **Updated at:** 2026-11-05
 - **Basis:** P7 (reconciliation, host protection and start limit, capability routing, [catalog](catalog.md)) on P6.5 (coverage, calibration, Harbor GPU sharing, manifest adapter, Python SDK) and P1–P6.
 - **Stage:** R0–R2 validated here; R3 LongDS checked with a complete native Codex task, Harbor with oracle/empty samples; R4 only as two daemons on one machine.
 - **Blockers:** none for the current release.
@@ -25,7 +25,7 @@
 - GUI Web: [task creation, method comparison and saved review](guides/gui-bench-web.md); BrowserGym/MiniWoB covers 125 registered tasks with external/empty, and CLI Agents declaring `gui` through a private signed GUI service (`orbit-computer` CLI/MCP; benchmarks declare `requires`). Claude Code completed five sampled BrowserGym tasks through MCP and three CUA-Lite MiniWoB tasks through the shared service; Orbit wires declared stdio MCP servers into Claude/Codex homes. Codex authentication diagnosis failed and `gui` remains false. Coordinate/drag overlays, action-id session alignment and an embodied multi-camera/video timeline exist; EFE MetaWorld+ standard now imports executed actions, native reward, render video and session references after scoring, with completeness labels; missing proprioception is not invented. No browser replay or state recovery.
 - Multi-node: workers join by token; placement across nodes, size-limited code bundles by hash, named datasets, mirrored logs/metrics, artifact streaming from verified descriptors. Guide: [guides/multi-node.md](guides/multi-node.md).
 - GUI hubs: [Cua Bench](../examples/bench-adapters/cua-bench/) basic desktop tasks passed five real empty/oracle pairs and failure/cleanup checks; [CUA-Lite](../examples/bench-adapters/cua-lite/) MiniWoB is calibrated, with isolated WebVoyager/Online-Mind2Web paths and deferred native judges for reviewed subsets. [MobileWorld](../examples/bench-adapters/mobileworld/) and [OSWorld-V2](../examples/bench-adapters/osworld-v2/) adapters retain original task catalogs and single-episode runners; real KVM calibration remains pending. WebVoyager needs its full asset image; Web model calibration remains pending.
-- Integration tiers (see [catalog](catalog.md)): Harbor (L0), `orbit-bench.yaml` via the built-in `manifest` adapter (L1; vla-eval LIBERO sample calibrated), Python SDK `examples/sdk/orbit_bench` (L2, all 9 Python adapters). `orbit bench coverage` (EFE: 1,938/2,260 runnable by conditions) and `orbit bench calibrate` (EFE MetaWorld+ and LIBERO manifest passed for real).
+- Integration tiers (see [catalog](catalog.md)): Harbor (L0), `orbit-bench.yaml` via the built-in `manifest` adapter (L1; vla-eval LIBERO sample calibrated), Python SDK `examples/sdk/orbit_bench` (L2 external adapters). `orbit bench coverage` (EFE: 1,938/2,260 runnable by conditions) and `orbit bench calibrate` (EFE MetaWorld+ and LIBERO manifest passed for real). [C4 τ²-bench](../examples/bench-adapters/tau2/): pinned airline/retail, gold/empty sample calibrated with independent offline upstream scoring and rescore; no live user/model calls.
 
 ## Main gaps
 
