@@ -179,6 +179,8 @@ def score(req):
     from orbit_bench import invalid, valid
 
     review = {"files": [
+        {"label": "Conversation", "phase": "verify", "path": "conversation.json", "kind": "conversation",
+         "fallback": "json"},
         {"label": "Calls, results and per-turn states", "phase": "solve", "path": "evidence.json", "kind": "json"},
         {"label": "Independent replay", "phase": "verify", "path": "replay.json", "kind": "json"},
         {"label": "Upstream checker verdict", "phase": "verify", "path": "verdict.json", "kind": "json"},

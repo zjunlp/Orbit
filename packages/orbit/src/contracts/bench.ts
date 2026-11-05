@@ -364,6 +364,7 @@ export const REVIEW_KINDS = [
   "table",
   "trajectory",
   "episode",
+  "conversation",
 ] as const;
 export type ReviewKind = (typeof REVIEW_KINDS)[number];
 

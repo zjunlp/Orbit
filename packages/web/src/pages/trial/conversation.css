@@ -1,0 +1,479 @@
+/* C3/C4 conversation view: turns | conversation | inspector (design §9.15). */
+.conv {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.conv-verdict {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.conv-verdict-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conv-verdict-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.conv-verdict.ok .conv-verdict-title {
+  color: var(--st-succeeded);
+}
+.conv-verdict.bad .conv-verdict-title {
+  color: var(--st-failed);
+}
+.conv-verdict-msg {
+  color: var(--text);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.conv-checks,
+.conv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.conv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  max-width: 100%;
+}
+.conv-check.big {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+.st-passed.conv-check,
+.conv-check.st-passed {
+  color: var(--st-succeeded);
+  border-color: color-mix(in srgb, var(--st-succeeded) 35%, transparent);
+}
+.conv-check.st-failed {
+  color: var(--st-failed);
+  border-color: color-mix(in srgb, var(--st-failed) 45%, transparent);
+  background: var(--del-bg);
+}
+.conv-check.st-unchecked {
+  color: var(--text-3);
+}
+.conv-actor {
+  font-size: 11.5px;
+  color: var(--text-2);
+  text-transform: none;
+}
+.conv-actor b {
+  color: var(--text);
+  font-weight: 500;
+}
+.conv-legend .conv-actor {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.conv-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) minmax(320px, 34%);
+}
+.conv-rail,
+.conv-main,
+.conv-inspector {
+  min-height: 0;
+  overflow: auto;
+}
+.conv-rail {
+  border-right: 1px solid var(--border);
+  background: var(--bg-sunken);
+  display: flex;
+  flex-direction: column;
+}
+.conv-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  color: var(--text-3);
+}
+.conv-search .input {
+  flex: 1;
+  min-width: 0;
+}
+.conv-hits {
+  padding: 0 12px 6px;
+  font-size: 12px;
+}
+.conv-rail ol {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 6px;
+  flex: 1;
+}
+.conv-turn-link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.conv-turn-link:hover {
+  background: var(--hover);
+}
+.conv-turn-link.on {
+  background: var(--selected);
+  border-color: var(--border-strong);
+}
+.conv-turn-link.st-failed {
+  border-left-color: var(--st-failed);
+}
+.conv-turn-link.st-passed {
+  border-left-color: var(--st-succeeded);
+}
+.conv-turn-link.st-unchecked {
+  border-left-color: var(--border-strong);
+}
+.conv-turn-n {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.st-failed > .conv-turn-n {
+  color: var(--st-failed);
+}
+.st-passed > .conv-turn-n svg {
+  color: var(--st-succeeded);
+}
+.st-unchecked > .conv-turn-n {
+  color: var(--text-3);
+}
+.conv-turn-meta {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.conv-turn-meta .bad {
+  color: var(--st-failed);
+}
+.conv-turn-meta .warn {
+  color: var(--st-cancelled);
+}
+.conv-turn-preview {
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.conv-keys {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+.conv-keys kbd,
+.conv-verdict kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  margin: 0 1px;
+}
+
+.conv-main {
+  padding: 14px 20px 40vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.conv-turn {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scroll-margin-top: 10px;
+}
+.conv-turn.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+.conv-turn.st-unchecked {
+  border-style: dashed;
+}
+.conv-note {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.conv-caret {
+  color: var(--text-3);
+  width: 10px;
+  flex: none;
+}
+.conv-body.wide {
+  grid-template-columns: 200px minmax(0, 1fr) minmax(420px, 58%);
+}
+.conv-insp-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.conv-insp-fail {
+  margin: 8px 14px 0;
+}
+.conv-turn > header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conv-fail {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: var(--del-bg);
+  color: var(--text);
+  font-size: 13px;
+}
+.conv-fail svg {
+  color: var(--st-failed);
+  flex: none;
+  margin-top: 2px;
+}
+.conv-none {
+  font-size: 12.5px;
+}
+.conv-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 88%;
+}
+.conv-msg.role-agent {
+  align-self: flex-end;
+}
+.conv-who {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.conv-msg.role-agent .conv-who {
+  text-align: right;
+}
+.conv-text {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.conv-msg.role-agent .conv-text {
+  background: var(--accent-soft);
+}
+.conv-msg.role-system .conv-text {
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-2);
+}
+
+.conv-call {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.conv-call.role-agent {
+  margin-left: 6%;
+}
+.conv-call.st-error {
+  border-left-color: var(--st-failed);
+}
+.conv-call.st-rejected {
+  border-left-color: var(--st-cancelled);
+}
+.conv-call.st-ok {
+  border-left-color: var(--st-succeeded);
+}
+.conv-call-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.conv-call-h:hover {
+  background: var(--hover);
+}
+.conv-call-sig {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.conv-call-res {
+  font-size: 12px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-call-b {
+  padding: 4px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.conv-field-l {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  margin-bottom: 3px;
+}
+.conv-json,
+.conv-call-b pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 360px;
+  overflow: auto;
+}
+.conv-err {
+  color: var(--st-failed);
+}
+
+.conv-inspector {
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+.conv-insp-h {
+  padding: 10px 14px 0;
+  font-weight: 600;
+}
+.conv-tabs {
+  padding: 0 8px;
+  background: transparent;
+}
+.conv-tabs a {
+  height: 34px;
+}
+.conv-insp-b {
+  padding: 12px 14px 30px;
+  font-size: 13px;
+}
+.conv-state td {
+  vertical-align: top;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.conv-state td.changed {
+  background: var(--add-bg);
+}
+.conv-state tr.mismatch td:first-child {
+  box-shadow: inset 3px 0 0 var(--st-failed);
+}
+.conv-state tr.mismatch td.changed {
+  background: var(--del-bg);
+}
+.conv-ref {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.conv-ref-line {
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.conv-ref-line.st-error {
+  color: var(--st-failed);
+}
+.conv-ref-line.st-rejected {
+  color: var(--st-cancelled);
+}
+.conv-check-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.conv-check-list .st-failed {
+  color: var(--st-failed);
+}
+.conv-check-list .st-passed svg {
+  color: var(--st-succeeded);
+}
+
+@media (max-width: 1100px) {
+  .conv-body {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .conv-inspector {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+@media (max-width: 760px) {
+  .conv-body {
+    grid-template-columns: 1fr;
+  }
+  .conv-rail {
+    display: none;
+  }
+}

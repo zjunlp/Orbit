@@ -142,6 +142,18 @@ class ProtocolTests(unittest.TestCase):
         self.assertIsNone(result["score"])
 
 
+    def test_state_changes_list_only_differing_paths(self):
+        initial = {"orders": {"a": {"status": "pending", "items": [1, 2]}}, "users": {"u": 1}}
+        expected = {"orders": {"a": {"status": "cancelled", "items": [1, 2]}}, "users": {"u": 1}}
+        actual = {"orders": {"a": {"status": "pending", "items": [1]}}, "users": {"u": 1}}
+        rows = adapter.state_changes(initial, expected, actual)
+        self.assertEqual(rows, [
+            {"path": "orders.a.items[1]", "initial": 2, "expected": 2},
+            {"path": "orders.a.status", "initial": "pending", "expected": "cancelled", "actual": "pending"},
+        ])
+        self.assertEqual(adapter.state_changes(initial, initial, initial), [])
+
+
 class PinTests(unittest.TestCase):
     def test_source_and_data_corruption(self):
         with tempfile.TemporaryDirectory() as d:
@@ -201,6 +213,21 @@ class NativeTests(unittest.TestCase):
                 simulation = SimulationRun.model_validate(json.loads((source / "simulation.json").read_text())["simulation"])
                 native = evaluate_simulation(simulation, task, EvaluationType.ALL, False, plan["domain"])
                 self.assertEqual(native.reward, result["score"])
+
+    def test_conversation_review_shows_checks_and_final_state(self):
+        _, _, out, result = self.execute("retail:0", "oracle")
+        conv = json.loads((out / "conversation.json").read_text())
+        self.assertEqual((conv["kind"], conv["verdict"]["passed"], result["score"]), ("conversation", True, 1))
+        calls = [e for t in conv["turns"] for e in t["events"] if e["type"] == "tool_call"]
+        self.assertTrue(calls and all("result" in c for c in calls))
+        self.assertTrue(conv["finalState"])
+        self.assertTrue(all(r.get("expected") == r.get("actual") for r in conv["finalState"]))
+        self.assertEqual(conv["completeness"], "environment-only")
+        _, _, out, _ = self.execute("retail:0", "empty")
+        conv = json.loads((out / "conversation.json").read_text())
+        self.assertFalse(conv["verdict"]["passed"])
+        self.assertIn("failed", [c["status"] for c in conv["verdict"]["checks"]])
+        self.assertTrue(any(r.get("expected") != r.get("actual") for r in conv["finalState"]))
 
     def test_forged_score_ignored_and_forged_tool_response_invalid(self):
         plan, source, out, _ = self.execute(method="empty")

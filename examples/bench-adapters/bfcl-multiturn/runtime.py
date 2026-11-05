@@ -192,7 +192,78 @@ def evidence_calls(payload, evidence):
     return result
 
 
-def verify_payload(payload, saved, output, api=None):
+def first_failed_turn(payload, decoded, checker):
+    """The checker returns at the first failing turn; find it by checking growing prefixes."""
+    truth = payload["ground_truth"]
+    for k in range(1, len(truth) + 1):
+        if not check({**payload, "ground_truth": truth[:k]}, decoded, checker)["valid"]:
+            return k - 1
+    return None
+
+
+def call_event(call):
+    error = call.get("action_error")
+    result = call.get("result")
+    failed = isinstance(result, str) and result.startswith("Error during execution")
+    arguments = {**{f"#{i}": v for i, v in enumerate(call.get("args", []))}, **call.get("kwargs", {})}
+    event = {"type": "tool_call", "id": call["id"], "actor": "agent",
+             "name": call.get("name") or call["source"].split("(", 1)[0].strip() or "?",
+             "arguments": arguments, "source": call["source"],
+             "status": "rejected" if error else "error" if failed else "ok"}
+    if error:
+        event["error"] = error
+    else:
+        event["result"] = result
+        if failed:
+            event["error"] = result
+    return event
+
+
+def conversation(payload, trace, truth_trace, result, failed_turn, method):
+    """The verifier's replay as a review conversation (Orbit `ConversationTrajectory`)."""
+    entry = payload["entry"]
+    passed = result["valid"]
+    details = {k: v for k, v in (result.get("details") or {}).items() if k != "execution_result"}
+    turns, tools = [], None
+    for index, row in enumerate(trace["turns"]):
+        events = [{"type": "message", "actor": m.get("role", "user"), "text": str(m.get("content", ""))}
+                  for m in row["messages"]]
+        events += [call_event(c) for c in row["calls"]]
+        if passed or failed_turn is None or index < failed_turn:
+            check = {"status": "passed"}
+        elif index == failed_turn:
+            check = {"status": "failed", "detail": result.get("error_message", "")}
+        else:
+            check = {"status": "unchecked",
+                     "detail": "The checker stops at the first failing turn"}
+        turn = {"index": index, "events": events, "check": check,
+                "state": {"before": row["state_before"], "after": row["state_after"],
+                          "expected": truth_trace["turns"][index]["state_after"]},
+                "reference": payload["ground_truth"][index]}
+        added = sorted(set(row["available_tools"]) - set(tools)) if tools is not None else []
+        if not row["messages"]:
+            turn["note"] = "Tool update turn (no user message)" + (f": {', '.join(added)} available" if added else "")
+        elif added:
+            turn["note"] = "Newly available tools: " + ", ".join(added)
+        tools = row["available_tools"]
+        turns.append(turn)
+    return {
+        "version": 1, "kind": "conversation",
+        "goal": str(entry["question"][0][0]["content"]) if entry["question"] and entry["question"][0] else "",
+        "participants": [{"id": "user", "role": "user", "label": "User (dataset turns)"},
+                         {"id": "agent", "role": "agent", "label": method},
+                         {"id": "environment", "role": "environment",
+                          "label": ", ".join(entry["involved_classes"])}],
+        "turns": turns,
+        "verdict": {"passed": passed, **({} if passed else {"type": result.get("error_type", ""),
+                                                                "message": result.get("error_message", "")}),
+                    "failedTurn": failed_turn, "details": details,
+                    "scorer": f"bfcl-eval {VERSION} multi_turn_checker"},
+        "completeness": "complete", "producer": "verifier", "trust": "trusted",
+    }
+
+
+def verify_payload(payload, saved, output, api=None, method="method"):
     if payload.get("solve_failed"):
         raise RuntimeFailure("env_step", "The fixed BFCL solve driver failed; missing evidence is not a method's zero")
     execute, checker, irrelevant = api or upstream()
@@ -206,7 +277,10 @@ def verify_payload(payload, saved, output, api=None):
     trace.update({"producer": "verifier", "trust": "independent replay; solve states/results ignored"})
     write_json(output / "replay.json", trace)
     result = check(payload, decoded, checker)
-    return {"checker": result, "irrelevance_diagnostic": irrelevant(decoded, payload["ground_truth"]),
+    failed_turn = None if result["valid"] else first_failed_turn(payload, decoded, checker)
+    write_json(output / "conversation.json",
+               conversation(payload, trace, truth_trace, result, failed_turn, method))
+    return {"checker": result, "failed_turn": failed_turn, "irrelevance_diagnostic": irrelevant(decoded, payload["ground_truth"]),
             "calls": sum(len(t) for t in calls), "reference_self_check": True}
 
 
@@ -220,7 +294,7 @@ def run(phase, method, payload, output, saved_path=None, api=None):
             write_json(output / "evidence.json", trace)
         else:
             saved = json.loads(saved_path.read_text()) if saved_path and saved_path.exists() else None
-            result = verify_payload(payload, saved, output, api)
+            result = verify_payload(payload, saved, output, api, method)
             write_json(output / "verdict.json", {**identity, **result})
         return 0
     except Exception as exc:

@@ -172,6 +172,31 @@ class UpstreamTests(unittest.TestCase):
                 self.assertEqual(result["checker"]["valid"], expected)
                 self.assertEqual(result["checker"]["valid"], native["valid"])
 
+    def test_conversation_marks_the_first_failing_turn_and_later_turns_unchecked(self):
+        p = fixture()
+        evidence, _ = runtime.replay(p, [["mkdir(dir_name='created')"], ["ls()"]], self.api[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            result = runtime.verify_payload(p, evidence, Path(tmp), self.api, "m")
+            conv = json.loads((Path(tmp) / "conversation.json").read_text())
+        self.assertEqual(result["failed_turn"], 1)
+        self.assertEqual([t["check"]["status"] for t in conv["turns"]], ["passed", "failed"])
+        self.assertEqual(conv["verdict"]["failedTurn"], 1)
+        self.assertFalse(conv["verdict"]["passed"])
+        self.assertNotIn("execution_result", conv["verdict"]["details"])
+        first = conv["turns"][0]
+        self.assertEqual([e["type"] for e in first["events"]], ["message", "tool_call"])
+        self.assertEqual(first["events"][1]["arguments"], {"dir_name": "created"})
+        self.assertEqual(first["reference"], ["mkdir(dir_name='created')"])
+        self.assertEqual(first["state"]["after"], first["state"]["expected"])
+        # A wrong first turn leaves the second unchecked.
+        evidence, _ = runtime.replay(p, [["ls()"], ["ls()"]], self.api[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime.verify_payload(p, evidence, Path(tmp), self.api, "m")
+            conv = json.loads((Path(tmp) / "conversation.json").read_text())
+        self.assertEqual([t["check"]["status"] for t in conv["turns"]], ["failed", "unchecked"])
+        evidence, _ = runtime.replay(p, [["mkdir(unknown='x')"], []], self.api[0])
+        self.assertEqual(runtime.call_event(evidence["turns"][0]["calls"][0])["status"], "rejected")
+
     def test_tampered_results_states_and_score_do_not_change_score(self):
         p = fixture()
         evidence, _ = runtime.replay(p, [[], []], self.api[0])
