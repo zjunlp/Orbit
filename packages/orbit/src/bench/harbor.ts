@@ -3,6 +3,7 @@
 // (environment_mode = "separate"), with the declared artifacts copied across. Settings Orbit cannot
 // honour mark the task unsupported instead of being ignored, so scores keep the task's conditions.
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -576,8 +577,13 @@ export const toBenchTask = (t: HarborTask): BenchTask => ({
   tags: t.tags,
 });
 
+/**
+ * The verifier command. The chmod is best effort: an image that runs as a non-root USER cannot change
+ * the mode of the mounted /tests, so the tests are staged executable on the host instead (and the
+ * script keeps its own shebang).
+ */
 const VERIFY_COMMAND =
-  "mkdir -p /logs/verifier /logs/agent && chmod +x /tests/test.sh && (/tests/test.sh) > /logs/verifier/test-stdout.txt 2>&1";
+  "mkdir -p /logs/verifier /logs/agent && chmod +x /tests/test.sh 2>/dev/null; (/tests/test.sh) > /logs/verifier/test-stdout.txt 2>&1";
 
 function imageFields(img: HarborImage | null): { image: string } | { dockerfile: string } {
   if (!img) throw new Error("task has no environment image");
@@ -637,6 +643,8 @@ export function harborSolveSpec(
     const tests = join(staging, "tests");
     mkdirSync(staging, { recursive: true });
     cpSync(join(t.dir, "tests"), tests, { recursive: true });
+    // A bind mount keeps this mode; the verifier may run as an image USER that cannot chmod it.
+    if (existsSync(join(tests, "test.sh"))) chmodSync(join(tests, "test.sh"), 0o755);
     Object.assign(run, {
       after: {
         // Harbor's verifier command: executable test.sh, output kept with the reward.
@@ -722,7 +730,9 @@ export function harborVerifySpec(
 const UPSTREAM_FAULTS: { pattern: RegExp; failure: FailureKind; issue: string }[] = [
   // Harbor's TextArena adapter (tests/test.sh): the game server was unreachable or gave no reward.
   {
-    pattern: /✗ (Could not reach game server|Game server returned \d+|No reward value in result)/,
+    // A game without a final result is not this fault: a method that never finished the game is a
+    // legitimate 0 (the server answers 425 "game not finished yet"; the verifier writes 0 too).
+    pattern: /✗ (Could not reach game server|Game server returned (?!425\b)\d+)/,
     failure: "infra",
     issue: "the game server did not report a result (the verifier wrote 0)",
   },

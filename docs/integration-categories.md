@@ -90,7 +90,7 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
 | OSWorld-V2、MobileWorld | C5 + `desktop` / `mobile` | 需要 KVM 真实校准；MobileWorld 的用户模型、MCP 辅助模式要作为独立 variant |
 | TB-Science、TB 4.0、ASI、PostTrainBench | C2 + `terminal` / `ml-experiment` | 指标单位与方向要声明（例如加速比不能显示成百分比） |
 | ResearchClawBench、LongDS | C2 + `research-report`（LongDS 每轮答案按 judge） | judge 未评项必须为无效，不能补 0 |
-| 尚未覆盖 | C1、C3、C4、C7 整类；C6 的原生 benchmark 只有 LIBERO 一个 | — |
+| 尚未覆盖 | C1 judge 类问答、C7 多人对局；C6 的原生 benchmark 只有 LIBERO 一个 | — |
 
 ## 5. 对 Orbit 的改动（确认后实施）
 
@@ -125,10 +125,10 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
 | C6 LIBERO：一个 trial 一个 episode，seed n 取初态 n-1（越界拒绝），结果核对计划的初态与任务；适配器与清单两种实现 | 已实现，真机三个 seed 三个不同初态 | `examples/bench-adapters/vla-eval`、`examples/bench-manifests/vla-eval-libero` |
 | 现有适配器声明类别（GUI 5 个、科研/训练 3 个、vla-eval、Harbor 内置） | 已实现 | `examples/bench-adapters/*` |
 | Web：作业列表按类别筛选与标注，新建作业显示类别 | 已实现 | `packages/web/src/lib/category.ts` |
-| 有效性：上游 verifier 在自身故障时写 0 的情形——已知故障信息（TextArena 游戏服务不可达 / 无 reward）判 invalid（`infra`）；评分脚本抛出非断言异常后得 0 时加 issue 提示复核（TB-Science 等 `|| echo 0` 写法） | 已实现（Harbor 路径） | `bench/harbor.ts` `harborReward` |
+| 有效性：上游 verifier 在自身故障时写 0 的情形——已知故障信息（TextArena 游戏服务不可达或报错；未结束的 425 是方法的 0）判 invalid（`infra`）；评分脚本抛出非断言异常后得 0 时加 issue 提示复核（TB-Science 等 `|| echo 0` 写法） | 已实现（Harbor 路径） | `bench/harbor.ts` `harborReward` |
 | SimpleQA judge 解析失败默认 C（未作答）、其余 judge 吞错 | 未开始（需随 C1 样板接入时处理） | — |
 | C3 BFCL multi-turn 样板 | 已实现：直接 SDK 接入四类会话，oracle/empty；独立离线重放与上游状态/响应检查；四类抽样双 seed 校准通过。一个提前调用未开放工具的上游参考会话明确 unsupported | [BFCL](../examples/bench-adapters/bfcl-multiturn/README.md) |
 | C4 τ²-bench 样板 | 已实现：airline/retail 直接登记，原版离线重放评分；oracle/empty × 4 任务 × 2 seed 校准、重评与原版对照通过；未运行用户 LLM | `examples/bench-adapters/tau2` |
 | C1 HumanEval 样板 | 已实现：固定数据 sha256、只给被测方 prompt、原版检查程序在无网络 verify 中执行；4 题 × oracle/empty × 2 seed 校准 7 项通过，oracle 全量 164/164 valid 且通过 | `examples/bench-adapters/humaneval` |
-| C7 TextArena 样板 | Harbor 转换器生成 38 个有 oracle 的单人游戏，以 `-c category=game` 登记（Harbor 只作格式）；见 status / 任务记录的校准结果 | `orbit bench add … --adapter harbor -c category=game` |
+| C7 TextArena 样板 | Harbor 转换器生成 38 个有 oracle 的单人游戏，以 `-c category=game` 登记（Harbor 只作格式）；4 游戏 × oracle/empty × 2 seed 校准通过（16/16 valid） | `orbit bench add … --adapter harbor -c category=game` |
 | EFE standard GPU 任务（pandadyn）真实运行 | Orbit 侧通过：sim 租 1 卡、rcb_monitor 经 `gpusOf` 看同卡、Agent 容器无 GPU；sim 失败被判 invalid（infra）而非 0；取消后无残留与租约。任务本身失败：本机容器内 Vulkan `vkCreateDevice` 初始化失败（CDI 与 `--gpus` 相同，与 Orbit 无关），需排查主机图形驱动 | — |
