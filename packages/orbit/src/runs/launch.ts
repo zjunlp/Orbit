@@ -208,7 +208,11 @@ export async function ensureImage(ctx: Context, run: Run, dirs: RunDirs): Promis
     // Pulled here, without the time limit of `docker run`, with progress in the run log.
     if (await docker.imageExists(image)) return image;
     ctx.save(run, "pull", `pulling ${image}`);
-    const code = await docker.pullImage(image, dirs.log);
+    const code = await docker.pullImage(image, dirs.log, docker.imageDeadlineMs());
+    if (code === docker.IMAGE_TIMEOUT)
+      throw new Error(
+        `docker pull ${image} made no progress within ${docker.imageDeadlineMs() / 60_000} min and was stopped (ORBIT_IMAGE_DEADLINE_MIN)`,
+      );
     if (code !== 0) throw new Error(`docker pull ${image} failed with exit code ${code}`);
     return image;
   }
@@ -234,7 +238,12 @@ export async function ensureImage(ctx: Context, run: Run, dirs: RunDirs): Promis
   appendFileSync(dirs.log, `[orbit] docker build -f ${df} -t ${tag}\n`);
   const code = await docker.buildImage(df, dirname(df), tag, dirs.log, {
     hostNetwork: run.spec.hostNetwork,
+    timeoutMs: docker.imageDeadlineMs(),
   });
+  if (code === docker.IMAGE_TIMEOUT)
+    throw new Error(
+      `docker build made no progress within ${docker.imageDeadlineMs() / 60_000} min and was stopped (ORBIT_IMAGE_DEADLINE_MIN)`,
+    );
   if (code !== 0) throw new Error(`docker build failed with exit code ${code}`);
   appendFileSync(dirs.log, "[orbit] build done\n");
   return tag;
