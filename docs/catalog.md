@@ -6,6 +6,7 @@ before it existed) passed for real on this machine. Neither means scores were co
 
 | Benchmark (hub) | Category | Tier | Methods | Runnable | Calibrated | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| BFCL multi-turn (direct upstream) | C3 tool workflow · local-state | L2 | oracle, empty | 799/800; one held-out-tool reference inconsistency | Four categories × oracle/empty × two seeds; offline rescore | [BFCL sample](tasks/20261105-sample-bfcl-multiturn.md) |
 | Embodied First Exam — 35 suites | C2 workspace · embodied-program / embodied-live | L0 Harbor | oracle, empty, CLI Agents | 1,938 / 2,260 (`allowlistNetwork=public`, `hostNamespaces=allow`) | MetaWorld+ (2 tasks × empty/oracle × 2 seeds); Claude Code ran one task | [P3](tasks/20261104-p3-browsergym-efe.md), [P6](tasks/20261104-p6-mainline.md), [P6.5](tasks/20261104-p65-integration.md) |
 | Terminal-Bench Science / TB 4.0 | C2 workspace · terminal | L0 Harbor | oracle, empty, CLI Agents | 70/70, 56/66 | oracle/empty samples | [harbor modes](tasks/20261010-harbor-verifier-modes.md) |
 | vla-eval LIBERO (libero_spatial) | C6 embodied policy · sim, step | L1 manifest and L2 adapter | empty, external | 10 tasks × 50 initial states (one per trial) | manifest: 1 task × 3 seeds = 3 different initial states, valid 0 (empty), rescore equal | [P4](tasks/20261104-p4-policy.md), [P6.5](tasks/20261104-p65-integration.md) |
@@ -22,5 +23,5 @@ Not runnable yet in EFE: BEHAVIOR-1K, iSpatialGym, ManiGuard and RoboWits need l
 Embodied Olympics – Match uses `cap_drop` on `main`. Tasks restricted by `gpu_types` run here only with
 `-c gpuTypes=any` (a recorded deviation; this machine has RTX 3090s).
 
-Not covered yet: C1 fixed input (QA, one-shot code generation), C3 tool workflows (MCP), C4 simulated-user sessions
+Not covered yet: C1 fixed input (QA, one-shot code generation), C4 simulated-user sessions
 (τ²-bench), C7 games; in C6 only LIBERO.
