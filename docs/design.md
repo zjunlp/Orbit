@@ -887,6 +887,11 @@ Agent 本身用 GPU）；否则由第一个不在宿主命名空间里的服务�
 拆成 Docker 的可执行文件与前置参数。`[environment] gpu_types` 变成拥有该组卡的角色的 `gpuModels`（任一型号，
 名称整词顺序匹配），本机没有这些型号时提交即给出原因；登记 `-c gpuTypes=any` 时不限制型号并记为偏差。
 
+**启动看门狗**：镜像拉取与构建（`docker pull` / `docker build`）在启动阶段没有期限，网络或构建代理卡住时 Run 会一直停在
+starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_IMAGE_DEADLINE_MIN`（默认 60 分钟）的期限：到时先 SIGTERM
+再 SIGKILL docker 子进程，日志写明原因，Run 以失败结束并给出可读理由（属基础设施，bench 记为 invalid 而不是 0 分）。
+构建/拉取的输出仍完整保留在 Run 日志里，便于区分"慢"与"卡住"。
+
 **P7 实现**：第 6 条对账回收在 `runs/reconcile.ts`：daemon 每 10 分钟（`orbit reconcile` 立即）列出带本 home 标签的容器、
 网络与卷，只删除其 Run 已结束且清理确认、或 Run 记录已不存在的资源；没有 Run 标签的、仍在被观察的 Run 的一律不动；
 任何一个列表失败则整轮跳过。活动租约若其 Run 已结束且清理确认（或已删除）则释放。第 3 条主机保护在租约之前：数据盘

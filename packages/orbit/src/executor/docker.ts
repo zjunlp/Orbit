@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   closeSync,
   createWriteStream,
   type Dirent,
@@ -289,30 +290,63 @@ export function envFileText(env: Record<string, string>): string {
     .join("");
 }
 
-/** `docker build`, streaming output to `logFile`. Resolves with the exit code. */
+/** Exit code of a stopped image build or pull (the run reports why it gave up). */
+export const IMAGE_TIMEOUT = 124;
+
+/** `docker build`, streaming output to `logFile`; stops after `timeoutMs` and resolves 124. */
 export function buildImage(
   dockerfile: string,
   context: string,
   tag: string,
   logFile: string,
-  opts: { hostNetwork?: boolean } = {},
+  opts: { hostNetwork?: boolean; timeoutMs?: number } = {},
 ) {
   const net = opts.hostNetwork ? ["--network", "host"] : [];
-  return spawnToLog(["build", ...net, "-f", dockerfile, "-t", tag, context], logFile);
+  return spawnToLog(
+    ["build", ...net, "-f", dockerfile, "-t", tag, context],
+    logFile,
+    opts.timeoutMs,
+  );
 }
 
-/** `docker pull`, streaming progress to `logFile`. Resolves with the exit code. */
-export function pullImage(image: string, logFile: string): Promise<number> {
-  return spawnToLog(["pull", image], logFile);
+/** `docker pull`, streaming progress to `logFile`; stops after `timeoutMs` and resolves 124. */
+export function pullImage(image: string, logFile: string, timeoutMs?: number): Promise<number> {
+  return spawnToLog(["pull", image], logFile, timeoutMs);
 }
 
-function spawnToLog(args: string[], logFile: string): Promise<number> {
+/**
+ * A start-phase deadline: a build or pull that stops making progress leaves the run queued forever,
+ * so it is killed after `IMAGE_DEADLINE_MIN` minutes (the log keeps the docker output).
+ */
+export function imageDeadlineMs(): number {
+  const minutes = Number(process.env.ORBIT_IMAGE_DEADLINE_MIN ?? 60);
+  return (Number.isFinite(minutes) && minutes > 0 ? minutes : 60) * 60_000;
+}
+
+function spawnToLog(args: string[], logFile: string, timeoutMs?: number): Promise<number> {
   const fd = openSync(logFile, "a");
   return new Promise<number>((resolve) => {
     try {
       const p = spawn("docker", args, { stdio: ["ignore", fd, fd] });
-      p.on("error", () => resolve(127));
-      p.on("close", (code) => resolve(code ?? 1));
+      const timer = timeoutMs
+        ? setTimeout(() => {
+            appendFileSync(
+              logFile,
+              `[orbit] docker ${args[0]} stopped after ${timeoutMs / 60_000} min\n`,
+            );
+            p.kill("SIGTERM");
+            setTimeout(() => p.kill("SIGKILL"), 10_000).unref();
+          }, timeoutMs)
+        : null;
+      timer?.unref();
+      p.on("error", () => {
+        if (timer) clearTimeout(timer);
+        resolve(127);
+      });
+      p.on("close", (code, signal) => {
+        if (timer) clearTimeout(timer);
+        resolve(timer && (signal || code === null) ? IMAGE_TIMEOUT : (code ?? 1));
+      });
     } finally {
       closeSync(fd);
     }

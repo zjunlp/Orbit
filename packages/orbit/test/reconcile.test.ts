@@ -105,3 +105,26 @@ it("holds new local starts on a nearly full disk or while too many runs are star
   expect(hostProtection(res(3), 0, 4)).toMatch(/data disk has 3 GB free/);
   expect(hostProtection(res(100), 4, 4)).toMatch(/at most 4 start at once/);
 });
+
+it("stops a docker build or pull that makes no progress", async () => {
+  const { buildImage, IMAGE_TIMEOUT } = await import("../src/executor/docker.ts");
+  const { mkdtempSync } = await import("node:fs");
+  const log = join(mkdtempSync(join(tmpdir(), "orbit-img-")), "log");
+  // A docker binary that never terminates on its own.
+  const dir = mkdtempSync(join(tmpdir(), "orbit-fake-docker-"));
+  const fake = join(dir, "docker");
+  const { writeFileSync, chmodSync } = await import("node:fs");
+  writeFileSync(fake, "#!/bin/sh\nexec sleep 120\n", { mode: 0o755 });
+  chmodSync(fake, 0o755);
+  const old = process.env.PATH;
+  process.env.PATH = `${dir}:${old}`;
+  try {
+    const started = Date.now();
+    // The helper spawns `docker` from PATH; the deadline is 1 s here.
+    const code = await buildImage("Dockerfile", dir, "tag", log, { timeoutMs: 1500 });
+    expect(code).toBe(IMAGE_TIMEOUT);
+    expect(Date.now() - started).toBeLessThan(20_000);
+  } finally {
+    process.env.PATH = old;
+  }
+});
