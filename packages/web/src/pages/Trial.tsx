@@ -30,14 +30,17 @@ import {
   jobPath,
   runDuration,
   runPath,
+  trialPath,
 } from "../lib/format.ts";
+import { useHotkeys } from "../lib/hotkeys.ts";
 import { reportCandidates } from "../lib/report.ts";
 import { extraFields, resolveKind, showValue } from "../lib/review.ts";
-import { setQuery, useLocation } from "../lib/router.ts";
+import { navigate, setQuery, useLocation } from "../lib/router.ts";
 import { upsertRun, useRun } from "../lib/runs-store.ts";
 import { useAsync } from "../lib/use.ts";
 import { ArtifactsTab, Csv } from "./run/Artifacts.tsx";
 import { SessionTab } from "./run/Session.tsx";
+import { ConversationFile } from "./trial/Conversation.tsx";
 import { EpisodeFile } from "./trial/Episode.tsx";
 import { TrajectoryFile } from "./trial/Trajectory.tsx";
 
@@ -92,7 +95,11 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const tabs: TabDef[] = useMemo(() => {
     if (!review) return LEGACY_TABS;
     const out: TabDef[] = review.files
-      .map((f, i) => ({ key: `f${i}`, label: f.label, trajectory: f.kind === "trajectory" }))
+      .map((f, i) => ({
+        key: `f${i}`,
+        label: f.label,
+        trajectory: f.kind === "trajectory" || f.kind === "conversation",
+      }))
       .sort((a, b) => Number(b.trajectory) - Number(a.trajectory));
     if (review.items.length) out.push({ key: "grader", label: "Grader" });
     if (Object.keys(review.details).length || extraFields(review, REVIEW_FIELDS).length)
@@ -130,7 +137,9 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const o = trial.outcome;
   const method = job.spec.methods.find((m) => m.name === trial.method);
   const evidence = job.capabilities?.rescore === "evidence";
-  const gui = review?.files.some((f) => f.kind === "trajectory") ?? false;
+  const gui =
+    review?.files.some((f) => f.kind === "trajectory" || f.kind === "conversation") ?? false;
+  const nav = neighbours(d.data.trials, trial);
   const rescoreLabel = evidence ? "Recheck evidence" : "Rescore";
   const rescore = async () => {
     if (
@@ -181,6 +190,11 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
         <Link className="btn sm" href={jobPath(jobId)}>
           <IconFlask size={13} /> Job
         </Link>
+        <span className="trial-nav" title="Other trials of this job">
+          <TrialLink jobId={jobId} t={nav.prev} label="‹ Prev" keyHint="[" />
+          <TrialLink jobId={jobId} t={nav.next} label="Next ›" keyHint="]" />
+          <TrialLink jobId={jobId} t={nav.nextFailure} label="Next failure" keyHint="}" />
+        </span>
       </TopBar>
       <div className="run-head trial-head">
         <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
@@ -312,6 +326,8 @@ function TabBody(props: {
       );
     }
     if (resolved.kind === "episode" && run) return <EpisodeFile run={run} file={f} />;
+    if (resolved.kind === "conversation" && run)
+      return <ConversationFile key={`${run.id}/${f.path}`} run={run} file={f} />;
     return run ? <ReviewFileView key={tab} run={run} f={f} /> : notStarted(f.phase);
   }
   if (tab === "grader" && review) return <GraderItems items={review.items} />;
@@ -850,5 +866,61 @@ function OutputsView({ solve, verify }: { solve: Run | undefined; verify: Run | 
       </div>
       {run ? <ArtifactsTab run={run} artifacts={a.data} /> : <Empty title={`No ${phase} run`} />}
     </div>
+  );
+}
+
+/** Whether a finished trial did not succeed: invalid, unknown, or below full marks. */
+export const failedTrial = (t: Trial) =>
+  t.state === "done" &&
+  (t.outcome?.evaluation !== "valid" ||
+    t.outcome.score === null ||
+    t.outcome.score < t.outcome.maxScore);
+
+/** The previous and next trial of the job (by task, method, seed) and the next failed one. */
+export function neighbours(trials: Trial[], t: Trial) {
+  const order = [...trials].sort(
+    (a, b) => a.task.localeCompare(b.task) || a.method.localeCompare(b.method) || a.seed - b.seed,
+  );
+  const i = order.findIndex((x) => x.id === t.id);
+  const after = [...order.slice(i + 1), ...order.slice(0, Math.max(i, 0))];
+  return {
+    prev: i > 0 ? order[i - 1] : undefined,
+    next: i >= 0 && i < order.length - 1 ? order[i + 1] : undefined,
+    nextFailure: after.find(failedTrial),
+  };
+}
+
+function TrialLink({
+  jobId,
+  t,
+  label,
+  keyHint,
+}: {
+  jobId: string;
+  t: Trial | undefined;
+  label: string;
+  keyHint: string;
+}) {
+  useHotkeys(
+    t
+      ? {
+          [keyHint]: () => navigate(trialPath(jobId, t.id)),
+        }
+      : {},
+  );
+  if (!t)
+    return (
+      <button type="button" className="btn sm" disabled>
+        {label}
+      </button>
+    );
+  return (
+    <Link
+      className="btn sm"
+      href={trialPath(jobId, t.id)}
+      title={`${t.task} · ${t.method} #${t.seed} (${keyHint})`}
+    >
+      {label}
+    </Link>
   );
 }

@@ -788,3 +788,75 @@ process.stdin.on("end", () => {
     }
   },
 );
+
+it("runs a calibration job, rescores it once and shows it in the catalog", async () => {
+  const f = fixture();
+  const executable = join(f.home, "calibration-adapter.cjs");
+  write(
+    executable,
+    `#!${process.execPath}
+let input = "";
+process.stdin.on("data", c => input += c);
+process.stdin.on("end", () => {
+  const req = JSON.parse(input), say = value => console.log(JSON.stringify(value));
+  if (req.op === "tasks") return say({
+    tasks: ["a.1", "a.2", "b.1"].map(id => ({ id, title: null, supported: id !== "a.2", reason: id === "a.2" ? "needs a GPU" : null, tags: { oracle: "full" } })),
+    capabilities: { category: "tool-workflow", methods: ["empty", "oracle", "codex"], conditions: {}, scoreKind: "binary", rescore: "evidence" }
+  });
+  if (req.op === "score") return say({ score: req.trial.method.agent === "oracle" ? 1 : 0 });
+  say({ spec: { backend: "process", command: ["true"] } });
+});
+`,
+  );
+  chmodSync(executable, 0o755);
+  f.registry.put({ name: "fixture", path: f.source, adapter: executable });
+  let n = 0;
+  f.submit.mockImplementation(async (spec) => {
+    const queued = Run.parse({ ...f.run, id: `r${++n}`, spec, state: "queued", startedAt: null });
+    f.store.putRun(queued);
+    return queued;
+  });
+  // Every submitted run succeeds as soon as it is seen.
+  const finishRuns = async () => {
+    for (const r of f.store.listRuns({}))
+      if (r.state === "queued") {
+        const done = {
+          ...r,
+          state: "succeeded" as const,
+          cleanup: "done" as const,
+          exitCode: 0,
+          startedAt: at,
+          endedAt: at,
+        };
+        mkdirSync(f.runs.dirs(r.id).output, { recursive: true });
+        f.store.putRun(done);
+        f.runs.emit("change", { run: done });
+      }
+  };
+  const job = await f.bench.calibrate({ benchmark: "fixture", sample: 5, seeds: 2 });
+  expect(job.spec.tasks).toEqual(["a.1", "b.1"]);
+  expect(job.spec.calibration).toEqual({ noOracle: [], rescore: true });
+  expect(f.bench.job(job.id).calibration?.phase).toBe("running");
+  await expect
+    .poll(
+      async () => {
+        await finishRuns();
+        return f.bench.job(job.id).calibration?.phase;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe("done");
+  const report = f.bench.job(job.id).calibration;
+  expect(report?.calibrated).toBe(true);
+  expect(report?.checks.find((c) => c.name === "rescore reproduces scores")).toMatchObject({
+    result: "passed",
+  });
+  expect(f.store.trials(job.id).map((t) => t.history.length)).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
+  // The catalog lists in the background; once listed it shows coverage and the calibration.
+  expect(f.bench.catalog().entries[0]).toMatchObject({ fidelity: "calibrated", jobs: 1 });
+  await expect.poll(() => f.bench.catalog().entries[0]?.listing?.coverage.supported).toBe(2);
+  const entry = f.bench.catalog().entries[0];
+  expect(entry).toMatchObject({ listingError: null, methods: [] });
+  expect(entry?.listing).toMatchObject({ oracleTasks: 2, coverage: { total: 3 } });
+  expect(entry?.calibrations[0]?.job).toBe(job.id);
+});

@@ -5,6 +5,7 @@ import type {
   Artifacts,
   AuthProfile,
   AuthTestResult,
+  BenchCatalog,
   BenchCompare,
   BenchConsolidateInput,
   BenchConsolidateResult,
@@ -17,6 +18,7 @@ import type {
   BenchRescoreInput,
   BenchRescoreResult,
   BenchTaskList,
+  CalibrationRequestInput,
   DoctorReport,
   FolderMoveResult,
   FolderStat,
@@ -35,6 +37,7 @@ import type {
 export type {
   Artifacts,
   AuthProfile,
+  BenchCatalog,
   BenchCompare,
   BenchJob,
   BenchJobDetail,
@@ -43,6 +46,10 @@ export type {
   Benchmark,
   BenchTask,
   BenchTaskList,
+  CalibrationCheck,
+  CalibrationReport,
+  CatalogEntry,
+  CatalogMethod,
   CodeSnapshot,
   FolderStat,
   Gpu,
@@ -153,6 +160,12 @@ export const api = {
       body: JSON.stringify(spec),
     }),
   benchJobs: () => req<BenchJobList>("/bench/jobs").then((r) => r.jobs),
+  benchCatalog: (refresh: string[] = []) =>
+    req<BenchCatalog>(
+      `/bench/catalog${refresh.length ? `?refresh=${refresh.map(enc).join(",")}` : ""}`,
+    ),
+  benchCalibrate: (body: CalibrationRequestInput) =>
+    req<BenchJob>("/bench/calibrations", { method: "POST", body: JSON.stringify(body) }),
   benchJob: (id: string) => req<BenchJobDetail>(`/bench/jobs/${enc(id)}`),
   benchReports: (id: string) =>
     req<{ reports: BenchReport[] }>(`/bench/jobs/${enc(id)}/reports`).then((r) => r.reports),

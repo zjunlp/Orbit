@@ -188,7 +188,9 @@ def verify(req):
 
 def review():
     return {"files": [
-        {"label": "Conversation", "phase": "solve", "kind": "markdown", "path": "trajectory.md"},
+        {"label": "Conversation", "phase": "verify", "kind": "conversation", "fallback": "json",
+         "path": "conversation.json"},
+        {"label": "Transcript", "phase": "solve", "kind": "markdown", "path": "trajectory.md"},
         {"label": "Native simulation", "phase": "solve", "kind": "json", "path": "simulation.json"},
         {"label": "Inputs and shared state", "phase": "solve", "kind": "json", "path": "context.json"},
         {"label": "Event index", "phase": "solve", "kind": "text", "path": "events.jsonl"},
@@ -313,12 +315,119 @@ def solve_runtime(root, plan, out):
         raise failure
 
 
+def flatten(value, prefix="", out=None):
+    """JSON value → {path: leaf}; lists by index, dicts by key."""
+    out = {} if out is None else out
+    if isinstance(value, dict) and value:
+        for k, v in value.items():
+            flatten(v, f"{prefix}.{k}" if prefix else str(k), out)
+    elif isinstance(value, list) and value:
+        for i, v in enumerate(value):
+            flatten(v, f"{prefix}[{i}]", out)
+    else:
+        out[prefix] = value
+    return out
+
+
+def state_changes(initial, expected, actual, limit=500):
+    """Paths where the expected or the actual final DB differs from the initial one, or each other."""
+    a, b, c = flatten(initial), flatten(expected), flatten(actual)
+    missing = object()
+    rows = []
+    for path in sorted(set(a) | set(b) | set(c)):
+        x, y, z = a.get(path, missing), b.get(path, missing), c.get(path, missing)
+        if x is y is z or (x == y == z):
+            continue
+        row = {"path": path}
+        for key, v in (("initial", x), ("expected", y), ("actual", z)):
+            if v is not missing:
+                row[key] = v
+        rows.append(row)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def replay_db(constructor, task, messages):
+    """The DB after replaying the conversation's tool calls on a fresh environment."""
+    env = reset(constructor, task)
+    for message in messages:
+        for call in getattr(message, "tool_calls", None) or []:
+            env.get_response(call)
+    return env.tools.db.model_dump(mode="json")
+
+
+def conversation_of(plan, task, simulation, reward, initial_db, expected_db, actual_db):
+    """The verified conversation as an Orbit `ConversationTrajectory` (review kind `conversation`)."""
+    results = {}
+    for m in simulation.messages:
+        if m.role == "tool":
+            results[m.id] = m
+    turns, events = [], []
+    for m in simulation.messages:
+        if m.role == "tool":
+            continue
+        actor = "agent" if m.role == "assistant" else "user" if m.role == "user" else "system"
+        if actor == "user" and events:
+            turns.append({"index": len(turns), "events": events})
+            events = []
+        if m.content:
+            events.append({"type": "message", "actor": actor, "text": m.content})
+        for call in m.tool_calls or []:
+            r = results.get(call.id)
+            caller = "user" if str(getattr(call.requestor, "value", call.requestor)) == "user" else "agent"
+            event = {"type": "tool_call", "id": call.id or f"call-{len(events)}", "actor": caller,
+                     "name": call.name, "arguments": call.arguments,
+                     "status": "error" if r is not None and r.error else "ok"}
+            if r is not None:
+                event["result"] = r.content
+                if r.error:
+                    event["error"] = r.content
+            events.append(event)
+    if events or not turns:
+        turns.append({"index": len(turns), "events": events})
+    info = reward
+    basis = [str(getattr(b, "value", b)) for b in info.reward_basis or []]
+    checks = []
+    if info.db_check is not None:
+        checks.append({"name": "final database matches the reference", "scored": "DB" in basis,
+                       "status": "passed" if info.db_check.db_match else "failed"})
+    for c in info.communicate_checks or []:
+        checks.append({"name": f"communicated: {c.info}", "status": "passed" if c.met else "failed",
+                       "scored": "COMMUNICATE" in basis,
+                       **({"detail": c.justification} if c.justification else {})})
+    for c in info.action_checks or []:
+        args = ", ".join(f"{k}={v!r}" for k, v in c.action.arguments.items())
+        checks.append({"name": f"action {c.action.name}({args})", "scored": "ACTION" in basis,
+                       "status": "passed" if c.action_match else "failed"})
+    return {
+        "version": 1, "kind": "conversation", "goal": str(task.user_scenario.instructions)[:100_000],
+        "participants": [{"id": "agent", "role": "agent", "label": plan["method"]},
+                         {"id": "user", "role": "user",
+                          "label": "Simulated user" if plan["userSimulator"]["invoked"] else "User (not simulated)"},
+                         {"id": "system", "role": "system", "label": "System"},
+                         {"id": "environment", "role": "environment", "label": f"{plan['domain']} tools"}],
+        "turns": turns,
+        "verdict": {"passed": info.reward == 1, "message": f"reward {info.reward:g}; basis {', '.join(basis)}",
+                    "failedTurn": None, "checks": checks,
+                    "details": {"reward_breakdown": {str(getattr(k, "value", k)): v
+                                                     for k, v in (info.reward_breakdown or {}).items()}},
+                    "scorer": f"tau2 evaluate_simulation ({COMMIT[:10]})"},
+        "finalState": state_changes(initial_db, expected_db, actual_db),
+        "completeness": "complete" if plan["userSimulator"]["invoked"] else "environment-only",
+        "producer": "verifier", "trust": "trusted",
+    }
+
+
 def verify_runtime(root, plan, source, out):
     try:
         task, constructor = load_runtime(root, plan)
         # The upstream environment evaluator logs and swallows gold-action exceptions. Fail closed
         # before calling it, including for empty trials, so broken gold infrastructure cannot score 0.
-        gold_messages(reset(constructor, task), task, [])
+        gold_env = reset(constructor, task)
+        initial_db = gold_env.tools.db.model_dump(mode="json")
+        gold_messages(gold_env, task, [])
+        expected_db = gold_env.tools.db.model_dump(mode="json")
         from loguru import logger
         from tau2.data_model.simulation import SimulationRun
         from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
@@ -346,6 +455,12 @@ def verify_runtime(root, plan, source, out):
         if not math.isfinite(value) or value not in (0, 1):
             raise ValueError("Non-binary upstream reward")
         write_json(out / "reward.json", reward.model_dump(mode="json"))
+        try:
+            actual_db = replay_db(constructor, task, simulation.messages)
+            write_json(out / "conversation.json", conversation_of(
+                plan, task, simulation, reward, initial_db, expected_db, actual_db))
+        except Exception as exc:  # The review view is derived evidence; it never changes the score.
+            write_json(out / "conversation-error.json", {"error": f"{type(exc).__name__}: {exc}"})
         episode = {"steps": len(simulation.messages), "terminated": True, "truncated": False,
                    "endedBy": "agent", "successSignal": "tau2.evaluate_simulation:ALL"}
         result = {**valid(value, episode=episode), "evidenceSha256": evidence_hash}

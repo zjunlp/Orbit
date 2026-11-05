@@ -2035,3 +2035,10 @@ a.card.phase:hover {
   padding-left: 20px;
   overflow-wrap: anywhere;
 }
+.trial-nav {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}

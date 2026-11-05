@@ -127,8 +127,8 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
 | Web：作业列表按类别筛选与标注，新建作业显示类别 | 已实现 | `packages/web/src/lib/category.ts` |
 | 有效性：上游 verifier 在自身故障时写 0 的情形——已知故障信息（TextArena 游戏服务不可达或报错；未结束的 425 是方法的 0）判 invalid（`infra`）；评分脚本抛出非断言异常后得 0 时加 issue 提示复核（TB-Science 等 `|| echo 0` 写法） | 已实现（Harbor 路径） | `bench/harbor.ts` `harborReward` |
 | SimpleQA judge 解析失败默认 C（未作答）、其余 judge 吞错 | 未开始（需随 C1 样板接入时处理） | — |
-| C3 BFCL multi-turn 样板 | 已实现：直接 SDK 接入四类会话，oracle/empty；独立离线重放与上游状态/响应检查；四类抽样双 seed 校准通过。一个提前调用未开放工具的上游参考会话明确 unsupported | [BFCL](../examples/bench-adapters/bfcl-multiturn/README.md) |
-| C4 τ²-bench 样板 | 已实现：airline/retail 直接登记，原版离线重放评分；oracle/empty × 4 任务 × 2 seed 校准、重评与原版对照通过；未运行用户 LLM | `examples/bench-adapters/tau2` |
+| C3 BFCL multi-turn 样板 | 已实现：直接 SDK 接入四类会话，oracle/empty；独立离线重放与上游状态/响应检查；四类抽样双 seed 校准通过。一个提前调用未开放工具的上游参考会话明确 unsupported。CLI Agent 经 `bfcl` MCP 服务逐轮对话（Orbit 脚手架，与榜单 FC 提示不同）；Codex gpt-6.1-sol 真实跑通 4 题，重评一致；verify 写对话轨迹（首个失败轮次） | [BFCL](../examples/bench-adapters/bfcl-multiturn/README.md) |
+| C4 τ²-bench 样板 | 已实现：airline/retail 直接登记，原版离线重放评分；oracle/empty × 4 任务 × 2 seed 校准、重评与原版对照通过；未运行用户 LLM（ARK 方案不允许脚本直接调用，需另定用户模型来源）；verify 写对话轨迹（计分/诊断检查、终态 DB 差异） | `examples/bench-adapters/tau2` |
 | C1 HumanEval 样板 | 已实现：固定数据 sha256、只给被测方 prompt、原版检查程序在无网络 verify 中执行；4 题 × oracle/empty × 2 seed 校准 7 项通过，oracle 全量 164/164 valid 且通过 | `examples/bench-adapters/humaneval` |
 | C7 TextArena 样板 | Harbor 转换器生成 38 个有 oracle 的单人游戏，以 `-c category=game` 登记（Harbor 只作格式）；4 游戏 × oracle/empty × 2 seed 校准通过（16/16 valid） | `orbit bench add … --adapter harbor -c category=game` |
 | EFE standard GPU 任务（pandadyn）真实运行 | Orbit 侧通过：sim 租 1 卡、rcb_monitor 经 `gpusOf` 看同卡、Agent 容器无 GPU；sim 失败被判 invalid（infra）而非 0；取消后无残留与租约。任务本身失败：本机容器内 Vulkan `vkCreateDevice` 初始化失败（CDI 与 `--gpus` 相同，与 Orbit 无关），需排查主机图形驱动 | — |

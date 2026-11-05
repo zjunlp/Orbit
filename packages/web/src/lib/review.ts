@@ -12,6 +12,7 @@ export const KNOWN_KINDS = [
   "table",
   "trajectory",
   "episode",
+  "conversation",
 ] as const;
 export type Kind = (typeof KNOWN_KINDS)[number];
 

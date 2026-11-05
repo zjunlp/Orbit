@@ -1,14 +1,14 @@
 import { benchCategory } from "@zjunlp/orbit/categories";
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "@zjunlp/orbit/metrics";
-import { useState } from "react";
 import { IconCompare, IconFlask } from "../../components/icons.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { Empty, Link, Loading } from "../../components/ui.tsx";
-import { api, type BenchJobList, type Benchmark } from "../../lib/api.ts";
+import { api, type BenchJobList } from "../../lib/api.ts";
 import { BENCH_CATEGORIES, CATEGORY_LABELS, categoryLabel } from "../../lib/category.ts";
 import { ago, jobPath } from "../../lib/format.ts";
 import { navigate, onLinkClick, setQuery, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
+import { BenchCatalogView } from "./Catalog.tsx";
 
 import { JobState, jobLabel, summaryTitle } from "./common.tsx";
 import "./launch.css";
@@ -18,7 +18,7 @@ export function BenchJobs() {
   const benchmarks = useAsync(() => api.benchmarks(), []);
   const loc = useLocation();
   const selected = (loc.query.get("sel") ?? "").split(",").filter(Boolean);
-  const tab = loc.query.get("tab") === "environments" ? "environments" : "jobs";
+  const tab = loc.query.get("tab") === "catalog" ? "catalog" : "jobs";
   const query = loc.query.get("q") ?? "";
   const status = loc.query.get("state") ?? "all";
   const category = loc.query.get("category") ?? "all";
@@ -41,16 +41,18 @@ export function BenchJobs() {
   return (
     <>
       <TopBar crumbs={[{ label: "Bench" }]}>
-        <button
-          type="button"
-          className="btn sm"
-          disabled={selected.length === 0}
-          onClick={() =>
-            navigate(`/bench/compare?jobs=${selected.map(encodeURIComponent).join(",")}`)
-          }
-        >
-          <IconCompare size={14} /> Compare{selected.length ? ` (${selected.length})` : ""}
-        </button>
+        {tab === "jobs" && (
+          <button
+            type="button"
+            className="btn sm"
+            disabled={selected.length === 0}
+            onClick={() =>
+              navigate(`/bench/compare?jobs=${selected.map(encodeURIComponent).join(",")}`)
+            }
+          >
+            <IconCompare size={14} /> Compare{selected.length ? ` (${selected.length})` : ""}
+          </button>
+        )}
         <Link className="btn primary sm" href="/bench/new">
           New evaluation
         </Link>
@@ -68,11 +70,11 @@ export function BenchJobs() {
             </button>
             <button
               type="button"
-              className={`btn sm${tab === "environments" ? " on" : " ghost"}`}
-              aria-pressed={tab === "environments"}
-              onClick={() => setQuery({ tab: "environments" })}
+              className={`btn sm${tab === "catalog" ? " on" : " ghost"}`}
+              aria-pressed={tab === "catalog"}
+              onClick={() => setQuery({ tab: "catalog", q: null, state: null, category: null })}
             >
-              Registered environments {benchmarks.data?.length ?? ""}
+              Catalog {benchmarks.data?.length ?? ""}
             </button>
           </div>
           {tab === "jobs" ? (
@@ -148,94 +150,11 @@ export function BenchJobs() {
               )}
             </>
           ) : (
-            <section className="card">
-              <div className="card-h">Registered environments</div>
-              {benchmarks.error ? (
-                <div className="card-b callout" role="alert">
-                  {benchmarks.error}
-                </div>
-              ) : !benchmarks.data ? (
-                <Loading what="Loading environments" />
-              ) : !benchmarks.data.length ? (
-                <div className="card-b col">
-                  <p className="muted">
-                    Prepare a benchmark and register its adapter on the daemon host:
-                  </p>
-                  <code>orbit bench add mine /path/to/benchmark --adapter /path/to/adapter.py</code>
-                </div>
-              ) : (
-                <div className="card-b col" style={{ gap: 16 }}>
-                  {benchmarks.data.map((b) => (
-                    <Environment key={b.name} benchmark={b} />
-                  ))}
-                </div>
-              )}
-            </section>
+            <BenchCatalogView />
           )}
         </div>
       </div>
     </>
-  );
-}
-
-function Environment({ benchmark: b }: { benchmark: Benchmark }) {
-  const [open, setOpen] = useState(false);
-  const info = useAsync(
-    () => (open ? api.benchInfo(b.name) : Promise.resolve(null)),
-    [open, b.name],
-  );
-  return (
-    <div className="bench-environment-details">
-      <div className="row bench-wrap">
-        <b>{b.name}</b>
-        <span className="chip">Registered</span>
-        <span className="faint">updated {ago(b.updatedAt)}</span>
-        <span className="spacer" />
-        <Link className="btn sm" href={`/bench/new?benchmark=${encodeURIComponent(b.name)}`}>
-          New evaluation
-        </Link>
-      </div>
-      <details onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary>Configuration & task coverage</summary>
-        <div className="col" style={{ gap: 10, marginTop: 10 }}>
-          <dl className="kv">
-            <dt>Adapter</dt>
-            <dd className="mono">{b.adapter}</dd>
-            <dt>Checkout</dt>
-            <dd className="mono">{b.path}</dd>
-            <dt>Resources</dt>
-            <dd className="mono">{b.resources ?? "Adapter defaults"}</dd>
-          </dl>
-          {info.loading ? (
-            <span className="muted">Listing tasks…</span>
-          ) : info.error ? (
-            <div className="callout">{info.error}</div>
-          ) : (
-            info.data && (
-              <>
-                <p>
-                  {info.data.tasks.filter((t) => t.supported).length} supported /{" "}
-                  {info.data.tasks.length} listed tasks
-                </p>
-                {info.data.capabilities && (
-                  <dl className="kv">
-                    {Object.entries(info.data.capabilities.conditions).map(([key, value]) => (
-                      <div key={key} style={{ display: "contents" }}>
-                        <dt>{key}</dt>
-                        <dd>{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-              </>
-            )
-          )}
-          <p className="muted">
-            Registration and task listing do not verify environment startup or model connectivity.
-          </p>
-        </div>
-      </details>
-    </div>
   );
 }
 

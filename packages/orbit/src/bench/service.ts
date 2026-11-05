@@ -11,6 +11,7 @@ import {
   type AdapterTasksResponse,
   type AgentCapabilities,
   type AgentDefinition,
+  type BenchCatalog,
   type BenchCompare,
   type BenchConsolidateInput,
   type BenchConsolidateResult,
@@ -26,6 +27,10 @@ import {
   type BenchRescoreResult,
   type BenchTask,
   type BenchUsage,
+  CalibrationRequest,
+  type CalibrationRequestInput,
+  calibrationMethods,
+  calibrationReport,
   capabilityAllows,
   Folder,
   type FolderExportResult,
@@ -38,6 +43,7 @@ import {
   type RunDeletion,
   type RunSpecInput,
   type ScoreResult,
+  sampleTasks,
   type Trial,
   trialRunIds,
 } from "../contracts/index.ts";
@@ -49,6 +55,7 @@ import { NotFoundError, type RunService, UserError } from "../runs/service.ts";
 import { type AgentFailure, loadRunAgentTranscript, runAgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
 import { gitSource } from "../workspace/snapshot.ts";
+import { catalogEntry, type Listing } from "./catalog.ts";
 import { classify, cleanupOf, shouldCheckAgentFailure, solveVerdict } from "./classify.ts";
 import {
   benchGroup,
@@ -91,6 +98,9 @@ function failed(solve: Run, issues: string[], issue: string): Outcome {
   };
 }
 
+/** How long a cached task listing is shown before the catalog lists the tasks again. */
+const LISTING_TTL_MS = 10 * 60_000;
+
 export class BenchService {
   private readonly deps: BenchServiceDeps;
   /** Agent definitions; built-ins when the caller (tests, embedders) did not supply a registry. */
@@ -98,6 +108,9 @@ export class BenchService {
   /** Trials being advanced, and those changed meanwhile (advanced once more afterwards). */
   private readonly busy = new Set<string>();
   private readonly again = new Set<string>();
+  /** Task listings of registered benchmarks for the catalog, refreshed in the background. */
+  private readonly listings = new Map<string, Listing>();
+  private listingQueue: Promise<void> = Promise.resolve();
 
   constructor(deps: BenchServiceDeps) {
     this.deps = deps;
@@ -115,6 +128,10 @@ export class BenchService {
         this.deps.log?.(`bench trial ${t.id}: repaired outcome cleanup`);
     }
     this.advanceAll(this.deps.store.openTrials().map((t) => t.id));
+    // A calibration job that ended while the daemon was down still gets its rescore step.
+    for (const j of this.deps.store.listJobs(10_000))
+      if (j.spec.calibration && j.state !== "running" && j.rescore?.state !== "done")
+        if (!this.deps.store.hasOpenTrials(j.id)) this.afterCalibration(j.id);
   }
 
   /** Advance trials one after another in the background (each may run adapter processes). */
@@ -275,6 +292,7 @@ export class BenchService {
     const job = this.deps.store.getJob(id);
     if (!job) throw new NotFoundError(`bench job not found: ${id}`);
     const trials = this.deps.store.trials(id);
+    const calibration = calibrationReport(job, trials);
     return {
       job,
       trials,
@@ -284,7 +302,126 @@ export class BenchService {
         job.metrics,
         job.official,
       ),
+      ...(calibration ? { calibration } : {}),
     };
+  }
+
+  // ---- calibration and catalog (design §9.15) ----
+
+  /**
+   * Start a calibration job: sampled (or given) tasks × the calibration methods the benchmark
+   * admits × seeds. Its report is part of the job detail; the daemon rescores it once it ends.
+   */
+  async calibrate(input: CalibrationRequestInput): Promise<BenchJob> {
+    const parsed = CalibrationRequest.safeParse(input);
+    if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
+    const r = parsed.data;
+    const info = await this.infoOf(this.benchmark(r.benchmark));
+    this.remember(r.benchmark, info);
+    const oracle = r.oracle && info.capabilities?.calibration?.oracle !== "none";
+    const tasks = r.tasks.length ? r.tasks : sampleTasks(info.tasks, r.sample, r.suite, oracle);
+    if (!tasks.length) throw new UserError(`${r.benchmark} has no supported tasks to calibrate`);
+    const methods = calibrationMethods(info.capabilities, r.oracle);
+    if (!methods.length) throw new UserError(`${r.benchmark} admits neither empty nor oracle`);
+    const noOracle = info.tasks
+      .filter((t) => tasks.includes(t.id) && t.tags.oracle && t.tags.oracle !== "full")
+      .map((t) => t.id);
+    return this.submit({
+      name: `calibrate ${r.benchmark}`,
+      benchmark: r.benchmark,
+      tasks,
+      methods: methods.map((m) => ({ name: m, agent: m as "empty" | "oracle" })),
+      seeds: r.seeds,
+      calibration: { noOracle, rescore: r.rescore },
+      ...(r.timeoutMin ? { timeoutMin: r.timeoutMin } : {}),
+    });
+  }
+
+  /** A calibration job's trials have all ended: rescore it once from saved evidence, then finish. */
+  private afterCalibration(id: string): void {
+    const job = this.deps.store.getJob(id);
+    const c = job?.spec.calibration;
+    if (!job || !c || job.rescore?.state === "done") return;
+    const done = (note?: string) => {
+      const fresh = this.deps.store.getJob(id) ?? job;
+      fresh.rescore = { state: "done", ...(note ? { note } : {}) };
+      this.deps.store.putJob(fresh);
+    };
+    const skip =
+      job.rescore?.state === "started"
+        ? (job.rescore.note ?? null)
+        : !c.rescore
+          ? "disabled"
+          : job.state === "cancelled"
+            ? "job cancelled"
+            : job.capabilities?.rescore === "none"
+              ? "the benchmark declares no rescore"
+              : undefined;
+    if (skip !== undefined) {
+      done(skip ?? undefined);
+      return;
+    }
+    job.rescore = { state: "started" };
+    this.deps.store.putJob(job);
+    try {
+      const r = this.rescore(id);
+      if (r.skipped.length) {
+        const fresh = this.deps.store.getJob(id) ?? job;
+        fresh.rescore = {
+          state: fresh.rescore?.state ?? "started",
+          note: `${r.skipped.length} trial(s) not rescored: ${r.skipped[0]?.reason}`,
+        };
+        this.deps.store.putJob(fresh);
+      }
+    } catch (e) {
+      done(`rescore refused: ${(e as Error).message}`);
+    }
+  }
+
+  /** Every registered benchmark with its listing, calibrations, real methods and fidelity. */
+  catalog(refresh: string[] = []): BenchCatalog {
+    const jobs = this.jobs(10_000).jobs;
+    return {
+      entries: this.deps.registry.list().map((b) => {
+        this.refreshListing(b, refresh.includes(b.name));
+        const own = jobs.filter((j) => j.spec.benchmark === b.name);
+        const calibrations = own
+          .filter((j) => j.spec.calibration)
+          .slice(0, 5)
+          .map((j) => calibrationReport(j, this.deps.store.trials(j.id)))
+          .filter((r) => r !== null);
+        return catalogEntry(b, this.listing(b.name), own, calibrations);
+      }),
+    };
+  }
+
+  private listing(name: string): Listing {
+    return this.listings.get(name) ?? { at: null, data: null, error: null, refreshing: false };
+  }
+
+  private remember(name: string, data: AdapterTasksResponse): void {
+    this.listings.set(name, { at: nowIso(), data, error: null, refreshing: false });
+  }
+
+  /** List a benchmark's tasks again in the background when the cached listing is old or forced. */
+  private refreshListing(b: Benchmark, force: boolean): void {
+    const l = this.listing(b.name);
+    const age = l.at ? Date.now() - Date.parse(l.at) : Number.POSITIVE_INFINITY;
+    if (l.refreshing || (!force && age < LISTING_TTL_MS && (l.data || l.error))) return;
+    this.listings.set(b.name, { ...l, refreshing: true });
+    // One listing at a time: adapters may start containers to list tasks.
+    this.listingQueue = this.listingQueue.then(async () => {
+      try {
+        this.remember(b.name, await this.infoOf(b));
+      } catch (e) {
+        this.listings.set(b.name, {
+          ...this.listing(b.name),
+          at: nowIso(),
+          error: (e as Error).message,
+          refreshing: false,
+        });
+      }
+    });
   }
 
   jobs(limit = 200): BenchJobList {
@@ -686,6 +823,8 @@ export class BenchService {
           reason = "finished";
         }
         this.writeReport(job.id, reason);
+        // After this trial's advance has let go of it, so the rescore can take it too.
+        if (job.spec.calibration) setImmediate(() => this.afterCalibration(job.id));
       }
     }
   }
