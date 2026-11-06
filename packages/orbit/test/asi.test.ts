@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { TrialRequest } from "../src/bench/adapter.ts";
 import { asiAdapter, asiReview, asiScore, asiSolveSpec } from "../src/bench/asi.ts";
-import type { Run } from "../src/contracts/index.ts";
+import { AdapterRequest, BenchCapabilities, type Run } from "../src/contracts/index.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "orbit-asi-status-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -187,4 +187,13 @@ describe("ASI execution and evaluation remain independent", () => {
       attempt_status: "execution_failed",
     });
   });
+});
+
+it("declares its identity and the native runner's actual Agent admission", () => {
+  const req = AdapterRequest.parse({ protocol: 1, op: "tasks", benchmark: checkout() });
+  const info = asiAdapter.info?.(req, []);
+  const caps = BenchCapabilities.parse(info?.capabilities);
+  expect(caps.identity?.id).toBe("asi-bench");
+  expect(caps.domains).toContain("science");
+  expect(caps.methods).toEqual(["oracle", "empty", "codex", "claude-code"]);
 });

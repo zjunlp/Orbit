@@ -71,3 +71,28 @@ export function onLinkClick(e: React.MouseEvent<HTMLAnchorElement>) {
   e.preventDefault();
   navigate(a.pathname + a.search + a.hash);
 }
+
+/** Preserve saved views when moving the old home and Catalog into their own pages. */
+export function legacyHref(path: string, query: URLSearchParams, hash = ""): string | null {
+  const normalized = path.replace(/\/+$/, "") || "/";
+  const q = new URLSearchParams(query);
+  let destination = normalized;
+  if (normalized === "/bench" && q.get("tab") === "catalog") {
+    destination = "/benchmarks";
+    q.delete("tab");
+    const evidence: Record<string, string> = {
+      passed: "calibrated",
+      failed: "failed",
+      none: "uncalibrated",
+      running: "running",
+      real: "no-real",
+    };
+    const cal = q.get("cal");
+    if (cal && evidence[cal] && !q.has("ev")) q.set("ev", evidence[cal]);
+    q.delete("cal");
+  } else if (normalized === "/" && ["q", "state", "flat", "folder", "kind"].some((k) => q.has(k))) {
+    destination = "/runs";
+  }
+  if (destination === path) return null;
+  return `${destination}${q.size ? `?${q}` : ""}${hash ? `#${hash}` : ""}`;
+}

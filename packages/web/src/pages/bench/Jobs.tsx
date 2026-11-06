@@ -18,7 +18,7 @@ export function BenchJobs() {
   const benchmarks = useAsync(() => api.benchmarks(), []);
   const loc = useLocation();
   const selected = (loc.query.get("sel") ?? "").split(",").filter(Boolean);
-  const tab = loc.query.get("tab") === "catalog" ? "catalog" : "jobs";
+  const tab = "jobs" as "jobs" | "catalog";
   const query = loc.query.get("q") ?? "";
   const status = loc.query.get("state") ?? "all";
   const category = loc.query.get("category") ?? "all";
@@ -40,7 +40,7 @@ export function BenchJobs() {
 
   return (
     <>
-      <TopBar crumbs={[{ label: "Bench" }]}>
+      <TopBar crumbs={[{ label: "Evaluations" }]}>
         {tab === "jobs" && (
           <button
             type="button"
@@ -59,24 +59,12 @@ export function BenchJobs() {
       </TopBar>
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
-          <div className="row bench-wrap">
-            <button
-              type="button"
-              className={`btn sm${tab === "jobs" ? " on" : " ghost"}`}
-              aria-pressed={tab === "jobs"}
-              onClick={() => setQuery({ tab: null })}
-            >
-              Evaluations {jobs.data?.length ?? ""}
-            </button>
-            <button
-              type="button"
-              className={`btn sm${tab === "catalog" ? " on" : " ghost"}`}
-              aria-pressed={tab === "catalog"}
-              onClick={() => setQuery({ tab: "catalog", q: null, state: null, category: null })}
-            >
-              Catalog {benchmarks.data?.length ?? ""}
-            </button>
-          </div>
+          <p className="muted" style={{ margin: 0 }}>
+            Every evaluation of a benchmark: methods × tasks × seeds, each trial solved and then
+            verified. Browse what can be evaluated under{" "}
+            <Link href="/benchmarks">Benchmarks ({benchmarks.data?.length ?? "…"} registered)</Link>
+            .
+          </p>
           {tab === "jobs" ? (
             <>
               <div className="bench-home-toolbar">

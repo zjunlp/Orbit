@@ -273,3 +273,31 @@ export const IconFlask = (p: P) => (
     <path d="M7 15h10" />
   </I>
 );
+export const IconDashboard = (p: P) => (
+  <I {...p}>
+    <rect x="3" y="3" width="7" height="9" rx="1.5" />
+    <rect x="14" y="3" width="7" height="5" rx="1.5" />
+    <rect x="14" y="12" width="7" height="9" rx="1.5" />
+    <rect x="3" y="16" width="7" height="5" rx="1.5" />
+  </I>
+);
+export const IconLibrary = (p: P) => (
+  <I {...p}>
+    <path d="M4 4v16M9 4v16" />
+    <path d="m14 4.5 4.5 15.5" />
+  </I>
+);
+export const IconBranch = (p: P) => (
+  <I {...p}>
+    <circle cx="6" cy="5" r="2.2" />
+    <circle cx="6" cy="19" r="2.2" />
+    <circle cx="18" cy="12" r="2.2" />
+    <path d="M6 7.2v9.6M8 6.5c5 .5 8 2.5 8.2 3.6M8 17.5c5-.5 8-2.5 8.2-3.6" />
+  </I>
+);
+export const IconSidebar = (p: P) => (
+  <I {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+  </I>
+);

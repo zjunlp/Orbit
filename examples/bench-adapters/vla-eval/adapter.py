@@ -13,6 +13,7 @@ Methods:
             and scores what zero actions achieve (a negative calibration, not "no model").
 """
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -115,6 +116,13 @@ def benchmark_in_image(image, spec, params):
     raise ValueError("benchmark image printed no task list")
 
 
+def benchmark_identity(spec):
+    if spec == "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark":
+        return {"id": "libero", "name": "LIBERO", "variant": "vla-eval"}
+    return {"id": "vla-" + hashlib.sha256(spec.encode()).hexdigest()[:16],
+            "name": spec, "variant": "vla-eval"}
+
+
 def tasks(req):
     _, c, spec, _ = settings(req)
     params = params_of(c)
@@ -131,6 +139,7 @@ def tasks(req):
             "category": "embodied-policy",
             "profiles": ["sim", "sync", "step"],
             "domains": ["embodied"],
+            "identity": benchmark_identity(spec),
             "calibration": {"oracle": "none", "seedsVary": True},
             "methods": ["external", "empty"],
             "scoreKind": "scalar",

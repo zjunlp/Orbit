@@ -11,6 +11,29 @@ import { CheckpointPolicy } from "./runs.ts";
 /** Adapters shipped with Orbit (`orbit __adapter <name>`). */
 export const BUILTIN_ADAPTERS = ["harbor", "asi", "manifest"] as const;
 
+/**
+ * What a benchmark is, independent of how it is registered (design §9.16): registrations with the
+ * same `id` are one benchmark (e.g. several experiment setups of ASI-Bench).
+ */
+export const BenchIdentity = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, "id: lowercase letters, digits, . _ -"),
+  name: z.string().min(1).max(120),
+  version: z.string().max(80).optional(),
+  /** A protocol variant of the same benchmark (e.g. `static` / `executable`). */
+  variant: z.string().max(80).optional(),
+});
+export type BenchIdentity = z.infer<typeof BenchIdentity>;
+
+/** A registration's own labels, over what its adapter declares (`orbit bench label`). */
+export const BenchLabels = z.object({
+  identity: BenchIdentity.optional(),
+  domains: z
+    .array(z.string().regex(/^[a-z][a-z0-9-]{0,30}$/))
+    .max(6)
+    .optional(),
+});
+export type BenchLabels = z.infer<typeof BenchLabels>;
+
 /** A registered benchmark checkout. */
 export const BenchmarkInput = z.object({
   name: ProfileName,
@@ -37,6 +60,8 @@ export const BenchmarkInput = z.object({
     .string()
     .refine((p) => p.startsWith("/"), "resources must be an absolute path")
     .optional(),
+  /** Identity and domains set at registration; not part of how the benchmark runs. */
+  labels: BenchLabels.optional(),
 });
 export type BenchmarkInput = z.input<typeof BenchmarkInput>;
 export const Benchmark = BenchmarkInput.extend({ createdAt: z.string(), updatedAt: z.string() });
@@ -202,7 +227,12 @@ export const BenchCapabilities = z
   .object({
     category: BenchCategory.optional(),
     profiles: z.array(z.string().max(40)).max(12).default([]),
-    /** Subject-area tags shown in the UI (e.g. `embodied`), independent of the category. */
+    /** What the benchmark is (source, version); registrations with the same id are one benchmark. */
+    identity: BenchIdentity.optional(),
+    /**
+     * Subject domains (`BENCH_DOMAINS`, e.g. `embodied`), independent of the category; other values
+     * are kept as tags.
+     */
     domains: z
       .array(z.string().regex(/^[a-z][a-z0-9-]{0,30}$/))
       .max(6)
@@ -278,6 +308,45 @@ export const Method = z
 export type Method = z.infer<typeof Method>;
 
 /**
+ * What a method is made of, hashed into its revision (design §9.16). Credentials never enter it;
+ * the auth kind does, since login and API-key routes can reach different models.
+ */
+export const MethodBasis = z.object({
+  agent: z.string(),
+  model: z.string().nullable(),
+  effort: z.string().nullable(),
+  authKind: z.string().nullable(),
+  /** The Agent CLI version on the submitting node (CLI methods). */
+  cliVersion: z.string().nullable(),
+  /** sha256 over the method bundle's files (paths and contents), or null without a bundle. */
+  bundleDigest: z.string().nullable(),
+  entrypoint: z.string().nullable(),
+  config: z.record(z.string(), z.string()).nullable(),
+});
+export type MethodBasis = z.infer<typeof MethodBasis>;
+export const MethodRevision = z.object({
+  /** First 12 hex digits of sha256 over the basis. */
+  revision: z.string().regex(/^[0-9a-f]{12}$/),
+  basis: MethodBasis,
+  /** Some runtime inputs are unknown, or reconstructed from an older job without its bundle digest. */
+  approximate: z.boolean().default(false),
+});
+export type MethodRevision = z.infer<typeof MethodRevision>;
+
+/** How a method came about, stated by whoever submitted it; never inferred (design §9.16). */
+export const MethodLineage = z.object({
+  /** The revision this one was derived from. */
+  parent: z
+    .string()
+    .regex(/^[0-9a-f]{12}$/)
+    .optional(),
+  note: z.string().max(4000).optional(),
+  /** Trials (`<job>.<n>`) whose failures led to this method. */
+  informedBy: z.array(z.string().max(80)).max(50).default([]),
+});
+export type MethodLineage = z.infer<typeof MethodLineage>;
+
+/**
  * Marks a calibration job (design §9.15), fixed at submission: tasks whose reference solution is
  * partial or missing (their oracle trials are not judged) and whether to rescore once it ends.
  */
@@ -333,6 +402,8 @@ export type CalibrationReport = z.infer<typeof CalibrationReport>;
 export const BenchJobSpec = z.object({
   name: z.string().max(200).optional(),
   calibration: JobCalibration.optional(),
+  /** Per method name: how the method came about (optional; design §9.16). */
+  lineage: z.record(z.string(), MethodLineage).default({}),
   benchmark: ProfileName,
   /** Task ids; default: every supported task. */
   tasks: z.array(z.string()).default([]),
@@ -663,6 +734,13 @@ export const BenchJob = z.object({
   capabilities: BenchCapabilities.optional(),
   /** The benchmark's own aggregation rule at submission, when its adapter declares one. */
   official: OfficialRule.optional(),
+  /** Per method name: the content revision of the method at submission (design §9.16). */
+  revisions: z
+    .record(
+      z.string(),
+      z.lazy(() => MethodRevision),
+    )
+    .default({}),
   /** Per-task overrides read from the benchmark's resources file at submit (null without one). */
   resources: z.record(z.string(), ResourceOverride).nullable().default(null),
   /** Folder for organizing; the job's runs follow it. */
@@ -833,6 +911,15 @@ export const CatalogEntry = z.object({
     .nullable(),
   /** The listing's capabilities, else those of the newest job (so a row has a category early). */
   capabilities: BenchCapabilities.nullable(),
+  /**
+   * What benchmark this registration is: its labels, else the adapter's declaration, else derived
+   * from the registration (`source` says which). Entries with the same `identity.id` are one benchmark.
+   */
+  identity: BenchIdentity,
+  identitySource: z.enum(["label", "adapter", "derived"]),
+  /** Vocabulary domains (`BENCH_DOMAINS`) and the other declared tags, from labels else adapter. */
+  domains: z.array(z.string()),
+  tags: z.array(z.string()),
   /** The last listing failed (an earlier one may still be shown). */
   listingError: z.string().nullable(),
   /** A listing is being refreshed now. */

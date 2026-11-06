@@ -2,7 +2,15 @@
 // solve Run's after phase, for verifiers that need its container) on the same lease model as every
 // other run. BenchService advances trials when their runs change, and
 // recovers open trials from the store after a daemon restart.
-import { appendFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { cp } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { AuthEntry, AuthStore } from "../auth/index.ts";
@@ -10,9 +18,11 @@ import type { OrbitPaths } from "../config/paths.ts";
 import {
   type AdapterTasksResponse,
   type AgentCapabilities,
+  type AgentCatalog,
   type AgentDefinition,
   type BenchCatalog,
   type BenchCompare,
+  type BenchCompatibility,
   type BenchConsolidateInput,
   type BenchConsolidateResult,
   type BenchJob,
@@ -20,6 +30,7 @@ import {
   type BenchJobList,
   BenchJobSpec,
   type BenchJobSpecInput,
+  BenchLabels,
   type Benchmark,
   type BenchReport,
   BenchRescore,
@@ -35,9 +46,12 @@ import {
   Folder,
   type FolderExportResult,
   type FolderMoveResult,
+  isAgentMethod,
   isCliMethod,
   isTerminal,
   type Method,
+  type MethodList,
+  type MethodRevision,
   type Outcome,
   type Run,
   type RunDeletion,
@@ -51,7 +65,7 @@ import { metricValue, resolveMetrics } from "../contracts/metrics.ts";
 import { type AgentRegistry, builtinRegistry } from "../harness/registry.ts";
 import { newId, nowIso } from "../lib/ids.ts";
 import { dirBytes } from "../records/index.ts";
-import { NotFoundError, type RunService, UserError } from "../runs/service.ts";
+import { AUTH_TEST_GROUP, NotFoundError, type RunService, UserError } from "../runs/service.ts";
 import { type AgentFailure, loadRunAgentTranscript, runAgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
 import { gitSource } from "../workspace/snapshot.ts";
@@ -63,6 +77,15 @@ import {
   planConsolidation,
   sameMethodSetup,
 } from "./consolidate.ts";
+import {
+  agentBlocker,
+  agentCatalog,
+  authTests,
+  compatibility,
+  jobRevision,
+  methodLines,
+} from "./hub.ts";
+import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
 
 export { benchGroup } from "./consolidate.ts";
@@ -195,6 +218,13 @@ export class BenchService {
       if (!t.supported) throw new UserError(`task ${id} is not supported: ${t.reason}`);
     }
     if (spec.tasks.length === 0) throw new UserError(`${b.name} has no supported tasks`);
+    this.checkLineage(spec);
+    const revisions = await this.revisions(spec.methods);
+    for (const [name, lineage] of Object.entries(spec.lineage))
+      if (lineage.parent && lineage.parent === revisions[name]?.revision)
+        throw new UserError(
+          `${name}: parent revision matches this method; change the method or remove the parent to rerun it`,
+        );
     let resources: BenchJob["resources"] = null;
     if (b.resources) {
       try {
@@ -213,6 +243,7 @@ export class BenchService {
       benchmarkSnapshot: structuredClone(b),
       ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
       ...(info.official ? { official: structuredClone(info.official) } : {}),
+      revisions,
       resources,
       folder: folder.data,
       metrics: resolveMetrics(info.metrics),
@@ -251,6 +282,52 @@ export class BenchService {
     return job;
   }
 
+  /** Each method's content revision on this node at submission (design §9.16). */
+  private async revisions(methods: Method[]): Promise<Record<string, MethodRevision>> {
+    const out: Record<string, MethodRevision> = {};
+    for (const m of methods) {
+      if (!isAgentMethod(m)) continue;
+      let cliVersion: string | null = null;
+      if (isCliMethod(m)) {
+        const def = this.agents.get(m.agent);
+        cliVersion = def ? ((await this.agents.info(def)).version ?? null) : null;
+      }
+      let digest: string | null = null;
+      if (m.bundle)
+        try {
+          digest = bundleDigest(m.bundle);
+        } catch (e) {
+          throw new UserError(`${m.name}: method bundle: ${(e as Error).message}`);
+        }
+      const profile = m.auth ? this.deps.auth?.get(m.auth)?.profile : null;
+      const authKind = profile?.kind ?? null;
+      const model = m.model ?? profile?.model;
+      const approximate =
+        m.agent === "external" || !cliVersion || cliVersion === "unknown" || !model;
+      out[m.name] = revisionOf(
+        methodBasis({ ...m, model }, { authKind, cliVersion, bundleDigest: digest }),
+        approximate,
+      );
+    }
+    return out;
+  }
+
+  /** Lineage names methods of the job, a known parent revision and existing trials. */
+  private checkLineage(spec: BenchJobSpec): void {
+    const names = new Set(spec.methods.map((m) => m.name));
+    const known = (rev: string) =>
+      this.deps.store
+        .listJobs(10_000)
+        .some((j) => j.spec.methods.some((m) => jobRevision(j, m.name)?.revision === rev));
+    for (const [name, l] of Object.entries(spec.lineage)) {
+      if (!names.has(name)) throw new UserError(`lineage names no method of this job: ${name}`);
+      if (l.parent && !known(l.parent))
+        throw new UserError(`${name}: parent revision ${l.parent} is not in any job`);
+      for (const t of l.informedBy)
+        if (!this.deps.store.getTrial(t)) throw new UserError(`${name}: trial not found: ${t}`);
+    }
+  }
+
   /** The Agent definition a method names; `external`/`oracle`/`empty` never reach a definition. */
   private agentDef(m: Method): AgentDefinition {
     const def = this.agents.get(m.agent);
@@ -267,15 +344,9 @@ export class BenchService {
     }
     const def = this.agents.get(m.agent);
     if (!def) throw new UserError(`${m.name}: unknown Agent ${m.agent}; see \`orbit agent ls\``);
-    if (requires.includes("mcp") && def.command.mcp.kind === "none")
-      throw new UserError(
-        `${m.name}: this benchmark requires MCP, but ${m.agent} has no MCP wiring`,
-      );
-    const lacking = requires.filter((k) => !def.capabilities[k]);
-    if (lacking.length)
-      throw new UserError(
-        `${m.name}: this benchmark needs Agent capabilities ${lacking.join(", ")}, which ${m.agent} does not declare`,
-      );
+    // The same check the compatibility matrix shows (bench/hub.ts).
+    const why = agentBlocker(def, undefined, requires);
+    if (why) throw new UserError(`${m.name}: ${why}`);
     const entry = m.auth ? this.deps.auth?.get(m.auth) : null;
     if (!entry) throw new UserError(`${m.name}: auth profile not found: ${m.auth}`);
     if (!def.auth.kinds.includes(entry.profile.kind))
@@ -393,6 +464,65 @@ export class BenchService {
         return catalogEntry(b, this.listing(b.name), own, calibrations);
       }),
     };
+  }
+
+  /** Every Agent with its wiring, profiles, evidence and use (design §9.16). */
+  async agentCatalog(): Promise<AgentCatalog> {
+    const infos = await Promise.all(this.agents.list().map((d) => this.agents.info(d)));
+    const runs = this.deps.store.listRuns({ group: AUTH_TEST_GROUP, limit: 500 });
+    const passed = (r: Run) => {
+      if (r.state !== "succeeded") return false;
+      try {
+        return readFileSync(this.deps.runs.dirs(r.id).log, "utf8").includes("ORBIT_AUTH_OK");
+      } catch {
+        return false;
+      }
+    };
+    return agentCatalog(
+      infos,
+      this.jobs(10_000).jobs,
+      this.deps.auth?.list() ?? [],
+      authTests(runs, passed),
+      (job, agent) => {
+        const j = this.deps.store.getJob(job);
+        const names = new Set(j?.spec.methods.filter((m) => m.agent === agent).map((m) => m.name));
+        return (
+          this.deps.store
+            .trials(job)
+            .filter((t) => names.has(t.method) && t.outcome?.evaluation === "valid")
+            .sort((a, b) => ((a.endedAt ?? "") < (b.endedAt ?? "") ? 1 : -1))[0] ?? null
+        );
+      },
+    );
+  }
+
+  /** Which CLI Agent can take which registered benchmark, by the submission checks. */
+  compatibility(): BenchCompatibility {
+    return compatibility(
+      this.agents.list(),
+      this.catalog().entries,
+      this.jobs(10_000).jobs,
+      this.deps.auth?.list() ?? [],
+    );
+  }
+
+  /** Method lines with revisions and results compared with the previous revision. */
+  methods(metric?: string): MethodList {
+    return {
+      methods: methodLines(
+        this.jobs(10_000).jobs,
+        (id) => this.deps.store.trials(id),
+        (id) => this.deps.store.reports(id),
+        metric,
+      ),
+    };
+  }
+
+  /** Set a registration's identity and domains (labels do not change how it runs). */
+  label(name: string, labels: BenchLabels): Benchmark {
+    const b = this.benchmark(name);
+    const next = { ...b, labels: BenchLabels.parse(labels) };
+    return this.deps.registry.put(next);
   }
 
   private listing(name: string): Listing {

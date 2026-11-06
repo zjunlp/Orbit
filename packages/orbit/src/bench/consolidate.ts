@@ -32,6 +32,7 @@ function benchmarkSettings(b: Benchmark) {
 }
 
 export const sameMethodSetup = (a: BenchJob, b: BenchJob) => {
+  if (!isDeepStrictEqual(a.revisions, b.revisions)) return false;
   if (a.spec.benchmark !== b.spec.benchmark || !isDeepStrictEqual(a.spec.methods, b.spec.methods))
     return false;
   if (!a.benchmarkSnapshot && !b.benchmarkSnapshot) return true;
@@ -63,6 +64,7 @@ export function consolidateOptions(id: string, input: BenchConsolidateInput) {
 }
 
 export function equivalentTransport(a: BenchJob, b: BenchJob, transport: Transport): boolean {
+  if (!isDeepStrictEqual(a.revisions, b.revisions)) return false;
   if (Boolean(a.benchmarkSnapshot) !== Boolean(b.benchmarkSnapshot)) return false;
   const left = a.benchmarkSnapshot ?? transport.benchmarks.get(a.spec.benchmark);
   const right = b.benchmarkSnapshot ?? transport.benchmarks.get(b.spec.benchmark);

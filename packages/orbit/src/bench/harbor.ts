@@ -901,6 +901,9 @@ export const harborAdapter: AdapterHandlers = {
         category: (opts.category ?? "agent-workspace") as BenchCategory,
         profiles,
         domains: embodied ? ["embodied"] : [],
+        ...(embodied
+          ? { identity: { id: "embodied-first-exam", name: "Embodied First Exam" } }
+          : {}),
         methods: ["oracle", "empty", "cli"],
         conditions: {
           Format: "Harbor task directories; each task's own environment and verifier",

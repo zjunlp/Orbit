@@ -70,7 +70,12 @@ function formatAgents(agents: AgentInfo[]): string {
         a.definition.capabilities.oneShot ? "one-shot" : "",
         a.definition.capabilities.multiTurn ? "multi-turn" : "",
         a.definition.capabilities.gui ? "gui" : "",
-        a.definition.capabilities.mcp ? "mcp" : "",
+        // Declared but not written into the Agent's config: a benchmark requiring MCP refuses it.
+        a.definition.capabilities.mcp
+          ? a.definition.command.mcp.kind === "none"
+            ? "mcp(not wired)"
+            : "mcp"
+          : "",
       ]
         .filter(Boolean)
         .join(" "),

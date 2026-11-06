@@ -114,7 +114,22 @@ class AdapterTests(unittest.TestCase):
         with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows):
             caps = adapter.tasks(self.req)["capabilities"]
         self.assertEqual(caps["category"], "embodied-policy")
+        self.assertEqual(caps["domains"], ["embodied"])
+        self.assertEqual(caps["identity"]["id"], "libero")
         self.assertEqual(caps["calibration"], {"oracle": "none", "seedsVary": True})
+
+    def test_configured_benchmarks_do_not_share_libero_identity(self):
+        config = self.req["benchmark"]["config"]
+        with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=[]):
+            config["benchmark"] = "fixture.benchmarks:OtherBenchmark"
+            first = adapter.tasks(self.req)["capabilities"]["identity"]
+            config["params"] = '{"seed": 99}'
+            self.assertEqual(adapter.tasks(self.req)["capabilities"]["identity"], first)
+            config["benchmark"] = "fixture.benchmarks:AnotherBenchmark"
+            second = adapter.tasks(self.req)["capabilities"]["identity"]
+        self.assertNotEqual(first["id"], "libero")
+        self.assertNotEqual(second["id"], first["id"])
+        self.assertEqual(first["name"], "fixture.benchmarks:OtherBenchmark")
 
 
 if __name__ == "__main__":

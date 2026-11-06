@@ -19,6 +19,7 @@ import {
   type AdapterRequest,
   BenchCapabilities,
   BenchCategory,
+  BenchIdentity,
   BenchTask,
   CalibrationExpect,
   FailureKind,
@@ -83,6 +84,7 @@ const Manifest = z.object({
   category: BenchCategory.optional(),
   profiles: z.array(z.string()).default([]),
   domains: z.array(z.string()).default([]),
+  identity: BenchIdentity.optional(),
   calibration: CalibrationExpect.optional(),
   /**
    * Initial states (episodes) per task: a trial runs one, seed n is episode n-1 (`{{episode}}`), and
@@ -330,6 +332,7 @@ function capabilities(m: Manifest) {
     ...(m.category ? { category: m.category } : {}),
     profiles: m.profiles,
     domains: m.domains,
+    ...(m.identity ? { identity: m.identity } : {}),
     ...(m.calibration ? { calibration: m.calibration } : {}),
     kind: m.kind,
     methods: Object.keys(m.methods),

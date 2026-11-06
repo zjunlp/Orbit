@@ -9,6 +9,7 @@ image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
 category: embodied-policy
 profiles: [sim, sync, step]
 domains: [embodied]
+identity: { id: libero, name: LIBERO, variant: vla-eval }
 calibration: { oracle: none, seedsVary: true }
 episodes: 50
 scoreKind: scalar

@@ -20,11 +20,17 @@ import {
   type CalibrationReport,
   type CatalogEntry,
 } from "../../lib/api.ts";
-import { BENCH_CATEGORIES, CATEGORY_LABELS } from "../../lib/category.ts";
+import {
+  BENCH_CATEGORIES,
+  BENCH_DOMAINS,
+  CATEGORY_LABELS,
+  DOMAIN_LABELS,
+} from "../../lib/category.ts";
 import { ago, dateTime, jobPath, trialPath } from "../../lib/format.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
 import "./catalog.css";
+import "../hub.css";
 
 type CalState = "passed" | "failed" | "running" | "none";
 
@@ -73,28 +79,77 @@ const GROUP_LABEL = (g: (typeof GROUPS)[number]) =>
         ? "Task listing failed"
         : CATEGORY_LABELS[g];
 
+/** Registrations with the same identity are one benchmark (design §9.16). */
+export const benchmarkKey = (e: CatalogEntry) => e.identity.id;
+/** Distinct benchmarks among entries. */
+export const distinct = (entries: CatalogEntry[]) => new Set(entries.map(benchmarkKey)).size;
+
+type Evidence =
+  | "calibrated"
+  | "failed"
+  | "uncalibrated"
+  | "running"
+  | "real"
+  | "no-real"
+  | "parity";
+const EVIDENCE: { key: Evidence; label: string; test: (e: CatalogEntry) => boolean }[] = [
+  { key: "calibrated", label: "Passed sample calibration", test: (e) => calState(e) === "passed" },
+  { key: "failed", label: "Calibration failed", test: (e) => calState(e) === "failed" },
+  { key: "uncalibrated", label: "Not calibrated", test: (e) => calState(e) === "none" },
+  { key: "running", label: "Calibration running", test: (e) => calState(e) === "running" },
+  { key: "real", label: "Real methods ran", test: (e) => e.methods.length > 0 },
+  { key: "no-real", label: "No real methods yet", test: (e) => e.methods.length === 0 },
+  { key: "parity", label: "Parity evidence", test: (e) => Boolean(e.capabilities?.parity) },
+];
+const DOMAIN_KEYS = [...BENCH_DOMAINS, "unlabeled"] as const;
+const domainLabel = (d: string) =>
+  d === "unlabeled" ? "Unlabeled" : (DOMAIN_LABELS[d as keyof typeof DOMAIN_LABELS] ?? d);
+const inDomain = (e: CatalogEntry, d: string) =>
+  d === "unlabeled" ? e.domains.length === 0 : e.domains.includes(d);
+
+/**
+ * The Benchmarks page body: facets (category, domain, evidence) with counts, a grouped table and a
+ * category × domain coverage matrix. Counts are distinct benchmarks, not registrations.
+ */
 export function BenchCatalogView() {
   const loc = useLocation();
   const busy = (d?: CatalogEntry[]) =>
     (d ?? []).some((e) => e.refreshing || calState(e) === "running");
-  const [refresh, setRefresh] = useState<string[]>([]);
-  const catalog = useAsync(
-    () => api.benchCatalog(refresh).then((r) => r.entries),
-    [refresh.join(",")],
-    { poll: true, pollMs: 4000 },
-  );
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const catalog = useAsync(() => api.benchCatalog().then((r) => r.entries), [], {
+    poll: true,
+    pollMs: 4000,
+  });
+  const refreshListings = async () => {
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      await api.benchCatalog((catalog.data ?? []).map((e) => e.benchmark.name));
+      catalog.reload();
+    } catch (error) {
+      setRefreshError((error as Error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const q = (loc.query.get("q") ?? "").toLowerCase();
   const category = loc.query.get("category") ?? "all";
-  const cal = loc.query.get("cal") ?? "all";
+  const domain = loc.query.get("domain") ?? "all";
+  const ev = (loc.query.get("ev") ?? "all") as Evidence | "all";
+  const view = loc.query.get("view") === "matrix" ? "matrix" : "table";
   const open = loc.query.get("open");
   const entries = catalog.data ?? [];
-  const shown = entries.filter(
-    (e) =>
-      (category === "all" || groupOf(e) === category) &&
-      (cal === "all" || (cal === "real" ? e.methods.length === 0 : calState(e) === cal)) &&
-      `${e.benchmark.name} ${identity(e) ?? ""} ${e.benchmark.adapter}`.toLowerCase().includes(q),
+  const searched = entries.filter((e) =>
+    `${e.benchmark.name} ${e.identity.name} ${e.identity.id} ${identity(e) ?? ""} ${e.benchmark.adapter} ${e.domains.join(" ")} ${e.tags.join(" ")}`
+      .toLowerCase()
+      .includes(q),
   );
-  const count = (s: CalState) => entries.filter((e) => calState(e) === s).length;
+  const pass = (e: CatalogEntry, skip?: "category" | "domain" | "ev") =>
+    (skip === "category" || category === "all" || groupOf(e) === category) &&
+    (skip === "domain" || domain === "all" || inDomain(e, domain)) &&
+    (skip === "ev" || ev === "all" || (EVIDENCE.find((x) => x.key === ev)?.test(e) ?? true));
+  const shown = searched.filter((e) => pass(e));
   const groups = GROUPS.map((c) => ({ c, rows: shown.filter((e) => groupOf(e) === c) })).filter(
     (g) => g.rows.length,
   );
@@ -113,134 +168,350 @@ export function BenchCatalogView() {
         <code>orbit bench add mine /path/to/benchmark --adapter /path/to/adapter.py</code>
       </Empty>
     );
-  const stat = (label: string, n: number, value: string, cls = "") => (
-    <button
-      type="button"
-      className={`catalog-stat${cal === value ? " on" : ""} ${cls}`}
-      aria-pressed={cal === value}
-      onClick={() => setQuery({ cal: cal === value || value === "all" ? null : value })}
-    >
-      <b className="num">{n}</b> {label}
-    </button>
+  const categories = new Set(
+    entries.map((e) => benchCategory(e.capabilities ?? undefined)).filter(Boolean),
   );
+  const domains = new Set(entries.flatMap((e) => e.domains));
+  const facet = (
+    title: string,
+    param: "category" | "domain" | "ev",
+    current: string,
+    items: { key: string; label: string; test: (e: CatalogEntry) => boolean }[],
+  ) => (
+    <div className="facet">
+      <div className="facet-h">{title}</div>
+      {items.map((it) => {
+        const n = distinct(searched.filter((e) => pass(e, param) && it.test(e)));
+        if (!n && current !== it.key) return null;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            className={`facet-item${current === it.key ? " on" : ""}`}
+            aria-pressed={current === it.key}
+            onClick={() => setQuery({ [param]: current === it.key ? null : it.key })}
+          >
+            <span className="ellipsis">{it.label}</span>
+            <span className="num faint">{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+  const active = [
+    category !== "all" && { k: "category", label: GROUP_LABEL(category as never) },
+    domain !== "all" && { k: "domain", label: domainLabel(domain) },
+    ev !== "all" && { k: "ev", label: EVIDENCE.find((x) => x.key === ev)?.label ?? ev },
+  ].filter(Boolean) as { k: string; label: string }[];
   return (
     <div className="col" style={{ gap: 14 }}>
-      {catalog.error && (
+      {(catalog.error || refreshError) && (
         <div className="callout" role="alert">
-          Connection problem; showing the last loaded catalog. {catalog.error}
+          Connection problem; showing the last loaded catalog. {catalog.error ?? refreshError}
         </div>
       )}
-      <div className="catalog-stats">
-        {stat("registered", entries.length, "all")}
-        {stat("passed sample calibration", count("passed"), "passed", "good")}
-        {stat("calibration failed", count("failed"), "failed", count("failed") ? "bad" : "")}
-        {stat("not calibrated", count("none"), "none")}
-        {count("running") > 0 && stat("calibrating", count("running"), "running")}
-        {stat("without real methods", entries.filter((e) => !e.methods.length).length, "real")}
+      <div className="hub-stats">
+        <div className="hub-stat">
+          <b className="num">{distinct(entries)}</b>
+          <span>benchmarks</span>
+          <small className="faint">{entries.length} registrations</small>
+        </div>
+        <div className="hub-stat">
+          <b className="num">
+            {categories.size}
+            <span className="faint">/7</span>
+          </b>
+          <span>categories</span>
+          <small className="faint">how the subject interacts</small>
+        </div>
+        <div className="hub-stat">
+          <b className="num">{domains.size}</b>
+          <span>domains</span>
+          <small className="faint">
+            {distinct(entries.filter((e) => !e.domains.length))} benchmarks unlabeled
+          </small>
+        </div>
+        <div className="hub-stat good">
+          <b className="num">{distinct(entries.filter((e) => calState(e) === "passed"))}</b>
+          <span>sample-calibrated</span>
+          <small className="faint">integration judged correctly</small>
+        </div>
+        <div className="hub-stat">
+          <b className="num">{distinct(entries.filter((e) => e.methods.length))}</b>
+          <span>with real methods</span>
+          <small className="faint">a model or policy ran</small>
+        </div>
       </div>
       <div className="bench-home-toolbar">
         <input
           className="input"
           type="search"
           aria-label="Search benchmarks"
-          placeholder="Search benchmarks, sources or adapters"
+          placeholder="Search benchmarks, sources, domains or adapters"
           value={loc.query.get("q") ?? ""}
           onChange={(e) => setQuery({ q: e.target.value || null })}
         />
-        <select
-          className="input"
-          aria-label="Filter by category"
-          value={category}
-          onChange={(e) => setQuery({ category: e.target.value === "all" ? null : e.target.value })}
-        >
-          <option value="all">All categories</option>
-          {GROUPS.map((c) => (
-            <option key={c} value={c}>
-              {GROUP_LABEL(c)}
-            </option>
-          ))}
-        </select>
+        <span className="seg" title="View">
+          <button
+            type="button"
+            className={`btn sm${view === "table" ? " on" : " ghost"}`}
+            aria-pressed={view === "table"}
+            onClick={() => setQuery({ view: null })}
+          >
+            Table
+          </button>
+          <button
+            type="button"
+            className={`btn sm${view === "matrix" ? " on" : " ghost"}`}
+            aria-pressed={view === "matrix"}
+            onClick={() => setQuery({ view: "matrix" })}
+          >
+            Coverage matrix
+          </button>
+        </span>
         <button
           type="button"
           className="btn"
           title="List every benchmark's tasks again"
-          onClick={() => setRefresh(entries.map((e) => e.benchmark.name))}
+          disabled={refreshing}
+          onClick={() => void refreshListings()}
         >
-          {busy(entries) ? <IconLoader size={13} className="spin" /> : null} Refresh listings
+          {refreshing || busy(entries) ? <IconLoader size={13} className="spin" /> : null} Refresh
+          listings
         </button>
-        {(q || category !== "all" || cal !== "all") && (
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => setQuery({ q: null, category: null, cal: null })}
-          >
-            Clear filters · {shown.length}/{entries.length} shown
-          </button>
-        )}
       </div>
-      {!shown.length ? (
-        <Empty title="No matching benchmarks">Change the search or filters.</Empty>
-      ) : (
-        <section className="card">
-          <table className="table catalog-table">
-            <colgroup>
-              <col style={{ width: 34 }} />
-              <col />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 210 }} />
-              <col style={{ width: "20%" }} />
-              <col style={{ width: 160 }} />
-              <col style={{ width: 200 }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th />
-                <th>Benchmark</th>
-                <th>Supported / listed</th>
-                <th>Calibration</th>
-                <th>Methods · latest score</th>
-                <th>Fidelity</th>
-                <th />
-              </tr>
-            </thead>
-            {groups.map((g) => (
-              <tbody key={g.c}>
-                <tr className="catalog-group-row">
-                  <td colSpan={7}>
-                    {GROUP_LABEL(g.c)}
-                    <span className="count">
-                      {g.rows.length} benchmark{g.rows.length === 1 ? "" : "s"}
-                    </span>
-                  </td>
-                </tr>
-                {g.rows.map((e) => (
-                  <Fragment key={e.benchmark.name}>
-                    <Row
-                      e={e}
-                      open={open === e.benchmark.name}
-                      toggle={() =>
-                        setQuery({
-                          open: open === e.benchmark.name ? null : e.benchmark.name,
-                          ptab: null,
-                        })
-                      }
-                      reload={catalog.reload}
-                    />
-                    {open === e.benchmark.name && (
-                      <tr className="catalog-detail-row">
-                        <td colSpan={7}>
-                          <Detail e={e} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+      <div className="hub-layout">
+        <aside className="facets" aria-label="Filters">
+          {facet(
+            "Category",
+            "category",
+            category,
+            GROUPS.map((c) => ({ key: c, label: GROUP_LABEL(c), test: (e) => groupOf(e) === c })),
+          )}
+          {facet(
+            "Domain",
+            "domain",
+            domain,
+            DOMAIN_KEYS.map((d) => ({
+              key: d,
+              label: domainLabel(d),
+              test: (e) => inDomain(e, d),
+            })),
+          )}
+          {facet(
+            "Evidence",
+            "ev",
+            ev,
+            EVIDENCE.map((x) => ({ key: x.key, label: x.label, test: x.test })),
+          )}
+        </aside>
+        <div className="col" style={{ gap: 10, minWidth: 0 }}>
+          {active.length > 0 && (
+            <div className="active-filters">
+              {active.map((f) => (
+                <button
+                  key={f.k}
+                  type="button"
+                  className="chip link"
+                  onClick={() => setQuery({ [f.k]: null })}
+                  aria-label={`Remove filter ${f.label}`}
+                >
+                  {f.label} <IconX size={11} />
+                </button>
+              ))}
+              <span className="faint">
+                {distinct(shown)} of {distinct(entries)} benchmarks
+              </span>
+              <button
+                type="button"
+                className="btn sm ghost"
+                onClick={() => setQuery({ q: null, category: null, domain: null, ev: null })}
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+          {view === "matrix" ? (
+            <CoverageMatrix
+              entries={searched.filter((e) => pass(e, "category") && pass(e, "domain"))}
+            />
+          ) : !shown.length ? (
+            <Empty title="No matching benchmarks">Change the search or filters.</Empty>
+          ) : (
+            <section className="card matrix-wrap">
+              <table className="table catalog-table">
+                <colgroup>
+                  <col style={{ width: 34 }} />
+                  <col style={{ minWidth: 220 }} />
+                  <col style={{ width: 112 }} />
+                  <col style={{ width: 172 }} />
+                  <col style={{ width: 168 }} />
+                  <col style={{ width: 124 }} />
+                  <col style={{ width: 96 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th />
+                    <th>Benchmark · domains</th>
+                    <th>Tasks</th>
+                    <th>Calibration</th>
+                    <th>Real methods</th>
+                    <th>Fidelity</th>
+                    <th />
+                  </tr>
+                </thead>
+                {groups.map((g) => (
+                  <tbody key={g.c}>
+                    <tr className="catalog-group-row">
+                      <td colSpan={7}>
+                        {GROUP_LABEL(g.c)}
+                        <span className="count">
+                          {distinct(g.rows)} benchmark{distinct(g.rows) === 1 ? "" : "s"}
+                          {g.rows.length > distinct(g.rows) && ` · ${g.rows.length} registrations`}
+                        </span>
+                      </td>
+                    </tr>
+                    {[...new Set(g.rows.map(benchmarkKey))].map((key) => {
+                      const regs = g.rows.filter((e) => benchmarkKey(e) === key);
+                      const first = regs[0] as CatalogEntry;
+                      return (
+                        <Fragment key={key}>
+                          {regs.length > 1 && (
+                            <tr className="catalog-identity-row">
+                              <td />
+                              <td colSpan={6}>
+                                <b>{first.identity.name}</b>
+                                {first.identity.version && (
+                                  <span className="faint mono"> {first.identity.version}</span>
+                                )}
+                                <span className="faint"> · {regs.length} registrations</span>
+                                <DomainChips e={first} />
+                              </td>
+                            </tr>
+                          )}
+                          {regs.map((e) => (
+                            <Fragment key={e.benchmark.name}>
+                              <Row
+                                e={e}
+                                nested={regs.length > 1}
+                                open={open === e.benchmark.name}
+                                toggle={() =>
+                                  setQuery({
+                                    open: open === e.benchmark.name ? null : e.benchmark.name,
+                                    ptab: null,
+                                  })
+                                }
+                                reload={catalog.reload}
+                              />
+                              {open === e.benchmark.name && (
+                                <tr className="catalog-detail-row">
+                                  <td colSpan={7}>
+                                    <Detail e={e} />
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
                 ))}
-              </tbody>
-            ))}
-          </table>
-        </section>
-      )}
+              </table>
+            </section>
+          )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function DomainChips({ e }: { e: CatalogEntry }) {
+  if (!e.domains.length && !e.tags.length)
+    return <span className="domain-chip none">unlabeled</span>;
+  return (
+    <span className="domain-chips">
+      {e.domains.map((d) => (
+        <span key={d} className={`domain-chip d-${d}`}>
+          {domainLabel(d)}
+        </span>
+      ))}
+      {e.tags.slice(0, 4).map((t) => (
+        <span key={t} className="domain-chip tag">
+          {t}
+        </span>
+      ))}
+      {e.tags.length > 4 && <span className="faint">+{e.tags.length - 4}</span>}
+    </span>
+  );
+}
+
+/** Category × domain: distinct benchmarks (and how many passed calibration); click to filter. */
+export function CoverageMatrix({ entries }: { entries: CatalogEntry[] }) {
+  const cats = BENCH_CATEGORIES.filter((c) => entries.some((e) => groupOf(e) === c));
+  const others = GROUPS.filter((g) => !BENCH_CATEGORIES.includes(g as never)).filter((g) =>
+    entries.some((e) => groupOf(e) === g),
+  );
+  const rows = [...cats, ...others];
+  const cols = DOMAIN_KEYS.filter((d) => entries.some((e) => inDomain(e, d)));
+  if (!rows.length)
+    return <Empty title="No matching benchmarks">Change the search or filters.</Empty>;
+  return (
+    <section className="card">
+      <div className="matrix-wrap">
+        <table className="table coverage-matrix">
+          <thead>
+            <tr>
+              <th>Category \\ domain</th>
+              {cols.map((d) => (
+                <th key={d} className="c">
+                  {domainLabel(d)}
+                </th>
+              ))}
+              <th className="c">All</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => {
+              const inRow = entries.filter((e) => groupOf(e) === c);
+              return (
+                <tr key={c}>
+                  <th scope="row">{GROUP_LABEL(c)}</th>
+                  {cols.map((d) => {
+                    const cell = inRow.filter((e) => inDomain(e, d));
+                    const n = distinct(cell);
+                    const cal = distinct(cell.filter((e) => calState(e) === "passed"));
+                    return (
+                      <td key={d} className="c">
+                        {n ? (
+                          <button
+                            type="button"
+                            className="matrix-cell"
+                            style={{ "--a": Math.min(1, 0.18 + n * 0.16) } as React.CSSProperties}
+                            title={`${n} benchmark(s), ${cal} passed sample calibration`}
+                            onClick={() => setQuery({ category: c, domain: d, view: null })}
+                          >
+                            <b>{n}</b>
+                            {cal > 0 && <small> · {cal}✓</small>}
+                          </button>
+                        ) : (
+                          <span className="faint">·</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="c num">{distinct(inRow)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="card-b faint" style={{ fontSize: 12 }}>
+        Cells count distinct benchmarks (✓: passed sample calibration). A benchmark with several
+        domains appears in each; the matrix shows coverage, not scores.
+      </div>
+    </section>
   );
 }
 
@@ -249,16 +520,20 @@ function Row({
   open,
   toggle,
   reload,
+  nested = false,
 }: {
   e: CatalogEntry;
   open: boolean;
   toggle: () => void;
   reload: () => void;
+  /** One of several registrations of the same benchmark (shown under its identity row). */
+  nested?: boolean;
 }) {
   const [calibrating, setCalibrating] = useState(false);
+  const [labeling, setLabeling] = useState(false);
   const cov = e.listing?.coverage;
   const metric = primaryMetric(resolveMetrics(e.listing?.metrics ?? []));
-  const profiles = [...(e.capabilities?.profiles ?? []), ...(e.capabilities?.domains ?? [])];
+  const profiles = e.capabilities?.profiles ?? [];
   return (
     <tr className={`click${open ? " sel" : ""}`} onClick={toggle}>
       <td className="catalog-toggle">
@@ -275,8 +550,12 @@ function Row({
           {open ? <IconChevronDown size={15} /> : <IconChevron size={15} />}
         </button>
       </td>
-      <td>
-        <b>{e.benchmark.name}</b>
+      <td className={nested ? "nested" : ""}>
+        <b>{nested ? e.benchmark.name : e.identity.name}</b>
+        {!nested && e.identity.name !== e.benchmark.name && (
+          <span className="faint mono"> {e.benchmark.name}</span>
+        )}
+        {!nested && <DomainChips e={e} />}
         {identity(e) && (
           <div className="catalog-sub clamp2" title={identity(e)}>
             {identity(e)}
@@ -323,14 +602,17 @@ function Row({
               return (
                 <Link
                   key={m.key}
-                  className="chip link"
+                  className="catalog-method link"
                   href={jobPath(m.latest.job)}
                   title={`${m.key} · ${m.jobs} job(s) · latest ${dateTime(m.latest.createdAt)}`}
                   onClick={(ev) => ev.stopPropagation()}
                 >
-                  {m.model ?? m.agent} <b>{fmtMetric(s.metrics[metric.name]?.mean, metric)}</b>
-                  <span className="faint">
-                    {s.valid}/{s.trials}
+                  <span className="ellipsis">{m.model ?? m.agent}</span>
+                  <span className="num">
+                    <b>{fmtMetric(s.metrics[metric.name]?.mean, metric)}</b>{" "}
+                    <span className="faint">
+                      {s.valid}/{s.trials} valid
+                    </span>
                   </span>
                 </Link>
               );
@@ -344,7 +626,7 @@ function Row({
           {FIDELITY[e.fidelity].label}
         </span>
       </td>
-      <td className="r nowrap" onClick={(ev) => ev.stopPropagation()}>
+      <td className="r row-actions" onClick={(ev) => ev.stopPropagation()}>
         <button
           type="button"
           className="btn sm"
@@ -366,6 +648,24 @@ function Row({
         >
           Evaluate
         </Link>
+        <button
+          type="button"
+          className="btn sm ghost"
+          title="Set what benchmark this is and its domains"
+          onClick={() => setLabeling(true)}
+        >
+          Labels
+        </button>
+        {labeling && (
+          <LabelsDialog
+            e={e}
+            onClose={() => setLabeling(false)}
+            onSaved={() => {
+              setLabeling(false);
+              reload();
+            }}
+          />
+        )}
         {calibrating && (
           <CalibrateDialog
             e={e}
@@ -852,6 +1152,143 @@ function CalibrateDialog({
             onClick={() => void start()}
           >
             {busy ? "Starting…" : "Start calibration"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Identity and domains of a registration; they only change how the catalog groups and counts it. */
+function LabelsDialog({
+  e,
+  onClose,
+  onSaved,
+}: {
+  e: CatalogEntry;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const own = e.benchmark.labels;
+  const [id, setId] = useState(own?.identity?.id ?? e.identity.id);
+  const [name, setName] = useState(own?.identity?.name ?? e.identity.name);
+  const [version, setVersion] = useState(own?.identity?.version ?? e.identity.version ?? "");
+  const [domains, setDomains] = useState<string[]>(own?.domains ?? [...e.domains, ...e.tags]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const toggle = (d: string) =>
+    setDomains((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d]));
+  const save = async (clear = false) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.benchLabel(
+        e.benchmark.name,
+        clear
+          ? {}
+          : {
+              identity: {
+                id: id.trim(),
+                name: name.trim() || id.trim(),
+                ...(version.trim() ? { version: version.trim() } : {}),
+              },
+              domains,
+            },
+      );
+      toast(clear ? "Labels removed" : "Labels saved");
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="overlay" onMouseDown={onClose}>
+      <div
+        className="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="labels-title"
+        onMouseDown={(ev) => ev.stopPropagation()}
+        onKeyDown={(ev) => {
+          if (ev.key === "Escape") onClose();
+        }}
+      >
+        <div className="dialog-h" id="labels-title">
+          Labels of {e.benchmark.name}
+        </div>
+        <div className="dialog-b" style={{ textAlign: "left" }}>
+          <p className="muted">
+            Registrations with the same id count as one benchmark. Labels do not change how it runs.
+            Now:{" "}
+            {e.identitySource === "derived"
+              ? "derived from the registration name"
+              : `from the ${e.identitySource}`}
+            .
+          </p>
+          <div className="form-grid">
+            <label htmlFor="lab-id">Id</label>
+            <input
+              id="lab-id"
+              className="input mono"
+              value={id}
+              onChange={(x) => setId(x.target.value)}
+            />
+            <label htmlFor="lab-name">Name</label>
+            <input
+              id="lab-name"
+              className="input"
+              value={name}
+              onChange={(x) => setName(x.target.value)}
+            />
+            <label htmlFor="lab-version">Version</label>
+            <input
+              id="lab-version"
+              className="input"
+              value={version}
+              placeholder="optional"
+              onChange={(x) => setVersion(x.target.value)}
+            />
+          </div>
+          <div className="conv-field-l">Domains</div>
+          <div className="domain-picker">
+            {BENCH_DOMAINS.map((d) => (
+              <label key={d} className="row" style={{ gap: 6 }}>
+                <input type="checkbox" checked={domains.includes(d)} onChange={() => toggle(d)} />
+                {DOMAIN_LABELS[d]}
+              </label>
+            ))}
+          </div>
+          {domains.some((d) => !(BENCH_DOMAINS as readonly string[]).includes(d)) && (
+            <p className="faint">
+              Kept as tags:{" "}
+              {domains.filter((d) => !(BENCH_DOMAINS as readonly string[]).includes(d)).join(", ")}
+            </p>
+          )}
+          {error && <div className="errbox">{error}</div>}
+        </div>
+        <div className="dialog-f">
+          {own && (
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={busy}
+              onClick={() => void save(true)}
+            >
+              Remove labels
+            </button>
+          )}
+          <span className="spacer" />
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={busy || !id.trim()}
+            onClick={() => void save()}
+          >
+            Save
           </button>
         </div>
       </div>

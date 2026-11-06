@@ -247,3 +247,49 @@ export function registrationChanged(source: BenchJob, registered: Benchmark): bo
       stableValue(registered[key as keyof Benchmark]),
   );
 }
+
+/** Attach explicit lineage to one method under test. */
+export function withLineage(
+  spec: BenchJobSpecInput,
+  l: { parent: string; note: string; informedBy: string; method?: string },
+): BenchJobSpecInput {
+  const parent = l.parent.trim();
+  const note = l.note.trim();
+  const informedBy = l.informedBy
+    .split(/[\s,]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (parent && !/^[0-9a-f]{12}$/.test(parent))
+    throw new Error("Parent revision must be 12 lowercase hex digits.");
+  if (!parent && !note && !informedBy.length) return spec;
+  const methods = spec.methods.filter((m) => m.agent !== "oracle" && m.agent !== "empty");
+  if (l.method && !methods.some((m) => m.name === l.method))
+    throw new Error("Select the method this lineage applies to.");
+  if (methods.length > 1 && !l.method) throw new Error("Select one method for this lineage.");
+  const lineage = Object.fromEntries(
+    methods
+      .filter((m) => !l.method || m.name === l.method)
+      .map((m) => [
+        m.name,
+        { ...(parent ? { parent } : {}), ...(note ? { note } : {}), informedBy },
+      ]),
+  );
+  return Object.keys(lineage).length ? { ...spec, lineage } : spec;
+}
+
+/** Deriving a trial copies only its method; an ordinary copy retains the whole evaluation. */
+export function copiedMethods(source: BenchJob, method: string, parent: string): Method[] {
+  if (!method && !parent) return source.spec.methods;
+  const candidates = source.spec.methods.filter((m) =>
+    method ? m.name === method : source.revisions[m.name]?.revision === parent,
+  );
+  if (
+    candidates.length !== 1 ||
+    candidates.some((m) => m.agent === "oracle" || m.agent === "empty")
+  )
+    throw new Error("Select a single evaluated method to derive.");
+  const recorded = source.revisions[candidates[0]?.name ?? ""];
+  if (parent && recorded && recorded.revision !== parent)
+    throw new Error("The parent revision does not match this method.");
+  return candidates;
+}

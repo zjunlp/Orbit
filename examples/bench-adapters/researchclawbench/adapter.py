@@ -56,7 +56,7 @@ def task_dir(req, task):
 
 
 # Integration category (docs/integration-categories.md).
-CAPABILITIES = {"category": "agent-workspace", "profiles": ["research-report", "judge"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none", "repeat": {"tolerance": 5}}, "conditions": {"Scoring": "rubric items judged by an LLM against the reference"}}
+CAPABILITIES = {"identity": {"id": "researchclawbench", "name": "ResearchClawBench"}, "domains": ["science"], "category": "agent-workspace", "profiles": ["research-report", "judge"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none", "repeat": {"tolerance": 5}}, "conditions": {"Scoring": "rubric items judged by an LLM against the reference"}}
 
 
 def tasks(req):

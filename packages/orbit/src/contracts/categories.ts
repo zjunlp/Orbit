@@ -61,3 +61,44 @@ export function benchCategory(c: { category?: BenchCategory; kind?: string } | u
   if (c?.category) return c.category;
   return c?.kind && ["browser", "desktop", "mobile"].includes(c.kind) ? "gui" : null;
 }
+
+/**
+ * Subject domains (design §9.16): what a benchmark's tasks are about, independent of how the subject
+ * interacts with them (the category). A benchmark has one or more; values outside this vocabulary
+ * (an adapter's own sub-domains, such as tau2's `airline`) are kept as tags and not counted.
+ */
+export const BENCH_DOMAINS = [
+  "science",
+  "software",
+  "machine-learning",
+  "data-analysis",
+  "gui-web",
+  "embodied",
+  "games",
+  "conversation",
+  "knowledge",
+] as const;
+export type BenchDomain = (typeof BENCH_DOMAINS)[number];
+
+export const DOMAIN_LABELS: Record<BenchDomain, string> = {
+  science: "Science",
+  software: "Software",
+  "machine-learning": "Machine learning",
+  "data-analysis": "Data analysis",
+  "gui-web": "GUI & web",
+  embodied: "Embodied",
+  games: "Games",
+  conversation: "Conversation",
+  knowledge: "Knowledge & reasoning",
+};
+
+/** Declared domains split into the vocabulary's and the other tags, each in declared order. */
+export function splitDomains(declared: readonly string[]): {
+  domains: BenchDomain[];
+  tags: string[];
+} {
+  const known = new Set<string>(BENCH_DOMAINS);
+  const domains = [...new Set(declared.filter((d) => known.has(d)))] as BenchDomain[];
+  const tags = [...new Set(declared.filter((d) => !known.has(d)))];
+  return { domains, tags };
+}

@@ -88,6 +88,9 @@ class AdapterTests(unittest.TestCase):
     def test_catalog_declares_supported_methods_and_fixed_conditions(self):
         self.req["benchmark"]["config"].update(actionSet="bid", maxSteps="7")
         caps = adapter.tasks(self.req)["capabilities"]
+        self.assertEqual(caps["identity"]["version"], evidence.MINIWOB_COMMIT)
+        self.assertEqual(caps["identity"]["variant"], "browsergym")
+        self.assertEqual(caps["domains"], ["gui-web"])
         self.assertEqual(caps["methods"], ["external", "empty", "cli"])
         self.assertEqual(caps["rescore"], "evidence")
         self.assertEqual(caps["conditions"]["Step limit"], "7")

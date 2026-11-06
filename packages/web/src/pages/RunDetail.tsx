@@ -80,7 +80,7 @@ export function RunDetail({ id }: { id: string }) {
   if (!run)
     return (
       <>
-        <TopBar crumbs={[{ label: "Runs", href: "/" }, { label: id }]} />
+        <TopBar crumbs={[{ label: "Runs", href: "/runs" }, { label: id }]} />
         {failure ? (
           <Empty title={failure.notFound ? "Run not found" : "Could not load run"}>
             {failure.notFound ? id : failure.message}
@@ -157,7 +157,7 @@ function RunView({ run }: { run: Run }) {
                 { label: bench.phase },
               ]
             : [
-                { label: "Runs", href: "/" },
+                { label: "Runs", href: "/runs" },
                 ...(run.spec.group
                   ? [{ label: run.spec.group, href: `/?q=${encodeURIComponent(run.spec.group)}` }]
                   : []),
@@ -217,7 +217,7 @@ function RunView({ run }: { run: Run }) {
           onConfirm={async () => {
             const r = await api.deleteRuns([run.id]);
             toast(r.leftovers.length ? "Run deleted; some files were left on disk" : "Run deleted");
-            navigate("/");
+            navigate("/runs");
           }}
         >
           <p>

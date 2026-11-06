@@ -16,6 +16,7 @@ import { jobLabel } from "./common.tsx";
 import {
   buildMethods,
   capabilityAllows,
+  copiedMethods,
   evaluationSpec,
   importMethods,
   isCliAgent,
@@ -25,6 +26,7 @@ import {
   methodTypes,
   registrationChanged,
   taskSubset,
+  withLineage,
 } from "./new-job.ts";
 import "./launch.css";
 import { categoryLabel } from "../../lib/category.ts";
@@ -49,6 +51,12 @@ export function NewBenchJob() {
   const agents = useAsync(() => api.agents(), []);
   const preset = loc.query.get("benchmark") ?? "";
   const subset = taskSubset(loc.query);
+  // "Derive next method" (design §9.16): the new methods descend from this revision and trials.
+  const derive = {
+    parent: loc.query.get("parent") ?? "",
+    method: loc.query.get("method") ?? "",
+    informedBy: (loc.query.get("informedBy") ?? "").split(",").filter(Boolean),
+  };
   const loadedSource = source.data?.job.id === from ? source.data.job : undefined;
 
   return (
@@ -80,7 +88,8 @@ export function NewBenchJob() {
             </Empty>
           ) : (
             <NewJobForm
-              key={JSON.stringify([from, preset, subset])}
+              key={JSON.stringify([from, preset, subset, derive])}
+              derive={derive}
               benchmarks={benchmarks.data}
               source={loadedSource}
               preset={preset}
@@ -106,7 +115,9 @@ function NewJobForm({
   profiles,
   profilesError,
   agentNames,
+  derive,
 }: {
+  derive: { parent: string; method: string; informedBy: string[] };
   benchmarks: Benchmark[];
   source?: BenchJob;
   preset: string;
@@ -121,9 +132,14 @@ function NewJobForm({
   const [benchmark, setBenchmark] = useState(source?.spec.benchmark ?? preset);
   const [chosen, setChosen] = useState<string[] | null>(subset ?? source?.spec.tasks ?? null);
   const [search, setSearch] = useState("");
-  const [drafts, setDrafts] = useState<MethodDraft[]>(
-    source?.spec.methods.map(methodDraft) ?? [methodDraft({ name: "empty", agent: "empty" })],
+  const [drafts, setDrafts] = useState<MethodDraft[]>(() =>
+    source
+      ? copiedMethods(source, derive.method, derive.parent).map(methodDraft)
+      : [methodDraft({ name: "empty", agent: "empty" })],
   );
+  const [lineageTarget, setLineageTarget] = useState(drafts[0]?.id ?? "");
+  const lineageMethods = drafts.filter((m) => m.agent !== "oracle" && m.agent !== "empty");
+  const lineageMethod = lineageMethods.find((m) => m.id === lineageTarget) ?? lineageMethods[0];
   const [name, setName] = useState(source ? `${jobLabel(source)} copy`.slice(0, 200) : "");
   const [seeds, setSeeds] = useState(String(source?.spec.seeds ?? 1));
   const [timeout, setTimeout] = useState(
@@ -132,6 +148,9 @@ function NewJobForm({
   const [folder, setFolder] = useState(source?.folder ?? "");
   const [options, setOptions] = useState(JSON.stringify(source?.spec.options ?? {}, null, 2));
   const [importText, setImportText] = useState("");
+  const [parent, setParent] = useState(derive.parent);
+  const [note, setNote] = useState("");
+  const [informedBy, setInformedBy] = useState(derive.informedBy.join(", "));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const info = useAsync(
@@ -177,11 +196,9 @@ function NewJobForm({
     try {
       if (!registered || !current || info.loading || info.error)
         throw new Error("Reload the environment before starting.");
-      const spec = evaluationSpec(
-        fields,
-        buildMethods(drafts, capabilities, profiles),
-        tasks,
-        source,
+      const spec = withLineage(
+        evaluationSpec(fields, buildMethods(drafts, capabilities, profiles), tasks, source),
+        { parent, note, informedBy, method: lineageMethod?.name.trim() },
       );
       setError(null);
       setSubmitting(true);
@@ -447,6 +464,60 @@ function NewJobForm({
             <section className="card">
               <div className="card-h">Review & start</div>
               <div className="card-b col" style={{ gap: 16 }}>
+                <fieldset className="bench-lineage">
+                  <legend>Method lineage (optional)</legend>
+                  <p className="faint">
+                    Record the parent and evidence for one method. Change the model, settings or
+                    bundle to create a new revision; leave the parent empty to rerun the same
+                    method.
+                  </p>
+                  <label className="bench-field">
+                    Method
+                    <select
+                      className="input"
+                      value={lineageMethod?.id ?? ""}
+                      onChange={(e) => setLineageTarget(e.target.value)}
+                      disabled={!lineageMethods.length}
+                    >
+                      {!lineageMethods.length && (
+                        <option value="">Add an Agent or policy method first</option>
+                      )}
+                      {lineageMethods.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name || "Unnamed method"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="bench-field">
+                    Parent revision
+                    <input
+                      className="input mono"
+                      value={parent}
+                      placeholder="12 hex digits, from the Methods page"
+                      onChange={(e) => setParent(e.target.value.trim())}
+                    />
+                  </label>
+                  <label className="bench-field">
+                    What changed
+                    <textarea
+                      className="input"
+                      rows={2}
+                      value={note}
+                      placeholder="e.g. retry tool calls that return an error"
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                  </label>
+                  <label className="bench-field">
+                    Informed by trials
+                    <input
+                      className="input mono"
+                      value={informedBy}
+                      placeholder="job.00003, …"
+                      onChange={(e) => setInformedBy(e.target.value)}
+                    />
+                  </label>
+                </fieldset>
                 <label className="bench-field">
                   Evaluation name
                   <input
