@@ -10,7 +10,7 @@ from typing import Optional
 
 import numpy as np
 
-from .binding import digest, validate_observation
+from .binding import check_sample, digest, validate_observation
 from .evidence import seal, write_json
 
 
@@ -30,12 +30,13 @@ class StepResult:
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity):
+    check_sample(sample, sample["sampleId"])
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
     write_json(directory / "resolved-binding.json", binding)
     sample_ref = sample["sampleId"]
     contract = {
-        "version": 1, "sampleRef": sample_ref, "episodeId": episode_id,
+        "version": 2 if "execution" in identity else 1, "sampleRef": sample_ref, "episodeId": episode_id,
         "sample": sample, "sampleDigest": digest(sample), "bindingDigest": binding["digest"],
         "horizon": benchmark.horizon, "replanSteps": policy.replan_steps, "identity": identity,
     }

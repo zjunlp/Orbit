@@ -11,6 +11,11 @@ def digest(value):
     return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def check_sample(sample, sample_ref):
+    if sample.get("sampleId") != sample_ref or digest({k: v for k, v in sample.items() if k != "sampleId"}) != sample_ref:
+        raise ValueError("sampleId differs from the sample content or frozen sampleRef")
+
+
 def resolve_binding(benchmark, policy, observation_map):
     if set(observation_map) != set(policy["observations"]):
         raise ValueError("explicit mappings must cover exactly the policy observation fields")

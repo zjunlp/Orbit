@@ -80,6 +80,145 @@ function policy() {
   });
 }
 
+function comparisonFixture() {
+  const job = BenchJob.parse({
+    id: "synthetic-job",
+    spec: {
+      benchmark: "synthetic",
+      tasks: ["synthetic:task"],
+      samplePlan: plan(),
+      methods: [
+        { name: "p", agent: "policy", policyRef: "synthetic-policy", policySnapshot: policy() },
+      ],
+    },
+    benchmarkSnapshot: {
+      name: "synthetic",
+      adapter: "harbor",
+      path: "/synthetic-benchmark",
+      createdAt: "2026-11-06",
+      updatedAt: "2026-11-06",
+    },
+    resources: { "synthetic:task": { cpus: 2, memGB: 4, gpus: 0, timeoutMin: 10 } },
+    state: "done",
+    createdAt: "2026-11-06",
+    endedAt: "2026-11-06",
+  });
+  const trials = plan().items.map((item, i) =>
+    Trial.parse({
+      id: `synthetic-trial-${i}`,
+      jobId: job.id,
+      task: item.taskId,
+      method: "p",
+      sampleRef: item.sampleId,
+      state: "done",
+      solveRunId: null,
+      verifyRunId: null,
+      createdAt: job.createdAt,
+      endedAt: job.endedAt,
+      outcome: {
+        execution: "succeeded",
+        evaluation: "valid",
+        score: i,
+        maxScore: 1,
+        cleanup: "done",
+        issues: [],
+      },
+    }),
+  );
+  return { job, trials };
+}
+
+it.each([
+  [
+    "environment",
+    (job: BenchJob) => {
+      if (job.benchmarkSnapshot) job.benchmarkSnapshot.env.RENDERER = "other";
+    },
+  ],
+  [
+    "options",
+    (job: BenchJob) => {
+      job.spec.options.protocol = "other";
+    },
+  ],
+  [
+    "job timeout",
+    (job: BenchJob) => {
+      job.spec.timeoutMin = 20;
+    },
+  ],
+  [
+    "task timeout",
+    (job: BenchJob) => {
+      job.resources = {
+        "synthetic:task": { ...job.resources?.["synthetic:task"], timeoutMin: 20 },
+      };
+    },
+  ],
+  ...(["cpus", "memGB", "gpus", "gpuMemGB"] as const).map(
+    (field) =>
+      [
+        field,
+        (job: BenchJob) => {
+          job.resources = {
+            "synthetic:task": { ...job.resources?.["synthetic:task"], [field]: 8 },
+          };
+        },
+      ] as const,
+  ),
+  [
+    "source",
+    (job: BenchJob) => {
+      job.source = { commit: "other", describe: null, dirty: false };
+    },
+  ],
+  [
+    "declared conditions",
+    (job: BenchJob) => {
+      job.capabilities = AdapterTasksResponse.parse({
+        tasks: [],
+        capabilities: {
+          methods: ["policy"],
+          scoreKind: "binary",
+          rescore: "evidence",
+          conditions: { Protocol: "other" },
+        },
+      }).capabilities;
+    },
+  ],
+] as const)(
+  "fingerprints %s and excludes mismatched conditions from paired statistics",
+  (_label, change) => {
+    const original = comparisonFixture();
+    const other = structuredClone(original);
+    other.job.id = "other-job";
+    change(other.job);
+    expect(planDigest(other.job)).not.toBe(planDigest(original.job));
+    const comparison = compareJobs([original, other]);
+    expect(comparison.stats.score?.pairedTasks).toBe(0);
+    expect(
+      Object.values(comparison.stats.score?.columns ?? {}).every((column) => column.diff === null),
+    ).toBe(true);
+  },
+);
+
+it("pairs common samples with equivalent effective budgets despite registration metadata", () => {
+  const original = comparisonFixture();
+  const other = structuredClone(original);
+  other.job.id = "other-job";
+  other.job.spec.timeoutMin = 10;
+  other.job.resources = { "synthetic:task": { cpus: 2, memGB: 4, gpus: 0, timeoutMin: 99 } };
+  if (!other.job.benchmarkSnapshot) throw new Error("missing synthetic snapshot");
+  other.job.benchmarkSnapshot.updatedAt = "2026-11-07";
+  other.job.benchmarkSnapshot.resources = "/synthetic-other-resources.json";
+  expect(planDigest(other.job)).toBe(planDigest(original.job));
+  other.job.spec.tasks.push("synthetic:unpaired-task");
+  other.job.resources["synthetic:unpaired-task"] = { cpus: 32 };
+  const comparison = compareJobs([original, other]);
+  expect(comparison.stats.score?.pairedTasks).toBe(1);
+  expect(Object.values(comparison.stats.score?.columns ?? {}).at(1)?.diff?.mean).toBe(0);
+});
+
 describe("planned sample and explicit binding contracts", () => {
   it("retains required legacy seeds and rejects mixed identities and submission parameters", () => {
     expect(SampleIdentity.parse({ seed: 1 })).toEqual({ seed: 1 });
@@ -242,6 +381,7 @@ it("registers policies independently and freezes their definitions and bindings 
     role: "policy",
     gpus: 0,
   });
+  expect(submit.mock.calls[0]?.[0].tags?.execution_trial).toBe(store.trials(job.id)[0]?.id);
   bench.policies.remove("synthetic-policy");
   expect(store.getJob(job.id)?.spec.methods[0]?.policySnapshot?.checkpointDigest).toBe(
     policy().checkpointDigest,
@@ -329,4 +469,46 @@ it("registers policies independently and freezes their definitions and bindings 
       trial: { ...solve.mock.calls[0]?.[0], seed: 1 },
     }).success,
   ).toBe(false);
+
+  // Simulate legacy evidence with no execution_trial, then adopt it twice and rescore.
+  const sourceTrial = store.trials(job.id)[0];
+  if (!sourceTrial?.solveRunId) throw new Error("missing source solve");
+  const sourceRun = store.getRun(sourceTrial.solveRunId);
+  if (!sourceRun) throw new Error("missing source Run");
+  delete sourceRun.spec.tags.execution_trial;
+  store.putRun(sourceRun);
+  let sourceJob = store.getJob(job.id) ?? job;
+  for (const id of ["synthetic-merge-one", "synthetic-merge-two"]) {
+    const target = { ...structuredClone(sourceJob), id };
+    store.putJob(target);
+    for (const [i, trial] of store.trials(sourceJob.id).entries()) {
+      store.putTrial(
+        Trial.parse({
+          ...trial,
+          id: `${id}.${i}`,
+          jobId: id,
+          outcome: null,
+          solveRunId: null,
+          verifyRunId: null,
+          history: [],
+          state: "done",
+        }),
+      );
+    }
+    const preview = await bench.consolidate(id, { sources: [sourceJob.id] });
+    await bench.consolidate(id, { sources: [sourceJob.id], dryRun: false, expect: preview.digest });
+    sourceJob = store.getJob(id) ?? target;
+    expect(store.getRun(sourceRun.id)?.spec.tags.execution_trial).toBe(sourceTrial.id);
+  }
+  const adopted = store.trials(sourceJob.id).find((trial) => trial.solveRunId === sourceRun.id);
+  if (!adopted) throw new Error("missing adopted trial");
+  bench.rescore(sourceJob.id, { trials: [adopted.id] });
+  await expect.poll(() => verify.mock.calls.length).toBe(4);
+  expect(verify.mock.calls.at(-1)?.[1]?.run.spec.tags).toMatchObject({
+    trial: adopted.id,
+    execution_trial: sourceTrial.id,
+  });
+  finish(store.getTrial(adopted.id)?.verifyRunId ?? null);
+  await expect.poll(() => store.getTrial(adopted.id)?.outcome?.evaluation).toBe("valid");
+  expect(solve).toHaveBeenCalledTimes(2);
 });

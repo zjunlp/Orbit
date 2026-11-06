@@ -28,23 +28,60 @@ export const isValid = (t: Trial) => t.outcome?.evaluation === "valid";
 /** Version of the report computation; recorded in every report. */
 export const REPORT_AGGREGATOR = "orbit-report/1";
 
+type PlanConditions = Pick<BenchJob, "spec"> &
+  Partial<
+    Pick<BenchJob, "benchmarkSnapshot" | "capabilities" | "source" | "resources" | "official">
+  >;
+
+/** Frozen execution conditions, excluding registration metadata and resource-file locations. */
+function evaluationConditions(job: PlanConditions, tasks: string[]) {
+  const snapshot = job.benchmarkSnapshot;
+  return {
+    benchmark: snapshot
+      ? {
+          adapter: snapshot.adapter,
+          path: snapshot.path,
+          config: snapshot.config,
+          env: snapshot.env,
+          passEnv: [...snapshot.passEnv].sort(),
+        }
+      : null,
+    source: job.source ?? null,
+    contract: job.capabilities?.embodied ?? null,
+    conditions: job.capabilities?.conditions ?? {},
+    scoreKind: job.capabilities?.scoreKind ?? null,
+    official: job.official ?? null,
+    options: job.spec.options,
+    budgets: [...tasks].sort().map((task) => {
+      const override = job.resources?.[task];
+      return {
+        task,
+        cpus: override?.cpus ?? null,
+        memGB: override?.memGB ?? null,
+        gpus: override?.gpus ?? null,
+        gpuMemGB: override?.gpuMemGB ?? null,
+        timeoutMin: job.spec.timeoutMin ?? override?.timeoutMin ?? null,
+      };
+    }),
+  };
+}
+
 /**
  * Digest of a job's planned samples: benchmark, tasks, seeds and methods (name + agent). Appending
  * tasks or seeds yields a new digest, i.e. a new plan version.
  */
 export function planDigest(
-  job: Pick<BenchJob, "spec"> & Partial<Pick<BenchJob, "resolvedBindings" | "benchmarkSnapshot">>,
+  job: PlanConditions & Partial<Pick<BenchJob, "resolvedBindings">>,
 ): string {
   const s = job.spec;
   if (s.samplePlan) {
     const plan = {
-      version: 2,
+      version: 3,
       benchmark: s.benchmark,
-      benchmarkSnapshot: job.benchmarkSnapshot,
+      conditions: evaluationConditions(job, s.tasks),
       samplePlan: s.samplePlan.digest,
       methods: [...s.methods].sort((a, b) => a.name.localeCompare(b.name)),
       resolvedBindings: job.resolvedBindings,
-      options: Object.entries(s.options).sort(),
     };
     return contentDigest(plan);
   }
@@ -251,15 +288,15 @@ export function compareJobs(jobs: { job: BenchJob; trials: Trial[] }[]): BenchCo
     ),
   }));
   const planned = jobs.some(({ job }) => Boolean(job.spec.samplePlan));
-  const conditions = (job: BenchJob) => ({
-    contract: job.capabilities?.embodied,
-    config: job.benchmarkSnapshot?.config,
-  });
-  const sameConditions =
+  const sameConditions = (task: string) =>
     !planned ||
     jobs.every(
       ({ job }) =>
-        job.spec.samplePlan && isDeepStrictEqual(conditions(job), conditions(jobs[0]?.job ?? job)),
+        job.spec.samplePlan &&
+        isDeepStrictEqual(
+          evaluationConditions(job, [task]),
+          evaluationConditions(jobs[0]?.job ?? job, [task]),
+        ),
     );
   const matchedSamples = (task: string) => {
     const samples = columns.map((column) =>
@@ -269,7 +306,8 @@ export function compareJobs(jobs: { job: BenchJob; trials: Trial[] }[]): BenchCo
         .sort(),
     );
     return (
-      sameConditions && samples.every((own) => own.length > 0 && isDeepStrictEqual(own, samples[0]))
+      sameConditions(task) &&
+      samples.every((own) => own.length > 0 && isDeepStrictEqual(own, samples[0]))
     );
   };
   const stats: BenchCompare["stats"] = {};

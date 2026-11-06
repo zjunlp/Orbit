@@ -14,6 +14,7 @@ SDK = HERE.parents[1] / "sdk"
 sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
+from orbit_embodied.binding import check_sample
 
 
 def file_digest(path):
@@ -99,6 +100,7 @@ def solve(req):
     trial = req["trial"]
     if "seed" in trial or not trial.get("sample") or trial["sampleRef"] != trial["sample"]["sampleId"]:
         raise ValueError("native embodied execution requires a planned sample, not legacy seeds")
+    check_sample(trial["sample"], trial["sampleRef"])
     definition = trial["method"].get("policySnapshot")
     if not definition or definition["profile"] != reference["policyProfile"]:
         raise ValueError("missing or incompatible frozen policy definition")
@@ -119,17 +121,45 @@ def solve(req):
                              "PYOPENGL_PLATFORM": config.get("renderer", "osmesa")},
                      "resources": {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": 8},
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
+                     "tags": {"embodied_evidence": "2"},
                      "mounts": [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]}}
+
+
+def verification_expectation(req):
+    trial, run = req["trial"], req["solve"]["run"]
+    params, tags = run["spec"]["params"], run["spec"]["tags"]
+    for key, value in (("sampleRef", trial["sampleRef"]), ("task", trial["task"]),
+                       ("method", trial["method"]["name"]), ("phase", "solve")):
+        if params.get(key) != value:
+            raise ValueError("solve Run differs from the frozen trial: " + key)
+    check_sample(trial["sample"], trial["sampleRef"])
+    config = req["benchmark"]["config"]
+    reference = json.loads(config["reference"])
+    if digest(reference) != config["profileDigest"]:
+        raise ValueError("frozen reference profileDigest mismatch")
+    execution_trial = tags.get("execution_trial") or tags.get("source_trial") or tags.get("trial")
+    if not execution_trial or not trial.get("binding") or not trial["method"].get("policySnapshot"):
+        raise ValueError("missing frozen verification context")
+    version = int(tags.get("embodied_evidence", "1"))
+    if version not in (1, 2):
+        raise ValueError("unsupported embodied evidence version")
+    return {"version": 1, "trialId": trial["id"], "sample": trial["sample"],
+            "binding": trial["binding"], "policy": trial["method"]["policySnapshot"],
+            "reference": reference, "solveImplementationDigest": config["implementationDigest"],
+            "solveRunId": run["id"], "executionTrialId": execution_trial,
+            "evidenceVersion": version, "verifierDigest": implementation_digest()}
 
 
 def verify(req):
     config = req["benchmark"]["config"]
     if not pinned(config["image"]):
         raise ValueError("verification image must be pinned")
+    expected = verification_expectation(req)
     destination = stage(req)
+    (destination / "verify-request.json").write_text(json.dumps(expected, allow_nan=False))
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "verify", "/solve/episode", "/orbit/output/verified.json",
-                                 req["trial"]["sampleRef"], req["trial"]["id"], implementation_digest()],
+                                 "/orbit-embodied/verify-request.json"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python"},
                      "resources": {"gpus": 0, "cpus": 1, "memGB": 1}, "timeoutMin": 2,
                      "root": True, "network": False,
@@ -146,6 +176,12 @@ def score(req):
             raise ValueError("verifier and native evidence disagree")
         if verification["sampleRef"] != result["sampleRef"] or verification["episodeId"] != result["episodeId"]:
             raise ValueError("verification identity differs from the episode")
+        expected = verification_expectation(req)
+        if (verification.get("solveRunId") != expected["solveRunId"]
+                or verification.get("trialId") != expected["trialId"]
+                or verification.get("implementationDigest") != expected["verifierDigest"]
+                or verification.get("expectationDigest") != digest(expected)):
+            raise ValueError("verification belongs to another frozen trial or solve Run")
         if not result["valid"]:
             return invalid(result.get("failure", "scorer_error"), *result["issues"])
         files = [

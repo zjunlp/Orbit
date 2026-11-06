@@ -257,6 +257,15 @@ export function planConsolidation(input: {
       r.spec.group = benchGroup(id);
       r.spec.tags = {
         ...r.spec.tags,
+        ...(t.sampleRef
+          ? {
+              execution_trial:
+                r.spec.tags.execution_trial ??
+                r.spec.tags.source_trial ??
+                r.spec.tags.trial ??
+                a.sourceTrial,
+            }
+          : {}),
         job: id,
         trial: t.id,
         source_job: a.sourceJob,

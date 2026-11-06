@@ -867,6 +867,7 @@ export class BenchService {
           bench: job.spec.benchmark,
           job: job.id,
           trial: t.id,
+          ...(t.sampleRef ? { execution_trial: t.id } : {}),
           phase,
         },
         params: {

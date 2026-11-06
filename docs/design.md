@@ -839,11 +839,16 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   seed 和重复编号的规范内容生成。旧 Trial / 适配请求 / ReportEntry 仍要求 seed；新分支要求 sampleRef 且禁止 seed，
   联合契约拒绝混用。Trial.id 沿用原格式，episodeId 标识实际尝试。旧任务和报告不重写，新报告使用 `orbit-report/2`。
 - 报告、合并、校准与界面使用真实样本身份。新旧作业禁止直接归并；计划和方法条件不符时拒绝合并。C6 配对统计还要求相同
-  有效样本及评测条件，不仅匹配任务名；旧矩阵、seed n→初态 n−1 规则和旧报告摘要保持原行为。
+  有效样本及评测条件，不仅匹配任务名。计划摘要和配对判断共用冻结条件：适配器配置、环境变量名及非秘密值、源码、协议、
+  options 和实际生效的逐任务资源/timeout；登记时间和资源文件位置不参与。配对按共同任务检查条件，模型本身仍是比较变量。
+  旧矩阵、seed n→初态 n−1 规则和旧报告摘要保持原行为。
 - 首个目标固定 OpenPI LIBERO 与 pi05_libero。SDK 分离 Benchmark Adapter、PolicyClient、Connector、driver 和证据写入，
   显式保留旋转、resize、状态拼接、settle、horizon 与 replan_steps。原生判定与 Orbit 有效性分开，媒体失败不改变可信分数。
   每 Trial 独立 solve / verify；重评只读该次 solve 证据，无模型或仿真。SDK 核心只依赖标准库与 NumPy，额外传输/媒体依赖单列。
   solve 和 verify 各保存自身的适配器、driver、SDK 源码包及摘要；重评记录新评分器身份，保留求解证据和原实现。
+  验证器重算 sampleId，并逐项核对作业冻结的 sample、binding、policy、reference 和求解实现摘要。新证据记录原始 Run/trial，
+  由 Run 标签声明版本以拒绝证据降级；归并保留 execution_trial，多次归并不改变其来源。旧证据按已保存的 trial/source_trial
+  兼容验证，缺少可核对的来源即失败；不会改写旧证据来补造身份。验证结果同时绑定当前逻辑 trial、原始 solve Run 和验证请求摘要。
 - OpenPI 原生服务没有远端 RNG reset。D1 每 Trial 使用新服务并记录 JAX key 0 的 service 作用域，不宣称等价于参考 runner
   连续运行到任意 episode 的随机状态。源码审核、合成端点检查、真实正例与原生对照分别记录，不能互相代替。
   已完成真实 π₀.₅ checkpoint 的 CPU 与 GPU 正例开发验证、原生环境负例、单样本重评与清理。官方 runner 的确定性处理、

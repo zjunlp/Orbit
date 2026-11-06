@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .binding import digest
+from .binding import check_sample, digest
 
 
 def write_json(path, value):
@@ -46,7 +46,7 @@ def seal(directory, result):
     })
 
 
-def verify_episode(directory, sample_ref, episode_id):
+def verify_episode(directory, sample_ref, episode_id, expected=None):
     directory = Path(directory).resolve()
     manifest = json.loads((directory / "evidence-manifest.json").read_text())
     if manifest.get("version") != 1 or manifest.get("sampleRef") != sample_ref or manifest.get("episodeId") != episode_id:
@@ -54,15 +54,30 @@ def verify_episode(directory, sample_ref, episode_id):
     required = {"contract.json", "resolved-binding.json", "actions.jsonl", "native-result.json"}
     if not required.issubset(manifest["files"]):
         raise ValueError("required evidence is missing")
-    for name, expected in manifest["files"].items():
+    for name, expected_hash in manifest["files"].items():
         path = directory / name
         if Path(name).is_absolute() or ".." in Path(name).parts or path.is_symlink() or directory not in path.resolve().parents:
             raise ValueError("evidence path escapes its directory")
-        if file_digest(path) != expected:
+        if file_digest(path) != expected_hash:
             raise ValueError("evidence digest mismatch: " + name)
     contract = json.loads((directory / "contract.json").read_text())
     binding = json.loads((directory / "resolved-binding.json").read_text())
     result = json.loads((directory / "native-result.json").read_text())
+    check_sample(contract["sample"], sample_ref)
+    if expected is not None:
+        identity = contract["identity"]
+        for name, actual in (("sample", contract["sample"]), ("binding", binding),
+                             ("reference", identity.get("reference")), ("policy", identity.get("policy"))):
+            if actual != expected[name]:
+                raise ValueError("evidence differs from the frozen " + name)
+        if identity.get("implementationDigest") != expected["solveImplementationDigest"]:
+            raise ValueError("solve implementation differs from the frozen registration")
+        if not episode_id.startswith(expected["executionTrialId"] + "."):
+            raise ValueError("episode attempt belongs to another execution trial")
+        execution = {"runId": expected["solveRunId"], "trialId": expected["executionTrialId"]}
+        if expected["evidenceVersion"] >= 2 or "execution" in identity:
+            if contract.get("version") != 2 or identity.get("execution") != execution:
+                raise ValueError("evidence belongs to another solve Run or execution trial")
     if digest({k: v for k, v in binding.items() if k != "digest"}) != binding["digest"]:
         raise ValueError("resolved binding digest mismatch")
     for record in (contract, result):

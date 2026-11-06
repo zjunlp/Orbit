@@ -8,8 +8,8 @@ import unittest
 
 import numpy as np
 
-from orbit_embodied import StepResult, resolve_binding, run_episode, verify_episode
-from orbit_embodied.evidence import seal
+from orbit_embodied import StepResult, digest, resolve_binding, run_episode, verify_episode
+from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.openpi import quaternion_to_axis_angle
 
 
@@ -71,17 +71,20 @@ class CoreTests(unittest.TestCase):
                                              "frame": "world", "unit": "normalized", "rotation": "axis-angle", "gripper": "native"}}
         self.policy_profile = {**self.benchmark_profile, "id": "synthetic-policy"}
         self.binding = resolve_binding(self.benchmark_profile, self.policy_profile, {"state": "state"})
-        self.sample = {"sampleId": "synthetic-sample", "initialStateId": "0", "environmentSeed": 7}
+        content = {"taskId": "synthetic:task", "benchmarkProfile": "synthetic-reference",
+                   "initialStateId": "0", "initialStateDigest": "sha256:" + "a" * 64,
+                   "environmentSeed": 7, "policySeed": 0, "repetition": 0}
+        self.sample = {**content, "sampleId": digest(content)}
 
     def tearDown(self):
         self.temporary.cleanup()
 
-    def run_sample(self, benchmark, policy):
+    def run_sample(self, benchmark, policy, identity=None):
         return run_episode(benchmark, policy, self.sample, self.binding, self.output,
-                           "synthetic-attempt", {"fixture": True})
+                           "synthetic-trial.attempt", identity or {"fixture": True})
 
     def verify(self):
-        return verify_episode(self.output, "synthetic-sample", "synthetic-attempt")
+        return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
 
     def test_requires_explicit_complete_semantically_equal_mapping(self):
         with self.assertRaisesRegex(ValueError, "exactly"):
@@ -125,9 +128,9 @@ class CoreTests(unittest.TestCase):
     def test_rescore_rejects_other_samples_attempts_and_changed_files(self):
         self.run_sample(SyntheticBenchmark(), SyntheticPolicy())
         with self.assertRaisesRegex(ValueError, "another sample"):
-            verify_episode(self.output, "other-sample", "synthetic-attempt")
+            verify_episode(self.output, "other-sample", "synthetic-trial.attempt")
         with self.assertRaisesRegex(ValueError, "another sample"):
-            verify_episode(self.output, "synthetic-sample", "other-attempt")
+            verify_episode(self.output, self.sample["sampleId"], "other-attempt")
         (self.output / "actions.jsonl").write_text("")
         with self.assertRaisesRegex(ValueError, "digest mismatch"):
             self.verify()
@@ -141,6 +144,65 @@ class CoreTests(unittest.TestCase):
         seal(self.output, result)
         with self.assertRaisesRegex(ValueError, "differs"):
             self.verify()
+
+    def test_sample_content_is_checked_before_execution_and_after_resealing(self):
+        original = copy.deepcopy(self.sample)
+        self.sample["initialStateId"] = "1"
+        with self.assertRaisesRegex(ValueError, "sampleId"):
+            self.run_sample(SyntheticBenchmark(), SyntheticPolicy())
+        self.assertFalse(self.output.exists())
+        self.sample = original
+        result = self.run_sample(SyntheticBenchmark(), SyntheticPolicy())
+        contract = json.loads((self.output / "contract.json").read_text())
+        contract["sample"]["initialStateId"] = "1"
+        contract["sampleDigest"] = digest(contract["sample"])
+        write_json(self.output / "contract.json", contract)
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "sampleId"):
+            self.verify()
+
+    def test_frozen_context_and_execution_identity_survive_logical_trial_changes(self):
+        identity = {"reference": {"id": "synthetic-reference"}, "policy": {"name": "synthetic-policy"},
+                    "implementationDigest": "sha256:" + "b" * 64,
+                    "execution": {"runId": "source-run", "trialId": "synthetic-trial"}}
+        result = self.run_sample(SyntheticBenchmark(), SyntheticPolicy(), identity)
+        expected = {"trialId": "consolidated-trial", "executionTrialId": "synthetic-trial",
+                    "solveRunId": "source-run", "evidenceVersion": 2,
+                    "sample": self.sample, "binding": self.binding,
+                    "reference": identity["reference"], "policy": identity["policy"],
+                    "solveImplementationDigest": identity["implementationDigest"]}
+        def verify(context):
+            return verify_episode(self.output, self.sample["sampleId"], result["episodeId"], context)
+        self.assertTrue(verify(expected)["valid"])
+        for key, value in (("solveRunId", "other-run"), ("executionTrialId", "other-trial")):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "another"):
+                verify({**expected, key: value})
+        original = json.loads((self.output / "contract.json").read_text())
+        for key in ("reference", "policy"):
+            changed = copy.deepcopy(original)
+            changed["identity"][key]["id"] = "other"
+            write_json(self.output / "contract.json", changed)
+            seal(self.output, result)
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "frozen " + key):
+                verify(expected)
+        write_json(self.output / "contract.json", original)
+        changed_binding = {**self.binding, "version": 9}
+        changed_binding["digest"] = digest({k: v for k, v in changed_binding.items() if k != "digest"})
+        changed = copy.deepcopy(original)
+        changed["bindingDigest"] = changed_binding["digest"]
+        write_json(self.output / "resolved-binding.json", changed_binding)
+        write_json(self.output / "contract.json", changed)
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "frozen binding"):
+            verify(expected)
+        write_json(self.output / "resolved-binding.json", self.binding)
+        del original["identity"]["execution"]
+        original["version"] = 1
+        write_json(self.output / "contract.json", original)
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "another solve Run"):
+            verify(expected)
+        self.assertTrue(verify({**expected, "evidenceVersion": 1})["valid"])
 
     def test_quaternion_zero_clipping_and_rotation_direction(self):
         np.testing.assert_array_equal(quaternion_to_axis_angle([0., 0., 0., 1.01]), np.zeros(3))
