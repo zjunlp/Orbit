@@ -859,7 +859,8 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   随机流仍未验证，控制组通过不覆盖失败结论。工具为 `parity_plan.py / parity.py / parity_policy.py`，不作为生产模型池或默认保真度声明。
 - 第二组端点复用同一 Run 路径：`groot-zmq` 调用官方 GR00T 服务，模型端显式 `ioAdapter` 在原生 LIBERO 与 GR00T 输入间转换，
   不改写 LIBERO benchmark profile；同一连接器也接收原生 SimplerEnv WidowX 的扁平字段。动作顺序、执行片段长度、Torch seed 0
-  及 backbone 内容摘要显式冻结，新增可选字段不补入旧 Policy 快照。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
+  及 backbone 内容摘要显式冻结，新增可选字段不补入旧 Policy 快照。GR00T 动作时间索引必须从 0 连续递增；原始动作在任何夹爪转换前
+  检查数值类型及有限性，拒绝的数值数组以禁止 pickle 的文件和诊断元数据保存，评测归为 `policy_act` 无效结果。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
   对没有原生终止的成功信号在片段边界结束；证据验证按 profile 选择 last/any 成功聚合。`gpusOf: main` 允许模型服务显式共享模拟器已租用的 GPU，禁止同时
   声明独立 role/GPU；没有新资源账本或调度器。配置、资产下载及验证边界见[接入说明](../examples/bench-adapters/embodied/GR00T.md)。
 - D2a 后续实现共享 solve Run、逐样本完成归属、SQLite 一致性备份及迁移恢复，并测量逐 Trial verify 的开销；当前 store 没有

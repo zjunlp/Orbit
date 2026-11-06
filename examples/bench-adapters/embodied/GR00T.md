@@ -91,5 +91,12 @@ Evidence records both policy and native actions.
 Each trial starts a fresh model with Torch seed 0 after loading. Calls have deadlines and are never
 retried. Saved-evidence verification runs separately on CPU, without model or simulator startup.
 
+The connector requires dense action time indices `0..horizon-1` before inference. Raw predicted
+actions must be numeric and finite before any gripper conversion, including rows outside the
+executed prefix. Rejected numeric arrays remain in `chunks/<call>.rejected.npy` with pickle disabled;
+the companion JSON identifies the source observation and rejection reason. Unsupported values
+receive a bounded text preview. Such calls produce an invalid `policy_act` result without executing
+the rejected chunk; earlier completed controls remain available for review and verification.
+
 `fixtures/zero_groot.py` is an explicit stateless calibration policy, not a GR00T model substitute.
 The source profiles deliberately do not certify full-suite calibration or statistical parity.

@@ -83,6 +83,8 @@ class GrootClient:
             action = modalities["action"]
             if action["modality_keys"] != self.order:
                 raise ValueError("GR00T action ordering differs from the frozen profile")
+            if list(action["delta_indices"]) != list(range(len(action["delta_indices"]))):
+                raise ValueError("GR00T action times must be contiguous and start at zero")
             if len(action["delta_indices"]) < replan_steps:
                 raise ValueError("GR00T action horizon is shorter than the execution horizon")
         except Exception:
@@ -128,6 +130,10 @@ class GrootClient:
                 raise ValueError("GR00T action field requires shape (1, horizon, dimension)")
             fields.append(value[0])
         chunk = np.concatenate(fields, axis=-1)
+        if chunk.dtype.kind not in "buif" or not np.isfinite(chunk).all():
+            from .driver import EpisodeFailure
+            raise EpisodeFailure("policy_act", "GR00T returned non-numeric or non-finite raw actions",
+                                 rejected_actions=chunk)
         if self.io_adapter == "libero-native":
             chunk[:, -1] = -np.sign(2 * chunk[:, -1] - 1)
         return chunk
