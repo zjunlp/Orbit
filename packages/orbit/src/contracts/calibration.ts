@@ -11,10 +11,11 @@ import {
   capabilityAllows,
   type Trial,
   taskSuite,
+  trialRunIds,
 } from "./bench.ts";
 import { benchCategory } from "./categories.ts";
 import { sampleLabel } from "./naming.ts";
-import type { Run } from "./runs.ts";
+import { isTerminal, type Run } from "./runs.ts";
 
 /**
  * Spread `n` tasks over the suites, round robin, in each suite's listed order. With `oracle`, tasks
@@ -222,6 +223,17 @@ export function judgeCalibration(t: Trial[], o: JudgeOptions = {}): CalibrationC
   return checks;
 }
 
+/** Includes historical and unlinked owned Runs; missing references must be represented by null. */
+export function calibrationRunsClean(runs: ReadonlyMap<string, Run | null>): boolean {
+  return [...runs.values()].every(
+    (run) =>
+      run !== null &&
+      isTerminal(run.state) &&
+      run.cleanup === "done" &&
+      (!run.lease || run.lease.state === "released"),
+  );
+}
+
 /** The report of a calibration job (`spec.calibration`), or null for other jobs. */
 export function calibrationReport(
   job: BenchJob,
@@ -230,8 +242,13 @@ export function calibrationReport(
 ): CalibrationReport | null {
   const c = job.spec.calibration;
   if (!c) return null;
+  const relatedRuns = new Map([
+    ...trials.flatMap(trialRunIds).map((id) => [id, runs?.get(id) ?? null] as const),
+    ...(runs ?? []),
+  ]);
+  const clean = c.mode !== "policy" || calibrationRunsClean(relatedRuns);
   // Cleanup is confirmed after the outcome; a pending one is not judged yet.
-  const open = trials.some((x) => x.state !== "done" || x.outcome?.cleanup === "pending");
+  const open = !clean || trials.some((x) => x.state !== "done" || x.outcome?.cleanup === "pending");
   const phase =
     c.mode === "policy" && job.rescore?.state !== "done"
       ? job.rescore?.state === "started" || job.state !== "running"
@@ -257,12 +274,7 @@ export function calibrationReport(
       : undefined;
   if (c.mode === "policy") {
     checks = checks.filter((check) =>
-      [
-        "all trials finished",
-        "evaluation valid",
-        "cleanup confirmed",
-        "rescore reproduces scores",
-      ].includes(check.name),
+      ["all trials finished", "evaluation valid", "rescore reproduces scores"].includes(check.name),
     );
     const add = (name: string, ok: boolean, detail: string, pending = false) =>
       checks.push({
@@ -277,6 +289,14 @@ export function calibrationReport(
         detail,
         trials: [],
       });
+    add(
+      "cleanup confirmed",
+      clean,
+      clean
+        ? "all owned solve and verification Runs, including scoring history, cleaned; leases released"
+        : "waiting for all owned Runs, including scoring history and unlinked submissions, to finish cleanup and release leases",
+      !clean,
+    );
     add(
       "acceptance budget",
       !job.calibrationExpiredAt &&

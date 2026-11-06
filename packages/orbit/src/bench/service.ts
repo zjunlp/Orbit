@@ -32,6 +32,7 @@ import {
   type CalibrationRequestInput,
   calibrationMethods,
   calibrationReport,
+  calibrationRunsClean,
   capabilityAllows,
   Folder,
   type FolderExportResult,
@@ -508,6 +509,16 @@ export class BenchService {
     if (!job || !c || job.rescore?.state === "done") return;
     const done = (note?: string) => {
       const fresh = this.deps.store.getJob(id) ?? job;
+      if (
+        c.mode === "policy" &&
+        !calibrationRunsClean(this.calibrationRuns(fresh, this.deps.store.trials(id)))
+      ) {
+        if (note) {
+          fresh.rescore = { state: "started", note };
+          this.deps.store.putJob(fresh);
+        }
+        return;
+      }
       fresh.rescore = { state: "done", ...(note ? { note } : {}) };
       if (c.mode === "policy") {
         const deadline = Date.parse(fresh.createdAt) + (c.budgetMin as number) * 60_000;
@@ -550,11 +561,19 @@ export class BenchService {
     }
   }
 
+  private calibrationRuns(job: BenchJob, trials: Trial[]): Map<string, Run | null> {
+    const runs = new Map(
+      trials.flatMap(trialRunIds).map((id) => [id, this.deps.runs.get(id)] as const),
+    );
+    // A submitted Run is durable before its Trial linkage is written.
+    for (const run of this.deps.runs.storeList({ group: benchGroup(job.id), limit: 100_000 }))
+      if (run.spec.tags.job === job.id) runs.set(run.id, run);
+    return runs;
+  }
+
   private calibration(job: BenchJob, trials: Trial[]) {
     const runs =
-      job.spec.calibration?.mode === "policy"
-        ? new Map(trials.flatMap(trialRunIds).map((id) => [id, this.deps.runs.get(id)] as const))
-        : undefined;
+      job.spec.calibration?.mode === "policy" ? this.calibrationRuns(job, trials) : undefined;
     return calibrationReport(job, trials, runs);
   }
 
@@ -906,21 +925,20 @@ export class BenchService {
     job.endedAt = nowIso();
     this.deps.store.putJob(job);
     if (policyCheck) this.clearCalibrationTimer(id);
-    const trials = this.deps.store.trials(id).filter((t) => t.state !== "done");
-    const cancelledRuns = new Set<string>();
-    for (const t of trials) {
-      const runId =
-        t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null;
-      // Completed batch evidence is still verified after a job cancellation.
-      if (
-        runId &&
-        !(t.batch && t.state === "verifying" && !policyCheck) &&
-        !cancelledRuns.has(runId)
-      ) {
-        cancelledRuns.add(runId);
-        await this.deps.runs.cancel(runId).catch(() => undefined);
-      }
-    }
+    const all = this.deps.store.trials(id);
+    const trials = all.filter((t) => t.state !== "done");
+    const runIds = policyCheck
+      ? [...this.calibrationRuns(job, all).values()]
+          .filter((run): run is Run => run !== null && !isTerminal(run.state))
+          .map((run) => run.id)
+      : trials
+          // Completed ordinary batch evidence is still verified after cancellation.
+          .filter((t) => !(t.batch && t.state === "verifying"))
+          .map((t) =>
+            t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null,
+          )
+          .filter((id): id is string => id !== null);
+    for (const runId of new Set(runIds)) await this.deps.runs.cancel(runId).catch(() => undefined);
     this.advanceAll(trials.map((t) => t.id));
     if (policyCheck && !trials.length) this.afterCalibration(id);
     return job;
@@ -932,6 +950,11 @@ export class BenchService {
     if (this.stopped) return;
     if (!("bench" in run.spec.tags) && !run.spec.group?.startsWith("bench-")) return;
     for (const t of this.deps.store.trialsByRun(run.id)) void this.advance(t.id);
+    const job = this.deps.store.getJob(run.spec.tags.job ?? "");
+    if (job?.spec.calibration?.mode === "policy")
+      setImmediate(() => {
+        if (!this.stopped && !this.deps.store.hasOpenTrials(job.id)) this.afterCalibration(job.id);
+      });
   }
 
   private async advance(id: string): Promise<void> {
@@ -1119,7 +1142,8 @@ export class BenchService {
       this.deps.store.getJob(jobId)?.spec.calibration?.mode !== "policy"
     )
       return;
-    if (this.cancelled(jobId, t) && this.deps.store.getRun(runId)?.stopRequested !== "cancel")
+    const run = this.deps.store.getRun(runId);
+    if (this.cancelled(jobId, t) && run && !isTerminal(run.state) && run.stopRequested !== "cancel")
       await this.deps.runs.cancel(runId).catch(() => undefined);
   }
 
@@ -1263,7 +1287,7 @@ export class BenchService {
         issues = reply.issues;
         run = await this.submitRun(job, trials[0] as Trial, "solve", reply.spec);
       }
-      const solve = run;
+      const solve = this.deps.runs.get(run.id) ?? run;
       this.deps.store.tx(() => {
         for (const member of trials) {
           const fresh = this.deps.store.getTrial(member.id) as Trial;

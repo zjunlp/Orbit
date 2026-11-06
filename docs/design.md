@@ -887,6 +887,8 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   目标预算 10–30 分钟；达到预算仍未完成的检查如实标注，不转为通过。`bench calibrate --policy --sample-plan --budget` 已承接模型接入检查，
   默认总预算 20 分钟、最多 30 分钟，覆盖排队、模型启动、求解、逐 episode CPU 验证和首次单样本重评；使用既有 Job/Trial/Run 状态，
   预算到期持久记录并取消未完成工作，清理确认可延后；重启在恢复排队执行前补发过期停止意图。CLI 断开不解除预算。
+  停止与清理核对同时覆盖 Trial 当前/历史关联和 job 标签所属的已持久化 Run，避免提交完成但尚未写回关联时漏取消；
+  全部所属 Run 终止、清理完成并释放租约后才结束验收，清理事件会继续推进等待中的报告。
   报告显式标为 policy 接入，catalog 单独列出，不提升 benchmark 原生语义校准或 fidelity；原 empty/oracle 校准保持原行为。
   该入口只接受真实模型、2–5 个冻结样本及固定批次，禁止用归并拼成验收通过。使用方式见[轻量接入检查](guides/policy-integration-checks.md)。
   验证证据按实现、协议/profile、benchmark 源码及资产、镜像等身份限定复用范围；变更模型权重需重验模型路径，变更驱动语义需重验对应原生对照。

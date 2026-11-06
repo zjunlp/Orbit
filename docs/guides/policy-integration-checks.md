@@ -29,6 +29,11 @@ Cleanup can extend beyond the execution budget. Restart preserves the original d
 work receives stop intent before recovered queued Runs are scheduled. Closing the CLI does not
 remove the daemon's budget. `--wait` only limits how long the CLI waits for a report.
 
+Cancellation also finds job-owned Runs persisted before their Trial linkage was written. Acceptance
+waits for all owned current and historical Runs to terminate, finish cleanup and release their
+leases. A successful new verifier does not hide an older verifier awaiting cleanup; cleanup events
+resume the waiting report without rerunning the model or verification.
+
 The policy command exits nonzero if the requested integration check does not pass. Results and
 incomplete checks stay visible; reaching the deadline is never reported as a pass. Evidence and
 previous scores remain available. Bounded policy checks cannot adopt results through consolidation.

@@ -411,6 +411,120 @@ it("honors an expired budget before restart can schedule another Run", async () 
   expect(recovered.job(job.id).calibration).toMatchObject({ phase: "done", calibrated: false });
 });
 
+it("cancels an unlinked durable solve on restart and waits for its cleanup without touching another job", async () => {
+  const f = fixture();
+  const submit = f.submit.getMockImplementation();
+  if (!submit) throw new Error("missing synthetic submission");
+  f.submit.mockImplementation(async (...args) => {
+    await submit(...args);
+    return new Promise<Run>(() => {});
+  });
+  const job = await f.bench.calibrate(f.request);
+  await setImmediate();
+  const run = f.store.listRuns({ limit: 10 })[0];
+  if (!run) throw new Error("missing durable synthetic Run");
+  expect(f.store.trials(job.id).every((t) => t.state === "pending" && !t.solveRunId)).toBe(true);
+  const other = await submit({ ...run.spec, tags: { ...run.spec.tags, job: "another-job" } });
+  f.cancel.mockImplementation(async (id) => {
+    const stopping = { ...(f.store.getRun(id) as Run), state: "cancelled" as const };
+    f.store.putRun(stopping);
+    f.runs.emit("change", { run: stopping });
+    return stopping;
+  });
+  f.bench.stop();
+  f.store.putJob({ ...job, createdAt: new Date(Date.now() - 21 * 60_000).toISOString() });
+  const recovered = new BenchService(f.deps);
+  const active = fixtures[0];
+  if (!active) throw new Error("missing fixture");
+  active.bench = recovered;
+  await recovered.enforceCalibrationBudgets();
+  recovered.start();
+  await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "done")).toBe(true);
+  expect(f.cancel).toHaveBeenCalledExactlyOnceWith(run.id);
+  expect(f.store.getRun(run.id)?.state).toBe("cancelled");
+  expect(f.store.getRun(other.id)?.state).toBe("queued");
+  expect(recovered.job(job.id).calibration).toMatchObject({
+    phase: "rescoring",
+    calibrated: false,
+  });
+  expect(f.store.getJob(job.id)?.rescore?.state).not.toBe("done");
+  f.finish(run.id, "cancelled");
+  await expect.poll(() => recovered.job(job.id).calibration?.phase).toBe("done");
+  expect(recovered.job(job.id).calibration?.calibrated).toBe(false);
+  expect(f.submit).toHaveBeenCalledTimes(1);
+});
+
+it("cancels a durable CPU verifier whose Trial linkage was interrupted", async () => {
+  const f = fixture();
+  const job = await f.bench.calibrate({ ...f.request, rescore: false });
+  await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "solving")).toBe(true);
+  f.finish(f.store.trials(job.id)[0]?.solveRunId ?? null);
+  await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "verifying")).toBe(true);
+  const trial = f.store.trials(job.id)[0];
+  if (!trial?.verifyRunId) throw new Error("missing synthetic verifier");
+  const verifier = trial.verifyRunId;
+  f.bench.stop();
+  f.store.putTrial({ ...trial, state: "solving", verifyRunId: null });
+  f.store.putJob({ ...job, createdAt: new Date(Date.now() - 21 * 60_000).toISOString() });
+  const recovered = new BenchService(f.deps);
+  const active = fixtures[0];
+  if (!active) throw new Error("missing fixture");
+  active.bench = recovered;
+  await recovered.enforceCalibrationBudgets();
+  recovered.start();
+  await expect.poll(() => recovered.job(job.id).calibration?.phase).toBe("done");
+  expect(f.store.getRun(verifier)?.state).toBe("cancelled");
+  expect(f.cancel).toHaveBeenCalledTimes(2);
+  expect(f.submit).toHaveBeenCalledTimes(3);
+});
+
+it.each(["pending", "failed"] as const)(
+  "waits for a historical verifier with %s cleanup, then finishes on its cleanup event",
+  async (cleanup) => {
+    const f = fixture();
+    const job = await f.bench.calibrate(f.request);
+    await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "solving")).toBe(true);
+    f.finish(f.store.trials(job.id)[0]?.solveRunId ?? null);
+    await expect
+      .poll(() => f.store.trials(job.id).every((t) => t.state === "verifying"))
+      .toBe(true);
+    const original = f.store.getRun(f.store.trials(job.id)[0]?.verifyRunId ?? "");
+    if (!original) throw new Error("missing original verifier");
+    const pending = {
+      ...original,
+      state: "succeeded" as const,
+      cleanup,
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+    };
+    f.store.putRun(pending);
+    f.runs.emit("change", { run: pending });
+    f.finish(f.store.trials(job.id)[1]?.verifyRunId ?? null);
+    await expect.poll(() => f.store.trials(job.id)[0]?.history.length).toBe(1);
+    await expect.poll(() => f.store.trials(job.id)[0]?.state).toBe("verifying");
+    f.finish(f.store.trials(job.id)[0]?.verifyRunId ?? null);
+    await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "done")).toBe(true);
+    const report = f.bench.job(job.id).calibration;
+    expect(report).toMatchObject({ phase: "rescoring", calibrated: false });
+    expect(report?.checks.find((c) => c.name === "cleanup confirmed")?.result).not.toBe("passed");
+    expect(f.store.getJob(job.id)?.rescore?.state).toBe("started");
+    // The report must also distrust an old completion marker from before this fix.
+    const current = f.store.getJob(job.id);
+    if (!current) throw new Error("missing job");
+    f.store.putJob({ ...current, rescore: { state: "done" } });
+    expect(f.bench.job(job.id).calibration).toMatchObject({
+      phase: "rescoring",
+      calibrated: false,
+    });
+    f.store.putJob(current);
+    f.finish(original.id);
+    await expect.poll(() => f.bench.job(job.id).calibration?.phase).toBe("done");
+    expect(f.bench.job(job.id).calibration?.calibrated).toBe(true);
+    expect(f.store.trials(job.id)[0]?.history[0]?.outcome.cleanup).toBe(cleanup);
+    expect(f.submit).toHaveBeenCalledTimes(4);
+  },
+);
+
 it("stops the selected rescore when the budget expires after the job initially ended", async () => {
   const f = fixture();
   const job = await f.bench.calibrate(f.request);
