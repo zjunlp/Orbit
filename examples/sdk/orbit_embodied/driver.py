@@ -15,9 +15,10 @@ from .evidence import seal, write_json
 
 
 class EpisodeFailure(RuntimeError):
-    def __init__(self, kind, message):
+    def __init__(self, kind, message, *, rejected_actions=None):
         super().__init__(message)
         self.kind = kind
+        self.rejected_actions = rejected_actions
 
 
 @dataclass
@@ -27,6 +28,7 @@ class StepResult:
     terminated: bool
     success: bool
     simulation_time: Optional[float] = None
+    native_action: Optional[list] = None
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity):
@@ -76,12 +78,24 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     inputs = {target: observation[source] for target, source in binding["observationMap"].items()}
                     validate_observation(inputs, binding["policyProfile"]["observations"])
                     stage = "policy_act"
-                    called = time.monotonic()
-                    requested = np.asarray(policy.act(inputs))
-                    elapsed = time.monotonic() - called
                     call += 1
                     chunks = directory / "chunks"
                     chunks.mkdir(exist_ok=True)
+                    called = time.monotonic()
+                    try:
+                        requested = np.asarray(policy.act(inputs))
+                    except EpisodeFailure as exc:
+                        if exc.rejected_actions is not None:
+                            raw = np.asarray(exc.rejected_actions)
+                            rejection = {"sourceObservation": step, "encoding": "raw-policy-actions",
+                                         "reason": str(exc), "dtype": str(raw.dtype), "shape": list(raw.shape)}
+                            if raw.dtype.kind in "buif":
+                                np.save(chunks / (str(call) + ".rejected.npy"), raw, allow_pickle=False)
+                            else:
+                                rejection["preview"] = repr(raw)[:500]
+                            write_json(chunks / (str(call) + ".rejected.json"), rejection)
+                        raise
+                    elapsed = time.monotonic() - called
                     if requested.dtype.kind not in "buif":
                         write_json(chunks / (str(call) + ".rejected.json"), {"dtype": str(requested.dtype), "shape": list(requested.shape), "preview": repr(requested)[:500]})
                         raise ValueError("policy returned non-numeric actions")
@@ -99,6 +113,8 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                        "nativeSuccess": bool(native.success), "wallSeconds": time.monotonic() - start,
                        "simulationSeconds": native.simulation_time,
                        "state": benchmark.state(native.observation)}
+                if native.native_action is not None:
+                    row["nativeAction"] = native.native_action
                 log.write(json.dumps(row, allow_nan=False) + "\n")
                 log.flush()
                 result["steps"] = step + 1

@@ -1,10 +1,21 @@
 // Pure allocation and spec translation; no GPUs or Docker are used.
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, expect, it } from "vitest";
+import { parseCompose } from "../src/bench/compose.ts";
 import { findHarborTasks, harborSolveSpec } from "../src/bench/harbor.ts";
-import { NodeResources, type Run, RunSpec, roleRequests } from "../src/contracts/index.ts";
+import {
+  Lease,
+  leaseRequest,
+  NodeResources,
+  PolicyDefinition,
+  type Run,
+  RunSpec,
+  roleRequests,
+} from "../src/contracts/index.ts";
 import { runArgs } from "../src/executor/docker.ts";
 import { allocateRoles, infeasible } from "../src/resources/allocate.ts";
 import { serviceGpus } from "../src/runs/services.ts";
@@ -73,6 +84,185 @@ it("gives a gpusOf service the owner's cards without leasing more", () => {
   expect(serviceGpus(run, { gpusOf: "sim" })).toEqual(["GPU-1"]);
   expect(serviceGpus(run, {})).toEqual([]);
   expect(serviceGpus(run, { gpusOf: "main" })).toEqual([]);
+});
+
+const capacities = (sizes: number[]) =>
+  NodeResources.parse({
+    ...node,
+    gpus: sizes.map((size, index) => ({ ...gpu(index, "synthetic"), memTotalMiB: size * 1024 })),
+  });
+
+const sharedBudget = (owner = "main") =>
+  RunSpec.parse({
+    image: "synthetic",
+    command: ["true"],
+    resources: {
+      gpus: owner === "main" ? 1 : 0,
+      ...(owner === "main" ? { gpuMemGB: 4 } : {}),
+      cpus: 1,
+      memGB: 1,
+    },
+    services: [
+      ...(owner === "main"
+        ? []
+        : [{ name: "sim", image: "synthetic", role: owner, gpus: 1, gpuMemGB: 4 }]),
+      { name: "policy", image: "synthetic", gpusOf: owner, gpuMemGB: 24, cpus: 1, memGB: 1 },
+    ],
+  });
+
+it.each(["main", "sim"])(
+  "adds shared GPU memory budgets to owner %s without extra cards or mutation",
+  (owner) => {
+    const spec = sharedBudget(owner);
+    const before = structuredClone(spec);
+    const roles = roleRequests(spec);
+    expect(roles.find((r) => r.role === owner)).toMatchObject({ gpus: 1, gpuMemGB: 28 });
+    expect(leaseRequest(spec).gpus).toBe(1);
+    expect(roleRequests(spec)).toEqual(roles);
+    expect(spec).toEqual(before);
+    expect(allocateRoles(roles, capacities([8, 24, 32]), [])).toMatchObject({
+      ok: true,
+      gpuIds: ["GPU-2"],
+    });
+  },
+);
+
+it("retains a shared model's floor when the owner has no GPU memory budget", () => {
+  const spec = sharedBudget();
+  delete spec.resources.gpuMemGB;
+  expect(allocateRoles(roleRequests(spec), capacities([8, 24]), [])).toMatchObject({
+    ok: true,
+    gpuIds: ["GPU-1"],
+  });
+});
+
+it("rejects nodes without enough shared GPU capacity but waits when fitting cards are busy", () => {
+  const spec = sharedBudget();
+  const roles = roleRequests(spec);
+  expect(infeasible(leaseRequest(spec), capacities([8, 24]), roles)).toMatch(/role main.*28 GB/);
+  const busy = capacities([8, 32]);
+  const fitting = busy.gpus[1];
+  if (!fitting) throw new Error("missing GPU fixture");
+  fitting.available = false;
+  expect(infeasible(leaseRequest(spec), busy, roles)).toBeNull();
+  expect(allocateRoles(roles, busy, [])).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("role main"),
+  });
+  const held = Lease.parse({
+    id: "held",
+    runId: "other",
+    node: node.node,
+    gpuIds: ["GPU-1"],
+    cpus: 1,
+    memGB: 1,
+    state: "active",
+    createdAt: node.probedAt,
+    releasedAt: null,
+  });
+  expect(allocateRoles(roles, capacities([8, 32]), [held]).ok).toBe(false);
+});
+
+it("carries generated GR00T and native simulator budgets into the real allocator", () => {
+  const sdk = fileURLToPath(new URL("../../../examples/sdk/", import.meta.url));
+  const output = execFileSync(
+    "python3",
+    [
+      "-B",
+      "-c",
+      `
+import json,sys,tempfile
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from orbit_embodied.test_provision import configured_resources
+with tempfile.TemporaryDirectory() as temporary:
+    items=[configured_resources(Path(temporary)/str(shared),shared=shared) for shared in (False,True)]
+    print(json.dumps(items))
+`,
+      sdk,
+    ],
+    { encoding: "utf8", timeout: 15000 },
+  );
+  const items = JSON.parse(output) as { policy: unknown; spec: object }[];
+  for (const [index, item] of items.entries()) {
+    const shared = index === 1;
+    const policy = PolicyDefinition.parse(item.policy);
+    expect(policy.service.gpuMemGB).toBe(24);
+    const spec = RunSpec.parse({ ...item.spec, services: [policy.service] });
+    const roles = roleRequests(spec);
+    expect(roles[0]?.gpuMemGB).toBe(shared ? 28 : 4);
+    const hardware = capacities([8, shared ? 32 : 24]);
+    expect(infeasible(leaseRequest(spec), hardware, roles)).toBeNull();
+    expect(allocateRoles(roles, hardware, [])).toMatchObject({
+      ok: true,
+      gpuIds: shared ? ["GPU-1"] : ["GPU-0", "GPU-1"],
+    });
+    if (shared) expect(allocateRoles(roles, capacities([8, 24]), []).ok).toBe(false);
+  }
+});
+
+it("checks independent role capacities separately during admission", () => {
+  const spec = RunSpec.parse({
+    image: "synthetic",
+    command: ["true"],
+    resources: { gpus: 1, gpuMemGB: 32, cpus: 1, memGB: 1 },
+    services: [{ name: "policy", image: "synthetic", role: "policy", gpus: 1, gpuMemGB: 8 }],
+  });
+  const hardware = capacities([8, 32]);
+  expect(infeasible(leaseRequest(spec), hardware, roleRequests(spec))).toBeNull();
+  expect(allocateRoles(roleRequests(spec), hardware, [])).toMatchObject({
+    ok: true,
+    roles: [
+      { role: "main", gpuIds: ["GPU-1"] },
+      { role: "policy", gpuIds: ["GPU-0"] },
+    ],
+  });
+});
+
+it("does not double-count GPU memory already combined by Compose", () => {
+  const task = join(dir, "shared-budget-compose");
+  mkdirSync(task, { recursive: true });
+  const file = join(task, "docker-compose.yaml");
+  const reservation = {
+    deploy: {
+      resources: {
+        reservations: { devices: [{ driver: "nvidia", count: 1, capabilities: ["gpu"] }] },
+      },
+    },
+  };
+  writeFileSync(
+    file,
+    JSON.stringify({
+      services: {
+        main: { ...reservation, "x-gpu-memory-gb": 4 },
+        policy: { image: "synthetic", ...reservation, "x-gpu-memory-gb": 24 },
+      },
+    }),
+  );
+  const problems: string[] = [];
+  const plan = parseCompose(file, task, null, null, {}, problems);
+  expect(problems).toEqual([]);
+  const spec = RunSpec.parse({
+    image: "synthetic",
+    command: ["true"],
+    resources: { gpus: plan.mainGpus, gpuMemGB: plan.mainGpuMemGB },
+    services: plan.services,
+  });
+  expect(roleRequests(spec)[0]).toMatchObject({ gpus: 1, gpuMemGB: 28 });
+});
+
+it("sums multiple shared budgets per card without increasing the GPU count", () => {
+  const spec = sharedBudget();
+  spec.resources.gpus = 2;
+  const policy = spec.services[0];
+  if (!policy) throw new Error("missing service fixture");
+  spec.services.push({ ...policy, name: "monitor", gpuMemGB: 2 });
+  const roles = roleRequests(spec);
+  expect(roles[0]).toMatchObject({ gpus: 2, gpuMemGB: 30 });
+  expect(allocateRoles(roles, capacities([8, 32, 32]), [])).toMatchObject({
+    ok: true,
+    gpuIds: ["GPU-1", "GPU-2"],
+  });
 });
 
 it("translates an EFE-style task: main GPU, monitor sharing it, gpu_types and shm", () => {

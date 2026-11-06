@@ -36,19 +36,33 @@ export function infeasible(
   r: NodeResources,
   roles: RoleRequest[] = [],
 ): string | null {
-  for (const role of roles) {
-    if (!role.gpuModels?.length || role.gpus === 0) continue;
-    const have = r.gpus.filter((g) => modelMatches(g.name, role.gpuModels)).length;
-    if (have < role.gpus)
-      return `role ${role.role} needs ${role.gpus} GPU(s) of ${role.gpuModels.join(" / ")}, but this node has ${have}`;
-  }
   if (req.gpus > 0 && r.gpuError) return `GPUs requested but unavailable: ${r.gpuError}`;
-  const fitting = r.gpus.filter(
-    (g) => gpuMemFits(g, req) && (!req.gpuIds?.length || matchesId(g, req.gpuIds)),
-  );
+  const candidates = gpuCandidates(roles, r.gpus);
+  for (const [i, role] of roles.entries()) {
+    if (role.gpus === 0) continue;
+    const have = candidates[i]?.length ?? 0;
+    if (have < role.gpus) {
+      const { models } = gpuFeatures(role);
+      const constraints = [
+        role.gpuModels?.length ? `of ${role.gpuModels.join(" / ")}` : "",
+        models.length ? `matching ${models.join(" / ")}` : "",
+        role.gpuMemGB ? `with at least ${role.gpuMemGB} GB` : "",
+        role.gpuIds?.length ? `matching ${role.gpuIds.join(" / ")}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `role ${role.role} needs ${role.gpus} GPU(s)${constraints ? ` ${constraints}` : ""}, but this node has ${have}`;
+    }
+  }
+  const fitting = roles.length
+    ? r.gpus
+    : r.gpus.filter((g) => gpuMemFits(g, req) && (!req.gpuIds?.length || matchesId(g, req.gpuIds)));
   if (req.gpus > fitting.length) {
     return `needs ${req.gpus} GPU(s) but this node has ${fitting.length} matching`;
   }
+  const match = matchGpuRoles(roles, candidates);
+  if (!match.ok)
+    return `roles cannot be assigned distinct GPUs (blocked at role ${roles[match.role]?.role})`;
   if (req.cpus > r.cpu.count) return `needs ${req.cpus} CPUs but this node has ${r.cpu.count}`;
   const maxMem = r.memory.totalGB * MEM_LEASABLE_FRACTION;
   if (req.memGB > maxMem)
@@ -66,7 +80,7 @@ export function infeasible(
  * Cards report a little less than their nominal size (an 80 GB H100 shows 81559 MiB), so a request
  * in nominal GB matches within 3%.
  */
-function gpuMemFits(g: { memTotalMiB: number }, req: ResourceRequest): boolean {
+function gpuMemFits(g: { memTotalMiB: number }, req: Pick<ResourceRequest, "gpuMemGB">): boolean {
   return !req.gpuMemGB || g.memTotalMiB >= req.gpuMemGB * 1024 * 0.97;
 }
 
@@ -206,6 +220,62 @@ export function gpuCapabilityWarnings(roles: RoleRequest[]): string[] {
   });
 }
 
+function gpuCandidates(roles: RoleRequest[], cards: NodeResources["gpus"]): string[][] {
+  return roles.map((role) => {
+    const { models } = gpuFeatures(role);
+    return cards
+      .filter((g) => gpuMemFits(g, role))
+      .filter((g) => !role.gpuIds?.length || matchesId(g, role.gpuIds))
+      .filter((g) => models.every((name) => g.name.toLowerCase().includes(name)))
+      .filter((g) => modelMatches(g.name, role.gpuModels))
+      .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index)
+      .map((g) => g.uuid);
+  });
+}
+
+/** Both admission and allocation use this matching; the caller selects all or only free cards. */
+function matchGpuRoles(
+  roles: RoleRequest[],
+  candidates: string[][],
+): { ok: true; gpuIds: string[][] } | { ok: false; role: number; free: number } {
+  const slots = roles.flatMap((role, i) => Array.from({ length: role.gpus }, () => i));
+  const owner = new Map<string, number>();
+  const assign = (slot: number, seen: Set<string>): boolean => {
+    const available = candidates[slots[slot] as number] ?? [];
+    // Try unused cards first, preserving the previous least-used-card preference.
+    for (const card of available) {
+      if (!seen.has(card) && !owner.has(card)) {
+        owner.set(card, slot);
+        return true;
+      }
+    }
+    for (const card of available) {
+      if (seen.has(card)) continue;
+      seen.add(card);
+      const previous = owner.get(card);
+      if (previous !== undefined && assign(previous, seen)) {
+        owner.set(card, slot);
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const [slot, role] of slots.entries())
+    if (!assign(slot, new Set())) {
+      const free = (candidates[role] ?? []).filter((card) => !owner.has(card)).length;
+      return { ok: false, role, free };
+    }
+  return {
+    ok: true,
+    gpuIds: roles.map((_, i) =>
+      (candidates[i] ?? []).filter((card) => {
+        const slot = owner.get(card);
+        return slot !== undefined && slots[slot] === i;
+      }),
+    ),
+  };
+}
+
 export type RoleAllocationResult =
   | { ok: true; gpuIds: string[]; roles: RoleAllocation[] }
   | { ok: false; reason: string };
@@ -243,17 +313,10 @@ export function allocateRoles(
     return waiting(whole.reason);
 
   const leased = new Set(leases.flatMap((l) => l.gpuIds));
-  const candidates = roles.map((role) => {
-    const { models } = gpuFeatures(role);
-    return r.gpus
-      .filter((g) => !leased.has(g.uuid) && g.available)
-      .filter((g) => gpuMemFits(g, role as ResourceRequest))
-      .filter((g) => !role.gpuIds?.length || matchesId(g, role.gpuIds))
-      .filter((g) => models.every((name) => g.name.toLowerCase().includes(name)))
-      .filter((g) => modelMatches(g.name, role.gpuModels))
-      .sort((a, b) => a.memUsedMiB - b.memUsedMiB || a.index - b.index)
-      .map((g) => g.uuid);
-  });
+  const candidates = gpuCandidates(
+    roles,
+    r.gpus.filter((g) => !leased.has(g.uuid) && g.available),
+  );
   const shortage = (i: number, free: number) => {
     const role = roles[i] as RoleRequest;
     const { models } = gpuFeatures(role);
@@ -265,33 +328,8 @@ export function allocateRoles(
     if ((candidates[i]?.length ?? 0) < role.gpus) return shortage(i, candidates[i]?.length ?? 0);
   if (!whole.ok) return waiting(whole.reason);
 
-  const slots = roles.flatMap((role, i) => Array.from({ length: role.gpus }, () => i));
-  const owner = new Map<string, number>();
-  const assign = (slot: number, seen: Set<string>): boolean => {
-    const available = candidates[slots[slot] as number] ?? [];
-    // Try unused cards first, preserving the previous least-used-card preference.
-    for (const card of available) {
-      if (!seen.has(card) && !owner.has(card)) {
-        owner.set(card, slot);
-        return true;
-      }
-    }
-    for (const card of available) {
-      if (seen.has(card)) continue;
-      seen.add(card);
-      const previous = owner.get(card);
-      if (previous !== undefined && assign(previous, seen)) {
-        owner.set(card, slot);
-        return true;
-      }
-    }
-    return false;
-  };
-  for (const [slot, role] of slots.entries())
-    if (!assign(slot, new Set())) {
-      const available = (candidates[role] ?? []).filter((card) => !owner.has(card)).length;
-      return shortage(role, available);
-    }
+  const match = matchGpuRoles(roles, candidates);
+  if (!match.ok) return shortage(match.role, match.free);
   const out: RoleAllocation[] = [];
   for (const [i, role] of roles.entries()) {
     const devices = allocateDevices(
@@ -301,14 +339,10 @@ export function allocateRoles(
       out.flatMap((x) => x.devices),
     );
     if (!devices.ok) return waiting(`role ${role.role}: ${devices.reason}`);
-    const picked = (candidates[i] ?? []).filter((card) => {
-      const slot = owner.get(card);
-      return slot !== undefined && slots[slot] === i;
-    });
     out.push({
       role: role.role,
       devices: devices.devices,
-      gpuIds: picked,
+      gpuIds: match.gpuIds[i] ?? [],
       cpus: role.cpus,
       memGB: role.memGB,
     });

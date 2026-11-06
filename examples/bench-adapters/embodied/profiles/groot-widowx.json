@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "id": "groot-widowx-reference/1",
+  "scoreName": "GR00T native widowx success",
+  "reference": {
+    "evaluation": {
+      "repository": "https://github.com/NVIDIA/Isaac-GR00T",
+      "commit": "7b304f95b95790490b79bd263ba57015c3c12dfd"
+    },
+    "libero": {
+      "commit": "8f1084e3132a39270c3a13ebe37270a43ece2a01"
+    },
+    "simpler": {
+      "commit": "8a2d286c926c1371927caa7651a412b4cc331756",
+      "maniskillCommit": "c2a9e87c186300b694da6f2497dd68d2c347a4b7"
+    },
+    "files": {
+      "gr00t/eval/rollout_policy.py": "sha256:e0833d57826f26e5b05e46e202f56eeae53fbb0e22b1c8b7c6b2271320e66132",
+      "gr00t/eval/sim/wrapper/multistep_wrapper.py": "sha256:8b2e7b8dea5399c1e1b51e9d9419aa32309aa9b46aaad88223d8dae6b3e56237",
+      "gr00t/policy/server_client.py": "sha256:d29d2e68e97ceae1762243315f23f22e696538da60fecd87d9a1391d20f7f1b9",
+      "gr00t/policy/gr00t_policy.py": "sha256:0a9fd201a23c972bf8c216496e61de32aca945cfdad5222f7dbfc5015f60c89a",
+      "gr00t/eval/sim/SimplerEnv/simpler_env.py": "sha256:e7f9a9129bfeb4b5e16410b699a960af742abb28b119608d90c13516cafe0840",
+      "external_dependencies/SimplerEnv/simpler_env/__init__.py": "sha256:d12b2be350fb5ff2671e4b1334d67c7afc6bef90919db6e9e15d42abad393c61",
+      "external_dependencies/SimplerEnv/simpler_env/utils/env/observation_utils.py": "sha256:ddfaa1d46d557d3d61387ae4717f067616accb76262089cf9eacbe193263272b",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/agents/controllers/pd_ee_pose.py": "sha256:b3d62a3f46ae9eb69f017b91671d8d29de818a51e5aa7ac9066628fabdcf3538",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/put_on_in_scene.py": "sha256:977fc830b8fb3903b72862d7082bacf06fb3d092f867a93be503d00671bf5a74"
+    }
+  },
+  "environment": {
+    "kind": "registered-gym",
+    "registration": "gr00t.eval.sim.SimplerEnv.simpler_env",
+    "register": "register_simpler_envs",
+    "tasks": [
+      "simpler_env_widowx/widowx_spoon_on_towel",
+      "simpler_env_widowx/widowx_carrot_on_plate",
+      "simpler_env_widowx/widowx_stack_cube",
+      "simpler_env_widowx/widowx_put_eggplant_in_basket"
+    ],
+    "horizon": 300,
+    "reset": "environmentSeed+initialStateId",
+    "success": "any native info.success; preserve native termination, otherwise terminate at chunk boundary"
+  },
+  "benchmarkProfile": {
+    "id": "widowx-official-gym/1",
+    "observations": {
+      "video.image_0": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "camera": "3rd_view_camera",
+        "layout": "HWC",
+        "format": "RGB-resized256"
+      },
+      "state.x": {
+        "semantic": "eef-position-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.y": {
+        "semantic": "eef-position-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.z": {
+        "semantic": "eef-position-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.roll": {
+        "semantic": "eef-orientation-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "Bridge-default-rotation",
+        "unit": "radian",
+        "format": "static-xyz-euler"
+      },
+      "state.pitch": {
+        "semantic": "eef-orientation-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "Bridge-default-rotation",
+        "unit": "radian",
+        "format": "static-xyz-euler"
+      },
+      "state.yaw": {
+        "semantic": "eef-orientation-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "Bridge-default-rotation",
+        "unit": "radian",
+        "format": "static-xyz-euler"
+      },
+      "state.gripper": {
+        "semantic": "widowx-native-eef-gripper-state",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "joint",
+        "unit": "native-eef-pos[7]"
+      },
+      "state.pad": {
+        "semantic": "constant-zero-padding",
+        "dtype": "float32",
+        "shape": [1]
+      },
+      "annotation.human.action.task_description": {
+        "semantic": "task-language",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "widowx-ee-target-delta",
+      "shape": [7],
+      "controller": "arm_pd_ee_target_delta_pose_align2_gripper_pd_joint_pos",
+      "frame": "ee_align2-about-current-FK-origin",
+      "unit": "translation:metre;rotation:radian",
+      "rotation": "axis-angle",
+      "gripper": "wrapper-0-close-1-open;native-sign-conversion",
+      "order": ["x", "y", "z", "roll", "pitch", "yaw", "gripper"]
+    }
+  },
+  "policyProfile": {
+    "id": "groot-widowx-input/1",
+    "observations": {
+      "video.image_0": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "camera": "3rd_view_camera",
+        "layout": "HWC",
+        "format": "RGB-resized256"
+      },
+      "state.x": {
+        "semantic": "eef-position-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.y": {
+        "semantic": "eef-position-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.z": {
+        "semantic": "eef-position-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.roll": {
+        "semantic": "eef-orientation-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "Bridge-default-rotation",
+        "unit": "radian",
+        "format": "static-xyz-euler"
+      },
+      "state.pitch": {
+        "semantic": "eef-orientation-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "Bridge-default-rotation",
+        "unit": "radian",
+        "format": "static-xyz-euler"
+      },
+      "state.yaw": {
+        "semantic": "eef-orientation-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "Bridge-default-rotation",
+        "unit": "radian",
+        "format": "static-xyz-euler"
+      },
+      "state.gripper": {
+        "semantic": "widowx-native-eef-gripper-state",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "joint",
+        "unit": "native-eef-pos[7]"
+      },
+      "state.pad": {
+        "semantic": "constant-zero-padding",
+        "dtype": "float32",
+        "shape": [1]
+      },
+      "annotation.human.action.task_description": {
+        "semantic": "task-language",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "widowx-ee-target-delta",
+      "shape": [7],
+      "controller": "arm_pd_ee_target_delta_pose_align2_gripper_pd_joint_pos",
+      "frame": "ee_align2-about-current-FK-origin",
+      "unit": "translation:metre;rotation:radian",
+      "rotation": "axis-angle",
+      "gripper": "wrapper-0-close-1-open;native-sign-conversion",
+      "order": ["x", "y", "z", "roll", "pitch", "yaw", "gripper"]
+    }
+  },
+  "observationMap": {
+    "video.image_0": "video.image_0",
+    "state.x": "state.x",
+    "state.y": "state.y",
+    "state.z": "state.z",
+    "state.roll": "state.roll",
+    "state.pitch": "state.pitch",
+    "state.yaw": "state.yaw",
+    "state.gripper": "state.gripper",
+    "state.pad": "state.pad",
+    "annotation.human.action.task_description": "annotation.human.action.task_description"
+  },
+  "parameters": {
+    "controlHz": 5,
+    "renderSize": 256,
+    "settleSteps": 0,
+    "replanSteps": 4,
+    "policySeed": 0,
+    "successRule": "any"
+  },
+  "status": {
+    "sourceAudit": "pinned",
+    "images": "unverified",
+    "positiveCalibration": "not_run",
+    "nativeParity": "not_run"
+  }
+}

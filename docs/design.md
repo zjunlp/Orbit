@@ -148,7 +148,11 @@ CLI 的运行/试跑/等待共用 `cli/run.ts`，表格与选项解析共用 for
 ## 4. 核心契约（R1 目标，字段以 `contracts/` 为准）
 
 **ResourceRequest**：`{ gpus, gpuMemGB?, gpuIds?, cpus, memGB, node? }`。Agent 按任务估算后提交；
-不满足时排队，而不是失败。
+没有可满足要求的节点时预检拒绝，符合条件的设备暂时被占用时排队。
+`gpuMemGB` 按每张卡总显存筛选。共享服务的显存预算由 `roleRequests` 加到 `gpusOf` 指定的拥有者，
+不增加 GPU 数量；拥有者和各独立角色分别检查容量、型号与指定卡，避免把主角色的门槛套到其他角色。
+预检与实际分配共用 GPU 筛选及联合匹配，确认独立角色能同时获得不同的卡；预检使用全部探测到的卡，
+实际分配排除忙碌与已租用的卡，区分硬件无法满足和暂时等待。
 
 **Lease**：`{ id, runId, node, gpuIds, cpus, memGB, state: active|released }`。
 只有确认容器已清理才释放。
@@ -857,8 +861,14 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   固定动作和原生 horizon 样例对照通过；共享编译模型、独立 key-0 流的真实协议控制下，实时输入、完整动作预测及物理轨迹精确一致。
   独立 GPU 进程逐位比较未通过：重复官方路径对相同首个输入也产生不同预测，具体底层原因未定位。完整 suite 统计等价和后续 episode
   随机流仍未验证，控制组通过不覆盖失败结论。工具为 `parity_plan.py / parity.py / parity_policy.py`，不作为生产模型池或默认保真度声明。
+- 第二组端点复用同一 Run 路径：`groot-zmq` 调用官方 GR00T 服务，模型端显式 `ioAdapter` 在原生 LIBERO 与 GR00T 输入间转换，
+  不改写 LIBERO benchmark profile；同一连接器也接收原生 SimplerEnv WidowX 的扁平字段。动作顺序、执行片段长度、Torch seed 0
+  及 backbone 内容摘要显式冻结，新增可选字段不补入旧 Policy 快照。GR00T 动作时间索引必须从 0 连续递增；原始动作在任何夹爪转换前
+  检查数值类型及有限性，拒绝的数值数组以禁止 pickle 的文件和诊断元数据保存，评测归为 `policy_act` 无效结果。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
+  对没有原生终止的成功信号在片段边界结束；证据验证按 profile 选择 last/any 成功聚合。`gpusOf: main` 允许模型服务显式共享模拟器已租用的 GPU，禁止同时
+  声明独立 role/GPU；没有新资源账本或调度器。配置、资产下载及验证边界见[接入说明](../examples/bench-adapters/embodied/GR00T.md)。
 - D2a 后续实现共享 solve Run、逐样本完成归属、SQLite 一致性备份及迁移恢复，并测量逐 Trial verify 的开销；当前 store 没有
-  自动备份。D2b 再接第二组端点并提炼唯一语义直连规则。首期不引入模型池、转换图搜索或另一套作业状态机。
+  自动备份。D2b 的第二组端点已先行接入，唯一语义直连规则仍待提炼。首期不引入模型池、转换图搜索或另一套作业状态机。
 
 ### 9.5 Agent 与环境的桥
 
@@ -917,7 +927,8 @@ reservation 与 x-gpu-memory-gb，其他 deploy 设置继续拒绝。带 `x-orbi
 Compose 在一台机器上给每个 `count: N` 同样的前 N 张卡）：`main` 有 reservation 时由 main 租用（privileged 模式，
 Agent 本身用 GPU）；否则由第一个不在宿主命名空间里的服务租用并成为同名角色（standard 模式的 sim）；其余服务
 （如测 GPU 用量的 rcb_monitor）用 `ServiceSpec.gpusOf` 看到同一组卡而不额外租用。组内 count 必须相同；
-`x-gpu-memory-gb` 求和作为该卡的最小显存。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
+`x-gpu-memory-gb` 求和作为该卡的最小显存；已折叠到拥有者的预算不再重复累加。直接声明的 `gpusOf` 服务保留自身
+`gpuMemGB`，在通用角色规划中加入拥有者；未声明预算的监控服务保持原行为。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
 拆成 Docker 的可执行文件与前置参数。`[environment] gpu_types` 变成拥有该组卡的角色的 `gpuModels`（任一型号，
 名称整词顺序匹配），本机没有这些型号时提交即给出原因；登记 `-c gpuTypes=any` 时不限制型号并记为偏差。
 

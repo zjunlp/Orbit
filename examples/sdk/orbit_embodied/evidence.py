@@ -85,6 +85,14 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
             raise ValueError("contract/result identity mismatch")
     if contract["bindingDigest"] != binding["digest"] or digest(contract["sample"]) != contract["sampleDigest"]:
         raise ValueError("contract fingerprint mismatch")
+    reference = contract["identity"].get("reference", {})
+    if "parameters" in reference:
+        task = contract["sample"]["taskId"]
+        horizon = reference.get("environment", {}).get("horizon", reference.get("horizons", {}).get(task.split(":")[0]))
+        if horizon is not None and contract["horizon"] != horizon:
+            raise ValueError("episode horizon differs from the frozen reference")
+        if contract["replanSteps"] != reference["parameters"]["replanSteps"]:
+            raise ValueError("execution horizon differs from the frozen reference")
     actions = [json.loads(line) for line in (directory / "actions.jsonl").read_text().splitlines()]
     controls = [row for row in actions if row["phase"] == "control"]
     if result["valid"]:
@@ -119,8 +127,12 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         initial = json.loads((directory / "initial-state.json").read_text())
         if initial["sampleRef"] != sample_ref or initial["initialStateId"] != contract["sample"].get("initialStateId") or initial["initialStateDigest"] != contract["sample"].get("initialStateDigest"):
             raise ValueError("initial-state evidence differs from the sample plan")
-    if result["valid"] and result["success"] != bool(controls[-1]["nativeSuccess"]):
-        raise ValueError("native verdict contradicts the last control step")
+    rule = contract["identity"].get("reference", {}).get("parameters", {}).get("successRule", "last")
+    if rule not in ("last", "any"):
+        raise ValueError("unsupported native success aggregation")
+    success = any(row["nativeSuccess"] for row in controls) if rule == "any" else bool(controls and controls[-1]["nativeSuccess"])
+    if result["valid"] and result["success"] != success:
+        raise ValueError("native verdict contradicts the declared control-step aggregation")
     if result["valid"] and not result["success"] and result["steps"] != contract["horizon"]:
         raise ValueError("a valid failure must reach the declared horizon")
     return result

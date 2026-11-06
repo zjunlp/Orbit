@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from orbit_embodied import StepResult, digest, resolve_binding, run_episode, verify_episode
+from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.openpi import quaternion_to_axis_angle
 
@@ -124,6 +124,25 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["failure"], "env_step")
         self.assertEqual(self.verify()["steps"], 3)
         self.assertFalse(result["valid"])
+
+    def test_rejected_raw_output_keeps_preceding_controls_and_call_identity(self):
+        class RejectingPolicy(SyntheticPolicy):
+            def act(self, observation):
+                if self.calls:
+                    raise EpisodeFailure("policy_act", "synthetic non-finite raw output",
+                                         rejected_actions=np.full((6, 7), np.inf, dtype=np.float32))
+                return super().act(observation)
+        benchmark = SyntheticBenchmark()
+        result = self.run_sample(benchmark, RejectingPolicy())
+        self.assertEqual(result["failure"], "policy_act")
+        self.assertEqual(result["steps"], 5)
+        self.assertEqual(benchmark.count, 5)
+        self.assertFalse(self.verify()["valid"])
+        self.assertTrue(np.isfinite(np.load(self.output / "chunks/0.npy", allow_pickle=False)).all())
+        self.assertTrue(np.isposinf(np.load(self.output / "chunks/1.rejected.npy", allow_pickle=False)).all())
+        rejection = json.loads((self.output / "chunks/1.rejected.json").read_text())
+        self.assertEqual(rejection["sourceObservation"], 5)
+        self.assertEqual(rejection["encoding"], "raw-policy-actions")
 
     def test_rescore_rejects_other_samples_attempts_and_changed_files(self):
         self.run_sample(SyntheticBenchmark(), SyntheticPolicy())

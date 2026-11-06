@@ -20,6 +20,8 @@ import {
   Method,
   PolicyDefinition,
   Run,
+  RunSpec,
+  roleRequests,
   SampleIdentity,
   SemanticProfile,
   Trial,
@@ -79,6 +81,40 @@ function policy() {
     },
   });
 }
+
+it("admits explicit GR00T identities and main-GPU sharing without changing saved OpenPI definitions", () => {
+  const original = policy();
+  expect(original).not.toHaveProperty("replanSteps");
+  expect(original).not.toHaveProperty("backboneDigest");
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../examples/bench-adapters/embodied/profiles/groot-widowx.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const input = {
+    ...original,
+    connector: "groot-zmq",
+    profile: reference.policyProfile,
+    replanSteps: 4,
+    ioAdapter: "gr00t-flat",
+    backboneDigest: `sha256:${"d".repeat(64)}`,
+    randomness: { backend: "torch", initialSeed: 0, scope: "service" },
+    service: { ...original.service, role: undefined, gpus: 0, gpusOf: "main" },
+  };
+  expect(PolicyDefinition.parse(input).service.gpusOf).toBe("main");
+  for (const changed of [
+    { ...input, backboneDigest: undefined },
+    { ...input, replanSteps: undefined },
+    { ...input, randomness: original.randomness },
+    { ...input, service: { ...input.service, role: "policy" } },
+    { ...input, service: { ...input.service, gpusOf: "sim" } },
+  ])
+    expect(PolicyDefinition.safeParse(changed).success).toBe(false);
+});
 
 function comparisonFixture() {
   const job = BenchJob.parse({
@@ -270,245 +306,268 @@ describe("planned sample and explicit binding contracts", () => {
   });
 });
 
-it("registers policies independently and freezes their definitions and bindings per job", async () => {
-  const home = mkdtempSync(join(tmpdir(), "orbit-embodied-test-"));
-  homes.push(home);
-  const paths = orbitPaths({ ORBIT_HOME: home });
-  ensureHome(paths);
-  const store = new Store(paths.db);
-  stores.push(store);
-  const registry = new BenchmarkRegistry(paths.benchmarks);
-  registry.put({ name: "synthetic", adapter: "harbor", path: home });
-  const runs = new RunService({ store, paths, probe: vi.fn() });
-  const bench = new BenchService({ store, paths, runs, registry, self: [process.execPath] });
-  bench.policies.put(policy());
-  expect(new PolicyRegistry(join(home, "policies.json")).list()).toHaveLength(1);
-  vi.spyOn(AdapterClient.prototype, "tasks").mockResolvedValue(
-    AdapterTasksResponse.parse({
-      tasks: [
-        {
-          id: "synthetic:task",
-          title: "Synthetic task",
-          supported: true,
-          reason: null,
-          tags: { initialStateDigest: `sha256:${"a".repeat(64)}` },
+it.each([false, true])(
+  "freezes independent policies and bindings per job (shared GPU: %s)",
+  async (shared) => {
+    const home = mkdtempSync(join(tmpdir(), "orbit-embodied-test-"));
+    homes.push(home);
+    const paths = orbitPaths({ ORBIT_HOME: home });
+    ensureHome(paths);
+    const store = new Store(paths.db);
+    stores.push(store);
+    const registry = new BenchmarkRegistry(paths.benchmarks);
+    registry.put({ name: "synthetic", adapter: "harbor", path: home });
+    const runs = new RunService({ store, paths, probe: vi.fn() });
+    const bench = new BenchService({ store, paths, runs, registry, self: [process.execPath] });
+    const definition = policy();
+    if (shared)
+      definition.service = { ...definition.service, role: undefined, gpusOf: "main", gpuMemGB: 24 };
+    bench.policies.put(definition);
+    expect(new PolicyRegistry(join(home, "policies.json")).list()).toHaveLength(1);
+    vi.spyOn(AdapterClient.prototype, "tasks").mockResolvedValue(
+      AdapterTasksResponse.parse({
+        tasks: [
+          {
+            id: "synthetic:task",
+            title: "Synthetic task",
+            supported: true,
+            reason: null,
+            tags: { initialStateDigest: `sha256:${"a".repeat(64)}` },
+          },
+        ],
+        capabilities: {
+          methods: ["policy"],
+          conditions: {},
+          scoreKind: "binary",
+          rescore: "evidence",
+          embodied: {
+            profile: reference.id,
+            semanticProfile: benchmarkProfile,
+            observationMap: reference.observationMap,
+          },
         },
-      ],
-      capabilities: {
-        methods: ["policy"],
-        conditions: {},
-        scoreKind: "binary",
-        rescore: "evidence",
-        embodied: {
-          profile: reference.id,
-          semanticProfile: benchmarkProfile,
-          observationMap: reference.observationMap,
-        },
-      },
-    }),
-  );
-  const solve = vi.spyOn(AdapterClient.prototype, "solve").mockResolvedValue({
-    spec: { image: "synthetic-benchmark", command: ["true"] },
-    issues: [],
-  });
-  const verify = vi.spyOn(AdapterClient.prototype, "verify").mockResolvedValue({
-    spec: { image: "synthetic-verifier", command: ["true"] },
-    issues: [],
-  });
-  vi.spyOn(AdapterClient.prototype, "score").mockResolvedValue({
-    score: 1,
-    maxScore: 1,
-    invalid: false,
-    issues: [],
-  });
-  let ordinal = 0;
-  const submit = vi.spyOn(runs, "submit").mockImplementation(async (spec) => {
-    const run = Run.parse({
-      id: `synthetic-${++ordinal}`,
-      spec,
-      state: "queued",
-      node: "synthetic",
-      reason: null,
-      exitCode: null,
-      image: null,
-      containerId: null,
-      lease: null,
-      code: null,
-      cleanup: "pending",
-      note: "",
-      createdAt: new Date().toISOString(),
-      startedAt: null,
-      endedAt: null,
-    });
-    store.putRun(run);
-    mkdirSync(runs.dirs(run.id).output, { recursive: true });
-    return run;
-  });
-  const mismatched = [sample("0", `sha256:${"f".repeat(64)}`)];
-  await expect(
-    bench.submit({
-      benchmark: "synthetic",
-      samplePlan: checkSamplePlan({
-        version: 1,
-        items: mismatched,
-        digest: contentDigest(mismatched),
       }),
-      methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
-    }),
-  ).rejects.toThrow("initial-state asset");
-  expect(submit).not.toHaveBeenCalled();
-  expect(store.listJobs()).toHaveLength(0);
-  const job = await bench.submit({
-    benchmark: "synthetic",
-    samplePlan: plan(),
-    methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
-  });
-  await expect.poll(() => store.trials(job.id).filter((t) => t.state === "solving").length).toBe(2);
-  expect(job.spec.tasks).toEqual(["synthetic:task"]);
-  const changedRuntime = structuredClone(job);
-  const frozenPolicy = changedRuntime.spec.methods[0]?.policySnapshot;
-  if (!frozenPolicy) throw new Error("missing policy snapshot");
-  frozenPolicy.service.image = `synthetic-model@sha256:${"f".repeat(64)}`;
-  expect(planDigest(changedRuntime)).not.toBe(planDigest(job));
-  const changedBinding = structuredClone(job);
-  if (!changedBinding.resolvedBindings?.p) throw new Error("missing resolved binding");
-  changedBinding.resolvedBindings.p.digest = `sha256:${"f".repeat(64)}`;
-  expect(planDigest(changedBinding)).not.toBe(planDigest(job));
-  expect(store.trials(job.id).every((t) => !Object.hasOwn(t, "seed"))).toBe(true);
-  expect(solve.mock.calls[0]?.[0].binding).toEqual(job.resolvedBindings?.p);
-  expect(submit.mock.calls[0]?.[0].services?.[0]).toMatchObject({
-    name: "policy",
-    role: "policy",
-    gpus: 0,
-  });
-  expect(submit.mock.calls[0]?.[0].tags?.execution_trial).toBe(store.trials(job.id)[0]?.id);
-  bench.policies.remove("synthetic-policy");
-  expect(store.getJob(job.id)?.spec.methods[0]?.policySnapshot?.checkpointDigest).toBe(
-    policy().checkpointDigest,
-  );
-  function finish(id: string | null) {
-    if (!id) throw new Error("missing synthetic run");
-    const run = store.getRun(id);
-    if (!run) throw new Error("missing synthetic run record");
-    const complete = {
-      ...run,
-      state: "succeeded" as const,
-      cleanup: "done" as const,
-      exitCode: 0,
-      startedAt: job.createdAt,
-      endedAt: new Date().toISOString(),
-    };
-    store.putRun(complete);
-    runs.emit("change", { run: complete });
-  }
-  for (const trial of store.trials(job.id)) finish(trial.solveRunId);
-  await expect.poll(() => verify.mock.calls.length).toBe(2);
-  await expect
-    .poll(() => store.trials(job.id).filter((t) => t.state === "verifying").length)
-    .toBe(2);
-  expect(submit.mock.calls.slice(2).every(([spec]) => !spec.services?.length)).toBe(true);
-  for (const trial of store.trials(job.id)) finish(trial.verifyRunId);
-  await expect.poll(() => store.getJob(job.id)?.state).toBe("done");
-  const before = store.trials(job.id);
-  const first = before[0];
-  if (!first) throw new Error("missing planned trial");
-  bench.rescore(job.id, { trials: [first.id] });
-  await expect.poll(() => verify.mock.calls.length).toBe(3);
-  const rescored = store.trials(job.id).find((t) => t.id === first.id);
-  finish(rescored?.verifyRunId ?? null);
-  await expect.poll(() => store.trials(job.id).find((t) => t.id === first.id)?.state).toBe("done");
-  expect(solve).toHaveBeenCalledTimes(2);
-  expect(store.trials(job.id)[1]).toEqual(before[1]);
-  expect(store.trials(job.id)[0]?.history).toHaveLength(1);
-  const report = buildReport(
-    store.getJob(job.id) ?? job,
-    store.trials(job.id),
-    "rescore",
-    1,
-    new Date().toISOString(),
-  );
-  expect(report.methods[0]?.entries.map((entry) => entry.sample).sort()).toEqual(
-    plan()
-      .items.map((item) => item.sampleId)
-      .sort(),
-  );
-  expect(report.aggregator).toBe("orbit-report/2");
-  const alternate = [sample("9")];
-  const alternatePlan = checkSamplePlan({
-    version: 1,
-    items: alternate,
-    digest: contentDigest(alternate),
-  });
-  const otherJob = BenchJob.parse({
-    ...job,
-    id: "synthetic-other",
-    spec: { ...job.spec, seeds: undefined, samplePlan: alternatePlan },
-  });
-  const otherTrials = [
-    Trial.parse({
-      ...before[0],
-      id: "synthetic-other.1",
-      jobId: otherJob.id,
-      sampleRef: alternate[0]?.sampleId,
-    }),
-  ];
-  const comparison = compareJobs([
-    { job, trials: store.trials(job.id) },
-    { job: otherJob, trials: otherTrials },
-  ]);
-  expect(comparison.stats.score?.pairedTasks).toBe(0);
-  expect(
-    Object.values(comparison.stats.score?.columns ?? {}).every((column) => column.diff === null),
-  ).toBe(true);
-
-  expect(
-    AdapterRequest.safeParse({
-      protocol: 1,
-      op: "solve",
-      benchmark: { name: "x", path: home, config: {} },
-      trial: { ...solve.mock.calls[0]?.[0], seed: 1 },
-    }).success,
-  ).toBe(false);
-
-  // Simulate legacy evidence with no execution_trial, then adopt it twice and rescore.
-  const sourceTrial = store.trials(job.id)[0];
-  if (!sourceTrial?.solveRunId) throw new Error("missing source solve");
-  const sourceRun = store.getRun(sourceTrial.solveRunId);
-  if (!sourceRun) throw new Error("missing source Run");
-  delete sourceRun.spec.tags.execution_trial;
-  store.putRun(sourceRun);
-  let sourceJob = store.getJob(job.id) ?? job;
-  for (const id of ["synthetic-merge-one", "synthetic-merge-two"]) {
-    const target = { ...structuredClone(sourceJob), id };
-    store.putJob(target);
-    for (const [i, trial] of store.trials(sourceJob.id).entries()) {
-      store.putTrial(
-        Trial.parse({
-          ...trial,
-          id: `${id}.${i}`,
-          jobId: id,
-          outcome: null,
-          solveRunId: null,
-          verifyRunId: null,
-          history: [],
-          state: "done",
+    );
+    const solve = vi.spyOn(AdapterClient.prototype, "solve").mockResolvedValue({
+      spec: {
+        image: "synthetic-benchmark",
+        command: ["true"],
+        resources: { gpus: shared ? 1 : 0, ...(shared ? { gpuMemGB: 4 } : {}) },
+      },
+      issues: [],
+    });
+    const verify = vi.spyOn(AdapterClient.prototype, "verify").mockResolvedValue({
+      spec: { image: "synthetic-verifier", command: ["true"] },
+      issues: [],
+    });
+    vi.spyOn(AdapterClient.prototype, "score").mockResolvedValue({
+      score: 1,
+      maxScore: 1,
+      invalid: false,
+      issues: [],
+    });
+    let ordinal = 0;
+    const submit = vi.spyOn(runs, "submit").mockImplementation(async (spec) => {
+      const run = Run.parse({
+        id: `synthetic-${++ordinal}`,
+        spec,
+        state: "queued",
+        node: "synthetic",
+        reason: null,
+        exitCode: null,
+        image: null,
+        containerId: null,
+        lease: null,
+        code: null,
+        cleanup: "pending",
+        note: "",
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        endedAt: null,
+      });
+      store.putRun(run);
+      mkdirSync(runs.dirs(run.id).output, { recursive: true });
+      return run;
+    });
+    const mismatched = [sample("0", `sha256:${"f".repeat(64)}`)];
+    await expect(
+      bench.submit({
+        benchmark: "synthetic",
+        samplePlan: checkSamplePlan({
+          version: 1,
+          items: mismatched,
+          digest: contentDigest(mismatched),
         }),
-      );
+        methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
+      }),
+    ).rejects.toThrow("initial-state asset");
+    expect(submit).not.toHaveBeenCalled();
+    expect(store.listJobs()).toHaveLength(0);
+    const job = await bench.submit({
+      benchmark: "synthetic",
+      samplePlan: plan(),
+      methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
+    });
+    await expect
+      .poll(() => store.trials(job.id).filter((t) => t.state === "solving").length)
+      .toBe(2);
+    expect(job.spec.tasks).toEqual(["synthetic:task"]);
+    const changedRuntime = structuredClone(job);
+    const frozenPolicy = changedRuntime.spec.methods[0]?.policySnapshot;
+    if (!frozenPolicy) throw new Error("missing policy snapshot");
+    frozenPolicy.service.image = `synthetic-model@sha256:${"f".repeat(64)}`;
+    expect(planDigest(changedRuntime)).not.toBe(planDigest(job));
+    const changedBinding = structuredClone(job);
+    if (!changedBinding.resolvedBindings?.p) throw new Error("missing resolved binding");
+    changedBinding.resolvedBindings.p.digest = `sha256:${"f".repeat(64)}`;
+    expect(planDigest(changedBinding)).not.toBe(planDigest(job));
+    expect(store.trials(job.id).every((t) => !Object.hasOwn(t, "seed"))).toBe(true);
+    expect(solve.mock.calls[0]?.[0].binding).toEqual(job.resolvedBindings?.p);
+    expect(submit.mock.calls[0]?.[0].services?.[0]).toMatchObject({
+      name: "policy",
+      ...(shared ? { gpusOf: "main" } : { role: "policy" }),
+      gpus: 0,
+    });
+    if (shared) expect(submit.mock.calls[0]?.[0].services?.[0]?.role).toBeUndefined();
+    if (shared) {
+      const spec = RunSpec.parse(submit.mock.calls[0]?.[0]);
+      expect(roleRequests(spec)[0]).toMatchObject({ gpus: 1, gpuMemGB: 28 });
     }
-    const preview = await bench.consolidate(id, { sources: [sourceJob.id] });
-    await bench.consolidate(id, { sources: [sourceJob.id], dryRun: false, expect: preview.digest });
-    sourceJob = store.getJob(id) ?? target;
-    expect(store.getRun(sourceRun.id)?.spec.tags.execution_trial).toBe(sourceTrial.id);
-  }
-  const adopted = store.trials(sourceJob.id).find((trial) => trial.solveRunId === sourceRun.id);
-  if (!adopted) throw new Error("missing adopted trial");
-  bench.rescore(sourceJob.id, { trials: [adopted.id] });
-  await expect.poll(() => verify.mock.calls.length).toBe(4);
-  expect(verify.mock.calls.at(-1)?.[1]?.run.spec.tags).toMatchObject({
-    trial: adopted.id,
-    execution_trial: sourceTrial.id,
-  });
-  finish(store.getTrial(adopted.id)?.verifyRunId ?? null);
-  await expect.poll(() => store.getTrial(adopted.id)?.outcome?.evaluation).toBe("valid");
-  expect(solve).toHaveBeenCalledTimes(2);
-});
+    expect(submit.mock.calls[0]?.[0].tags?.execution_trial).toBe(store.trials(job.id)[0]?.id);
+    bench.policies.remove("synthetic-policy");
+    expect(store.getJob(job.id)?.spec.methods[0]?.policySnapshot?.checkpointDigest).toBe(
+      policy().checkpointDigest,
+    );
+    function finish(id: string | null) {
+      if (!id) throw new Error("missing synthetic run");
+      const run = store.getRun(id);
+      if (!run) throw new Error("missing synthetic run record");
+      const complete = {
+        ...run,
+        state: "succeeded" as const,
+        cleanup: "done" as const,
+        exitCode: 0,
+        startedAt: job.createdAt,
+        endedAt: new Date().toISOString(),
+      };
+      store.putRun(complete);
+      runs.emit("change", { run: complete });
+    }
+    for (const trial of store.trials(job.id)) finish(trial.solveRunId);
+    await expect.poll(() => verify.mock.calls.length).toBe(2);
+    await expect
+      .poll(() => store.trials(job.id).filter((t) => t.state === "verifying").length)
+      .toBe(2);
+    expect(submit.mock.calls.slice(2).every(([spec]) => !spec.services?.length)).toBe(true);
+    for (const trial of store.trials(job.id)) finish(trial.verifyRunId);
+    await expect.poll(() => store.getJob(job.id)?.state).toBe("done");
+    const before = store.trials(job.id);
+    const first = before[0];
+    if (!first) throw new Error("missing planned trial");
+    bench.rescore(job.id, { trials: [first.id] });
+    await expect.poll(() => verify.mock.calls.length).toBe(3);
+    const rescored = store.trials(job.id).find((t) => t.id === first.id);
+    finish(rescored?.verifyRunId ?? null);
+    await expect
+      .poll(() => store.trials(job.id).find((t) => t.id === first.id)?.state)
+      .toBe("done");
+    expect(solve).toHaveBeenCalledTimes(2);
+    expect(store.trials(job.id)[1]).toEqual(before[1]);
+    expect(store.trials(job.id)[0]?.history).toHaveLength(1);
+    const report = buildReport(
+      store.getJob(job.id) ?? job,
+      store.trials(job.id),
+      "rescore",
+      1,
+      new Date().toISOString(),
+    );
+    expect(report.methods[0]?.entries.map((entry) => entry.sample).sort()).toEqual(
+      plan()
+        .items.map((item) => item.sampleId)
+        .sort(),
+    );
+    expect(report.aggregator).toBe("orbit-report/2");
+    const alternate = [sample("9")];
+    const alternatePlan = checkSamplePlan({
+      version: 1,
+      items: alternate,
+      digest: contentDigest(alternate),
+    });
+    const otherJob = BenchJob.parse({
+      ...job,
+      id: "synthetic-other",
+      spec: { ...job.spec, seeds: undefined, samplePlan: alternatePlan },
+    });
+    const otherTrials = [
+      Trial.parse({
+        ...before[0],
+        id: "synthetic-other.1",
+        jobId: otherJob.id,
+        sampleRef: alternate[0]?.sampleId,
+      }),
+    ];
+    const comparison = compareJobs([
+      { job, trials: store.trials(job.id) },
+      { job: otherJob, trials: otherTrials },
+    ]);
+    expect(comparison.stats.score?.pairedTasks).toBe(0);
+    expect(
+      Object.values(comparison.stats.score?.columns ?? {}).every((column) => column.diff === null),
+    ).toBe(true);
+
+    expect(
+      AdapterRequest.safeParse({
+        protocol: 1,
+        op: "solve",
+        benchmark: { name: "x", path: home, config: {} },
+        trial: { ...solve.mock.calls[0]?.[0], seed: 1 },
+      }).success,
+    ).toBe(false);
+
+    // Simulate legacy evidence with no execution_trial, then adopt it twice and rescore.
+    const sourceTrial = store.trials(job.id)[0];
+    if (!sourceTrial?.solveRunId) throw new Error("missing source solve");
+    const sourceRun = store.getRun(sourceTrial.solveRunId);
+    if (!sourceRun) throw new Error("missing source Run");
+    delete sourceRun.spec.tags.execution_trial;
+    store.putRun(sourceRun);
+    let sourceJob = store.getJob(job.id) ?? job;
+    for (const id of ["synthetic-merge-one", "synthetic-merge-two"]) {
+      const target = { ...structuredClone(sourceJob), id };
+      store.putJob(target);
+      for (const [i, trial] of store.trials(sourceJob.id).entries()) {
+        store.putTrial(
+          Trial.parse({
+            ...trial,
+            id: `${id}.${i}`,
+            jobId: id,
+            outcome: null,
+            solveRunId: null,
+            verifyRunId: null,
+            history: [],
+            state: "done",
+          }),
+        );
+      }
+      const preview = await bench.consolidate(id, { sources: [sourceJob.id] });
+      await bench.consolidate(id, {
+        sources: [sourceJob.id],
+        dryRun: false,
+        expect: preview.digest,
+      });
+      sourceJob = store.getJob(id) ?? target;
+      expect(store.getRun(sourceRun.id)?.spec.tags.execution_trial).toBe(sourceTrial.id);
+    }
+    const adopted = store.trials(sourceJob.id).find((trial) => trial.solveRunId === sourceRun.id);
+    if (!adopted) throw new Error("missing adopted trial");
+    bench.rescore(sourceJob.id, { trials: [adopted.id] });
+    await expect.poll(() => verify.mock.calls.length).toBe(4);
+    expect(verify.mock.calls.at(-1)?.[1]?.run.spec.tags).toMatchObject({
+      trial: adopted.id,
+      execution_trial: sourceTrial.id,
+    });
+    finish(store.getTrial(adopted.id)?.verifyRunId ?? null);
+    await expect.poll(() => store.getTrial(adopted.id)?.outcome?.evaluation).toBe("valid");
+    expect(solve).toHaveBeenCalledTimes(2);
+  },
+);

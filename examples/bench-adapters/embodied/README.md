@@ -1,4 +1,4 @@
-# Native LIBERO and independent OpenPI policies
+# Native embodied benchmarks and independent policies
 
 Experimental D1 implementation. Development checks include real π₀.₅ checkpoint positives on
 CPU and GPU, native-environment negatives and saved-output rescore/cleanup. Deterministic
@@ -6,6 +6,9 @@ reference checks and a sampled real protocol control with shared compiled weight
 Bitwise comparison across independent GPU processes failed; full-suite statistical equivalence
 remains unverified. See the task records for validation details.
 The existing vla-eval registrations remain separate.
+
+The additional GR00T connector reuses the same native LIBERO benchmark and supports native
+SimplerEnv WidowX. Provisioning and explicit evaluation conditions are in [GR00T.md](GR00T.md).
 
 The benchmark adapter lists official LIBERO tasks and runs one frozen sample per solve Run.
 Orbit adds the independently registered model service and leases both roles together. Verify
@@ -94,8 +97,8 @@ packaged `reference.json`; every phase still requires its content to match the r
 
 D1 starts a fresh policy service for every trial. The stock OpenPI protocol cannot reset its
 JAX random stream: independently running a later episode does not prove equivalence to the
-upstream multi-episode stream. Shared solve batches belong to D2a, additional endpoints and
-automatic direct mappings to D2b. The generated simulator configuration uses CPU OSMesa;
+upstream multi-episode stream. Shared solve batches belong to D2a; broader compatibility and
+automatic direct mappings remain future work. The OpenPI simulator configuration uses CPU OSMesa;
 renderer changes are explicit conditions and need their own reference checks.
 
 Saved evidence includes requested action chunks, executed controls with source observation and
@@ -159,11 +162,13 @@ production shared-batch or model-pool support.
 
 Use separate Python 3.8 and 3.11 environments with NumPy and the audited `openpi-client` package.
 The connector additionally needs Pillow, MsgPack and `websockets` (13.1 supports both versions).
+GR00T transport checks also need `pyzmq==26.2.0`, `msgpack==1.1.0` and `msgpack-numpy==0.4.8`.
+Set `PYTHONPATH=examples/sdk` when running from the repository root.
 
 ```bash
 python -B -m unittest discover -s examples/sdk -p 'test_*.py' -v
 ```
 
-These checks include a real binary WebSocket round trip with an explicitly synthetic policy
-server, chunk truncation at native termination, evidence corruption and saved-output verification.
+These checks include binary WebSocket and ZeroMQ round trips with explicitly synthetic policy
+servers, chunk termination and success aggregation, asset verification, evidence corruption and saved-output verification.
 They do not replace an actual simulator episode, real VLA positive or native-reference comparison.

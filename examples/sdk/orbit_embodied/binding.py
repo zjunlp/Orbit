@@ -16,6 +16,10 @@ def check_sample(sample, sample_ref):
         raise ValueError("sampleId differs from the sample content or frozen sampleRef")
 
 
+def seed_asset(reference, task):
+    return digest({"reset": "environmentSeed+initialStateId", "task": task, "profile": digest(reference)})
+
+
 def resolve_binding(benchmark, policy, observation_map):
     if set(observation_map) != set(policy["observations"]):
         raise ValueError("explicit mappings must cover exactly the policy observation fields")

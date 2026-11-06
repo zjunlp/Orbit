@@ -69,7 +69,7 @@ export type Healthcheck = z.infer<typeof Healthcheck>;
 
 /**
  * A service container next to the run's own (e.g. a simulator the Agent queries over HTTP). It runs
- * for the whole run on the run's networks, reachable by its name; it holds no GPUs.
+ * for the whole run on the run's networks, reachable by its name; resources join the run's lease.
  */
 export const ServiceSpec = z
   .object({
@@ -138,12 +138,13 @@ export const ServiceSpec = z
     devices: z.array(DeviceRequest).default([]),
     /** GPUs of this service's role (only with `role`). */
     gpus: z.number().int().min(0).optional(),
+    /** Per-GPU budget; with gpusOf it is added to the owner's budget. */
     gpuMemGB: z.number().positive().optional(),
     /** Acceptable GPU models of this service's role, any of them (see `ResourceRequest.gpuModels`). */
     gpuModels: z.array(z.string().trim().min(1).max(40)).max(16).optional(),
     /**
-     * See the GPUs leased to another role (`main` or a service role) without leasing any: a monitor
-     * that measures that role's GPU use, as Compose gives every reservation on one host the same card.
+     * Use another role's GPUs (`main` or a service role) without leasing extra cards. A declared
+     * memory budget is added to that owner, including for model/simulator sharing and monitors.
      */
     gpusOf: LeaseRole.optional(),
     /** GPU models the role needs, e.g. `rtx` (advisory: checked against the card name). */
@@ -488,12 +489,11 @@ export function serviceOrder<T extends { name: string; dependsOn: string[] }>(
   return out;
 }
 
-/** What a run leases: its own resources plus its services' (GPUs stay with the run's container). */
 /**
  * The lease a run needs, per role (design §9.4): `main`, plus each service with a `role` (a
  * simulator, a policy server) and its own GPU/memory request. Services without a role reserve CPU
- * and memory only, as before. `allocateRoles` decides the assignments together, so a run never
- * starts with half of a heterogeneous requirement.
+ * and memory only, unless gpusOf adds their per-GPU memory budget to an existing owner.
+ * `allocateRoles` decides the assignments together, so a run never starts with half a requirement.
  */
 export function roleRequests(
   s: Pick<RunSpec, "resources" | "services"> & Partial<Pick<RunSpec, "devices">>,
@@ -525,6 +525,11 @@ export function roleRequests(
         cpus: x.cpus ?? 1,
         memGB: x.memGB ?? 1,
       });
+  for (const service of s.services) {
+    if (!service.gpusOf || !service.gpuMemGB) continue;
+    const owner = roles.find((role) => role.role === service.gpusOf);
+    if (owner) owner.gpuMemGB = (owner.gpuMemGB ?? 0) + service.gpuMemGB;
+  }
   return roles;
 }
 
