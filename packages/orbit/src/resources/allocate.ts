@@ -36,16 +36,29 @@ export function infeasible(
   r: NodeResources,
   roles: RoleRequest[] = [],
 ): string | null {
-  for (const role of roles) {
-    if (!role.gpuModels?.length || role.gpus === 0) continue;
-    const have = r.gpus.filter((g) => modelMatches(g.name, role.gpuModels)).length;
-    if (have < role.gpus)
-      return `role ${role.role} needs ${role.gpus} GPU(s) of ${role.gpuModels.join(" / ")}, but this node has ${have}`;
-  }
   if (req.gpus > 0 && r.gpuError) return `GPUs requested but unavailable: ${r.gpuError}`;
-  const fitting = r.gpus.filter(
-    (g) => gpuMemFits(g, req) && (!req.gpuIds?.length || matchesId(g, req.gpuIds)),
-  );
+  for (const role of roles) {
+    if (role.gpus === 0) continue;
+    const have = r.gpus.filter(
+      (g) =>
+        gpuMemFits(g, role) &&
+        modelMatches(g.name, role.gpuModels) &&
+        (!role.gpuIds?.length || matchesId(g, role.gpuIds)),
+    ).length;
+    if (have < role.gpus) {
+      const constraints = [
+        role.gpuModels?.length ? `of ${role.gpuModels.join(" / ")}` : "",
+        role.gpuMemGB ? `with at least ${role.gpuMemGB} GB` : "",
+        role.gpuIds?.length ? `matching ${role.gpuIds.join(" / ")}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `role ${role.role} needs ${role.gpus} GPU(s)${constraints ? ` ${constraints}` : ""}, but this node has ${have}`;
+    }
+  }
+  const fitting = roles.length
+    ? r.gpus
+    : r.gpus.filter((g) => gpuMemFits(g, req) && (!req.gpuIds?.length || matchesId(g, req.gpuIds)));
   if (req.gpus > fitting.length) {
     return `needs ${req.gpus} GPU(s) but this node has ${fitting.length} matching`;
   }
@@ -66,7 +79,7 @@ export function infeasible(
  * Cards report a little less than their nominal size (an 80 GB H100 shows 81559 MiB), so a request
  * in nominal GB matches within 3%.
  */
-function gpuMemFits(g: { memTotalMiB: number }, req: ResourceRequest): boolean {
+function gpuMemFits(g: { memTotalMiB: number }, req: Pick<ResourceRequest, "gpuMemGB">): boolean {
   return !req.gpuMemGB || g.memTotalMiB >= req.gpuMemGB * 1024 * 0.97;
 }
 
@@ -247,7 +260,7 @@ export function allocateRoles(
     const { models } = gpuFeatures(role);
     return r.gpus
       .filter((g) => !leased.has(g.uuid) && g.available)
-      .filter((g) => gpuMemFits(g, role as ResourceRequest))
+      .filter((g) => gpuMemFits(g, role))
       .filter((g) => !role.gpuIds?.length || matchesId(g, role.gpuIds))
       .filter((g) => models.every((name) => g.name.toLowerCase().includes(name)))
       .filter((g) => modelMatches(g.name, role.gpuModels))

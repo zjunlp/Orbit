@@ -80,6 +80,11 @@ updates `libero-native` to the runtime with ZeroMQ support; prior jobs retain th
 
 Without `--share-gpu`, the model has an independent GPU role. With it, the model explicitly uses
 `gpusOf: main`, sharing the simulator's already leased GPU; Orbit still owns scheduling and cleanup.
+Both modes retain the model's 24 GB per-GPU budget. GPU simulators declare a separate 4 GB budget,
+configurable with `--sim-gpu-mem-gb`. Shared budgets add on the owning role, so the default shared
+configuration requires a nominal capacity of at least 28 GB per card; separate roles retain their
+individual budgets. These are capacity admission estimates; tune the simulator budget for the task.
+Insufficient node capacity fails preflight, while a fitting card that is busy or leased causes waiting.
 WidowX needs a working SAPIEN Vulkan renderer. The image supplies generic NVIDIA EGL/Vulkan
 manifests and requests graphics/compute/utility capabilities; no host driver paths are embedded.
 

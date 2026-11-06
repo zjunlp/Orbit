@@ -148,7 +148,9 @@ CLI 的运行/试跑/等待共用 `cli/run.ts`，表格与选项解析共用 for
 ## 4. 核心契约（R1 目标，字段以 `contracts/` 为准）
 
 **ResourceRequest**：`{ gpus, gpuMemGB?, gpuIds?, cpus, memGB, node? }`。Agent 按任务估算后提交；
-不满足时排队，而不是失败。
+没有可满足要求的节点时预检拒绝，符合条件的设备暂时被占用时排队。
+`gpuMemGB` 按每张卡总显存筛选。共享服务的显存预算由 `roleRequests` 加到 `gpusOf` 指定的拥有者，
+不增加 GPU 数量；拥有者和各独立角色分别检查容量、型号与指定卡，避免把主角色的门槛套到其他角色。
 
 **Lease**：`{ id, runId, node, gpuIds, cpus, memGB, state: active|released }`。
 只有确认容器已清理才释放。
@@ -923,7 +925,8 @@ reservation 与 x-gpu-memory-gb，其他 deploy 设置继续拒绝。带 `x-orbi
 Compose 在一台机器上给每个 `count: N` 同样的前 N 张卡）：`main` 有 reservation 时由 main 租用（privileged 模式，
 Agent 本身用 GPU）；否则由第一个不在宿主命名空间里的服务租用并成为同名角色（standard 模式的 sim）；其余服务
 （如测 GPU 用量的 rcb_monitor）用 `ServiceSpec.gpusOf` 看到同一组卡而不额外租用。组内 count 必须相同；
-`x-gpu-memory-gb` 求和作为该卡的最小显存。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
+`x-gpu-memory-gb` 求和作为该卡的最小显存；已折叠到拥有者的预算不再重复累加。直接声明的 `gpusOf` 服务保留自身
+`gpuMemGB`，在通用角色规划中加入拥有者；未声明预算的监控服务保持原行为。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
 拆成 Docker 的可执行文件与前置参数。`[environment] gpu_types` 变成拥有该组卡的角色的 `gpuModels`（任一型号，
 名称整词顺序匹配），本机没有这些型号时提交即给出原因；登记 `-c gpuTypes=any` 时不限制型号并记为偏差。
 

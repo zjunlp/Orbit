@@ -4,6 +4,7 @@
 import ast
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 import sys
@@ -38,7 +39,7 @@ def reference_profile(config):
 
 def settings(req):
     config = req["benchmark"]["config"]
-    unknown = set(config) - {"image", "profileDigest", "reference", "implementationDigest", "suite", "python", "simGpus", "renderer"}
+    unknown = set(config) - {"image", "profileDigest", "reference", "implementationDigest", "suite", "python", "simGpus", "simGpuMemGB", "renderer"}
     if unknown:
         raise ValueError("unknown embodied settings: " + ", ".join(sorted(unknown)))
     reference = reference_profile(config)
@@ -128,12 +129,18 @@ def solve(req):
                "implementationDigest": config["implementationDigest"]}
     (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
+    resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": 8}
+    if "simGpuMemGB" in config:
+        memory = float(config["simGpuMemGB"])
+        if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
+            raise ValueError("simGpuMemGB needs a GPU simulator and a finite positive budget")
+        resources["gpuMemGB"] = memory
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim",
                              "MUJOCO_GL": gl_platform,
                              "PYOPENGL_PLATFORM": gl_platform},
-                     "resources": {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": 8},
+                     "resources": resources,
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
                      "tags": {"embodied_evidence": "2"},
                      "mounts": [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]}}

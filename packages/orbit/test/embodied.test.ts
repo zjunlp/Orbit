@@ -20,6 +20,8 @@ import {
   Method,
   PolicyDefinition,
   Run,
+  RunSpec,
+  roleRequests,
   SampleIdentity,
   SemanticProfile,
   Trial,
@@ -318,7 +320,8 @@ it.each([false, true])(
     const runs = new RunService({ store, paths, probe: vi.fn() });
     const bench = new BenchService({ store, paths, runs, registry, self: [process.execPath] });
     const definition = policy();
-    if (shared) definition.service = { ...definition.service, role: undefined, gpusOf: "main" };
+    if (shared)
+      definition.service = { ...definition.service, role: undefined, gpusOf: "main", gpuMemGB: 24 };
     bench.policies.put(definition);
     expect(new PolicyRegistry(join(home, "policies.json")).list()).toHaveLength(1);
     vi.spyOn(AdapterClient.prototype, "tasks").mockResolvedValue(
@@ -349,7 +352,7 @@ it.each([false, true])(
       spec: {
         image: "synthetic-benchmark",
         command: ["true"],
-        resources: { gpus: shared ? 1 : 0 },
+        resources: { gpus: shared ? 1 : 0, ...(shared ? { gpuMemGB: 4 } : {}) },
       },
       issues: [],
     });
@@ -426,6 +429,10 @@ it.each([false, true])(
       gpus: 0,
     });
     if (shared) expect(submit.mock.calls[0]?.[0].services?.[0]?.role).toBeUndefined();
+    if (shared) {
+      const spec = RunSpec.parse(submit.mock.calls[0]?.[0]);
+      expect(roleRequests(spec)[0]).toMatchObject({ gpus: 1, gpuMemGB: 28 });
+    }
     expect(submit.mock.calls[0]?.[0].tags?.execution_trial).toBe(store.trials(job.id)[0]?.id);
     bench.policies.remove("synthetic-policy");
     expect(store.getJob(job.id)?.spec.methods[0]?.policySnapshot?.checkpointDigest).toBe(

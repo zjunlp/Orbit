@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 from pathlib import Path
 import subprocess
 
@@ -25,8 +26,11 @@ def main():
     parser.add_argument("--policy-image", required=True)
     parser.add_argument("--benchmark-image", required=True)
     parser.add_argument("--share-gpu", action="store_true")
+    parser.add_argument("--sim-gpu-mem-gb", type=float, default=4.0, help="Simulator memory budget per GPU in GB")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
+    if not math.isfinite(args.sim_gpu_mem_gb) or args.sim_gpu_mem_gb <= 0:
+        parser.error("sim-gpu-mem-gb must be finite and positive")
     model_reference = json.loads((HERE / "profiles/groot-model.json").read_text())
     for name, expected in model_reference["files"].items():
         if file_digest(args.reference_source / name) != expected:
@@ -53,7 +57,7 @@ def main():
     name = "groot-n17-" + args.profile
     runtime_checkpoint = "/weights/" + checkpoint.name
     service = {
-        "name": "policy", "image": model_image, "cpus": 4, "memGB": 32,
+        "name": "policy", "image": model_image, "cpus": 4, "memGB": 32, "gpuMemGB": 24,
         "command": ["/opt/orbit/serve_groot.py", "--checkpoint", runtime_checkpoint,
                     "--backbone-cache", "/weights/hub", "--embodiment", embodiment,
                     "--checkpoint-digest", model, "--normalization-digest", normalization,
@@ -64,7 +68,7 @@ def main():
     if args.share_gpu:
         service.update(gpusOf="main", gpus=0)
     else:
-        service.update(role="policy", gpus=1, gpuMemGB=24)
+        service.update(role="policy", gpus=1)
     policy = {
         "name": name, "version": "1.7", "kind": "model", "connector": "groot-zmq", "port": 5555,
         "replanSteps": reference["parameters"]["replanSteps"], "callTimeoutSec": 300,
@@ -80,7 +84,8 @@ def main():
         "adapter": str(HERE / "adapter.py"), "path": str(root),
         "config": {"image": benchmark_image, "python": "/.venv/bin/python" if args.profile == "libero" else "/usr/local/bin/python", "reference": json.dumps(reference),
                    "profileDigest": digest(reference), "implementationDigest": implementation_digest(),
-                   "simGpus": "1" if gpu_sim else "0", "renderer": "vulkan" if args.profile == "widowx" else "egl" if gpu_sim else "osmesa"},
+                   "simGpus": "1" if gpu_sim else "0", "renderer": "vulkan" if args.profile == "widowx" else "egl" if gpu_sim else "osmesa",
+                   **({"simGpuMemGB": str(args.sim_gpu_mem_gb)} if gpu_sim else {})},
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for filename, value in (("policy.json", policy), ("benchmark.json", benchmark), ("reference.json", reference)):
