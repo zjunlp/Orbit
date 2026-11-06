@@ -22,6 +22,7 @@ import {
   BenchTask,
   CalibrationExpect,
   FailureKind,
+  legacySeed,
   MetricSpec,
   OfficialRule,
 } from "../contracts/index.ts";
@@ -430,8 +431,8 @@ export function readResult(
 function resultContext(m: Manifest, trial: TrialRequest["trial"]): Record<string, unknown> {
   return {
     task: listTasks(m).find((t) => t.id === trial.task),
-    seed: trial.seed,
-    episode: episodeOf(m, trial.seed),
+    seed: legacySeed(trial),
+    episode: episodeOf(m, legacySeed(trial)),
     option: trial.options,
   };
 }
@@ -455,8 +456,8 @@ export const manifestAdapter: AdapterHandlers = {
     if (!task) throw new Error(`task not found: ${trial.task}`);
     const ctx = {
       task,
-      seed: trial.seed,
-      episode: episodeOf(m, trial.seed),
+      seed: legacySeed(trial),
+      episode: episodeOf(m, legacySeed(trial)),
       option: trial.options,
       method: {
         name: trial.method.name,

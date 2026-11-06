@@ -48,6 +48,9 @@ import {
   NodeStatus,
   NotifyTarget,
   type NotifyTargetInput,
+  PolicyDefinition,
+  type PolicyDefinitionInput,
+  PolicyList,
   ReconcileReport,
   Run,
   RunDeletion,
@@ -205,6 +208,10 @@ export class OrbitClient {
   datasetPut = (d: DatasetInput) => this.call(Dataset, "/datasets", { method: "POST", body: d });
   datasetRemove = (name: string) => this.call(Ok, `/datasets/${enc(name)}`, { method: "DELETE" });
 
+  policies = () => this.call(PolicyList, "/policies").then((r) => r.policies);
+  policyPut = (policy: PolicyDefinitionInput) =>
+    this.call(PolicyDefinition, "/policies", { method: "POST", body: policy });
+  policyRemove = (name: string) => this.call(Ok, `/policies/${enc(name)}`, { method: "DELETE" });
   benchmarks = () => this.call(BenchmarkList, "/benchmarks").then((r) => r.benchmarks);
   benchmarkPut = (b: BenchmarkInput) =>
     // Registration lists the tasks through the adapter (up to its 120 s limit).

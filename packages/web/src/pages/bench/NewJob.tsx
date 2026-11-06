@@ -164,6 +164,10 @@ function NewJobForm({
     try {
       if (!registered || !current || info.loading || info.error)
         throw new Error("Load a registered environment before continuing.");
+      if (capabilities?.embodied)
+        throw new Error(
+          "This policy benchmark requires a frozen sample plan. Submit it with orbit bench run --sample-plan.",
+        );
       if (stage === 0) evaluationSpec(fields, [{ name: "preview", agent: "empty" }], tasks, source);
       else buildMethods(drafts, capabilities, profiles);
       setError(null);

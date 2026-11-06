@@ -1,3 +1,4 @@
+import { sampleLabel } from "@zjunlp/orbit/naming";
 import { useMemo } from "react";
 import { Link, stateColor } from "../../components/ui.tsx";
 import { api, type Run, type Trial } from "../../lib/api.ts";
@@ -26,7 +27,7 @@ export function JobTrials({ job, runs, now }: { job: Job; runs: Run[]; now: numb
         <TrialRow
           key={t.id}
           t={t}
-          seeds={job.spec.seeds}
+          seeds={job.spec.seeds ?? 1}
           solve={byId.get(t.solveRunId ?? "")}
           verify={byId.get(t.verifyRunId ?? "")}
           now={now}
@@ -80,7 +81,7 @@ function TrialRow(props: { t: Trial; seeds: number; solve?: Run; verify?: Run; n
             {t.task}
           </Link>
           <span className="muted">{t.method}</span>
-          {props.seeds > 1 && <span className="faint">#{t.seed}</span>}
+          {(t.sampleRef || props.seeds > 1) && <span className="faint">#{sampleLabel(t)}</span>}
         </div>
       </td>
       <td colSpan={3}>

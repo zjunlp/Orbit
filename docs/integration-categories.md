@@ -123,6 +123,7 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
 | 按类别的校准期望（empty / oracle / 重复容差 / seed 取不同初态），benchmark 可覆盖；oracle 不全的任务不判 oracle、抽样优先 full | 已实现 | `cli/calibrate.ts` |
 | C2 EFE：每个任务按模式自动给出 profile（program 1,064 / live 1,196）、oracle 覆盖、交付类型 | 已实现 | `bench/harbor.ts` `embodiedTags` |
 | C6 LIBERO：一个 trial 一个 episode，seed n 取初态 n-1（越界拒绝），结果核对计划的初态与任务；适配器与清单两种实现 | 已实现，真机三个 seed 三个不同初态 | `examples/bench-adapters/vla-eval`、`examples/bench-manifests/vla-eval-libero` |
+| C6 独立 Policy + 原生 LIBERO：显式 Binding、固定 samplePlan、OpenPI connector、独立 verify/重评 | D1 闭环已验证：双 Python 环境、真实 π₀.₅ CPU/GPU 正例、原生环境负例及重评/清理；原生对照未验收 | [实现与限制](../examples/bench-adapters/embodied/README.md) |
 | 现有适配器声明类别（GUI 5 个、科研/训练 3 个、vla-eval、Harbor 内置） | 已实现 | `examples/bench-adapters/*` |
 | Web：作业列表按类别筛选与标注，新建作业显示类别 | 已实现 | `packages/web/src/lib/category.ts` |
 | 有效性：上游 verifier 在自身故障时写 0 的情形——已知故障信息（TextArena 游戏服务不可达或报错；未结束的 425 是方法的 0）判 invalid（`infra`）；评分脚本抛出非断言异常后得 0 时加 issue 提示复核（TB-Science 等 `|| echo 0` 写法） | 已实现（Harbor 路径） | `bench/harbor.ts` `harborReward` |

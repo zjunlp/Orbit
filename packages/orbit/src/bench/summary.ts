@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type {
   BenchCompare,
   BenchJob,
@@ -11,6 +12,7 @@ import type {
   ReportEntry,
   Trial,
 } from "../contracts/index.ts";
+import { sampleIdentity, sampleKey, sampleOrder } from "../contracts/index.ts";
 import {
   aggregate,
   metricValue,
@@ -19,6 +21,7 @@ import {
   resolveMetrics,
   taskMeans,
 } from "../contracts/metrics.ts";
+import { contentDigest } from "./samples.ts";
 
 export const isValid = (t: Trial) => t.outcome?.evaluation === "valid";
 
@@ -29,8 +32,22 @@ export const REPORT_AGGREGATOR = "orbit-report/1";
  * Digest of a job's planned samples: benchmark, tasks, seeds and methods (name + agent). Appending
  * tasks or seeds yields a new digest, i.e. a new plan version.
  */
-export function planDigest(job: Pick<BenchJob, "spec">): string {
+export function planDigest(
+  job: Pick<BenchJob, "spec"> & Partial<Pick<BenchJob, "resolvedBindings" | "benchmarkSnapshot">>,
+): string {
   const s = job.spec;
+  if (s.samplePlan) {
+    const plan = {
+      version: 2,
+      benchmark: s.benchmark,
+      benchmarkSnapshot: job.benchmarkSnapshot,
+      samplePlan: s.samplePlan.digest,
+      methods: [...s.methods].sort((a, b) => a.name.localeCompare(b.name)),
+      resolvedBindings: job.resolvedBindings,
+      options: Object.entries(s.options).sort(),
+    };
+    return contentDigest(plan);
+  }
   const plan = {
     benchmark: s.benchmark,
     tasks: [...s.tasks].sort(),
@@ -41,7 +58,7 @@ export function planDigest(job: Pick<BenchJob, "spec">): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(plan)).digest("hex")}`;
 }
 
-export const sampleKey = (t: Pick<Trial, "task" | "seed">) => `${t.task}#${t.seed}`;
+export { sampleKey };
 
 /** One trial as a report entry; `value` is the given metric. */
 function entry(t: Trial, metric: string): ReportEntry {
@@ -49,7 +66,7 @@ function entry(t: Trial, metric: string): ReportEntry {
     trial: t.id,
     sample: sampleKey(t),
     task: t.task,
-    seed: t.seed,
+    ...sampleIdentity(t),
     solveRunId: t.solveRunId,
     verifyRunId: t.verifyRunId,
     evaluation: t.outcome?.evaluation ?? "pending",
@@ -146,13 +163,13 @@ export function buildReport(
     createdAt: at,
     reason,
     planDigest: planDigest(job),
-    aggregator: REPORT_AGGREGATOR,
+    aggregator: job.spec.samplePlan ? "orbit-report/2" : REPORT_AGGREGATOR,
     metric,
     official: rule,
     methods: job.spec.methods.map(({ name }) => {
       const ts = trials
         .filter((t) => t.method === name)
-        .sort((a, b) => a.task.localeCompare(b.task) || a.seed - b.seed);
+        .sort((a, b) => a.task.localeCompare(b.task) || sampleOrder(a, b));
       const entries = ts.map((t) => entry(t, metric));
       const count = (e: ReportEntry["evaluation"]) =>
         entries.filter((x) => x.evaluation === e).length;
@@ -233,13 +250,38 @@ export function compareJobs(jobs: { job: BenchJob; trials: Trial[] }[]): BenchCo
       ]),
     ),
   }));
+  const planned = jobs.some(({ job }) => Boolean(job.spec.samplePlan));
+  const conditions = (job: BenchJob) => ({
+    contract: job.capabilities?.embodied,
+    config: job.benchmarkSnapshot?.config,
+  });
+  const sameConditions =
+    !planned ||
+    jobs.every(
+      ({ job }) =>
+        job.spec.samplePlan && isDeepStrictEqual(conditions(job), conditions(jobs[0]?.job ?? job)),
+    );
+  const matchedSamples = (task: string) => {
+    const samples = columns.map((column) =>
+      column.valid
+        .filter((trial) => trial.task === task)
+        .map(sampleKey)
+        .sort(),
+    );
+    return (
+      sameConditions && samples.every((own) => own.length > 0 && isDeepStrictEqual(own, samples[0]))
+    );
+  };
   const stats: BenchCompare["stats"] = {};
   for (const m of metrics) {
     const ms = means[m.name] ?? [];
-    const paired = new Set(tasks.filter((task) => ms.every((x) => x.has(task))));
+    const paired = new Set(
+      tasks.filter((task) => ms.every((x) => x.has(task)) && (!planned || matchedSamples(task))),
+    );
     const base = ms[0];
     stats[m.name] = {
       pairedTasks: paired.size,
+      ...(planned ? { pairedTaskIds: [...paired] } : {}),
       columns: Object.fromEntries(
         columns.map((c, i) => {
           const x = ms[i] ?? new Map();
@@ -248,7 +290,13 @@ export function compareJobs(jobs: { job: BenchJob; trials: Trial[] }[]): BenchCo
             {
               all: aggregate(x),
               paired: aggregate(x, paired),
-              diff: i > 0 && base ? pairedDiff(base, x) : null,
+              diff:
+                i > 0 && base
+                  ? pairedDiff(
+                      planned ? new Map([...base].filter(([task]) => paired.has(task))) : base,
+                      planned ? new Map([...x].filter(([task]) => paired.has(task))) : x,
+                    )
+                  : null,
             },
           ];
         }),

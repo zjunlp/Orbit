@@ -239,8 +239,8 @@ alternate（兼容 linked worktree），结束或失败后删除，不向用户�
 子模块 gitlink 和 `ls-files` 返回的目录不递归复制，路径记入 `CodeSnapshot.skippedSubmodules`（旧记录默认 `[]`）；
 提交时发出 warning 事件，CLI show 与 Web Code 页提示子模块内容未被快照。数据和权重不进快照，用命名 dataset 只读挂载。
 
-**容器**：GPU 优先用 CDI（`--device nvidia.com/gpu=<UUID>`，检测到 `/etc/cdi` 或 `/var/run/cdi` 中的
-NVIDIA spec 时），否则 `--gpus device=<UUID>`；启动后核对 `nvidia-smi -L` 与租约一致。默认以宿主用户
+**容器**：GPU 优先用 CDI（`--device nvidia.com/gpu=<UUID>`，Docker `info.CDISpecDirs` 声明的目录中存在
+NVIDIA spec 时）；未启用或能力查询失败则用 `--gpus device=<UUID>`，不能只凭本机文件判定。启动后核对 `nvidia-smi -L` 与租约一致。默认以宿主用户
 `uid:gid` 运行（产物归属正确），`--root` 例外。每个 Run 的记录目录挂载为 `/orbit`（rw）。
 没有租到 GPU 的容器设置 `NVIDIA_VISIBLE_DEVICES=void`，避免镜像默认值暴露全部 GPU。`image` 本地不存在时先
 `docker pull`（输出写入 Run 日志），拉取失败记为环境失败。daemon 重启后重新附着容器时，日志截回启动时记录的
@@ -767,7 +767,8 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 ```
 
 原则：语义尽量交给原生实现（不重新解释同一个仿真器）；资源与状态只在 Orbit；每个 hub 先以 `native` 方式包装跑通、对齐，
-再按需增加工具桥与轨迹转换。Orbit 不自研 Agent 或 episode 循环（§1）。
+再按需增加工具桥与轨迹转换。Orbit 不自研 Agent 循环；C6 可在容器内使用薄的同步 driver 调用官方环境，
+daemon 不参与逐步控制，任务、控制器和成功判定仍由 benchmark 提供（§1、§9.4a）。
 
 ### 9.1a 评测身份
 
@@ -814,9 +815,11 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
 ### 9.4 被评测对象：Agent 与 Policy
 
 - **Agent**：已实现的注册表（§6），任意 CLI，含自定义 harness。
-- **Policy**（`policy` 已作为保留名，尚不可运行；实现时新增 `PolicySpec`）：`{ image | dockerfile, command, port, protocol, health, resources(GPU), env, weights(dataset) }`，
-  `protocol ∈ vla-eval-ws | openpi-ws | gr00t-zmq | lite-http | custom`。policy 作为 trial 的 GPU service 启动，与 sim 一起**整组准入**
-  （gang lease：全部资源同时满足才启动，避免一半占着 GPU 等另一半）。模型权重走命名 dataset 只读挂载。
+- **Policy**：独立于 benchmark 登记的 `PolicyDefinition`（`policies.json`，daemon 唯一写者），固定模型 service、connector、
+  语义 profile、checkpoint 与归一化摘要，以及命名权重 dataset。`Method.agent = policy` 通过 `policyRef` 选择定义，提交时保存
+  权威快照；benchmark adapter 不解释模型启动参数。D1 先支持 `openpi-ws`，`vla-eval-ws / gr00t-zmq / lite-http / custom`
+  属于后续 connector，列表顺序不表示优先级。policy 为独立 GPU service，与仿真整组准入；仅接受固定镜像，模型 readiness 与
+  SDK 身份握手分别检查，权重以命名 dataset 只读挂载。
 - **按角色分配**：租约持久化 `main / sim / policy → gpuIds / devices / limits`，满足异构要求（如 sim 需 RTX、policy 需大显存）；
   首阶段同节点原子分配，逐组件核对设备映射，启动失败整组清理，清理确认前保留租约。
 - **native 的承载**：`native` 表示保留上游语义，不绑定宿主 process 后端。首个 vla-eval 接入采用：上游仿真镜像作为 Orbit Docker
@@ -825,6 +828,27 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   须先定义子资源的创建前登记、容量限制、取消后禁止新建、重启对账与清理确认，不能只删除现有校验开放。
 - 能力匹配：bench 声明 `requires`（`multiTurn`、`policyProtocol`、`gui`、`obs: rgb|depth|proprio`、`action: joint|ee|chunk`），提交前与
   Agent / Policy 声明比对，不匹配直接拒绝。
+
+### 9.4a 独立 Policy 与原生 C6（D1 闭环已验证，原生对照待验收）
+
+- `orbit policy add / ls / rm`、`orbit bench add-file`、`bench run --sample-plan` 走现有 HTTP 控制面。直接 LIBERO 路径使用
+  `examples/bench-adapters/embodied` 与容器内 `examples/sdk/orbit_embodied`，不调用或导入 vla-eval；旧路径继续使用原登记。
+- `BenchCapabilities.embodied` 声明评测 profile、原始观测/动作语义和显式映射。提交时校验模型端 profile、单位、frame、相机和
+  动作描述，生成不可变 `ResolvedBinding`，随作业保存；缺字段或语义不符即拒绝，不按同名、维度或排序猜测对应。
+- `BenchJob.spec.samplePlan` 接收已展开并带摘要的有序计划。sampleId 由任务、profile、初态文件摘要与索引、环境 seed、模型
+  seed 和重复编号的规范内容生成。旧 Trial / 适配请求 / ReportEntry 仍要求 seed；新分支要求 sampleRef 且禁止 seed，
+  联合契约拒绝混用。Trial.id 沿用原格式，episodeId 标识实际尝试。旧任务和报告不重写，新报告使用 `orbit-report/2`。
+- 报告、合并、校准与界面使用真实样本身份。新旧作业禁止直接归并；计划和方法条件不符时拒绝合并。C6 配对统计还要求相同
+  有效样本及评测条件，不仅匹配任务名；旧矩阵、seed n→初态 n−1 规则和旧报告摘要保持原行为。
+- 首个目标固定 OpenPI LIBERO 与 pi05_libero。SDK 分离 Benchmark Adapter、PolicyClient、Connector、driver 和证据写入，
+  显式保留旋转、resize、状态拼接、settle、horizon 与 replan_steps。原生判定与 Orbit 有效性分开，媒体失败不改变可信分数。
+  每 Trial 独立 solve / verify；重评只读该次 solve 证据，无模型或仿真。SDK 核心只依赖标准库与 NumPy，额外传输/媒体依赖单列。
+  solve 和 verify 各保存自身的适配器、driver、SDK 源码包及摘要；重评记录新评分器身份，保留求解证据和原实现。
+- OpenPI 原生服务没有远端 RNG reset。D1 每 Trial 使用新服务并记录 JAX key 0 的 service 作用域，不宣称等价于参考 runner
+  连续运行到任意 episode 的随机状态。源码审核、合成端点检查、真实正例与原生对照分别记录，不能互相代替。
+  已完成真实 π₀.₅ checkpoint 的 CPU 与 GPU 正例开发验证、原生环境负例、单样本重评与清理；尚未完成官方 runner 对照。
+- D2a 后续实现共享 solve Run、逐样本完成归属、SQLite 一致性备份及迁移恢复，并测量逐 Trial verify 的开销；当前 store 没有
+  自动备份。D2b 再接第二组端点并提炼唯一语义直连规则。首期不引入模型池、转换图搜索或另一套作业状态机。
 
 ### 9.5 Agent 与环境的桥
 
@@ -998,7 +1022,7 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
 
 **原则**：跟随 hub 与协议，不逐个追 bench。新 bench 多数先进入某个 hub 或采用已有格式；Orbit 只支持少数事实标准，
 不自造协议：任务格式 → Harbor（EFE、Cua Bench、TB 系列）；GUI 交互 → CUA-Lite canonical tool call 与 MCP computer-use；
-具身 Policy → vla-eval 协议；具身 coding agent → EFE `/spec /observe /submit`。
+具身 Policy → 独立语义契约与模型原生 connector（首个为 OpenPI WebSocket，可选 vla-eval-ws）；具身 coding agent → EFE `/spec /observe /submit`。
 
 **三层接入**（新 bench 优先落到最低层）：
 

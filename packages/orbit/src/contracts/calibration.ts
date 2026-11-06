@@ -13,6 +13,7 @@ import {
   taskSuite,
 } from "./bench.ts";
 import { benchCategory } from "./categories.ts";
+import { sampleLabel } from "./naming.ts";
 
 /**
  * Spread `n` tasks over the suites, round robin, in each suite's listed order. With `oracle`, tasks
@@ -75,7 +76,7 @@ export interface JudgeOptions {
 export function judgeCalibration(t: Trial[], o: JudgeOptions = {}): CalibrationCheck[] {
   const expect = o.expect ?? expectations(undefined);
   const noOracle = o.noOracle ?? new Set<string>();
-  const label = (x: Trial) => `${x.task}/${x.method}#${x.seed}`;
+  const label = (x: Trial) => `${x.task}/${x.method}#${sampleLabel(x)}`;
   const list = (xs: string[]) =>
     xs.length > 5 ? `${xs.slice(0, 5).join(", ")} +${xs.length - 5}` : xs.join(", ");
   const check = (
@@ -102,7 +103,7 @@ export function judgeCalibration(t: Trial[], o: JudgeOptions = {}): CalibrationC
   });
   const failing = (pred: (x: Trial) => boolean, text = label) =>
     t.filter((x) => !pred(x)).map((x) => ({ trial: x, text: text(x) }));
-  const score = (x: Trial) => `${x.task}#${x.seed}=${x.outcome?.score ?? "null"}`;
+  const score = (x: Trial) => `${x.task}#${sampleLabel(x)}=${x.outcome?.score ?? "null"}`;
   const checks: CalibrationCheck[] = [
     check(
       "all trials finished",
@@ -155,7 +156,10 @@ export function judgeCalibration(t: Trial[], o: JudgeOptions = {}): CalibrationC
   );
   const groups = new Map<string, Trial[]>();
   for (const x of t)
-    groups.set(`${x.task}/${x.method}`, [...(groups.get(`${x.task}/${x.method}`) ?? []), x]);
+    groups.set(`${x.sampleRef ?? x.task}/${x.method}`, [
+      ...(groups.get(`${x.sampleRef ?? x.task}/${x.method}`) ?? []),
+      x,
+    ]);
   const repeated = [...groups].filter(([, v]) => v.length > 1);
   const r = expect.repeat;
   const values = (v: Trial[]) => v.map((x) => x.outcome?.score ?? null);
@@ -243,7 +247,7 @@ export function calibrationReport(job: BenchJob, trials: Trial[]): CalibrationRe
     job: job.id,
     tasks: [...new Set(job.spec.tasks)],
     methods: job.spec.methods.map((m) => m.name),
-    seeds: job.spec.seeds,
+    seeds: job.spec.seeds ?? 1,
     phase,
     checks,
     calibrated:

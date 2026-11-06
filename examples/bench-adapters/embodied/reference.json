@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "id": "openpi-libero-reference/1",
+  "reference": {
+    "openpi": {
+      "repository": "https://github.com/Physical-Intelligence/openpi",
+      "commit": "215abfb217dbac7d5f1273282331b9b1866c0479"
+    },
+    "libero": {
+      "repository": "https://github.com/Lifelong-Robot-Learning/LIBERO",
+      "commit": "f78abd68ee283de9f9be3c8f7e2a9ad60246e95c"
+    },
+    "files": {
+      "examples/libero/main.py": "sha256:d53748c95804ada559e3ca867305b8f755d8651c4c7f4e2723ef80aea55a3943",
+      "examples/libero/Dockerfile": "sha256:71bd6fcdfef3a059d417d9781dbdc3cdcbb1ddb2a557a626a2bf589777017173",
+      "examples/libero/requirements.txt": "sha256:821008c9804ec835bccee66ab93c177f47a62a845c010497b5aea06829331727",
+      "packages/openpi-client/src/openpi_client/image_tools.py": "sha256:d48b4bd7f44e79fe6db8a8e07c9161144fa250be686e1245014a8b47e6171977",
+      "packages/openpi-client/src/openpi_client/msgpack_numpy.py": "sha256:c04568948fcee52b691e3be4b6cffb759f7e79ad67530fcd5d23095a0d13c057",
+      "src/openpi/policies/policy.py": "sha256:a2ac5236e23b11d0f5a840d4a8fef148d89dba921d5452ec5dfcd5a6ffa46f20",
+      "src/openpi/serving/websocket_policy_server.py": "sha256:1370d345e6c3c5b8f15573050e485e60a5b423d1df33e24b237805e6b442b026",
+      "third_party/libero/libero/libero/benchmark/libero_suite_task_map.py": "sha256:0c950df0a785aa55de968bb38ccd865d2017f71ddbe6f48cfd05ac0742b6d62d",
+      "scripts/docker/serve_policy.Dockerfile": "sha256:a6dd575b19625e5bec8aca459f3eacd7568e1329fd8928d7c74b2e62b700de0e",
+      "pyproject.toml": "sha256:e1f457bd81622a47a4c4de17b92815977ac5fcd40116bec92398eb400bf76483",
+      "uv.lock": "sha256:793488b5a55bb87200db90a61fd0af51922b686d94e1da4f4c587ab119b37d74"
+    }
+  },
+  "benchmarkProfile": {
+    "id": "libero-panda-raw/1",
+    "observations": {
+      "front_rgb": {
+        "semantic": "rgb",
+        "camera": "agentview",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "layout": "HWC"
+      },
+      "wrist_rgb": {
+        "semantic": "rgb",
+        "camera": "robot0_eye_in_hand",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "layout": "HWC"
+      },
+      "eef_position": {
+        "semantic": "eef-position",
+        "dtype": "float64",
+        "shape": [3],
+        "unit": "metre",
+        "frame": "world"
+      },
+      "eef_quaternion": {
+        "semantic": "eef-orientation",
+        "dtype": "float64",
+        "shape": [4],
+        "format": "xyzw",
+        "frame": "world"
+      },
+      "gripper_position": {
+        "semantic": "gripper-joints",
+        "dtype": "float64",
+        "shape": [2],
+        "unit": "metre",
+        "order": ["finger_joint1", "finger_joint2"]
+      },
+      "instruction": {
+        "semantic": "task-language",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "panda-ee-delta",
+      "shape": [7],
+      "controller": "OSC_POSE",
+      "frame": "world",
+      "unit": "controller-normalized",
+      "rotation": "axis-angle",
+      "gripper": "native-libero-minus1-open-plus1-close"
+    }
+  },
+  "policyProfile": {
+    "id": "openpi-libero-input/1",
+    "observations": {
+      "front_rgb": {
+        "semantic": "rgb",
+        "camera": "agentview",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "layout": "HWC"
+      },
+      "wrist_rgb": {
+        "semantic": "rgb",
+        "camera": "robot0_eye_in_hand",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "layout": "HWC"
+      },
+      "eef_position": {
+        "semantic": "eef-position",
+        "dtype": "float64",
+        "shape": [3],
+        "unit": "metre",
+        "frame": "world"
+      },
+      "eef_quaternion": {
+        "semantic": "eef-orientation",
+        "dtype": "float64",
+        "shape": [4],
+        "format": "xyzw",
+        "frame": "world"
+      },
+      "gripper_position": {
+        "semantic": "gripper-joints",
+        "dtype": "float64",
+        "shape": [2],
+        "unit": "metre",
+        "order": ["finger_joint1", "finger_joint2"]
+      },
+      "instruction": {
+        "semantic": "task-language",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "panda-ee-delta",
+      "shape": [7],
+      "controller": "OSC_POSE",
+      "frame": "world",
+      "unit": "controller-normalized",
+      "rotation": "axis-angle",
+      "gripper": "native-libero-minus1-open-plus1-close"
+    }
+  },
+  "observationMap": {
+    "front_rgb": "front_rgb",
+    "wrist_rgb": "wrist_rgb",
+    "eef_position": "eef_position",
+    "eef_quaternion": "eef_quaternion",
+    "gripper_position": "gripper_position",
+    "instruction": "instruction"
+  },
+  "parameters": {
+    "renderSize": 256,
+    "resizeSize": 224,
+    "replanSteps": 5,
+    "settleSteps": 10,
+    "environmentSeed": 7,
+    "policySeed": 0
+  },
+  "horizons": {
+    "libero_spatial": 220,
+    "libero_object": 280,
+    "libero_goal": 300,
+    "libero_10": 520,
+    "libero_90": 400
+  },
+  "checkpoint": {
+    "uri": "gs://openpi-assets/checkpoints/pi05_libero/",
+    "trainingConfig": "pi05_libero",
+    "required": ["params", "assets"],
+    "contentDigest": "sha256:a200b3f6fceaae4b32ff77eac560d9b6a86b0f9c8d625ee855204bf02d4846fc",
+    "normalizationDigest": "sha256:243945b9f57474b2d74de07f8d5c3c8bb37f2ec0e82d8a45b0d4a4db35d2271b"
+  },
+  "randomness": {
+    "referenceEnvironment": "NumPy seeded once; environment seeded at task construction; initial states selected in task/episode order",
+    "referencePolicy": "JAX key 0 per service, split per infer; stock WebSocket protocol exposes neither reset nor explicit noise",
+    "d1": "One fresh service per trial; no claim that standalone later samples reproduce a shared reference random stream",
+    "comparison": "Exact preprocessing and fixed-action environment checks first; full rollout comparison requires aligned streams or a predeclared statistical equivalence study"
+  },
+  "status": {
+    "sourceAudit": "pinned",
+    "checkpoint": "content-pinned",
+    "images": "unverified",
+    "positiveCalibration": "not_run",
+    "nativeParity": "not_run"
+  }
+}

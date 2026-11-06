@@ -9,6 +9,8 @@ import {
   type BenchJobDetail,
   type Benchmark,
   type Run,
+  sampleKey,
+  sampleLabel,
   type Trial,
   trialRunIds,
 } from "../contracts/index.ts";
@@ -133,7 +135,7 @@ export function planConsolidation(input: {
         reclassified.push({ job: d.job.id, trial: t.id, task: t.task, kind: failure.kind });
     }
   const newlyInvalid = new Set(reclassified.map((r) => r.trial));
-  const key = (t: Trial) => JSON.stringify([t.task, t.method, t.seed]);
+  const key = (t: Trial) => JSON.stringify([t.method, sampleKey(t)]);
   const trials = new Map(target.trials.map((t) => [key(t), structuredClone(t)]));
   const adopted: BenchConsolidateResult["adopted"] = [];
   const adoptedKeys = new Set<string>();
@@ -146,6 +148,9 @@ export function planConsolidation(input: {
     if (
       (!sameMethodSetup(d.job, target.job) &&
         !(f.allowTransportDifferences && equivalentTransport(target.job, d.job, transport))) ||
+      Boolean(d.job.spec.samplePlan) !== Boolean(target.job.spec.samplePlan) ||
+      (Boolean(d.job.spec.samplePlan) &&
+        !isDeepStrictEqual(d.job.spec.samplePlan, target.job.spec.samplePlan)) ||
       d.job.spec.seeds !== target.job.spec.seeds ||
       d.job.spec.timeoutMin !== target.job.spec.timeoutMin ||
       !isDeepStrictEqual(d.job.spec.options, target.job.spec.options) ||
@@ -155,7 +160,7 @@ export function planConsolidation(input: {
     for (const t of d.trials) {
       if (adoptedKeys.has(key(t)))
         throw new UserError(
-          `duplicate ${originalTaskIds.has(t.task) ? "source" : "appended"} trial ${t.task} / ${t.method} / ${t.seed}`,
+          `duplicate ${originalTaskIds.has(t.task) ? "source" : "appended"} trial ${t.task} / ${t.method} / ${sampleLabel(t)}`,
         );
       const prev = trials.get(key(t));
       if (!prev) {
@@ -175,7 +180,7 @@ export function planConsolidation(input: {
         continue;
       }
       if (!originalTaskIds.has(t.task))
-        throw new UserError(`duplicate appended trial ${t.task} / ${t.method} / ${t.seed}`);
+        throw new UserError(`duplicate appended trial ${t.task} / ${t.method} / ${sampleLabel(t)}`);
       const protectedTarget =
         isValid(prev) || prev.history.some((h) => h.outcome.evaluation === "valid");
       const retrySucceeded = t.solveRunId && oldRuns.get(t.solveRunId)?.state === "succeeded";

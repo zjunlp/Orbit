@@ -13,6 +13,7 @@ import {
   type Method,
   type MethodSummary,
 } from "../contracts/index.ts";
+import { contentDigest } from "./samples.ts";
 
 export interface Listing {
   at: string | null;
@@ -23,6 +24,8 @@ export interface Listing {
 
 /** What makes two methods of different jobs the same method. */
 export function methodKey(m: Method): string {
+  if (m.agent === "policy")
+    return `policy · ${m.policyRef ?? "?"}@${m.policySnapshot?.version ?? "?"} · ${contentDigest(m.policySnapshot ?? {}).slice(7, 23)}`;
   if (m.agent === "external") return `external · ${m.entrypoint ?? "?"}`;
   return [m.agent, m.model ?? "default model", m.effort].filter(Boolean).join(" · ");
 }

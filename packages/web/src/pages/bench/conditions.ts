@@ -29,7 +29,9 @@ export function jobConditions(job: BenchJob): Record<string, string> {
       ? [...job.benchmarkSnapshot.passEnv].sort().join(", ")
       : "Not recorded",
     "Task set": [...job.spec.tasks].sort().join(", "),
-    Repetitions: String(job.spec.seeds),
+    ...(job.spec.samplePlan
+      ? { "Sample plan": job.spec.samplePlan.digest }
+      : { Repetitions: String(job.spec.seeds) }),
     "Timeout override": job.spec.timeoutMin ? `${job.spec.timeoutMin} min` : "Environment default",
     "Resource overrides": job.resources ? stableValue(job.resources) : "Environment default",
     Options: stableValue(job.spec.options),
@@ -80,7 +82,10 @@ export function withBaseline(comparison: BenchCompare, baseline: string): BenchC
       new Map(
         comparison.rows.flatMap((row) => {
           const value = row.values[metric.name]?.[key];
-          return value == null ? [] : [[row.task, { mean: value }] as const];
+          return value == null ||
+            (previous.pairedTaskIds && !previous.pairedTaskIds.includes(row.task))
+            ? []
+            : [[row.task, { mean: value }] as const];
         }),
       );
     const base = means(baseline);

@@ -2,13 +2,21 @@ import { accessSync, constants, existsSync, statSync } from "node:fs";
 import type { Hono } from "hono";
 import { loadResources, resolveResources } from "../../bench/resources.ts";
 import type { BenchReport } from "../../contracts/index.ts";
-import { type Benchmark, BenchmarkInput } from "../../contracts/index.ts";
+import { type Benchmark, BenchmarkInput, PolicyDefinition } from "../../contracts/index.ts";
 import { NotFoundError, UserError } from "../../runs/service.ts";
 import type { AppDeps } from "../app.ts";
 import { num } from "../http.ts";
 
 export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   const { bench, benchmarks } = deps;
+  api.get("/policies", (c) => c.json({ policies: bench.policies.list() }));
+  api.post("/policies", async (c) =>
+    c.json(bench.policies.put(PolicyDefinition.parse(await c.req.json())), 201),
+  );
+  api.delete("/policies/:name", (c) => {
+    if (!bench.policies.remove(c.req.param("name"))) throw new NotFoundError("policy not found");
+    return c.json({ ok: true });
+  });
   // Benchmarks: registered checkouts, jobs of trials, and method comparison.
   api.get("/benchmarks", (c) =>
     c.json<{ benchmarks: Benchmark[] }>({ benchmarks: benchmarks.list() }),

@@ -223,3 +223,16 @@ export function autoRunName(command: string[]): string {
 export function runDisplayName(spec: { name?: string; command: string[] }): string {
   return spec.name || autoRunName(spec.command);
 }
+
+export function sampleLabel(value: { seed?: number; sampleRef?: string }): string {
+  return value.sampleRef ? value.sampleRef.slice(7, 19) : String(value.seed);
+}
+
+export function sampleOrder(
+  a: { seed?: number; sampleRef?: string },
+  b: { seed?: number; sampleRef?: string },
+): number {
+  return a.sampleRef || b.sampleRef
+    ? (a.sampleRef ?? String(a.seed)).localeCompare(b.sampleRef ?? String(b.seed))
+    : (a.seed ?? 0) - (b.seed ?? 0);
+}

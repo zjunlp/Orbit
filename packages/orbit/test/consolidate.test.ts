@@ -400,7 +400,7 @@ it("allows explicitly requested transport aliases only for the same checkout, cr
   expect((await f.bench.consolidate(a.id, body)).adopted).toHaveLength(1);
   for (const bad of [
     { ...donor, source: { ...source, commit: "different" } },
-    { ...donor, spec: { ...donor.spec, seeds: 2 } },
+    { ...donor, spec: { ...donor.spec, seeds: 2, samplePlan: undefined } },
     {
       ...donor,
       spec: { ...donor.spec, methods: [{ ...method, auth: "bridge", model: "different" }] },

@@ -11,6 +11,7 @@ import {
   Review,
 } from "./bench.ts";
 import { EnvName } from "./common.ts";
+import { EpisodeSample, ResolvedBinding, SampleIdentity } from "./embodied.ts";
 import { Run } from "./runs.ts";
 
 const MetricSpecs = z
@@ -114,7 +115,8 @@ export const AdapterRequest = z.object({
       id: z.string(),
       task: z.string(),
       method: Method,
-      seed: z.number().int(),
+      sample: EpisodeSample.optional(),
+      binding: ResolvedBinding.optional(),
       /** Job options (`orbit bench run --option key=value`). */
       options: z.record(z.string(), z.string()),
       timeoutMin: z.number().positive().optional(),
@@ -125,6 +127,7 @@ export const AdapterRequest = z.object({
       /** The method's auth profile uses the host network (for runners that start containers). */
       hostNetwork: z.boolean(),
     })
+    .and(SampleIdentity)
     .optional(),
   solve: AdapterRunRef.optional(),
   verify: AdapterRunRef.optional(),
