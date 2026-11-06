@@ -27,6 +27,10 @@ class LazyPolicy:
             self.client = GrootClient("tcp://policy:" + str(self.definition["port"]), self.definition["profile"],
                                      timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps,
                                      io_adapter=self.definition["ioAdapter"])
+        elif self.definition["connector"] == "openvla-ws":
+            from orbit_embodied.openvla import OpenVLAClient
+            self.client = OpenVLAClient("ws://policy:" + str(self.definition["port"]),
+                                       timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps)
         else:
             raise ValueError("unsupported policy connector")
         if (self.client.metadata.get("calibration") is True) != (self.definition["kind"] == "calibration"):

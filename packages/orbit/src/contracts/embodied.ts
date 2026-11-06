@@ -81,7 +81,7 @@ export const PolicyDefinition = z
     name: ProfileName,
     version: z.string().min(1),
     kind: z.enum(["model", "calibration"]).default("model"),
-    connector: z.enum(["openpi-ws", "groot-zmq"]),
+    connector: z.enum(["openpi-ws", "groot-zmq", "openvla-ws"]),
     ioAdapter: z.enum(["gr00t-flat", "libero-native"]).optional(),
     replanSteps: z.number().int().positive().optional(),
     backboneDigest: ContentDigest.optional(),
@@ -125,6 +125,18 @@ export const PolicyDefinition = z
     weights: z.object({ dataset: ProfileName, target: z.string().startsWith("/") }).optional(),
   })
   .superRefine((definition, ctx) => {
+    if (definition.connector === "openvla-ws") {
+      if (definition.replanSteps !== 8 || definition.ioAdapter !== "libero-native")
+        ctx.addIssue({
+          code: "custom",
+          message: "OpenVLA-OFT requires the explicit eight-step native LIBERO I/O recipe",
+        });
+      if (definition.kind === "model" && definition.randomness.backend !== "torch")
+        ctx.addIssue({
+          code: "custom",
+          message: "OpenVLA-OFT models require a torch random-stream declaration",
+        });
+    }
     if (definition.connector !== "groot-zmq") return;
     if (
       !definition.replanSteps ||

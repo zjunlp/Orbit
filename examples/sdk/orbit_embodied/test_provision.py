@@ -132,7 +132,7 @@ class ProvisionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "model"
             path.write_bytes(b"ABCDEF")
-            with self.assertRaisesRegex(ValueError, "differs from pinned NVIDIA"):
+            with self.assertRaisesRegex(ValueError, "differs from pinned upstream"):
                 fetcher.fetch(self.job(path))
 
     def test_offline_resolution_only_changes_runtime_metadata_and_keeps_assets_read_only(self):

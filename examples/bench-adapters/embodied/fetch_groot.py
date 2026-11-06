@@ -39,7 +39,7 @@ def fetch(job, *, direct=False):
             raise ValueError("asset size mismatch: " + file["rfilename"])
         sha, blob = hashes(path, size)
         if (sha != file["lfs"]["sha256"] if "lfs" in file else blob != file["blobId"]):
-            raise ValueError("asset differs from pinned NVIDIA content: " + file["rfilename"])
+            raise ValueError("asset differs from pinned upstream content: " + file["rfilename"])
         if mirror is not None and sha != mirror["Sha256"]:
             raise ValueError("mirror checksum mismatch")
         return sha

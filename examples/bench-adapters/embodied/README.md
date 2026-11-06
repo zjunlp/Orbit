@@ -9,6 +9,8 @@ The existing vla-eval registrations remain separate.
 
 The additional GR00T connector reuses the same native LIBERO benchmark and supports native
 SimplerEnv WidowX. Provisioning and explicit evaluation conditions are in [GR00T.md](GR00T.md).
+OpenVLA-OFT uses the same native LIBERO implementation with its own inference service and
+eight-step evaluation recipe; see [OPENVLA.md](OPENVLA.md).
 
 The benchmark adapter lists official LIBERO tasks and runs one frozen sample per solve Run.
 Orbit adds the independently registered model service and leases both roles together. Verify

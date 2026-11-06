@@ -867,6 +867,11 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   检查数值类型及有限性，拒绝的数值数组以禁止 pickle 的文件和诊断元数据保存，评测归为 `policy_act` 无效结果。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
   对没有原生终止的成功信号在片段边界结束；证据验证按 profile 选择 last/any 成功聚合。`gpusOf: main` 允许模型服务显式共享模拟器已租用的 GPU，禁止同时
   声明独立 role/GPU；没有新资源账本或调度器。配置、资产下载及验证边界见[接入说明](../examples/bench-adapters/embodied/GR00T.md)。
+- OpenVLA-OFT 的 `openvla-ws` 独立服务接收原生 LIBERO 观测，调用固定源码的官方图像、状态归一化与 L1 head 推理函数；
+  客户端在夹爪转换前验证完整原始动作。模型端使用独立 Python/Torch/Transformers 环境，checkpoint 和归一化摘要在启动时核对，
+  官方 loader 的配置同步只发生在临时视图。复用原生 LIBERO adapter、语义 binding、批次与验证器；`libero-oft-native` 是同一
+  benchmark 的显式评测 recipe（8 步动作块、环境种子 0），已有 OpenPI recipe 保持原配置。相同任务名不豁免不同 recipe 的比较条件；
+  沿用 OpenPI 固定的仿真运行时，不宣称与 OFT 官方完整环境或套件统计等价，见[使用与边界](../examples/bench-adapters/embodied/OPENVLA.md)。
 - D2a 固定批次使用 `BenchJob.spec.batchSize`（默认不启用）；按方法、计划顺序及相同资源覆盖拆分，成员与 attemptId、episodeId、
   完整清单摘要在提交时冻结。`solve` 适配请求的可选 `batch` 带完整有序 Trial 上下文，运行中不追加成员。模型服务每 Run 启动一次；
   逐项重建并 reset 环境、清空动作片段及连接器状态，模型随机流按已声明的 service 作用域连续推进，不声称远端 RNG 已复位。
