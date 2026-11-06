@@ -38,7 +38,9 @@ legacy adapters, trial identities, reports and the existing Run/resource lifecyc
 | Restart / implementation archives | working tree | passed | Daemon restart preserves jobs; new verifier accepts saved positive and negative evidence; solve source bundle remains intact |
 | Real VLA positive | working tree | passed | Official pinned π₀.₅ weights, CPU model service and native LIBERO success; separate roles, verification and cleanup |
 | GPU VLA positive | working tree | passed | Same pinned weights and planned sample; CUDA required; observed model process on leased GPU, main role has no GPU; native success, independent verify and cleanup |
-| Official reference parity / full suite | working tree | not_run | Requires aligned random streams and the subsequent comparison phase |
+| Sampled reference protocol control | working tree | passed | Deterministic processing/native actions and a shared-compiled-model real rollout; see the parity task |
+| Independent process bitwise parity | working tree | failed | Official-path repetition also differs numerically; keep separate from the passing controlled protocol comparison |
+| Full-suite statistical equivalence | working tree | not_run | Requires the subsequent batch/stream comparison phase |
 
 ## Next / open issues
 
@@ -46,4 +48,5 @@ D0 source/content lock and the D1 episode path are implemented and checked. D2a 
 sample ownership, migration/backup recovery and verifier cost measurements; D2b adds a second
 endpoint family and validated direct mapping. Full Web creation and C6 calibration selection
 remain deferred. D3 compares deterministic processing, fixed-action environments and aligned
-random rollouts separately. Resource inventories and personal run records stay outside Git.
+random rollouts separately; sampled findings are recorded in [the parity task](20261106-embodied-parity.md).
+Resource inventories and personal run records stay outside Git.

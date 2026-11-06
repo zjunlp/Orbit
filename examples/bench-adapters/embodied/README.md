@@ -1,8 +1,10 @@
 # Native LIBERO and independent OpenPI policies
 
 Experimental D1 implementation. Development checks include real π₀.₅ checkpoint positives on
-CPU and GPU, native-environment negatives and saved-output rescore/cleanup. Parity with the
-upstream evaluation remains unverified. See the task record for validation details.
+CPU and GPU, native-environment negatives and saved-output rescore/cleanup. Deterministic
+reference checks and a sampled real protocol control with shared compiled weights passed.
+Bitwise comparison across independent GPU processes failed; full-suite statistical equivalence
+remains unverified. See the task records for validation details.
 The existing vla-eval registrations remain separate.
 
 The benchmark adapter lists official LIBERO tasks and runs one frozen sample per solve Run.
@@ -98,6 +100,57 @@ chunk indexes, native verdict, required state, timing, the contract and resolved
 compressed video is separate from scoring evidence; raw camera tensors are not retained by
 default. A score of zero from reaching the horizon is valid, while model/environment failures
 retain their closed Orbit failure kind and the upstream error-inclusive denominator.
+
+## Sampled reference comparison
+
+`parity_plan.py` freezes a comparison against a saved real GPU solve. Export that Run's JSON
+with `orbit show "$SOLVE_RUN" --json` and locate its saved output directory. The candidate must
+be the first task and first initial state of the selected official suite, with environment seed 7,
+fresh service-scoped JAX key 0, and the unchanged SDK/driver. The builder checks pinned source
+files and records the comparison code, immutable runtime images and original evidence digest.
+
+```bash
+python3 -B examples/bench-adapters/embodied/parity_plan.py \
+  --reference-source "$OPENPI_SOURCE" --orbit-run "$SOLVE_RUN_JSON" \
+  --orbit-output "$SOLVE_OUTPUT" --output-dir "$PARITY_CONFIG"
+```
+
+The destination must be new. Submit `deterministic-run.json`, then `rollout-run.json`, using
+the existing authenticated `POST /api/v1/runs` API or `OrbitClient.submit`. Both use the normal
+Run/resource lifecycle. The first needs no model or GPU; the second starts the original frozen
+model service with its recorded resource requirements and read-only weights mount.
+
+The official `eval_libero` function runs unchanged. Observers wrap its environment/client and
+capture counters at video output, after the complete first episode and its denominator update.
+Execution stops there, preserving the official first-episode prefix. No task catalog, action,
+observation, success condition or model RNG is substituted in the real-policy comparison.
+The deterministic negative explicitly substitutes a zero-action fixture.
+
+The frozen checks require exact array dtype/shape/values and per-step native physics, raw camera,
+action, reward and termination fingerprints. Two initial states receive the same declared fixed
+action sequence. A native zero-action episode must reach the official horizon. The real-policy
+path compares every full predicted chunk against the original real Orbit solve and replays
+those actions through the SDK, checking its requests and recorded states against the official
+trace. Reconstructed SDK requests are labelled as replay evidence. Wall/inference timing and
+optional video resolution are excluded. Failures exit nonzero and write `parity-result.json`.
+
+Each Run saves the frozen plan, source bundle and comparison outputs. A passing sampled check
+does not establish full-suite statistical equivalence or later-episode random-stream parity;
+those require a separately declared sampling/stream plan and shared-batch support.
+
+For a stricter interface control, `--paired-runtime --baseline-plan "$BASELINE_PLAN"` creates
+an audit-only model service with two native WebSocket servers. They share immutable weights and
+one compiled sampler; each starts with its own key-0 stream. The official loop and the production
+SDK driver perform real inference, and observers compare both live request packets and complete
+predicted chunks. No action replay replaces inference in this mode. Both streams are created at
+service startup; no remote RNG-reset operation is added to the production connector.
+
+The parent plan links the earlier criteria and rejects changed samples, identities or numeric
+tolerances. This control tests protocol equivalence under a common numerical implementation.
+Keep an independently compiled process comparison as a separate result: a failed bitwise check
+does not become passed when the shared-runtime control succeeds. It also does not provide a
+statistical equivalence claim about independently started services. This audit service is not
+production shared-batch or model-pool support.
 
 ## SDK checks
 

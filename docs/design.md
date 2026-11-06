@@ -829,7 +829,7 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
 - 能力匹配：bench 声明 `requires`（`multiTurn`、`policyProtocol`、`gui`、`obs: rgb|depth|proprio`、`action: joint|ee|chunk`），提交前与
   Agent / Policy 声明比对，不匹配直接拒绝。
 
-### 9.4a 独立 Policy 与原生 C6（D1 闭环已验证，原生对照待验收）
+### 9.4a 独立 Policy 与原生 C6（D1 闭环与样例协议对照已验证）
 
 - `orbit policy add / ls / rm`、`orbit bench add-file`、`bench run --sample-plan` 走现有 HTTP 控制面。直接 LIBERO 路径使用
   `examples/bench-adapters/embodied` 与容器内 `examples/sdk/orbit_embodied`，不调用或导入 vla-eval；旧路径继续使用原登记。
@@ -846,7 +846,10 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   solve 和 verify 各保存自身的适配器、driver、SDK 源码包及摘要；重评记录新评分器身份，保留求解证据和原实现。
 - OpenPI 原生服务没有远端 RNG reset。D1 每 Trial 使用新服务并记录 JAX key 0 的 service 作用域，不宣称等价于参考 runner
   连续运行到任意 episode 的随机状态。源码审核、合成端点检查、真实正例与原生对照分别记录，不能互相代替。
-  已完成真实 π₀.₅ checkpoint 的 CPU 与 GPU 正例开发验证、原生环境负例、单样本重评与清理；尚未完成官方 runner 对照。
+  已完成真实 π₀.₅ checkpoint 的 CPU 与 GPU 正例开发验证、原生环境负例、单样本重评与清理。官方 runner 的确定性处理、
+  固定动作和原生 horizon 样例对照通过；共享编译模型、独立 key-0 流的真实协议控制下，实时输入、完整动作预测及物理轨迹精确一致。
+  独立 GPU 进程逐位比较未通过：重复官方路径对相同首个输入也产生不同预测，具体底层原因未定位。完整 suite 统计等价和后续 episode
+  随机流仍未验证，控制组通过不覆盖失败结论。工具为 `parity_plan.py / parity.py / parity_policy.py`，不作为生产模型池或默认保真度声明。
 - D2a 后续实现共享 solve Run、逐样本完成归属、SQLite 一致性备份及迁移恢复，并测量逐 Trial verify 的开销；当前 store 没有
   自动备份。D2b 再接第二组端点并提炼唯一语义直连规则。首期不引入模型池、转换图搜索或另一套作业状态机。
 
