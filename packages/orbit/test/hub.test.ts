@@ -126,7 +126,9 @@ it("shows declared, wired and evidenced capabilities separately", () => {
   expect(wired(def("codex"), "mcp")).toBe(true);
   expect(wired(def("opencode"), "mcp")).toBe(false);
   expect(agentBlocker(def("opencode"), ["cli"], ["mcp"])).toMatch(/no MCP wiring/);
-  expect(agentBlocker(def("codex"), ["cli"], ["gui"])).toMatch(/needs Agent capabilities gui/);
+  expect(agentBlocker(def("opencode"), ["cli"], ["gui"])).toMatch(/needs Agent capabilities gui/);
+  expect(agentBlocker(def("codex"), ["cli"], ["gui"])).toBeNull();
+  expect(wired(def("codex"), "gui")).toBe(true);
   expect(agentBlocker(def("codex"), ["oracle", "empty"], [])).toMatch(/does not admit/);
   expect(agentBlocker(def("codex"), ["cli"], ["mcp"])).toBeNull();
 });
@@ -212,6 +214,7 @@ it("builds the Agents page from jobs, profiles and auth tests", () => {
   expect(codex?.usage).toMatchObject({ jobs: 1, trials: 4, valid: 3, benchmarks: ["bfcl"] });
   expect(codex?.evidence).toMatchObject({ kind: "trial", ref: "j1.00002", benchmark: "bfcl" });
   expect(codex?.capabilities.mcp).toEqual({ declared: true, wired: true, evidence: true });
+  expect(codex?.capabilities.gui).toEqual({ declared: true, wired: true, evidence: false });
   // The latest test of claude-code's profile failed and it never ran: no evidence.
   const claude = c.agents.find((a) => a.definition.name === "claude-code");
   expect(claude?.evidence).toBeNull();
@@ -250,7 +253,11 @@ it("answers which Agent can take which benchmark by the submission checks", () =
   expect(cell("bfcl", "codex")).toMatchObject({ state: "ran", valid: 3, trials: 4, job: "j1" });
   expect(cell("bfcl", "opencode")).toMatchObject({ state: "blocked" });
   expect(cell("bfcl", "claude-code")).toMatchObject({ state: "needs-auth" });
-  expect(cell("miniwob", "codex")?.reason).toMatch(/gui/);
+  expect(cell("miniwob", "codex")).toEqual({ state: "allowed" });
+  expect(cell("miniwob", "opencode")).toMatchObject({
+    state: "blocked",
+    reason: expect.stringMatching(/gui/),
+  });
   expect(cell("humaneval", "codex")?.reason).toMatch(/does not admit/);
   expect(cell("new", "codex")?.state).toBe("unknown");
 });

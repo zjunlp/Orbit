@@ -374,6 +374,8 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   `{session}` `{home}`，可选参数写成 `{when:model} … {end}` 组；`transcript` 给出 CLI 自己的会话轨迹 glob 与格式。
 - `command.mcp`（默认 `{kind:"none"}`）声明 MCP 接线：`claude-json` 的 flag 指向 Agent home 的 `orbit-mcp.json`；`codex-toml` 向该 home 的 `config.toml` 增加 server 表。工具声明通过 trial 私有 bundle 随原启动流程写入，保留已有配置、拒绝同名 server；未接线但声明 MCP 能力的定义在 `agent show` 显示 `MCP declared, not wired`。
 - `capabilities`：`oneShot` / `multiTurn` / `mcp` / `gui`，在提交 bench trial 前与 benchmark 的要求比对。
+  Codex 与 Claude Code 声明 `gui`；Codex 的 BrowserGym/MiniWoB 截图与 CLI 工具路径已通过真实开发校准和独立签名核验，
+  不扩展为其他 GUI 后端的实跑声明。GUI 的私有服务需要容器网络与可达的模型连接，拒绝 `hostNetwork` profile。
 - `verified`：该定义在本机真实跑出过预期结果。内置的 codex 与 claude-code 为 true，其余为 false，直到
   `orbit agent test` 验证。
 
@@ -980,7 +982,7 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | P3 两个小而完整的接入 | 已完成：MiniWoB++ 全量 125；EFE MetaWorld+ standard（compose 卷、restart、偏差登记） | empty 125/125；EFE oracle 1 / empty 0 |
 | P4 Policy 路线 | 已完成：`Lease.roles` 按角色分配、service GPU 与 `entrypoint`、vla-eval 适配器（LIBERO 真实任务） | 角色独占卡、整组排队；LIBERO empty 0 分 valid |
 | P5 扩大覆盖（核心能力与 GUI hub 适配器已完成；EFE GPU 原版校准、Arena 未做；见 tasks/20261104-p5-core、p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
-| P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 按实际诊断保留能力限制；OSWorld 等 KVM 后端后置 |
+| P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 经 MiniWoB 截图/CLI 开发校准启用 GUI；OSWorld 等 KVM 后端后置 |
 | P6.5 接入层（§9.14，已完成；见 tasks/20261104-p65-integration） | calibrate / coverage、L2 SDK、L1 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按层级接入成本达标；迁移前后校准一致 |
 | P7 规模优化（对账回收、主机保护与启动限流、能力路由、[catalog](catalog.md) 已完成；暖池/实例账本、slots、导出、两台真机后置，见 §9.6 P7 实现） | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |

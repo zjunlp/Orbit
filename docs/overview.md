@@ -65,7 +65,7 @@ Web（daemon 自带的 React SPA）：Runs、Run 详情、对比、资源、Benc
 | C2 工作区 | ASI-Bench、LongDS、ResearchClawBench、PostTrainBench | 内置 / L2 | 全部 | ASI 兼容性检查；LongDS 跑通一个完整 Codex 任务；后两者只有单测 |
 | C3 工具 | BFCL multi-turn | L2 | 799/800 | 通过（四类 × 2 seed，离线重评） |
 | C4 模拟用户 | τ²-bench airline / retail | L2 | 164/164 | 通过；**用户模拟器 LLM 未运行**（用的是离线重放） |
-| C5 GUI | BrowserGym / MiniWoB++ | L2 | 125/125 | empty 全量；Claude Code 跑过 5 个抽样 |
+| C5 GUI | BrowserGym / MiniWoB++ | L2 | 125/125 | empty 全量；Claude Code 跑过 5 个抽样；Codex 截图/CLI 开发校准通过 |
 | C5 GUI | CUA-Lite、Cua Bench | L2 | 子集 | MiniWoB 部分与 Cua 基础桌面任务通过；WebVoyager / Online-Mind2Web 需资产与 judge |
 | C5 GUI | MobileWorld、OSWorld-V2 | L2 | 原版目录 | **未跑**（需要 KVM 真实校准） |
 | C6 具身策略 | vla-eval LIBERO（libero_spatial） | L1 + L2 | 10 任务 × 50 初态 | 通过（empty）；**没有跑过真实 VLA policy** |
@@ -76,7 +76,7 @@ Web（daemon 自带的 React SPA）：Runs、Run 详情、对比、资源、Benc
 - **CLI Agent（注册表内置 12 个）**：codex、claude-code、pi、opencode、kimi-cli、gemini-cli、aider、goose、qwen-code、
   copilot-cli、mini-swe-agent、dsh；用户可在 `agents.json` 自定义。**真实跑通的只有 codex、claude-code、dsh**，其余 9 个标为 `unverified`。
   会话解析器只有 Codex 和 Claude Code 有。
-- **GUI 能力**：Claude Code 经 `orbit-computer`（MCP/CLI 桥）完成过浏览器任务；Codex 的认证诊断失败，`gui` 能力仍为 false。
+- **GUI 能力**：Claude Code 经 `orbit-computer`（MCP/CLI 桥）完成过浏览器任务；Codex 经截图与 CLI 工具完成 MiniWoB 开发校准并启用 `gui`，签名证据经独立核验。GUI 运行需要容器可访问的模型连接；不代表桌面或手机后端已验证。
 - **Policy / 外部模型**：`external` 方法（VLA policy 服务镜像、OpenAI 兼容端点）已实现，**都未用真实模型运行**。
 - **校准方法**：`empty`（什么都不做）、`oracle`（参考解）、脚本方法——目前所有大类校准都只用它们。
 - **认证**：每个 Agent 的 login / API key / relay profile；通知支持飞书（含 app 机器人）、钉钉、企业微信、Slack、webhook。
@@ -86,7 +86,7 @@ Web（daemon 自带的 React SPA）：Runs、Run 详情、对比、资源、Benc
 **评测可信度（最重要）**
 - 没有任何 benchmark 用真实 Agent / 模型跑出与官方结果对齐的分数（TB-Science 与 `harbor run` 的成对对比也没做）。
 - 依赖 LLM 的部分没跑：τ² 的用户模拟器、C1 的 judge 类问答（SimpleQA 解析失败默认选 C 的吞错还没处理）、CUA-Lite 的 Web judge。
-- 9 个 CLI Agent 未验证；Codex 缺 Harbor 的 `unified_exec`，GUI 能力不可用。
+- 9 个 CLI Agent 未验证；Codex 缺 Harbor 的 `unified_exec`，GUI 实跑目前只验证了 BrowserGym/MiniWoB 浏览器路径。
 
 **接入覆盖**
 - C5 的 MobileWorld / OSWorld-V2 未在 KVM 上校准；C6 只有 LIBERO 一个原生 benchmark；C7 没有多人对局与 Elo 评分。

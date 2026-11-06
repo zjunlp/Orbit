@@ -62,7 +62,7 @@ export const BUILTIN_SEEDS: AgentDefinitionInput[] = [
       transcript: { glob: "sessions/**/*.jsonl", format: "codex" },
       mcp: { kind: "codex-toml" },
     },
-    capabilities: { oneShot: true, multiTurn: true, mcp: true, gui: false },
+    capabilities: { oneShot: true, multiTurn: true, mcp: true, gui: true },
   },
   {
     name: "claude-code",

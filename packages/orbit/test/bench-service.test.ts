@@ -140,9 +140,9 @@ process.stdin.on("end", () => {
   await expect(
     f.bench.submit({
       benchmark: "fixture",
-      methods: [{ name: "c", agent: "codex", auth: "p" }],
+      methods: [{ name: "c", agent: "opencode", auth: "p" }],
     }),
-  ).rejects.toThrow("needs Agent capabilities gui, which codex does not declare");
+  ).rejects.toThrow("needs Agent capabilities gui, which opencode does not declare");
   expect(f.store.listJobs()).toHaveLength(0);
   const submitted = await f.bench.submit({
     benchmark: "fixture",
