@@ -1076,6 +1076,79 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
 
 **不做**：跨类别总榜或单一健康分；在 Web 复制 `docs/catalog.md`；从缺失证据推测成功或补 0；把 Rescore 表述为重跑 Agent。
 
+### 9.16 Web 信息架构：any harness × any bench × 迭代进化（2026-11-06，设计）
+
+依据 [信息架构调研](research/web-ui/information-architecture.md)。Web 围绕三个对象组织：**Agents**（被评测的 harness /
+policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 方法包的版本，迭代的对象）；Evaluations 与 Runs 是它们
+的执行记录。现状问题：Bench 只是一个入口，Catalog 在其第二个标签；侧栏只有图标；Agent 只在 Settings 里显示两个；
+没有方法版本，`methodKey` 按 agent · model · effort 归并会把不同方法包混在一起。
+
+**导航**：侧栏默认展开为"图标 + 文字"（约 200 px），可折叠为图标栏（悬停显示名称与快捷键），偏好记在本地；窄屏自动折叠。
+
+| 组 | 项（快捷键） | 内容 |
+| --- | --- | --- |
+| — | Overview（`g o`，新首页） | 下文四块 |
+| Evaluate | Benchmarks（`g b`） | 现 Catalog 升为一级页 |
+| | Agents（`g a`） | 新页 |
+| | Methods（`g m`） | P1 交付；之前不显示空页 |
+| | Evaluations（`g e`） | 现 Bench 作业列表、作业、trial、作业对比 |
+| Operate | Runs（`g r`）、Resources（`g s`） | 不变；Runs 对比收为 Runs 内的操作 |
+| 底部 | Settings（`g p`）、快捷键、主题、连接状态 | Settings 不再列 Agent |
+
+旧地址（`/`、`/bench`、`/compare`）保留并重定向。界面文字为英文。
+
+**Overview** 回答四件事，每个数字可点进对应页面的筛选：
+
+1. 能评测什么：benchmark 数（不是登记数，见下）、覆盖的类别 `k/7`、领域数、抽样校准通过数、有真实方法结果的数。
+2. 能用谁来跑：Agent 数，其中本机有证据的、能力已接线的、有凭据的。
+3. 现在怎样：运行中的作业、排队原因、待复盘的失败 trial。
+4. 最近进化了什么：同一 benchmark 上方法新版本的配对 Δ（P1 前显示最近的真实方法结果）。
+
+无数据时显示首次使用清单：登记 benchmark → 配置凭据 → 校准 → 选兼容组合运行。
+
+**Benchmarks**：
+
+- **三个维度分开**：`category`（C1–C7，交互方式，单选）、`domains`（领域，多选）、`profiles`（环境与评分条件）。
+  例：EFE 是 C2 + embodied；原生 LIBERO 是 C6 + embodied；HumanEval 是 C1 + software。
+- **受控领域词表**（`contracts/categories.ts` 的 `BENCH_DOMAINS`，Web 运行时可用）：`science`、`software`、`machine-learning`、
+  `data-analysis`、`gui-web`、`embodied`、`games`、`conversation`、`knowledge`（问答、推理）。词表外的值（如 τ² 的
+  `airline`、`retail`，GUI 的 `browser`）显示为细分标签，不计入领域。契约仍接受任意字符串，旧作业照常解析；仓库内 adapter 的
+  测试要求至少一个词表内领域。未声明显示 "Unlabeled"，不猜。
+- **身份与计数**：`capabilities.identity`（`id`、`name`、`version`、`variant`，可选）。Catalog 按 `id` 把登记归为一个 benchmark
+  （例如 20 个 ASI 实验登记是一个 benchmark），未声明时按 adapter 与数据路径归并。计数分开：benchmarks / variants /
+  registrations / tasks；领域可多选，领域计数之和可大于总数。
+- 页面：左侧分面（Category、Domain、Evidence：calibrated / real method ran / parity），每项带计数；已选条件显示为可移除标签。
+  主区默认表格（沿用 Catalog 行与展开），可切换为 **Category × Domain 覆盖矩阵**（格内"benchmark 数 / 校准通过数"，
+  点击即筛选；只表达覆盖，不表达成绩）。
+
+**Agents**：
+
+- 每个注册定义一行（12 个内置 + 用户定义），另一标签列 external policy（作业中出现过的 entrypoint）。
+- 列：安装方式与本机版本（host 找到 / 运行时安装 / 镜像提供）；**能力分三态**：声明、已接线、有实跑证据（例：8 个定义声明
+  `mcp` 但没有 MCP 接线，显示 "declared · not wired"）；凭据（profile 数与最近测试结果）；证据（最近一次有效 trial 或凭据测试，
+  带节点、CLI 版本、日期与链接，取代硬编码的 `verified`）；跑过哪些 benchmark（作业数、最近结果）。
+- **兼容矩阵** Agent × Benchmark：由 daemon 用提交时的同一套检查计算（`methods` 准入、`requires`、MCP / GUI 接线、凭据），
+  格子为 allowed / blocked（原因）/ ran（有效 trial 数与最近结果）。不按类别或名称推断。
+- API：`GET /agents` 增加 `wiring`、`profiles`、`evidence`；`GET /bench/compatibility`。
+
+**Methods 与迭代进化**（P1–P2）：
+
+- **方法版本**：提交作业时为每个方法计算 `revision`——对 agent、实跑 CLI 版本、model、effort、方法包内容 digest、external 的
+  entrypoint / 配置 / 镜像取 digest（凭据不入）；同名不同内容即不同版本。存在作业里，旧作业按可得字段补算并标 "approximate"。
+- **派生关系**：可选 `parentRevision`、变更说明、`informedBy`（失败 trial 列表），由人或 Agent 显式填写
+  （`orbit bench run --parent … --note …`，或 trial 页 "Derive next method" 预填新建评测）。不从名称或时间推断。
+- **Methods 页**：方法 → 版本列表（变更说明、父版本）；选一个 benchmark（固定版本、任务集、指标与口径）看各版本结果随版本
+  排列，每点链接到不可变报告修订；相邻版本给配对 Δ 和退步 trial 入口（复用作业对比）。只补跑失败题的结果标
+  "regression subset"，不当作全量进步。
+- 闭环：trial 失败 → 证据（对话 / GUI / episode 视图）→ invalid 修环境并以同一方法重试；valid 失败派生新版本 → 回归子集 → 更大
+  集合确认。Orbit 只记录与比较，改进由人和 Agent 决定。
+
+**不做**：跨 benchmark 总分或总榜；一个 "Ready" 徽章合并安装、凭据、能力、校准与有效性；按 hub 或套件数宣传接入量；
+无证据的谱系；Web 内的科研编排。
+
+**交付顺序**：P0 侧栏与 Overview、Benchmarks 一级页（领域词表、身份归并、分面与矩阵）、Agents 页（能力三态、证据、兼容矩阵），
+同时修正 `agent ls` 把未接线的 MCP 显示为能力；P1 方法版本与 Methods 页；P2 派生关系与 "Derive next method"。
+
 ## 10. 路线
 
 | 阶段 | 目标 | 验收 |
