@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 
 from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.evidence import write_json
@@ -50,6 +51,7 @@ class LazyPolicy:
 
 def main(argv):
     if argv[0] == "verify":
+        started = time.monotonic()
         directory, destination, expected_path = argv[1:]
         expected = json.loads(Path(expected_path).read_text())
         sample_ref = expected["sample"]["sampleId"]
@@ -59,18 +61,38 @@ def main(argv):
             raise ValueError("verifier implementation changed after planning")
         contract = json.loads((Path(directory) / "contract.json").read_text())
         if contract["identity"].get("implementationArchive"):
-            verify_implementation(Path(directory).parent / "implementation", contract["identity"]["implementationDigest"])
+            root = Path(directory).parents[1] if expected.get("batch") else Path(directory).parent
+            verify_implementation(root / "implementation", contract["identity"]["implementationDigest"])
+        if expected.get("batch"):
+            plan = json.loads((Path(directory).parents[1] / "batch-plan.json").read_text())
+            if plan != expected["batch"]["plan"]:
+                raise ValueError("saved batch plan differs from frozen membership")
         result = json.loads((Path(directory) / "native-result.json").read_text())
+        reading_seconds = time.monotonic() - started
         write_json(destination, verify_episode(directory, sample_ref, result["episodeId"], expected))
         write_json(Path(destination).with_name("verification.json"), {"sampleRef": sample_ref,
                    "episodeId": result["episodeId"], "implementationDigest": verifier_digest,
                    "solveRunId": expected["solveRunId"], "trialId": expected["trialId"],
-                   "expectationDigest": digest(expected)})
+                   "expectationDigest": digest(expected),
+                   "timing": {"readAndArchiveSeconds": reading_seconds,
+                              "verifySeconds": time.monotonic() - started - reading_seconds,
+                              "totalSeconds": time.monotonic() - started}})
         return
     request = json.loads(Path(argv[1]).read_text())
-    measured = archive_implementation(Path(__file__).parent, Path(argv[2]).parent / "implementation")
+    root = Path(argv[2]) if argv[0] == "batch" else Path(argv[2]).parent
+    measured = archive_implementation(Path(__file__).parent, root / "implementation")
+    if argv[0] == "batch":
+        from orbit_embodied.batch import run_batch
+        if any(item["implementationDigest"] != measured for item in request["episodes"]):
+            raise ValueError("batch implementation changed after planning")
+        run_batch(request["plan"], request["episodes"], root, execute_episode)
+        return
     if measured != request["implementationDigest"]:
         raise ValueError("driver implementation changed after planning")
+    execute_episode(request, argv[2])
+
+
+def execute_episode(request, destination, cancelled=None):
     sample = request["sample"]
     if sample["benchmarkProfile"] != request["reference"]["id"]:
         raise ValueError("sample evaluation profile differs from the frozen reference")
@@ -90,10 +112,14 @@ def main(argv):
             or parameters["renderSize"] != 256
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
-    run_episode(benchmark, policy, sample, request["binding"], argv[2], request["episodeId"],
+    return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],
                 {"reference": request["reference"], "policy": request["policy"],
                  "execution": {"runId": os.environ["ORBIT_RUN_ID"], "trialId": request["trialId"]},
-                 "implementationDigest": request["implementationDigest"], "implementationArchive": True})
+                 "implementationDigest": request["implementationDigest"], "implementationArchive": True,
+                 **({"batch": request["batch"]} if request.get("batch") else {})},
+                cancelled=cancelled,
+                deadline=time.monotonic() + 60 * request.get("timeoutMin", 20) if cancelled is not None else None,
+                seal_before_media=cancelled is not None)
 
 
 if __name__ == "__main__":

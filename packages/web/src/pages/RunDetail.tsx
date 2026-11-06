@@ -191,7 +191,10 @@ function RunView({ run }: { run: Run }) {
             type="button"
             className="btn danger sm"
             onClick={async () => {
-              if (!confirm(`Cancel run ${run.id}?`)) return;
+              const scope = run.spec.tags.batch_size
+                ? ` This stops all unfinished episodes in its ${run.spec.tags.batch_size}-episode batch. Completed evidence will still be verified.`
+                : "";
+              if (!confirm(`Cancel run ${run.id}?${scope}`)) return;
               try {
                 upsertRun(await api.cancel(run.id));
               } catch (e) {

@@ -11,7 +11,13 @@ import {
   Review,
 } from "./bench.ts";
 import { EnvName } from "./common.ts";
-import { EpisodeSample, ResolvedBinding, SampleIdentity } from "./embodied.ts";
+import {
+  BatchEpisode,
+  EpisodeSample,
+  ResolvedBinding,
+  SampleIdentity,
+  SolveBatch,
+} from "./embodied.ts";
 import { Run } from "./runs.ts";
 
 const MetricSpecs = z
@@ -102,6 +108,30 @@ export const AdapterRunRef = z.object({
 export type AdapterRunRef = z.infer<typeof AdapterRunRef>;
 
 /** Request on the adapter's stdin; `trial` from `solve` on, `solve` from `verify`, `verify` for `score`. */
+export const AdapterTrial = z
+  .object({
+    id: z.string(),
+    task: z.string(),
+    method: Method,
+    sample: EpisodeSample.optional(),
+    binding: ResolvedBinding.optional(),
+    batch: BatchEpisode.optional(),
+    /** Job options (`orbit bench run --option key=value`). */
+    options: z.record(z.string(), z.string()),
+    timeoutMin: z.number().positive().optional(),
+    /** Resolved solve overrides, also needed by native runners that launch containers. */
+    resources: ResourceOverride.optional(),
+    /** Private per-trial host directory for files mounted into the runs; removed with the trial. */
+    staging: z.string(),
+    /** The method's auth profile uses the host network (for runners that start containers). */
+    hostNetwork: z.boolean(),
+  })
+  .and(SampleIdentity);
+export const AdapterSolveBatch = z.object({
+  plan: SolveBatch,
+  trials: z.array(AdapterTrial).min(1).max(256),
+});
+export type AdapterSolveBatch = z.infer<typeof AdapterSolveBatch>;
 export const AdapterRequest = z.object({
   protocol: z.literal(ADAPTER_PROTOCOL),
   op: AdapterOp,
@@ -110,25 +140,8 @@ export const AdapterRequest = z.object({
     path: z.string(),
     config: z.record(z.string(), z.string()),
   }),
-  trial: z
-    .object({
-      id: z.string(),
-      task: z.string(),
-      method: Method,
-      sample: EpisodeSample.optional(),
-      binding: ResolvedBinding.optional(),
-      /** Job options (`orbit bench run --option key=value`). */
-      options: z.record(z.string(), z.string()),
-      timeoutMin: z.number().positive().optional(),
-      /** Resolved solve overrides, also needed by native runners that launch containers. */
-      resources: ResourceOverride.optional(),
-      /** Private per-trial host directory for files mounted into the runs; removed with the trial. */
-      staging: z.string(),
-      /** The method's auth profile uses the host network (for runners that start containers). */
-      hostNetwork: z.boolean(),
-    })
-    .and(SampleIdentity)
-    .optional(),
+  trial: AdapterTrial.optional(),
+  batch: AdapterSolveBatch.optional(),
   solve: AdapterRunRef.optional(),
   verify: AdapterRunRef.optional(),
 });

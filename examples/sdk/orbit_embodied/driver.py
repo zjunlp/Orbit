@@ -21,6 +21,10 @@ class EpisodeFailure(RuntimeError):
         self.rejected_actions = rejected_actions
 
 
+class EpisodeCancelled(BaseException):
+    """Stop a batch without sealing an incomplete episode as a scored result."""
+
+
 @dataclass
 class StepResult:
     observation: dict
@@ -31,7 +35,8 @@ class StepResult:
     native_action: Optional[list] = None
 
 
-def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity):
+def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity,
+                *, cancelled=None, deadline=None, seal_before_media=False):
     check_sample(sample, sample["sampleId"])
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
@@ -48,6 +53,20 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     stage = "reset_failed"
     start = time.monotonic()
     recording = False
+    completed = False
+    sealed = False
+
+    def check_control():
+        if cancelled is not None and cancelled():
+            raise EpisodeCancelled()
+        if deadline is not None and time.monotonic() >= deadline:
+            raise EpisodeFailure("call_watchdog", "episode watchdog expired")
+
+    def final_issue(message):
+        if sealed:
+            write_json(directory / "media-status.json", {"issues": [message]})
+        else:
+            result["issues"].append(message)
     if hasattr(benchmark, "start_video"):
         try:
             benchmark.start_video(directory)
@@ -56,6 +75,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
             result["issues"].append("optional video: " + str(exc))
     try:
         with (directory / "actions.jsonl").open("w", encoding="utf-8") as log:
+            check_control()
             observation = benchmark.reset(sample)
             write_json(directory / "initial-state.json", {"sampleRef": sample_ref,
                        "state": benchmark.state(observation),
@@ -67,6 +87,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
             policy.reset(sample)
             chunk, chunk_index, call = [], 0, -1
             for step in range(benchmark.horizon):
+                check_control()
                 if recording:
                     try:
                         benchmark.record_frame(observation)
@@ -105,6 +126,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                         raise ValueError("policy action chunk has invalid shape, length or non-finite values")
                     chunk, chunk_index = requested[:policy.replan_steps], 0
                 action = chunk[chunk_index]
+                check_control()
                 stage = "env_step"
                 native = benchmark.step(action)
                 row = {"phase": "control", "step": step, "sourceObservation": step - chunk_index,
@@ -124,21 +146,28 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     break
             verdict = benchmark.result()
             result.update(success=bool(verdict["success"]), valid=True, native=verdict)
+            completed = True
     except Exception as exc:
         result.update(failure=getattr(exc, "kind", stage))
         result["issues"].append(str(exc))
         (directory / "actions.jsonl").touch(exist_ok=True)
+        completed = True
     finally:
-        if hasattr(benchmark, "finish_video"):
+        if seal_before_media and completed:
+            result["wallSeconds"] = time.monotonic() - start
+            seal(directory, result)
+            sealed = True
+        if hasattr(benchmark, "finish_video") and (completed or not seal_before_media):
             try:
                 benchmark.finish_video()
             except Exception as exc:
-                result["issues"].append("optional video finalization: " + str(exc))
+                final_issue("optional video finalization: " + str(exc))
         for endpoint in (policy, benchmark):
             try:
                 endpoint.close()
             except Exception as exc:
-                result["issues"].append("endpoint close: " + str(exc))
-    result["wallSeconds"] = time.monotonic() - start
-    seal(directory, result)
+                final_issue("endpoint close: " + str(exc))
+    if not sealed:
+        result["wallSeconds"] = time.monotonic() - start
+        seal(directory, result)
     return result

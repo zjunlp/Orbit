@@ -376,12 +376,36 @@ function TrialConfiguration({ job, trial }: { job: BenchJob; trial: Trial }) {
     ["Benchmark", job.spec.benchmark],
     ["Task", trial.task],
     [trial.sampleRef ? "Sample" : "Seed", trial.sampleRef ?? trial.seed],
+    ...(trial.batch
+      ? ([
+          ["Shared solve batch", trial.batch.plan.id],
+          ["Episode position", `${trial.batch.index + 1} / ${trial.batch.plan.members.length}`],
+          [
+            "Model random stream",
+            trial.batch.plan.randomness === "service"
+              ? "Continues in fixed batch order; retries require the same full prefix"
+              : "Stateless",
+          ],
+          [
+            "Shared resources and cancellation",
+            "Solve duration and resource use cover the whole batch. Cancelling the solve stops all unfinished episodes; completed evidence is still verified.",
+          ],
+        ] satisfies [string, unknown][])
+      : []),
     [
       "Initial state",
       job.spec.samplePlan?.items.find((s) => s.sampleId === trial.sampleRef)?.initialStateId,
     ],
     ["Sample conditions", job.spec.samplePlan?.items.find((s) => s.sampleId === trial.sampleRef)],
     ["Policy", method?.policyRef],
+    [
+      "Earlier solve attempts",
+      trial.priorAttempts?.map((attempt) => ({
+        run: attempt.solveRunId,
+        batch: attempt.batch?.plan.id,
+        outcome: attempt.outcome,
+      })),
+    ],
     ["Policy type", method?.policySnapshot?.kind],
     ["Policy connector", method?.policySnapshot?.connector],
     ["Policy I/O adapter", method?.policySnapshot?.ioAdapter],

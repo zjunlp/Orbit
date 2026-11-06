@@ -44,7 +44,36 @@ export const EmbodiedCapabilities = z.object({
   profile: z.string().min(1),
   semanticProfile: SemanticProfile,
   observationMap: z.record(z.string(), z.string()),
+  /** Fixed sequential solve batches; model RNG remains scoped to the leased service. */
+  batch: z.object({ maxEpisodes: z.number().int().min(2).max(256) }).optional(),
 });
+
+export const SolveBatch = z.strictObject({
+  version: z.literal(1),
+  id: z.string().min(1),
+  attemptId: z.string().regex(/^[a-zA-Z0-9-]+$/),
+  method: z.string().min(1),
+  randomness: z.enum(["service", "stateless"]),
+  members: z
+    .array(
+      z.strictObject({
+        trialId: z.string().min(1),
+        sampleRef: ContentDigest,
+        episodeId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/),
+      }),
+    )
+    .min(1)
+    .max(256),
+  digest: ContentDigest,
+});
+export type SolveBatch = z.infer<typeof SolveBatch>;
+export const BatchEpisode = z
+  .object({ plan: SolveBatch, index: z.number().int().nonnegative() })
+  .refine(
+    (value) => value.index < value.plan.members.length,
+    "batch episode index is out of range",
+  );
+export type BatchEpisode = z.infer<typeof BatchEpisode>;
 
 /** A policy definition is independent of a benchmark registration. */
 export const PolicyDefinition = z

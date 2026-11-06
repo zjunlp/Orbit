@@ -87,14 +87,14 @@ def tasks(req):
         listing = catalog(root, suite)
     source = reference["reference"].get("evaluation", reference["reference"].get("openpi"))
     return {"tasks": listing,
-            "capabilities": {"category": "embodied-policy", "embodied": {"profile": reference["id"], "semanticProfile": reference["benchmarkProfile"], "observationMap": reference["observationMap"]}, "profiles": ["sim", "sync", "step"],
+            "capabilities": {"category": "embodied-policy", "embodied": {"profile": reference["id"], "semanticProfile": reference["benchmarkProfile"], "observationMap": reference["observationMap"], "batch": {"maxEpisodes": 128}}, "profiles": ["sim", "sync", "step"],
                              "domains": ["embodied"], "methods": ["policy"],
                              "scoreKind": "binary", "rescore": "evidence",
                              "calibration": {"oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
                                             "Source": source["commit"],
                                             "Environment": config["image"], "Renderer": config.get("renderer", "osmesa"),
-                                            "Randomness": "fresh policy service per trial; reference stream parity unverified"}},
+                                            "Randomness": "fresh policy service per solve Run; fixed batches advance its declared stream in frozen order"}},
             "official": {"name": reference.get("scoreName", "OpenPI LIBERO success"), "version": source["commit"],
                          "errors": "fail", "unit": "sample"}}
 
@@ -109,7 +109,7 @@ def stage(req):
     return destination
 
 
-def solve(req):
+def solve_one(req):
     _, config, reference = settings(req)
     trial = req["trial"]
     if "seed" in trial or not trial.get("sample") or trial["sampleRef"] != trial["sample"]["sampleId"]:
@@ -126,6 +126,7 @@ def solve(req):
     payload = {"trialId": trial["id"], "sample": trial["sample"],
                "episodeId": trial["id"] + "." + uuid.uuid4().hex,
                "binding": binding, "reference": reference, "policy": definition,
+               "timeoutMin": trial.get("timeoutMin", 20),
                "implementationDigest": config["implementationDigest"]}
     (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
@@ -146,27 +147,76 @@ def solve(req):
                      "mounts": [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]}}
 
 
+def solve(req):
+    if not req.get("batch"):
+        return solve_one(req)
+    batch = req["batch"]
+    plan, trials = batch["plan"], batch["trials"]
+    if digest({key: value for key, value in plan.items() if key != "digest"}) != plan["digest"]:
+        raise ValueError("batch plan digest mismatch")
+    if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
+        raise ValueError("batch membership or leader mismatch")
+    payloads, reply = [], None
+    for index, (trial, member) in enumerate(zip(trials, plan["members"])):
+        if (trial["id"] != member["trialId"] or trial["sampleRef"] != member["sampleRef"]
+                or trial.get("batch") != {"plan": plan, "index": index}
+                or trial["method"] != trials[0]["method"]
+                or trial["binding"] != trials[0]["binding"]):
+            raise ValueError("batch trial differs from the frozen membership or method")
+        item = solve_one({**req, "trial": trial})
+        path = Path(trial["staging"]) / "request.json"
+        payload = json.loads(path.read_text())
+        payload.update(episodeId=member["episodeId"], batch={"plan": plan, "index": index})
+        payloads.append(payload)
+        if reply is None:
+            reply = item
+    destination = Path(trials[0]["staging"])
+    (destination / "batch-request.json").write_text(json.dumps({"plan": plan, "episodes": payloads}, allow_nan=False))
+    reply["spec"]["command"] = ["/orbit-embodied/run.py", "batch", "/orbit-embodied/batch-request.json", "/orbit/output"]
+    reply["spec"]["timeoutMin"] = sum(payload["timeoutMin"] for payload in payloads)
+    reply["spec"]["tags"]["embodied_evidence"] = "3"
+    return reply
+
+
+def episode_path(req):
+    batch = req["trial"].get("batch")
+    return "episodes/" + batch["plan"]["members"][batch["index"]]["episodeId"] if batch else "episode"
+
+
 def verification_expectation(req):
     trial, run = req["trial"], req["solve"]["run"]
     params, tags = run["spec"]["params"], run["spec"]["tags"]
-    for key, value in (("sampleRef", trial["sampleRef"]), ("task", trial["task"]),
-                       ("method", trial["method"]["name"]), ("phase", "solve")):
+    batch = trial.get("batch")
+    fields = (("method", trial["method"]["name"]), ("phase", "solve"))
+    if batch:
+        plan, index = batch["plan"], batch["index"]
+        member = plan["members"][index]
+        if (plan["digest"] != digest({key: value for key, value in plan.items() if key != "digest"})
+                or member["sampleRef"] != trial["sampleRef"]
+                or tags.get("execution_batch") != plan["id"] or tags.get("batch_attempt") != plan["attemptId"]):
+            raise ValueError("batch attempt differs from the frozen trial")
+        fields += (("batchDigest", plan["digest"]),)
+        execution_trial = member["trialId"]
+    else:
+        fields += (("sampleRef", trial["sampleRef"]), ("task", trial["task"]))
+        execution_trial = tags.get("execution_trial") or tags.get("source_trial") or tags.get("trial")
+    for key, value in fields:
         if params.get(key) != value:
             raise ValueError("solve Run differs from the frozen trial: " + key)
     check_sample(trial["sample"], trial["sampleRef"])
     config = req["benchmark"]["config"]
     reference = reference_profile(config)
-    execution_trial = tags.get("execution_trial") or tags.get("source_trial") or tags.get("trial")
     if not execution_trial or not trial.get("binding") or not trial["method"].get("policySnapshot"):
         raise ValueError("missing frozen verification context")
     version = int(tags.get("embodied_evidence", "1"))
-    if version not in (1, 2):
+    if version not in (1, 2, 3) or bool(batch) != (version == 3):
         raise ValueError("unsupported embodied evidence version")
     return {"version": 1, "trialId": trial["id"], "sample": trial["sample"],
             "binding": trial["binding"], "policy": trial["method"]["policySnapshot"],
             "reference": reference, "solveImplementationDigest": config["implementationDigest"],
             "solveRunId": run["id"], "executionTrialId": execution_trial,
-            "evidenceVersion": version, "verifierDigest": implementation_digest()}
+            "evidenceVersion": version, "verifierDigest": implementation_digest(),
+            **({"batch": batch} if batch else {})}
 
 
 def verify(req):
@@ -177,7 +227,7 @@ def verify(req):
     destination = stage(req)
     (destination / "verify-request.json").write_text(json.dumps(expected, allow_nan=False))
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
-                     "command": ["/orbit-embodied/run.py", "verify", "/solve/episode", "/orbit/output/verified.json",
+                     "command": ["/orbit-embodied/run.py", "verify", "/solve/" + episode_path(req), "/orbit/output/verified.json",
                                  "/orbit-embodied/verify-request.json"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python"},
                      "resources": {"gpus": 0, "cpus": 1, "memGB": 1}, "timeoutMin": 2,
@@ -190,7 +240,8 @@ def score(req):
     try:
         result = json.loads((Path(req["verify"]["output"]) / "verified.json").read_text())
         verification = json.loads((Path(req["verify"]["output"]) / "verification.json").read_text())
-        native = json.loads((Path(req["solve"]["output"]) / "episode/native-result.json").read_text())
+        prefix = episode_path(req)
+        native = json.loads((Path(req["solve"]["output"]) / prefix / "native-result.json").read_text())
         if result != native or result["sampleRef"] != req["trial"]["sampleRef"]:
             raise ValueError("verifier and native evidence disagree")
         if verification["sampleRef"] != result["sampleRef"] or verification["episodeId"] != result["episodeId"]:
@@ -204,14 +255,16 @@ def score(req):
         if not result["valid"]:
             return invalid(result.get("failure", "scorer_error"), *result["issues"])
         files = [
-            {"label": "Native episode", "phase": "solve", "path": "episode/native-result.json", "kind": "json"},
-            {"label": "Resolved binding", "phase": "solve", "path": "episode/resolved-binding.json", "kind": "json"},
+            {"label": "Native episode", "phase": "solve", "path": prefix + "/native-result.json", "kind": "json"},
+            {"label": "Resolved binding", "phase": "solve", "path": prefix + "/resolved-binding.json", "kind": "json"},
             {"label": "Verifier identity", "phase": "verify", "path": "verification.json", "kind": "json"},
         ]
         if (Path(req["solve"]["output"]) / "implementation/manifest.json").is_file():
             files.append({"label": "Driver implementation", "phase": "solve", "path": "implementation/manifest.json", "kind": "json"})
-        if (Path(req["solve"]["output"]) / "episode/video.mp4").is_file():
-            files.append({"label": "Episode video", "phase": "solve", "path": "episode/video.mp4"})
+        if (Path(req["solve"]["output"]) / prefix / "video.mp4").is_file():
+            files.append({"label": "Episode video", "phase": "solve", "path": prefix + "/video.mp4"})
+        if req["trial"].get("batch"):
+            files.append({"label": "Fixed solve batch", "phase": "solve", "path": "batch-plan.json", "kind": "json"})
         return valid(int(result["success"]), issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

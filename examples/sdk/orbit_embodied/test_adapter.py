@@ -24,6 +24,62 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def batch_request(self, root):
+        request = self.request(root)
+        first = request["trial"]
+        second = copy.deepcopy(first)
+        second.update(id="synthetic-second", staging=str(root / "second-staging"))
+        content = {key: value for key, value in second["sample"].items() if key != "sampleId"}
+        content["initialStateId"] = "1"
+        second["sample"] = {**content, "sampleId": digest(content)}
+        second["sampleRef"] = second["sample"]["sampleId"]
+        content = {"version": 1, "id": "synthetic-batch", "attemptId": "attempt", "method": "synthetic-policy",
+                   "randomness": "service", "members": [
+                       {"trialId": trial["id"], "sampleRef": trial["sampleRef"], "episodeId": trial["id"] + ".attempt"}
+                       for trial in (first, second)]}
+        plan = {**content, "digest": digest(content)}
+        for index, trial in enumerate((first, second)):
+            trial["batch"] = {"plan": plan, "index": index}
+        request["batch"] = {"plan": plan, "trials": [first, second]}
+        spec = request["solve"]["run"]["spec"]
+        spec["params"]["batchDigest"] = plan["digest"]
+        spec["tags"].update(embodied_evidence="3", execution_batch=plan["id"], batch_attempt=plan["attemptId"])
+        return request
+
+    def test_fixed_batch_has_one_run_and_independent_episode_verification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.batch_request(root)
+            reference = json.loads(request["benchmark"]["config"]["reference"])
+            with patch.object(adapter, "settings", return_value=(root, request["benchmark"]["config"], reference)):
+                reply = adapter.solve(request)["spec"]
+            self.assertEqual(reply["command"][1], "batch")
+            self.assertEqual(reply["timeoutMin"], 40)
+            self.assertEqual(reply["tags"]["embodied_evidence"], "3")
+            payload = json.loads((root / "staging/batch-request.json").read_text())
+            self.assertEqual([item["sample"]["initialStateId"] for item in payload["episodes"]], ["0", "1"])
+            request["trial"] = request["batch"]["trials"][1]
+            request["trial"]["id"] = "consolidated-second"
+            verify = adapter.verify(request)["spec"]
+            self.assertIn("/solve/episodes/synthetic-second.attempt", verify["command"])
+            expected = json.loads((root / "second-staging/verify-request.json").read_text())
+            self.assertEqual(expected["executionTrialId"], "synthetic-second")
+            self.assertEqual(expected["batch"]["index"], 1)
+            self.assertEqual(verify["resources"]["gpus"], 0)
+            self.assertNotIn("services", verify)
+
+    def test_batch_verification_rejects_other_episode_or_attempt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            request = self.batch_request(Path(temporary))
+            for field in ("batch_attempt", "execution_batch"):
+                changed = copy.deepcopy(request)
+                changed["solve"]["run"]["spec"]["tags"][field] = "other"
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, "batch attempt"):
+                    adapter.verify(changed)
+            request["trial"]["batch"]["index"] = 1
+            with self.assertRaisesRegex(ValueError, "batch attempt"):
+                adapter.verify(request)
+
     def request(self, root):
         reference = json.loads((ADAPTER.parent / "reference.json").read_text())
         content = {"taskId": "synthetic:task", "benchmarkProfile": reference["id"],

@@ -16,6 +16,7 @@ import {
 } from "../contracts/index.ts";
 import { UserError } from "../runs/errors.ts";
 import type { AgentFailure } from "../sessions/index.ts";
+import { batchConditions } from "./batches.ts";
 import { agentFailureIssue, shouldCheckAgentFailure } from "./classify.ts";
 import { executionBudget, isValid } from "./summary.ts";
 
@@ -153,6 +154,7 @@ export function planConsolidation(input: {
         !isDeepStrictEqual(d.job.spec.samplePlan, target.job.spec.samplePlan)) ||
       d.job.spec.seeds !== target.job.spec.seeds ||
       d.job.spec.timeoutMin !== target.job.spec.timeoutMin ||
+      d.job.spec.batchSize !== target.job.spec.batchSize ||
       !isDeepStrictEqual(d.job.spec.options, target.job.spec.options) ||
       !isDeepStrictEqual(d.job.metrics, target.job.metrics)
     )
@@ -163,6 +165,10 @@ export function planConsolidation(input: {
           `duplicate ${originalTaskIds.has(t.task) ? "source" : "appended"} trial ${t.task} / ${t.method} / ${sampleLabel(t)}`,
         );
       const prev = trials.get(key(t));
+      if (prev && !isDeepStrictEqual(batchConditions(prev), batchConditions(t)))
+        throw new UserError(
+          "retry batch prefix or random-stream scope differs from the original attempt",
+        );
       if (!prev) {
         if (!f.appendTasks || originalTaskIds.has(t.task))
           throw new UserError(`source trial ${t.id} is not in the target matrix`);
@@ -186,6 +192,7 @@ export function planConsolidation(input: {
       const retrySucceeded = t.solveRunId && oldRuns.get(t.solveRunId)?.state === "succeeded";
       const replaceFailed =
         f.replaceFailed &&
+        (!prev.batch || !protectedTarget) &&
         retrySucceeded &&
         prev.solveRunId &&
         oldRuns.get(prev.solveRunId)?.state === "failed";
@@ -207,7 +214,31 @@ export function planConsolidation(input: {
           );
         if (protectedTarget && !replaceFailed)
           throw new UserError(`refusing to replace valid trial ${prev.id}`);
-        trials.set(key(t), { ...t, id: prev.id, jobId: id, createdAt: prev.createdAt });
+        const priorAttempts =
+          t.batch || prev.batch
+            ? [
+                ...(prev.priorAttempts ?? []),
+                ...(prev.solveRunId
+                  ? [
+                      {
+                        solveRunId: prev.solveRunId,
+                        verifyRunId: prev.verifyRunId,
+                        batch: prev.batch,
+                        outcome: prev.outcome,
+                        history: prev.history,
+                      },
+                    ]
+                  : []),
+                ...(t.priorAttempts ?? []),
+              ]
+            : undefined;
+        trials.set(key(t), {
+          ...t,
+          id: prev.id,
+          jobId: id,
+          createdAt: prev.createdAt,
+          ...(priorAttempts?.length ? { priorAttempts } : {}),
+        });
         adopted.push({ task: t.task, sourceJob: d.job.id, sourceTrial: t.id, trial: prev.id });
         adoptedKeys.add(key(t));
       } else if (
@@ -253,10 +284,14 @@ export function planConsolidation(input: {
     leftovers: [],
   };
   const moved: Run[] = [];
+  const movedIds = new Set<string>();
   for (const a of adopted) {
     const t = [...trials.values()].find((t) => t.id === a.trial) as Trial;
     for (const rid of trialRunIds(t)) {
+      if (movedIds.has(rid)) continue;
+      movedIds.add(rid);
       const r = structuredClone(oldRuns.get(rid) as Run);
+      if (t.batch && r.spec.tags.job === id) continue;
       r.folder = target.job.folder;
       r.spec.group = benchGroup(id);
       r.spec.tags = {

@@ -82,6 +82,14 @@ function TrialRow(props: { t: Trial; seeds: number; solve?: Run; verify?: Run; n
           </Link>
           <span className="muted">{t.method}</span>
           {(t.sampleRef || props.seeds > 1) && <span className="faint">#{sampleLabel(t)}</span>}
+          {t.batch && (
+            <span
+              className="faint"
+              title="Solve Run, duration and resource measurements cover the entire batch"
+            >
+              batch {t.batch.index + 1}/{t.batch.plan.members.length}
+            </span>
+          )}
         </div>
       </td>
       <td colSpan={3}>

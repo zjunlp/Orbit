@@ -1,4 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -180,6 +190,77 @@ it("refuses a newer database without migrating or changing its version", () => {
   expect(db.prepare("PRAGMA user_version").get()?.user_version).toBe(9999);
   expect(db.prepare("SELECT name FROM sqlite_master").all()).toEqual([]);
   db.close();
+});
+
+function legacyDatabase(file: string, job: BenchJob, trial: Trial) {
+  const initial = new Store(file);
+  initial.putJob(job);
+  initial.putTrial(trial);
+  initial.close();
+  const legacy = new DatabaseSync(file);
+  legacy.exec(`PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;
+    DROP TABLE trial_runs;
+    CREATE TABLE trial_runs (run_id TEXT PRIMARY KEY, trial_id TEXT NOT NULL);
+    CREATE INDEX trial_runs_trial ON trial_runs(trial_id);
+    INSERT INTO trial_runs VALUES ('solve', 'job.1'), ('verify', 'job.1');
+    PRAGMA user_version = 6;`);
+  return legacy;
+}
+
+it("backs up committed WAL before migrating and restores legacy jobs, trials and history", () => {
+  const f = fixture();
+  const file = join(f.home, "legacy.db");
+  const history = { verifyRunId: "old-verify", outcome: f.trial.outcome as Outcome, endedAt: null };
+  const trial = { ...f.trial, history: [history] };
+  const legacy = legacyDatabase(file, f.job, trial);
+  legacy.prepare("INSERT INTO trial_runs VALUES (?, ?)").run("old-verify", trial.id);
+  const changed = { ...f.job, spec: { ...f.job.spec, name: "committed in WAL" } };
+  legacy
+    .prepare("UPDATE bench_jobs SET doc = ? WHERE id = ?")
+    .run(JSON.stringify(changed), changed.id);
+  expect(existsSync(`${file}-wal`)).toBe(true);
+  const migrated = new Store(file);
+  stores.push(migrated);
+  legacy.close();
+  expect(migrated.getJob(changed.id)).toEqual(changed);
+  expect(migrated.getTrial(trial.id)).toEqual(trial);
+  expect(migrated.trialsByRun("old-verify", "verify")).toEqual([trial]);
+  expect(migrated.trialsByRun("solve", "solve")).toEqual([trial]);
+  const backup = migrated.migrationBackup;
+  if (!backup) throw new Error("missing pre-migration backup");
+  expect(statSync(backup).mode & 0o777).toBe(0o600);
+  const snapshot = new DatabaseSync(backup, { readOnly: true });
+  expect(snapshot.prepare("PRAGMA user_version").get()?.user_version).toBe(6);
+  expect(JSON.parse(String(snapshot.prepare("SELECT doc FROM bench_jobs").get()?.doc))).toEqual(
+    changed,
+  );
+  snapshot.close();
+  const restored = join(f.home, "restored.db");
+  copyFileSync(backup, restored);
+  const recovery = new Store(restored);
+  stores.push(recovery);
+  expect(recovery.getJob(changed.id)).toEqual(changed);
+  expect(recovery.getTrial(trial.id)).toEqual(trial);
+});
+
+it("rolls back a failed migration and keeps an independently readable pre-migration backup", () => {
+  const f = fixture();
+  const file = join(f.home, "failed-migration.db");
+  const legacy = legacyDatabase(file, f.job, f.trial);
+  legacy.exec("CREATE TABLE trial_runs_legacy (collision TEXT)");
+  expect(() => new Store(file)).toThrow(/already another table/);
+  expect(legacy.prepare("PRAGMA user_version").get()?.user_version).toBe(6);
+  expect(legacy.prepare("SELECT * FROM trial_runs").all()).toHaveLength(2);
+  legacy.close();
+  const backups = readdirSync(`${file}.backups`);
+  expect(backups).toHaveLength(1);
+  const backup = new DatabaseSync(join(`${file}.backups`, backups[0] as string), {
+    readOnly: true,
+  });
+  expect(backup.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
+  expect(backup.prepare("PRAGMA user_version").get()?.user_version).toBe(6);
+  expect(JSON.parse(String(backup.prepare("SELECT doc FROM trials").get()?.doc))).toEqual(f.trial);
+  backup.close();
 });
 
 it("rolls back the job and all trials when submission fails midway", async () => {

@@ -366,6 +366,10 @@ export function createProgram(deps: ProgramDeps, paths: OrbitPaths = orbitPaths(
       for (const id of ids) {
         const r = await c.cancel(id);
         console.log(`${r.id}  ${r.state}`);
+        if (r.spec.tags.batch_size)
+          console.log(
+            `Stopped unfinished work in the ${r.spec.tags.batch_size}-episode batch; completed evidence is still verified.`,
+          );
       }
     });
 
