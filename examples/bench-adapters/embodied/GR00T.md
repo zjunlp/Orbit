@@ -6,7 +6,7 @@ codec. The same connector also accepts flat, ordered observations from NVIDIA's 
 SimplerEnv wrapper. Neither path imports vla-eval or starts an upstream rollout scheduler.
 
 `profiles/groot-model.json` pins the model implementation and NVIDIA checkpoint revisions.
-`profiles/groot-widowx.json` pins the SimplerEnv/ManiSkill source, four WidowX Visual Matching
+`profiles/groot-widowx.json` pins the SimplerEnv/ManiSkill source, seven WidowX Visual Matching
 tasks, control semantics and success reduction. LIBERO keeps `reference.json`, including its
 OpenPI-pinned simulator, 10 settle steps, suite horizons and 5-step replanning. The GR00T LIBERO
 checkpoint supplied here is trained for `libero_spatial`; this configuration does not reproduce
@@ -93,8 +93,11 @@ index into a LIBERO initial-state file. Its horizon is 300 control steps at 5 Hz
 4 steps. Success is any native `info.success`; native termination ends immediately, while a success
 signal without termination ends at the action chunk boundary. This follows the pinned wrapper.
 Evidence records both policy and native actions.
-Each trial starts a fresh model with Torch seed 0 after loading. Calls have deadlines and are never
-retried. Saved-evidence verification runs separately on CPU, without model or simulator startup.
+Each solve Run starts a fresh model with Torch seed 0 after loading. With `--batch-size`, the
+model remains loaded across the fixed group; each episode resets its environment and connector,
+while the declared service random stream continues in order. Calls have deadlines and are never
+retried. Saved-evidence verification runs separately per episode on CPU, without model or simulator
+startup. See the [batch guide](../../../docs/guides/embodied-batches.md) for retry and cancellation scope.
 
 The connector requires dense action time indices `0..horizon-1` before inference. Raw predicted
 actions must be numeric and finite before any gripper conversion, including rows outside the
