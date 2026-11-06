@@ -474,6 +474,13 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .option("--seeds <n>", "repetitions per task × method", numericOption("integer"), 2)
     .option("--no-oracle", "skip the oracle method")
     .option("--no-rescore", "skip rescoring from saved evidence")
+    .option("--policy <name>", "check a registered real model policy on a frozen sample plan")
+    .option("--sample-plan <file>", "2–5 frozen C6 episodes for --policy")
+    .option(
+      "--budget <min>",
+      "total policy-check wall-clock budget, including queue and rescore (default 20, maximum 30)",
+      numericOption("float"),
+    )
     .option("--timeout <min>", "solve timeout per trial in minutes", numericOption("float"))
     .option("--wait <min>", "give up waiting after this many minutes", numericOption("float"), 240)
     .option("--json", "print JSON")
@@ -490,8 +497,36 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           timeout?: number;
           wait: number;
           json?: boolean;
+          policy?: string;
+          samplePlan?: string;
+          budget?: number;
         },
+        command: Command,
       ) => {
+        if (o.policy || o.samplePlan || o.budget !== undefined) {
+          if (!o.policy || !o.samplePlan)
+            throw new Error("--policy and --sample-plan are required together");
+          if (
+            o.task ||
+            o.suite ||
+            ["sample", "seeds", "oracle"].some((key) => command.getOptionValueSource(key) === "cli")
+          )
+            throw new Error(
+              "policy checks use the frozen sample plan; --task, --suite, --sample, --seeds and --no-oracle do not apply",
+            );
+          const r = await calibrate(await client(), name, {
+            policyRef: o.policy,
+            samplePlan: SamplePlan.parse(JSON.parse(readFileSync(resolve(o.samplePlan), "utf8"))),
+            ...(o.budget === undefined ? {} : { budgetMin: o.budget }),
+            rescore: o.rescore,
+            ...(o.timeout ? { timeoutMin: o.timeout } : {}),
+            waitMin: o.wait,
+            progress: o.json ? undefined : (t) => t && console.error(t),
+          });
+          print(o.json, r, () => formatCalibration(r));
+          if (!r.calibrated) process.exitCode = 1;
+          return;
+        }
         const r = await calibrate(await client(), name, {
           ...(o.task ? { tasks: o.task } : {}),
           sample: o.sample,

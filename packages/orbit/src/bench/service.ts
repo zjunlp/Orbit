@@ -119,6 +119,8 @@ export class BenchService {
   private readonly busy = new Set<string>();
   private readonly again = new Set<string>();
   private readonly batchBusy = new Set<string>();
+  private readonly calibrationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private stopped = false;
   /** Task listings of registered benchmarks for the catalog, refreshed in the background. */
   private readonly listings = new Map<string, Listing>();
   private listingQueue: Promise<void> = Promise.resolve();
@@ -135,6 +137,8 @@ export class BenchService {
    * background: advancing them may call adapters, which must not hold up the daemon's start.
    */
   start(): void {
+    this.stopped = false;
+    for (const job of this.deps.store.listJobs(10_000)) this.armCalibrationBudget(job);
     for (const t of this.deps.store.pendingTrialCleanup()) {
       if (this.reconcileCleanup(t))
         this.deps.log?.(`bench trial ${t.id}: repaired outcome cleanup`);
@@ -144,6 +148,63 @@ export class BenchService {
     for (const j of this.deps.store.listJobs(10_000))
       if (j.spec.calibration && j.state !== "running" && j.rescore?.state !== "done")
         if (!this.deps.store.hasOpenTrials(j.id)) this.afterCalibration(j.id);
+  }
+
+  stop(): void {
+    this.stopped = true;
+    for (const timer of this.calibrationTimers.values()) clearTimeout(timer);
+    this.calibrationTimers.clear();
+  }
+
+  /** Restore stop intent before RunService starts scheduling recovered queued work. */
+  async enforceCalibrationBudgets(): Promise<void> {
+    for (const job of this.deps.store.listJobs(10_000))
+      if (
+        this.calibrationDeadline(job) !== null &&
+        Date.now() >= (this.calibrationDeadline(job) as number)
+      )
+        await this.expireCalibration(job.id);
+  }
+
+  private calibrationDeadline(job: BenchJob): number | null {
+    const c = job.spec.calibration;
+    return c?.mode === "policy" && job.rescore?.state !== "done"
+      ? Date.parse(job.createdAt) + (c.budgetMin as number) * 60_000
+      : null;
+  }
+
+  private clearCalibrationTimer(id: string): void {
+    clearTimeout(this.calibrationTimers.get(id));
+    this.calibrationTimers.delete(id);
+  }
+
+  private armCalibrationBudget(job: BenchJob): void {
+    const deadline = this.calibrationDeadline(job);
+    if (deadline === null || this.stopped || this.calibrationTimers.has(job.id)) return;
+    const timer = setTimeout(
+      () => {
+        this.calibrationTimers.delete(job.id);
+        void this.expireCalibration(job.id).catch((e) =>
+          this.deps.log?.(`calibration budget ${job.id}: ${e.message}`),
+        );
+      },
+      Math.max(1, deadline - Date.now()),
+    );
+    timer.unref();
+    this.calibrationTimers.set(job.id, timer);
+  }
+
+  private async expireCalibration(id: string): Promise<void> {
+    const job = this.deps.store.getJob(id);
+    if (!job) return;
+    const deadline = this.calibrationDeadline(job);
+    if (deadline === null || Date.now() < deadline) return;
+    if (!job.calibrationExpiredAt) {
+      job.calibrationExpiredAt = nowIso();
+      this.deps.store.putJob(job);
+    }
+    await this.cancel(id);
+    if (!this.deps.store.hasOpenTrials(id)) this.afterCalibration(id);
   }
 
   /** Advance trials one after another in the background (each may run adapter processes). */
@@ -209,6 +270,10 @@ export class BenchService {
       if (m.agent === "policy") {
         const policy = this.policies.get(m.policyRef ?? "");
         if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
+        if (spec.calibration?.mode === "policy" && policy.kind !== "model")
+          throw new UserError(
+            "policy integration checks require a real model registration, not a calibration fixture",
+          );
         m.policySnapshot = structuredClone(policy);
         const endpoint = info.capabilities?.embodied;
         if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
@@ -328,6 +393,7 @@ export class BenchService {
         for (const trial of planned) this.deps.store.putTrial(trial);
       }
     });
+    this.armCalibrationBudget(job);
     this.advanceAll(ids);
     return job;
   }
@@ -373,7 +439,7 @@ export class BenchService {
     const job = this.deps.store.getJob(id);
     if (!job) throw new NotFoundError(`bench job not found: ${id}`);
     const trials = this.deps.store.trials(id);
-    const calibration = calibrationReport(job, trials);
+    const calibration = this.calibration(job, trials);
     return {
       job,
       trials,
@@ -395,8 +461,24 @@ export class BenchService {
    */
   async calibrate(input: CalibrationRequestInput): Promise<BenchJob> {
     const parsed = CalibrationRequest.safeParse(input);
-    if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
+    if (!parsed.success) {
+      const policy = input && typeof input === "object" && "policyRef" in input;
+      const issues = parsed.error.issues.flatMap((issue) =>
+        issue.code === "invalid_union" ? (issue.errors.at(policy ? -1 : 0) ?? [issue]) : [issue],
+      );
+      throw new UserError(issues.map((issue) => issue.message).join("; "));
+    }
     const r = parsed.data;
+    if ("policyRef" in r)
+      return this.submit({
+        name: `policy check ${r.benchmark} / ${r.policyRef}`,
+        benchmark: r.benchmark,
+        methods: [{ name: "policy", agent: "policy", policyRef: r.policyRef }],
+        samplePlan: r.samplePlan,
+        batchSize: r.samplePlan.items.length,
+        calibration: { mode: "policy", budgetMin: r.budgetMin, rescore: r.rescore },
+        timeoutMin: Math.min(r.timeoutMin ?? r.budgetMin, r.budgetMin),
+      });
     const info = await this.infoOf(this.benchmark(r.benchmark));
     this.remember(r.benchmark, info);
     const oracle = r.oracle && info.capabilities?.calibration?.oracle !== "none";
@@ -420,12 +502,20 @@ export class BenchService {
 
   /** A calibration job's trials have all ended: rescore it once from saved evidence, then finish. */
   private afterCalibration(id: string): void {
+    if (this.stopped) return;
     const job = this.deps.store.getJob(id);
     const c = job?.spec.calibration;
     if (!job || !c || job.rescore?.state === "done") return;
     const done = (note?: string) => {
       const fresh = this.deps.store.getJob(id) ?? job;
       fresh.rescore = { state: "done", ...(note ? { note } : {}) };
+      if (c.mode === "policy") {
+        const deadline = Date.parse(fresh.createdAt) + (c.budgetMin as number) * 60_000;
+        if (deadline !== null && Date.now() >= deadline && !fresh.calibrationExpiredAt)
+          fresh.calibrationExpiredAt = nowIso();
+        fresh.endedAt = nowIso();
+        this.clearCalibrationTimer(id);
+      }
       this.deps.store.putJob(fresh);
     };
     const skip =
@@ -445,7 +535,8 @@ export class BenchService {
     job.rescore = { state: "started" };
     this.deps.store.putJob(job);
     try {
-      const r = this.rescore(id);
+      const first = c.mode === "policy" ? this.deps.store.trials(id)[0]?.id : undefined;
+      const r = this.rescore(id, first ? { trials: [first] } : {});
       if (r.skipped.length) {
         const fresh = this.deps.store.getJob(id) ?? job;
         fresh.rescore = {
@@ -459,6 +550,14 @@ export class BenchService {
     }
   }
 
+  private calibration(job: BenchJob, trials: Trial[]) {
+    const runs =
+      job.spec.calibration?.mode === "policy"
+        ? new Map(trials.flatMap(trialRunIds).map((id) => [id, this.deps.runs.get(id)] as const))
+        : undefined;
+    return calibrationReport(job, trials, runs);
+  }
+
   /** Every registered benchmark with its listing, calibrations, real methods and fidelity. */
   catalog(refresh: string[] = []): BenchCatalog {
     const jobs = this.jobs(10_000).jobs;
@@ -466,10 +565,14 @@ export class BenchService {
       entries: this.deps.registry.list().map((b) => {
         this.refreshListing(b, refresh.includes(b.name));
         const own = jobs.filter((j) => j.spec.benchmark === b.name);
-        const calibrations = own
-          .filter((j) => j.spec.calibration)
-          .slice(0, 5)
-          .map((j) => calibrationReport(j, this.deps.store.trials(j.id)))
+        const selected = [
+          ...own
+            .filter((j) => j.spec.calibration && j.spec.calibration.mode !== "policy")
+            .slice(0, 5),
+          ...own.filter((j) => j.spec.calibration?.mode === "policy").slice(0, 5),
+        ];
+        const calibrations = selected
+          .map((j) => this.calibration(j, this.deps.store.trials(j.id)))
           .filter((r) => r !== null);
         return catalogEntry(b, this.listing(b.name), own, calibrations);
       }),
@@ -797,28 +900,36 @@ export class BenchService {
   async cancel(id: string): Promise<BenchJob> {
     const job = this.deps.store.getJob(id);
     if (!job) throw new NotFoundError(`bench job not found: ${id}`);
-    if (job.state !== "running") return job;
+    const policyCheck = job.spec.calibration?.mode === "policy";
+    if (job.state !== "running" && !(policyCheck && job.rescore?.state !== "done")) return job;
     job.state = "cancelled";
     job.endedAt = nowIso();
     this.deps.store.putJob(job);
+    if (policyCheck) this.clearCalibrationTimer(id);
     const trials = this.deps.store.trials(id).filter((t) => t.state !== "done");
     const cancelledRuns = new Set<string>();
     for (const t of trials) {
       const runId =
         t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null;
       // Completed batch evidence is still verified after a job cancellation.
-      if (runId && !(t.batch && t.state === "verifying") && !cancelledRuns.has(runId)) {
+      if (
+        runId &&
+        !(t.batch && t.state === "verifying" && !policyCheck) &&
+        !cancelledRuns.has(runId)
+      ) {
         cancelledRuns.add(runId);
         await this.deps.runs.cancel(runId).catch(() => undefined);
       }
     }
     this.advanceAll(trials.map((t) => t.id));
+    if (policyCheck && !trials.length) this.afterCalibration(id);
     return job;
   }
 
   // ---- trial state machine ----
 
   private onRun(run: Run): void {
+    if (this.stopped) return;
     if (!("bench" in run.spec.tags) && !run.spec.group?.startsWith("bench-")) return;
     for (const t of this.deps.store.trialsByRun(run.id)) void this.advance(t.id);
   }
@@ -875,6 +986,15 @@ export class BenchService {
   }
 
   private async submitRun(job: BenchJob, t: Trial, phase: "solve" | "verify", spec: RunSpecInput) {
+    const fresh = this.deps.store.getJob(job.id) ?? job;
+    const deadline = this.calibrationDeadline(fresh);
+    if (
+      fresh.spec.calibration?.mode === "policy" &&
+      (this.cancelled(job.id, t) || (deadline !== null && Date.now() >= deadline))
+    ) {
+      if (deadline !== null && Date.now() >= deadline) await this.expireCalibration(job.id);
+      throw new UserError("policy integration check stopped before Run submission");
+    }
     // Read again: the job may have been moved to another folder meanwhile.
     const folder = this.deps.store.getJob(job.id)?.folder ?? job.folder;
     return this.deps.runs.submit(
@@ -983,12 +1103,22 @@ export class BenchService {
    * trial being rescored is never affected by an earlier cancel.
    */
   private cancelled(jobId: string, t: Trial): boolean {
-    return t.history.length === 0 && this.deps.store.getJob(jobId)?.state === "cancelled";
+    const job = this.deps.store.getJob(jobId);
+    return (
+      job?.state === "cancelled" &&
+      (t.history.length === 0 ||
+        (job.spec.calibration?.mode === "policy" && job.rescore?.state !== "done"))
+    );
   }
 
   /** A job cancelled while a run was being submitted: cancel that run too. */
   private async cancelIfJobCancelled(jobId: string, t: Trial, runId: string): Promise<void> {
-    if (t.batch && runId === t.verifyRunId) return;
+    if (
+      t.batch &&
+      runId === t.verifyRunId &&
+      this.deps.store.getJob(jobId)?.spec.calibration?.mode !== "policy"
+    )
+      return;
     if (this.cancelled(jobId, t) && this.deps.store.getRun(runId)?.stopRequested !== "cancel")
       await this.deps.runs.cancel(runId).catch(() => undefined);
   }
@@ -1173,6 +1303,17 @@ export class BenchService {
   private async stepSolving(job: BenchJob, t: Trial, solve: Run): Promise<void> {
     if (!isTerminal(solve.state)) return this.cancelIfJobCancelled(job.id, t, solve.id);
     if (t.batch && solve.cleanup === "pending") return;
+    if (job.spec.calibration?.mode === "policy" && this.cancelled(job.id, t)) {
+      const outcome = classify(solve, null, null, t.issues);
+      outcome.evaluation = "unknown";
+      outcome.score = null;
+      outcome.issues.push(
+        job.calibrationExpiredAt
+          ? "policy calibration budget exhausted"
+          : "policy integration check cancelled",
+      );
+      return this.finish(t, outcome);
+    }
     const batchEvidence = this.hasEpisodeEvidence(t, solve);
     const sv = solveVerdict(solve);
     // An Agent that could not reach or use its model left nothing worth verifying; an explicit

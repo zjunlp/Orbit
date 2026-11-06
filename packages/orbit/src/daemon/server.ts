@@ -231,12 +231,14 @@ async function startLockedDaemon(
   const url = `http://127.0.0.1:${port}`;
   webUrl = url;
   try {
+    await bench.enforceCalibrationBudgets();
     await runs.start();
     await cluster.start();
     bench.start();
     void feishu.sync();
     writeDaemonInfo(paths, { url, token, pid: process.pid });
   } catch (e) {
+    bench.stop();
     feishu.stop();
     await cluster.stop();
     await runs.stop();
@@ -247,6 +249,7 @@ async function startLockedDaemon(
   const stop = async () => {
     removeDaemonInfo(paths, process.pid);
     feishu.stop();
+    bench.stop();
     await cluster.stop();
     await runs.stop();
     await new Promise<void>((done) => {

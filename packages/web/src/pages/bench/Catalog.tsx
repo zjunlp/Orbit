@@ -390,7 +390,23 @@ const CHECK_ICON = {
 export function CalibrationCell({ e }: { e: CatalogEntry }) {
   const r = e.calibrations[0];
   const s = calState(e);
-  if (!r) return <span className="faint">not calibrated</span>;
+  if (!r) {
+    const policy = e.policyChecks?.[0];
+    return (
+      <div className="col">
+        <span className="faint">not calibrated</span>
+        {policy && (
+          <Link href={jobPath(policy.job)}>
+            {policy.phase !== "done"
+              ? "Policy check running"
+              : policy.calibrated
+                ? "Policy integration passed"
+                : "Policy check not passed"}
+          </Link>
+        )}
+      </div>
+    );
+  }
   const failed = r.checks.filter((c) => c.result === "failed");
   const skipped = r.checks.filter((c) => c.result === "not_run").length;
   return (
@@ -468,20 +484,50 @@ function Detail({ e }: { e: CatalogEntry }) {
 
 export function CalibrationDetail({ e }: { e: CatalogEntry }) {
   const r = e.calibrations[0];
-  if (!r)
-    return (
-      <div className="catalog-empty">
-        <p>
-          No calibration recorded. Calibration runs the do-nothing and reference methods on sampled
-          tasks and checks validity, expected scores, repeats, cleanup and a rescore from saved
-          evidence.
-        </p>
-        <p className="faint">
-          Use <b>Calibrate</b> on this row, or <code>orbit bench calibrate {e.benchmark.name}</code>
-          .
-        </p>
-      </div>
-    );
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      {r ? (
+        <CalibrationResult r={r} />
+      ) : (
+        <div className="catalog-empty">
+          <p>
+            No calibration recorded. Calibration runs the do-nothing and reference methods on
+            sampled tasks and checks validity, expected scores, repeats, cleanup and a rescore from
+            saved evidence.
+          </p>
+          <p className="faint">
+            Use <b>Calibrate</b> on this row, or{" "}
+            <code>orbit bench calibrate {e.benchmark.name}</code>.
+          </p>
+          {e.capabilities?.methods.includes("policy") && (
+            <p>
+              Check a real policy with frozen episodes using{" "}
+              <code>
+                orbit bench calibrate {e.benchmark.name} --policy POLICY --sample-plan samples.json
+                --budget 20
+              </code>
+              .
+            </p>
+          )}
+        </div>
+      )}
+      {(e.policyChecks?.length ?? 0) > 0 && (
+        <section className="col" style={{ gap: 10 }}>
+          <b>Policy integration checks</b>
+          <p className="faint">
+            Sampled model-path checks. Benchmark semantic calibration and full-suite statistical
+            equivalence remain separate.
+          </p>
+          {e.policyChecks?.map((policy) => (
+            <CalibrationResult key={policy.job} r={policy} />
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function CalibrationResult({ r }: { r: CalibrationReport }) {
   return (
     <div className="col" style={{ gap: 10 }}>
       <div className="catalog-facts">
@@ -492,10 +538,18 @@ export function CalibrationDetail({ e }: { e: CatalogEntry }) {
           </Link>
         </span>
         <span>methods {r.methods.join(", ")}</span>
-        <span>
-          {r.tasks.length} task{r.tasks.length === 1 ? "" : "s"} × {r.seeds} seed
-          {r.seeds === 1 ? "" : "s"}
-        </span>
+        {r.mode === "policy" ? (
+          <span>
+            Policy {r.policyRef} · {r.samples} frozen episodes · {r.budget?.minutes} minute total
+            budget
+            {r.budget?.expiredAt ? " · budget exhausted" : ""}
+          </span>
+        ) : (
+          <span>
+            {r.tasks.length} task{r.tasks.length === 1 ? "" : "s"} × {r.seeds} seed
+            {r.seeds === 1 ? "" : "s"}
+          </span>
+        )}
         {r.source && (
           <span className="mono" title="Benchmark checkout at submission">
             {r.source.commit.slice(0, 10)}
@@ -731,6 +785,11 @@ function CalibrateDialog({
   onStarted: () => void;
 }) {
   const caps = e.listing?.capabilities;
+  const policyMode = Boolean(
+    caps?.methods.includes("policy") &&
+      !caps.methods.includes("empty") &&
+      !caps.methods.includes("oracle"),
+  );
   const canOracle =
     caps?.calibration?.oracle !== "none" && (!caps || caps.methods.includes("oracle"));
   const canRescore = caps?.rescore !== "none";
@@ -741,19 +800,32 @@ function CalibrateDialog({
   const [rescore, setRescore] = useState(canRescore);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [policyRef, setPolicyRef] = useState("");
+  const [plan, setPlan] = useState("");
+  const [budget, setBudget] = useState(20);
   const suites = e.listing?.coverage.suites.filter((s) => s.supported > 0) ?? [];
   const start = async () => {
     setBusy(true);
     setError(null);
     try {
-      const job = await api.benchCalibrate({
-        benchmark: e.benchmark.name,
-        sample,
-        seeds,
-        oracle,
-        rescore,
-        ...(suite ? { suite } : {}),
-      });
+      const job = await api.benchCalibrate(
+        policyMode
+          ? {
+              benchmark: e.benchmark.name,
+              policyRef,
+              samplePlan: JSON.parse(plan),
+              budgetMin: budget,
+              rescore,
+            }
+          : {
+              benchmark: e.benchmark.name,
+              sample,
+              seeds,
+              oracle,
+              rescore,
+              ...(suite ? { suite } : {}),
+            },
+      );
       toast(`Calibration started: ${job.id}`);
       onStarted();
     } catch (err) {
@@ -777,56 +849,106 @@ function CalibrateDialog({
           Calibrate {e.benchmark.name}
         </div>
         <div className="dialog-b" style={{ textAlign: "left" }}>
-          <p className="muted">
-            Runs the do-nothing method{canOracle ? " and the reference solution" : ""} on sampled
-            tasks. No model is called.
-          </p>
-          <div className="form-grid">
-            <label htmlFor="cal-sample">Tasks</label>
-            <input
-              id="cal-sample"
-              className="input"
-              type="number"
-              min={1}
-              max={100}
-              value={sample}
-              onChange={(ev) => setSample(Math.max(1, Number(ev.target.value) || 1))}
-            />
-            <label htmlFor="cal-seeds">Seeds</label>
-            <input
-              id="cal-seeds"
-              className="input"
-              type="number"
-              min={1}
-              max={10}
-              value={seeds}
-              onChange={(ev) => setSeeds(Math.max(1, Number(ev.target.value) || 1))}
-            />
-            <label htmlFor="cal-suite">Suite</label>
-            <select
-              id="cal-suite"
-              className="input"
-              value={suite}
-              onChange={(ev) => setSuite(ev.target.value)}
-            >
-              <option value="">All suites (round robin)</option>
-              {suites.map((s) => (
-                <option key={s.suite} value={s.suite}>
-                  {s.suite} ({s.supported})
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className="row">
-            <input
-              type="checkbox"
-              checked={oracle}
-              disabled={!canOracle}
-              onChange={(ev) => setOracle(ev.target.checked)}
-            />
-            Reference solution (oracle)
-            {!canOracle && <span className="faint"> — not available</span>}
-          </label>
+          {policyMode ? (
+            <>
+              <p className="muted">
+                Checks a registered real model on 2–5 frozen episodes, with independent evidence
+                verification. Native task success is separate from integration validity.
+              </p>
+              <div className="form-grid">
+                <label htmlFor="cal-policy">Registered policy</label>
+                <input
+                  id="cal-policy"
+                  className="input"
+                  value={policyRef}
+                  onChange={(ev) => setPolicyRef(ev.target.value)}
+                />
+                <label htmlFor="cal-plan">Frozen sample plan</label>
+                <input
+                  id="cal-plan"
+                  className="input"
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(ev) => {
+                    const file = ev.target.files?.[0];
+                    if (file)
+                      void file
+                        .text()
+                        .then(setPlan)
+                        .catch((err) => setError(String(err)));
+                  }}
+                />
+                <label htmlFor="cal-budget">Total budget (minutes)</label>
+                <input
+                  id="cal-budget"
+                  className="input"
+                  type="number"
+                  min={0.1}
+                  max={30}
+                  step={0.1}
+                  value={budget}
+                  onChange={(ev) => setBudget(Number(ev.target.value))}
+                />
+              </div>
+              <p className="faint">
+                The budget includes queueing, model startup, verification and rescore. Unfinished
+                work is stopped at the deadline; cleanup is still confirmed.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="muted">
+                Runs the do-nothing method{canOracle ? " and the reference solution" : ""} on
+                sampled tasks. No model is called.
+              </p>
+              <div className="form-grid">
+                <label htmlFor="cal-sample">Tasks</label>
+                <input
+                  id="cal-sample"
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={sample}
+                  onChange={(ev) => setSample(Math.max(1, Number(ev.target.value) || 1))}
+                />
+                <label htmlFor="cal-seeds">Seeds</label>
+                <input
+                  id="cal-seeds"
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={seeds}
+                  onChange={(ev) => setSeeds(Math.max(1, Number(ev.target.value) || 1))}
+                />
+                <label htmlFor="cal-suite">Suite</label>
+                <select
+                  id="cal-suite"
+                  className="input"
+                  value={suite}
+                  onChange={(ev) => setSuite(ev.target.value)}
+                >
+                  <option value="">All suites (round robin)</option>
+                  {suites.map((s) => (
+                    <option key={s.suite} value={s.suite}>
+                      {s.suite} ({s.supported})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="row">
+                <input
+                  type="checkbox"
+                  checked={oracle}
+                  disabled={!canOracle}
+                  onChange={(ev) => setOracle(ev.target.checked)}
+                />
+                Reference solution (oracle)
+                {!canOracle && <span className="faint"> — not available</span>}
+              </label>
+            </>
+          )}
           <label className="row">
             <input
               type="checkbox"
@@ -836,9 +958,11 @@ function CalibrateDialog({
             />
             Rescore from saved evidence afterwards
           </label>
-          <p className="faint">
-            {sample * seeds * (oracle ? 2 : 1)} trial(s) · each starts its environment once.
-          </p>
+          {!policyMode && (
+            <p className="faint">
+              {sample * seeds * (oracle ? 2 : 1)} trial(s) · each starts its environment once.
+            </p>
+          )}
           {error && <div className="errbox">{error}</div>}
         </div>
         <div className="dialog-f">
@@ -848,7 +972,7 @@ function CalibrateDialog({
           <button
             type="button"
             className="btn primary"
-            disabled={busy}
+            disabled={busy || (policyMode && (!policyRef || !plan))}
             onClick={() => void start()}
           >
             {busy ? "Starting…" : "Start calibration"}

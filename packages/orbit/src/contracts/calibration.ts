@@ -14,6 +14,7 @@ import {
 } from "./bench.ts";
 import { benchCategory } from "./categories.ts";
 import { sampleLabel } from "./naming.ts";
+import type { Run } from "./runs.ts";
 
 /**
  * Spread `n` tasks over the suites, round robin, in each suite's listed order. With `oracle`, tasks
@@ -222,18 +223,26 @@ export function judgeCalibration(t: Trial[], o: JudgeOptions = {}): CalibrationC
 }
 
 /** The report of a calibration job (`spec.calibration`), or null for other jobs. */
-export function calibrationReport(job: BenchJob, trials: Trial[]): CalibrationReport | null {
+export function calibrationReport(
+  job: BenchJob,
+  trials: Trial[],
+  runs?: ReadonlyMap<string, Run | null>,
+): CalibrationReport | null {
   const c = job.spec.calibration;
   if (!c) return null;
   // Cleanup is confirmed after the outcome; a pending one is not judged yet.
   const open = trials.some((x) => x.state !== "done" || x.outcome?.cleanup === "pending");
   const phase =
-    job.state === "running" || (open && !job.rescore)
-      ? "running"
-      : job.rescore?.state === "started" || open
+    c.mode === "policy" && job.rescore?.state !== "done"
+      ? job.rescore?.state === "started" || job.state !== "running"
         ? "rescoring"
-        : "done";
-  const checks = judgeCalibration(trials, {
+        : "running"
+      : job.state === "running" || (open && !job.rescore)
+        ? "running"
+        : job.rescore?.state === "started" || open
+          ? "rescoring"
+          : "done";
+  let checks = judgeCalibration(trials, {
     ...(job.rescore?.note
       ? { rescoreNote: job.rescore.note }
       : !c.rescore
@@ -242,6 +251,116 @@ export function calibrationReport(job: BenchJob, trials: Trial[]): CalibrationRe
     expect: expectations(job.capabilities),
     noOracle: new Set(c.noOracle),
   });
+  const deadlineAt =
+    c.mode === "policy"
+      ? new Date(Date.parse(job.createdAt) + (c.budgetMin as number) * 60_000).toISOString()
+      : undefined;
+  if (c.mode === "policy") {
+    checks = checks.filter((check) =>
+      [
+        "all trials finished",
+        "evaluation valid",
+        "cleanup confirmed",
+        "rescore reproduces scores",
+      ].includes(check.name),
+    );
+    const add = (name: string, ok: boolean, detail: string, pending = false) =>
+      checks.push({
+        name,
+        result:
+          pending ||
+          (!ok && phase !== "done" && !job.calibrationExpiredAt && job.state !== "cancelled")
+            ? "not_run"
+            : ok
+              ? "passed"
+              : "failed",
+        detail,
+        trials: [],
+      });
+    add(
+      "acceptance budget",
+      !job.calibrationExpiredAt &&
+        job.state !== "cancelled" &&
+        Boolean(job.endedAt && Date.parse(job.endedAt) <= Date.parse(deadlineAt as string)),
+      job.calibrationExpiredAt
+        ? `total budget exhausted at ${job.calibrationExpiredAt}; unfinished checks did not pass`
+        : job.state === "cancelled"
+          ? "integration check cancelled"
+          : `${c.budgetMin} minute wall-clock budget, including queue, model startup, verification and rescore`,
+      phase !== "done" && !job.calibrationExpiredAt && job.state !== "cancelled",
+    );
+    const method = job.spec.methods[0];
+    add(
+      "frozen model and samples",
+      method?.policySnapshot?.kind === "model" &&
+        Boolean(job.spec.samplePlan) &&
+        trials.length === job.spec.samplePlan?.items.length &&
+        new Set(trials.map((t) => t.sampleRef)).size === trials.length &&
+        trials.every((t) =>
+          job.spec.samplePlan?.items.some((s) => s.sampleId === t.sampleRef && s.taskId === t.task),
+        ),
+      "real registered model and 2–5 explicit frozen samples; native success is not an integration threshold",
+    );
+    const shared = trials.some((t) => (t.batch?.plan.members.length ?? 0) > 1);
+    add(
+      "fixed batch execution",
+      shared &&
+        trials.every((t) => {
+          const batch = t.batch;
+          const solve = t.solveRunId ? runs?.get(t.solveRunId) : null;
+          return (
+            batch &&
+            batch.plan.members[batch.index]?.sampleRef === t.sampleRef &&
+            solve &&
+            solve.state === "succeeded" &&
+            solve.spec.tags.batch_attempt === batch.plan.attemptId &&
+            solve.spec.params.batchDigest === batch.plan.digest &&
+            solve.spec.services.filter((s) => s.name === "policy").length === 1 &&
+            trials
+              .filter((peer) => peer.batch?.plan.id === batch.plan.id)
+              .every((peer) => peer.solveRunId === solve.id)
+          );
+        }),
+      "fixed membership shares a solve Run and model service; per-episode random-stream reset is not implied",
+    );
+    const verificationIds = [
+      ...new Set(
+        trials
+          .flatMap((t) => [t.verifyRunId, ...t.history.map((h) => h.verifyRunId)])
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    add(
+      "independent CPU verification",
+      verificationIds.length >= trials.length &&
+        verificationIds.every((id) => {
+          const run = runs?.get(id);
+          return (
+            run?.state === "succeeded" &&
+            run.spec.resources.gpus === 0 &&
+            run.spec.services.length === 0 &&
+            trials.every((t) => t.solveRunId !== id)
+          );
+        }),
+      "saved episode evidence verified without loading a model or simulator",
+    );
+    if (c.rescore) {
+      const again = trials.filter((t) => t.history.length > 0);
+      add(
+        "requested rescore completed",
+        again.length > 0 &&
+          again.every(
+            (t) =>
+              t.history.at(-1)?.outcome.evaluation === "valid" &&
+              t.outcome?.evaluation === "valid" &&
+              t.history.at(-1)?.outcome.score === t.outcome.score &&
+              t.history.at(-1)?.outcome.maxScore === t.outcome.maxScore &&
+              t.history.at(-1)?.verifyRunId !== t.verifyRunId,
+          ),
+        "selected episode rescored from the original solve; trusted verdict preserved",
+      );
+    }
+  }
   return {
     benchmark: job.spec.benchmark,
     job: job.id,
@@ -253,7 +372,23 @@ export function calibrationReport(job: BenchJob, trials: Trial[]): CalibrationRe
     calibrated:
       phase === "done" &&
       checks.every((x) => x.result !== "failed") &&
+      (c.mode !== "policy" ||
+        checks
+          .filter((x) => c.rescore || x.name !== "rescore reproduces scores")
+          .every((x) => x.result === "passed")) &&
       checks.some((x) => x.result === "passed"),
+    ...(c.mode === "policy"
+      ? {
+          mode: "policy" as const,
+          policyRef: job.spec.methods[0]?.policyRef,
+          samples: job.spec.samplePlan?.items.length,
+          budget: {
+            minutes: c.budgetMin as number,
+            deadlineAt: deadlineAt as string,
+            ...(job.calibrationExpiredAt ? { expiredAt: job.calibrationExpiredAt } : {}),
+          },
+        }
+      : {}),
     createdAt: job.createdAt,
     endedAt: phase === "done" ? job.endedAt : null,
     source: job.source ? { commit: job.source.commit, dirty: job.source.dirty } : null,
@@ -263,9 +398,16 @@ export function calibrationReport(job: BenchJob, trials: Trial[]): CalibrationRe
 export function formatCalibration(r: CalibrationReport): string {
   const mark = { passed: "PASS", failed: "FAIL", not_run: "n/a " } as const;
   return [
-    `${r.benchmark}: ${r.calibrated ? "calibrated" : "NOT calibrated"} (job ${r.job})`,
+    `${r.benchmark}: ${r.mode === "policy" ? (r.calibrated ? "policy integration passed" : "policy integration NOT passed") : r.calibrated ? "calibrated" : "NOT calibrated"} (job ${r.job})`,
     `tasks: ${r.tasks.join(", ")}`,
-    `methods: ${r.methods.join(", ")} × ${r.seeds} seed(s)`,
+    r.mode === "policy"
+      ? `policy: ${r.policyRef}; ${r.samples} frozen episodes; ${r.budget?.minutes} minute total budget`
+      : `methods: ${r.methods.join(", ")} × ${r.seeds} seed(s)`,
+    ...(r.mode === "policy"
+      ? [
+          "Scope: sampled model path; benchmark semantic calibration and full-suite statistical equivalence remain separate.",
+        ]
+      : []),
     "",
     ...r.checks.map((x) => `${mark[x.result]}  ${x.name}: ${x.detail}`),
   ].join("\n");

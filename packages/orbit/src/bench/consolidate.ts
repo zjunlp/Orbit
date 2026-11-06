@@ -108,6 +108,10 @@ export function planConsolidation(input: {
   flags: BenchConsolidateInput;
   transport?: Transport;
 }) {
+  if ([input.target, ...input.donors].some((d) => d.job.spec.calibration?.mode === "policy"))
+    throw new UserError(
+      "policy integration checks must retain their own bounded execution; consolidation is not supported",
+    );
   const target = structuredClone(input.target);
   const donors = structuredClone(input.donors);
   const { oldRuns, failures } = input;
