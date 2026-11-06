@@ -10,23 +10,32 @@ from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 
 
-class LazyOpenPI:
-    replan_steps = 5
-
+class LazyPolicy:
     def __init__(self, definition):
         self.definition = definition
         self.client = None
+        self.replan_steps = definition.get("replanSteps", 5)
 
     def reset(self, sample):
-        from orbit_embodied.openpi import OpenPIClient
-        self.client = OpenPIClient("ws://policy:" + str(self.definition["port"]),
-                                   timeout=self.definition["callTimeoutSec"])
+        if self.definition["connector"] == "openpi-ws":
+            from orbit_embodied.openpi import OpenPIClient
+            self.client = OpenPIClient("ws://policy:" + str(self.definition["port"]),
+                                      timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps)
+        elif self.definition["connector"] == "groot-zmq":
+            from orbit_embodied.groot import GrootClient
+            self.client = GrootClient("tcp://policy:" + str(self.definition["port"]), self.definition["profile"],
+                                     timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps,
+                                     io_adapter=self.definition["ioAdapter"])
+        else:
+            raise ValueError("unsupported policy connector")
         if (self.client.metadata.get("calibration") is True) != (self.definition["kind"] == "calibration"):
             raise ValueError("calibration fixtures must be registered explicitly as calibration policies")
         identity = self.client.metadata.get("orbit", {})
         for key in ("checkpointDigest", "normalizationDigest"):
             if identity.get(key) != self.definition[key]:
                 raise ValueError("policy server identity mismatch: " + key)
+        if self.definition.get("backboneDigest") != identity.get("backboneDigest"):
+            raise ValueError("policy backbone identity differs from the frozen definition")
         if identity.get("randomness") != self.definition["randomness"]:
             raise ValueError("policy random-stream declaration does not match this reference")
         self.client.reset(sample)
@@ -58,22 +67,28 @@ def main(argv):
                    "solveRunId": expected["solveRunId"], "trialId": expected["trialId"],
                    "expectationDigest": digest(expected)})
         return
-    from orbit_embodied.libero import LiberoBenchmark
     request = json.loads(Path(argv[1]).read_text())
     measured = archive_implementation(Path(__file__).parent, Path(argv[2]).parent / "implementation")
     if measured != request["implementationDigest"]:
         raise ValueError("driver implementation changed after planning")
     sample = request["sample"]
-    suite, name = sample["taskId"].split(":", 1)
     if sample["benchmarkProfile"] != request["reference"]["id"]:
         raise ValueError("sample evaluation profile differs from the frozen reference")
-    benchmark = LiberoBenchmark(suite, name)
-    policy = LazyOpenPI(request["policy"])
+    if request["reference"].get("environment", {}).get("kind") == "registered-gym":
+        from orbit_embodied.gym import GymBenchmark
+        benchmark = GymBenchmark(request["reference"], sample["taskId"])
+        expected_horizon = request["reference"]["environment"]["horizon"]
+    else:
+        from orbit_embodied.libero import LiberoBenchmark
+        suite, name = sample["taskId"].split(":", 1)
+        benchmark = LiberoBenchmark(suite, name)
+        expected_horizon = request["reference"]["horizons"][suite]
+    policy = LazyPolicy(request["policy"])
     parameters = request["reference"]["parameters"]
-    if (benchmark.horizon != request["reference"]["horizons"][suite]
-            or benchmark.settle_steps != parameters["settleSteps"]
+    if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
-            or parameters["renderSize"] != 256 or parameters["resizeSize"] != 224):
+            or parameters["renderSize"] != 256
+            or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     run_episode(benchmark, policy, sample, request["binding"], argv[2], request["episodeId"],
                 {"reference": request["reference"], "policy": request["policy"],

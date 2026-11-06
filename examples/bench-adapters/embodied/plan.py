@@ -14,20 +14,27 @@ from adapter import catalog
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference-source", type=Path, required=True)
+    parser.add_argument("--reference-file", type=Path, default=HERE / "reference.json")
     parser.add_argument("--suite", default="libero_spatial")
     parser.add_argument("--task", action="append", required=True)
     parser.add_argument("--initial-state", action="append", type=int, required=True)
     parser.add_argument("--environment-seed", type=int, default=7)
     parser.add_argument("--repetitions", type=int, default=1)
     args = parser.parse_args()
-    reference = json.loads((HERE / "reference.json").read_text())
-    tasks = {task["id"]: task for task in catalog(args.reference_source, args.suite)}
+    reference = json.loads(args.reference_file.read_text())
+    generated = reference.get("environment", {}).get("kind") == "registered-gym"
+    if generated:
+        from orbit_embodied.binding import seed_asset
+        tasks = {task: {"tags": {"initialStateDigest": seed_asset(reference, task)}}
+                 for task in reference["environment"]["tasks"]}
+    else:
+        tasks = {task["id"]: task for task in catalog(args.reference_source, args.suite)}
     items = []
     for task_id in args.task:
         task = tasks[task_id]
         for initial_state in args.initial_state:
-            if not 0 <= initial_state < 50:
-                raise ValueError("the selected LIBERO reference provides initial states 0..49")
+            if not 0 <= initial_state < (2 ** 31 if generated else 50):
+                raise ValueError("initial-state index exceeds the selected reset recipe")
             for repetition in range(args.repetitions):
                 content = {"taskId": task_id, "benchmarkProfile": reference["id"],
                            "initialStateId": str(initial_state), "initialStateDigest": task["tags"]["initialStateDigest"],

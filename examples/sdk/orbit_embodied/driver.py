@@ -27,6 +27,7 @@ class StepResult:
     terminated: bool
     success: bool
     simulation_time: Optional[float] = None
+    native_action: Optional[list] = None
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity):
@@ -99,6 +100,8 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                        "nativeSuccess": bool(native.success), "wallSeconds": time.monotonic() - start,
                        "simulationSeconds": native.simulation_time,
                        "state": benchmark.state(native.observation)}
+                if native.native_action is not None:
+                    row["nativeAction"] = native.native_action
                 log.write(json.dumps(row, allow_nan=False) + "\n")
                 log.flush()
                 result["steps"] = step + 1

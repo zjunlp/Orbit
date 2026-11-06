@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -B
-"""Orbit protocol 1 adapter: native LIBERO, independent policy, one planned episode."""
+"""Orbit protocol 1 adapter: native environments, independent policy, one planned episode."""
 
 import ast
 import hashlib
@@ -14,7 +14,7 @@ SDK = HERE.parents[1] / "sdk"
 sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
-from orbit_embodied.binding import check_sample
+from orbit_embodied.binding import check_sample, seed_asset
 
 
 def file_digest(path):
@@ -51,8 +51,8 @@ def settings(req):
     image = config.get("image", "")
     if not pinned(image):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
-    if config.get("renderer", "osmesa") not in ("osmesa", "egl"):
-        raise ValueError("this adapter supports osmesa or egl rendering")
+    if config.get("renderer", "osmesa") not in ("osmesa", "egl", "vulkan"):
+        raise ValueError("unsupported native renderer")
     return root, config, reference
 
 
@@ -75,18 +75,26 @@ def catalog(root, suite):
 def tasks(req):
     root, config, reference = settings(req)
     suite = config.get("suite", "libero_spatial")
-    if suite not in reference["horizons"]:
-        raise ValueError("unsupported LIBERO suite")
-    return {"tasks": catalog(root, suite),
+    environment = reference.get("environment", {})
+    if environment.get("kind") == "registered-gym":
+        listing = [{"id": task, "title": task.split("/")[-1].replace("_", " "),
+                    "supported": True, "reason": None, "tags": {"initialStateDigest": seed_asset(reference, task)}}
+                   for task in environment["tasks"]]
+    else:
+        if suite not in reference["horizons"]:
+            raise ValueError("unsupported LIBERO suite")
+        listing = catalog(root, suite)
+    source = reference["reference"].get("evaluation", reference["reference"].get("openpi"))
+    return {"tasks": listing,
             "capabilities": {"category": "embodied-policy", "embodied": {"profile": reference["id"], "semanticProfile": reference["benchmarkProfile"], "observationMap": reference["observationMap"]}, "profiles": ["sim", "sync", "step"],
                              "domains": ["embodied"], "methods": ["policy"],
                              "scoreKind": "binary", "rescore": "evidence",
                              "calibration": {"oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
-                                            "Source": reference["reference"]["openpi"]["commit"],
+                                            "Source": source["commit"],
                                             "Environment": config["image"], "Renderer": config.get("renderer", "osmesa"),
                                             "Randomness": "fresh policy service per trial; reference stream parity unverified"}},
-            "official": {"name": "OpenPI LIBERO success", "version": reference["reference"]["openpi"]["commit"],
+            "official": {"name": reference.get("scoreName", "OpenPI LIBERO success"), "version": source["commit"],
                          "errors": "fail", "unit": "sample"}}
 
 
@@ -107,7 +115,7 @@ def solve(req):
         raise ValueError("native embodied execution requires a planned sample, not legacy seeds")
     check_sample(trial["sample"], trial["sampleRef"])
     definition = trial["method"].get("policySnapshot")
-    if not definition or definition["profile"] != reference["policyProfile"]:
+    if not definition:
         raise ValueError("missing or incompatible frozen policy definition")
     binding = trial.get("binding")
     expected = resolve_binding(reference["benchmarkProfile"], definition["profile"], reference["observationMap"])
@@ -119,11 +127,12 @@ def solve(req):
                "binding": binding, "reference": reference, "policy": definition,
                "implementationDigest": config["implementationDigest"]}
     (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
+    gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
-                     "env": {"PYTHONPATH": "/orbit-embodied/python:/app/packages/openpi-client/src:/app/third_party/libero",
-                             "MUJOCO_GL": config.get("renderer", "osmesa"),
-                             "PYOPENGL_PLATFORM": config.get("renderer", "osmesa")},
+                     "env": {"PYTHONPATH": "/orbit-embodied/python:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim",
+                             "MUJOCO_GL": gl_platform,
+                             "PYOPENGL_PLATFORM": gl_platform},
                      "resources": {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": 8},
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
                      "tags": {"embodied_evidence": "2"},

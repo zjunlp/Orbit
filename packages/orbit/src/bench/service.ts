@@ -1021,7 +1021,7 @@ export class BenchService {
         const service = {
           ...structuredClone(definition.service),
           name: "policy",
-          role: "policy" as const,
+          ...(definition.service.gpusOf ? {} : { role: "policy" as const }),
         };
         if (definition.weights) {
           const source = new DatasetRegistry(join(this.deps.paths.home, "datasets.json")).path(

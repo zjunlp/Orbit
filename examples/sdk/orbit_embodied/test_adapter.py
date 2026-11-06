@@ -72,6 +72,20 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertNotIn("services", verifier)
             self.assertFalse(verifier["network"])
 
+    def test_second_model_profile_reuses_the_same_libero_benchmark(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            reference = json.loads(request["benchmark"]["config"]["reference"])
+            profile = request["trial"]["method"]["policySnapshot"]["profile"]
+            profile["id"] = "groot-libero-input/1"
+            request["trial"]["binding"] = resolve_binding(reference["benchmarkProfile"], profile, reference["observationMap"])
+            with patch.object(adapter, "settings", return_value=(root, request["benchmark"]["config"], reference)):
+                adapter.solve(request)
+            staged = json.loads((root / "staging/request.json").read_text())
+            self.assertEqual(staged["reference"], reference)
+            self.assertEqual(staged["binding"]["policyProfile"]["id"], "groot-libero-input/1")
+
     def test_verifier_uses_frozen_context_and_original_execution_trial(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
