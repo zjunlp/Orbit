@@ -862,7 +862,7 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   独立 GPU 进程逐位比较未通过：重复官方路径对相同首个输入也产生不同预测，具体底层原因未定位。完整 suite 统计等价和后续 episode
   随机流仍未验证，控制组通过不覆盖失败结论。工具为 `parity_plan.py / parity.py / parity_policy.py`，不作为生产模型池或默认保真度声明。
 - 第二组端点复用同一 Run 路径：`groot-zmq` 调用官方 GR00T 服务，模型端显式 `ioAdapter` 在原生 LIBERO 与 GR00T 输入间转换，
-  不改写 LIBERO benchmark profile；同一连接器也接收原生 SimplerEnv WidowX 的扁平字段。动作顺序、执行片段长度、Torch seed 0
+  不改写 LIBERO benchmark profile；同一连接器也接收原生 SimplerEnv WidowX 七个任务的扁平字段。动作顺序、执行片段长度、Torch seed 0
   及 backbone 内容摘要显式冻结，新增可选字段不补入旧 Policy 快照。GR00T 动作时间索引必须从 0 连续递增；原始动作在任何夹爪转换前
   检查数值类型及有限性，拒绝的数值数组以禁止 pickle 的文件和诊断元数据保存，评测归为 `policy_act` 无效结果。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
   对没有原生终止的成功信号在片段边界结束；证据验证按 profile 选择 last/any 成功聚合。`gpusOf: main` 允许模型服务显式共享模拟器已租用的 GPU，禁止同时
@@ -880,6 +880,14 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - SQLite 第 7 次迁移将 `trial_runs` 改为多引用。已有库升级前由 daemon 用 `VACUUM INTO` 创建包含已提交 WAL 的一致性备份，
   在 `<db>.backups` 保存 0600 文件，独立打开检查完整性和版本；备份失败不迁移，迁移在单个事务中完成，失败回滚并停止启动。
   固定批次及恢复说明见[批量运行](guides/embodied-batches.md)。跨 Run 模型池、共享 verify 和通用语义直连仍后置。
+- **接入验收预算**：端点协议正确性、benchmark 原生语义与模型完整套件成绩分别验证。新增 benchmark 先检查完整目录与资产清单，
+  挑选代表任务做初始化、少量控制步及固定观测/动作、原生判定和正负例校准；全任务可启动性另记覆盖率，未验证的任务不宣称已验证。
+  新增模型优先复用已校准 benchmark 检查 Policy/connector。需要宣称支持的新增组合
+  仍须少量真实模型端到端检查，不能只凭形状匹配宣称兼容。资源就绪后的常规接入验收以 2–5 个 episode、批次与独立重评等定向检查为主，
+  目标预算 10–30 分钟；达到预算仍未完成的检查如实标注，不转为通过。这是开发验收约定，尚无新增预算 CLI 或自动分层执行器。
+  验证证据按实现、协议/profile、benchmark 源码及资产、镜像等身份限定复用范围；变更模型权重需重验模型路径，变更驱动语义需重验对应原生对照。
+  完整统计对照作为单独、有预先声明范围和计算预算的研究任务，按需开展，不作为每个模型与 benchmark 组合的默认接入门槛。
+  抽样接入与语义校准不等于完整统计等价，报告保留这一差别。
 
 ### 9.5 Agent 与环境的桥
 

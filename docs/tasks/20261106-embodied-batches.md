@@ -41,5 +41,6 @@ that estimate; these checks do not establish full-suite throughput or statistica
 
 ## Next / open issues
 
-Cross-Run pooling, shared verification and full-suite equivalence remain separate work. GR00T batch
-inference was not run in this change; its connector/SDK coverage does not replace real-model validation.
+Cross-Run pooling, shared verification and full-suite equivalence remain separate work. Subsequent
+[real GR00T batch checks](20261106-groot-batches.md) cover two episodes each on LIBERO and WidowX,
+including independent verification, selected rescore and resource cleanup.

@@ -23,7 +23,9 @@
       "external_dependencies/SimplerEnv/simpler_env/__init__.py": "sha256:d12b2be350fb5ff2671e4b1334d67c7afc6bef90919db6e9e15d42abad393c61",
       "external_dependencies/SimplerEnv/simpler_env/utils/env/observation_utils.py": "sha256:ddfaa1d46d557d3d61387ae4717f067616accb76262089cf9eacbe193263272b",
       "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/agents/controllers/pd_ee_pose.py": "sha256:b3d62a3f46ae9eb69f017b91671d8d29de818a51e5aa7ac9066628fabdcf3538",
-      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/put_on_in_scene.py": "sha256:977fc830b8fb3903b72862d7082bacf06fb3d092f867a93be503d00671bf5a74"
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/put_on_in_scene.py": "sha256:977fc830b8fb3903b72862d7082bacf06fb3d092f867a93be503d00671bf5a74",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/open_small_drawer_in_scene.py": "sha256:04a8fa89fc0e3378f02f0c276e3c343e5d36596203a4bb612efc6b9377b111b9",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/base_env.py": "sha256:26eaa0789e9f5b4174ed4be392c9bf8df6050050a83da29771a45ead31cd5958"
     }
   },
   "environment": {
@@ -34,7 +36,10 @@
       "simpler_env_widowx/widowx_spoon_on_towel",
       "simpler_env_widowx/widowx_carrot_on_plate",
       "simpler_env_widowx/widowx_stack_cube",
-      "simpler_env_widowx/widowx_put_eggplant_in_basket"
+      "simpler_env_widowx/widowx_put_eggplant_in_basket",
+      "simpler_env_widowx/widowx_put_eggplant_in_sink",
+      "simpler_env_widowx/widowx_open_drawer",
+      "simpler_env_widowx/widowx_close_drawer"
     ],
     "horizon": 300,
     "reset": "environmentSeed+initialStateId",

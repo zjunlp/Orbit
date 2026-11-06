@@ -35,5 +35,6 @@ native SimplerEnv WidowX. Keep existing OpenPI evaluations and saved-evidence ve
 
 ## Next / open issues
 
-Shared solve batches and database migration remain separate D2a work. Broader embodiments,
+[Fixed solve batches and database migration](20261106-embodied-batches.md) are now implemented;
+[real GR00T batch checks](20261106-groot-batches.md) cover both native endpoints. Broader embodiments,
 checkpoint families, complete-suite calibration and numerical parity need their own validation.
