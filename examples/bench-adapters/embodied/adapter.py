@@ -29,14 +29,19 @@ def implementation_digest():
     return digest(files)
 
 
+def reference_profile(config):
+    reference = json.loads(config.get("reference") or (HERE / "reference.json").read_text())
+    if config.get("profileDigest") != digest(reference):
+        raise ValueError("register the exact reference profileDigest; floating profiles are not allowed")
+    return reference
+
+
 def settings(req):
     config = req["benchmark"]["config"]
     unknown = set(config) - {"image", "profileDigest", "reference", "implementationDigest", "suite", "python", "simGpus", "renderer"}
     if unknown:
         raise ValueError("unknown embodied settings: " + ", ".join(sorted(unknown)))
-    reference = json.loads(config.get("reference") or (HERE / "reference.json").read_text())
-    if config.get("profileDigest") != digest(reference):
-        raise ValueError("register the exact reference profileDigest; floating profiles are not allowed")
+    reference = reference_profile(config)
     if config.get("implementationDigest") != implementation_digest():
         raise ValueError("adapter/SDK content changed; explicitly register the new implementation")
     root = Path(req["benchmark"]["path"])
@@ -134,9 +139,7 @@ def verification_expectation(req):
             raise ValueError("solve Run differs from the frozen trial: " + key)
     check_sample(trial["sample"], trial["sampleRef"])
     config = req["benchmark"]["config"]
-    reference = json.loads(config["reference"])
-    if digest(reference) != config["profileDigest"]:
-        raise ValueError("frozen reference profileDigest mismatch")
+    reference = reference_profile(config)
     execution_trial = tags.get("execution_trial") or tags.get("source_trial") or tags.get("trial")
     if not execution_trial or not trial.get("binding") or not trial["method"].get("policySnapshot"):
         raise ValueError("missing frozen verification context")

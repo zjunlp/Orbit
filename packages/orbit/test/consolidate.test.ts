@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { AuthStore } from "../src/auth/index.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
+import { contentDigest } from "../src/bench/samples.ts";
 import { BenchService } from "../src/bench/service.ts";
 import { tryConnect } from "../src/client/index.ts";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
@@ -115,7 +116,84 @@ it("does not read transport registries when the saved method setup already match
   expect(plan.adopted).toHaveLength(1);
 });
 
-function fixture() {
+it.each(
+  (["cpus", "memGB", "gpus", "gpuMemGB", "timeoutMin"] as const).flatMap((field) =>
+    [false, true].map((planned) => [field, planned] as const),
+  ),
+)(
+  "rejects changed %s budgets (planned=%s) before changing records or artifacts",
+  async (field, planned) => {
+    const f = fixture(planned);
+    const budget = { cpus: 1, memGB: 2, gpus: 0, gpuMemGB: 1, timeoutMin: 1 };
+    const snapshot = {
+      name: "fixture",
+      adapter: "harbor",
+      path: f.paths.home,
+      config: {},
+      env: {},
+      passEnv: [],
+      resources: join(f.paths.home, "resources.json"),
+      createdAt: at,
+      updatedAt: at,
+    };
+    for (const id of ["target", "source"]) {
+      const { job } = f.bench.job(id);
+      f.store.putJob({
+        ...job,
+        benchmarkSnapshot: snapshot,
+        resources: { a: id === "target" ? budget : { ...budget, [field]: 8 } },
+      });
+    }
+    const before = [f.bench.job("target"), f.bench.job("source")];
+    for (const dryRun of [true, false]) {
+      await expect(
+        f.bench.consolidate("target", {
+          sources: ["source"],
+          dryRun,
+          allowTransportDifferences: true,
+        }),
+      ).rejects.toThrow(/incompatible.*budget/);
+    }
+    expect([f.bench.job("target"), f.bench.job("source")]).toEqual(before);
+    expect(f.store.trialByRun("source.a-solve")?.id).toBe("source.a");
+    expect(readFileSync(join(f.runs.dirs("source.a-solve").output, "answer"), "utf8")).toBe(
+      "retained artifact\n",
+    );
+  },
+);
+
+it("uses effective timeout for adopted tasks and retains budgets when appending new tasks", async () => {
+  const f = fixture();
+  for (const id of ["target", "source"]) {
+    const { job } = f.bench.job(id);
+    f.store.putJob({
+      ...job,
+      spec: { ...job.spec, timeoutMin: 5 },
+      resources: {
+        a: { cpus: 2, timeoutMin: id === "target" ? 1 : 20 },
+        [id === "target" ? "b" : "unused"]: { cpus: id === "target" ? 1 : 8 },
+      },
+    });
+  }
+  const preview = await f.bench.consolidate("target", { sources: ["source"] });
+  expect(preview.adopted).toHaveLength(1);
+  await f.bench.consolidate("target", {
+    sources: ["source"],
+    dryRun: false,
+    expect: preview.digest,
+  });
+  const extra = f.job("extra", ["d"]);
+  f.store.putJob({
+    ...extra,
+    spec: { ...extra.spec, timeoutMin: 5 },
+    resources: { d: { cpus: 4, memGB: 8, timeoutMin: 30 } },
+  });
+  f.trial("extra", "d", true);
+  await f.bench.consolidate("target", { sources: ["extra"], appendTasks: true, dryRun: false });
+  expect(f.bench.job("target").job.resources?.d).toEqual({ cpus: 4, memGB: 8, timeoutMin: 30 });
+});
+
+function fixture(planned = false) {
   const home = mkdtempSync(join(tmpdir(), "orbit-consolidate-"));
   homes.push(home);
   const paths = orbitPaths({ ORBIT_HOME: home });
@@ -136,10 +214,27 @@ function fixture() {
     registry,
     auth,
   });
+  const items = ["a", "b", "c"].map((taskId) => {
+    const content = {
+      taskId,
+      benchmarkProfile: "synthetic-profile",
+      initialStateId: "0",
+      initialStateDigest: `sha256:${"a".repeat(64)}`,
+      environmentSeed: 7,
+      policySeed: 0,
+      repetition: 0,
+    };
+    return { ...content, sampleId: contentDigest(content) };
+  });
   const job = (id: string, tasks = ["a"]) => {
     const j = BenchJob.parse({
       id,
-      spec: { benchmark: "fixture", tasks, methods: [{ name: "empty", agent: "empty" }] },
+      spec: {
+        benchmark: "fixture",
+        tasks: planned ? items.map((s) => s.taskId) : tasks,
+        ...(planned ? { samplePlan: { version: 1, items, digest: contentDigest(items) } } : {}),
+        methods: [{ name: "empty", agent: "empty" }],
+      },
       folder: id,
       state: "done",
       createdAt: at,
@@ -187,7 +282,7 @@ function fixture() {
       jobId,
       task,
       method: "empty",
-      seed: 1,
+      ...(planned ? { sampleRef: items.find((s) => s.taskId === task)?.sampleId } : { seed: 1 }),
       state: "done",
       solveRunId: `${id}-solve`,
       verifyRunId: `${id}-verify`,

@@ -33,6 +33,22 @@ type PlanConditions = Pick<BenchJob, "spec"> &
     Pick<BenchJob, "benchmarkSnapshot" | "capabilities" | "source" | "resources" | "official">
   >;
 
+/** Effective submitted overrides; the job timeout takes precedence over the task timeout. */
+export function executionBudget(
+  job: Pick<BenchJob, "spec"> & Partial<Pick<BenchJob, "resources">>,
+  task: string,
+) {
+  const override = job.resources?.[task];
+  return {
+    task,
+    cpus: override?.cpus ?? null,
+    memGB: override?.memGB ?? null,
+    gpus: override?.gpus ?? null,
+    gpuMemGB: override?.gpuMemGB ?? null,
+    timeoutMin: job.spec.timeoutMin ?? override?.timeoutMin ?? null,
+  };
+}
+
 /** Frozen execution conditions, excluding registration metadata and resource-file locations. */
 function evaluationConditions(job: PlanConditions, tasks: string[]) {
   const snapshot = job.benchmarkSnapshot;
@@ -52,17 +68,7 @@ function evaluationConditions(job: PlanConditions, tasks: string[]) {
     scoreKind: job.capabilities?.scoreKind ?? null,
     official: job.official ?? null,
     options: job.spec.options,
-    budgets: [...tasks].sort().map((task) => {
-      const override = job.resources?.[task];
-      return {
-        task,
-        cpus: override?.cpus ?? null,
-        memGB: override?.memGB ?? null,
-        gpus: override?.gpus ?? null,
-        gpuMemGB: override?.gpuMemGB ?? null,
-        timeoutMin: job.spec.timeoutMin ?? override?.timeoutMin ?? null,
-      };
-    }),
+    budgets: [...tasks].sort().map((task) => executionBudget(job, task)),
   };
 }
 

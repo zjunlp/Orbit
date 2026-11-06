@@ -4,6 +4,7 @@ import importlib.util
 import copy
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import subprocess
 import sys
@@ -124,6 +125,38 @@ class AdapterPlanningTests(unittest.TestCase):
                                        input=json.dumps(request), text=True, capture_output=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(json.loads(completed.stdout)["spec"]["resources"]["gpus"], 0)
+
+    def test_default_reference_agrees_across_phases_and_rejects_profile_drift(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            request["benchmark"]["path"] = str(root)
+            reference = json.loads(request["benchmark"]["config"].pop("reference"))
+            reference["reference"]["files"] = {}
+            here = root / "synthetic-adapter"
+            here.mkdir()
+            for name in ("run.py", "adapter.py"):
+                shutil.copy2(ADAPTER.parent / name, here / name)
+            write_json(here / "reference.json", reference)
+            config = request["benchmark"]["config"]
+            config["profileDigest"] = digest(reference)
+            with patch.object(adapter, "HERE", here), patch.object(adapter, "catalog", return_value=[]):
+                config["implementationDigest"] = adapter.implementation_digest()
+                adapter.tasks(request)
+                adapter.solve(request)
+                adapter.verify(request)
+                solve = json.loads((root / "staging/request.json").read_text())
+                verify = json.loads((root / "staging/verify-request.json").read_text())
+                self.assertEqual(solve["reference"], reference)
+                self.assertEqual(verify["reference"], reference)
+                changed = copy.deepcopy(reference)
+                changed["parameters"]["settleSteps"] += 1
+                write_json(here / "reference.json", changed)
+                for phase in (adapter.tasks, adapter.solve, adapter.verify):
+                    with self.subTest(phase=phase.__name__), self.assertRaisesRegex(ValueError, "profileDigest"):
+                        phase(request)
+                config["reference"] = json.dumps(reference)
+                adapter.verify(request)
 
 
 if __name__ == "__main__":

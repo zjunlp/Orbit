@@ -17,7 +17,7 @@ import {
 import { UserError } from "../runs/errors.ts";
 import type { AgentFailure } from "../sessions/index.ts";
 import { agentFailureIssue, shouldCheckAgentFailure } from "./classify.ts";
-import { isValid } from "./summary.ts";
+import { executionBudget, isValid } from "./summary.ts";
 
 /** Group of a job's runs, so the run list and notifications see a job as one group. */
 export const benchGroup = (jobId: string) => `bench-${jobId}`;
@@ -197,6 +197,10 @@ export function planConsolidation(input: {
         t.outcome?.evaluation === "invalid" &&
         !t.history.some((h) => h.outcome.evaluation === "valid");
       if (isValid(t) || retainInvalid) {
+        if (!isDeepStrictEqual(executionBudget(d.job, t.task), executionBudget(target.job, t.task)))
+          throw new UserError(
+            `incompatible source job ${d.job.id}: execution budget for ${t.task}`,
+          );
         if (f.pruneInvalid && newlyInvalid.has(prev.id))
           throw new UserError(
             `trial ${prev.id} was just reclassified; review it without sources before pruning`,

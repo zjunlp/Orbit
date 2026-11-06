@@ -88,6 +88,9 @@ Mapping errors fail before job creation; the resolved mapping and policy definit
 Changing the adapter or SDK requires explicitly regenerating and registering the benchmark
 configuration. Each solve and verify output archives its own source bundle and digest; rescore
 records the new verifier while retaining the original solve implementation and evidence.
+Generated registrations embed `reference`. Hand-written registrations may omit it to use the
+packaged `reference.json`; every phase still requires its content to match the registered
+`profileDigest`, including saved-output verification and scoring.
 
 D1 starts a fresh policy service for every trial. The stock OpenPI protocol cannot reset its
 JAX random stream: independently running a later episode does not prove equivalence to the
