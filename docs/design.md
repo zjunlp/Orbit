@@ -892,6 +892,8 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   `calibrationExecutionEndedAt` 单独冻结评分工作的完成时间（含自动重评规划与执行），预算只覆盖到这里；清理等待不追加超时失败。
   自动完成入口重新核对全部 Trial 和所属 Run 已结束，避免重复回调把尚在规划的重评提前标成完成。
   `endedAt` 在清理确认后写入；报告通过 `budget.executionEndedAt`、CLI/Web 提示区分工作已结束和清理仍在进行。
+  旧作业缺少冻结时间且已手动重评时，按各样本首次评分及首样本首次自动重评的保留历史恢复原时间；
+  仅排除原验收结束后创建的 CPU 验证，不把后续手动重评计入原预算，也不凭旧完成标记跳过尚未完成的首次重评。
   报告显式标为 policy 接入，catalog 单独列出，不提升 benchmark 原生语义校准或 fidelity；原 empty/oracle 校准保持原行为。
   该入口只接受真实模型、2–5 个冻结样本及固定批次，禁止用归并拼成验收通过。使用方式见[轻量接入检查](guides/policy-integration-checks.md)。
   验证证据按实现、协议/profile、benchmark 源码及资产、镜像等身份限定复用范围；变更模型权重需重验模型路径，变更驱动语义需重验对应原生对照。

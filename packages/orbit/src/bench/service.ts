@@ -884,6 +884,7 @@ export class BenchService {
       ...f.trials.filter((x) => !all.some((t) => t.id === x)).map((x) => `trial ${x}`),
     ];
     if (unknown.length) throw new UserError(`not in job ${id}: ${unknown.join(", ")}`);
+    this.settlePolicyExecution(job);
     const picked = all.filter(
       (t) =>
         (!f.tasks.length || f.tasks.includes(t.task)) &&

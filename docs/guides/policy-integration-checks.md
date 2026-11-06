@@ -36,6 +36,12 @@ continues, including across restart. A delayed cleanup cannot cause a new execut
 The final report still waits for cleanup; CLI and Web show that waiting stage. Explicit later CPU
 rescore does not reopen or rewrite the original acceptance budget.
 
+On upgrade, older completed checks without a frozen execution time recover it from their original
+scoring history, including the first automatic rescore when requested. Later manual CPU verifiers,
+whether finished or still running, remain outside that original budget. An incomplete original
+automatic rescore still receives deadline enforcement. The completion time is also frozen before
+starting a new manual rescore on an older completed job.
+
 Cancellation also finds job-owned Runs persisted before their Trial linkage was written. Acceptance
 waits for all owned current and historical Runs to terminate, finish cleanup and release their
 leases. A successful new verifier does not hide an older verifier awaiting cleanup; cleanup events
