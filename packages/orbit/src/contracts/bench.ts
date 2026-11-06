@@ -304,14 +304,20 @@ export type Method = z.infer<typeof Method>;
  * Marks a calibration job (design §9.15), fixed at submission: tasks whose reference solution is
  * partial or missing (their oracle trials are not judged) and whether to rescore once it ends.
  */
-export const JobCalibration = z.object({
-  noOracle: z.array(z.string()).default([]),
-  rescore: z.boolean().default(true),
-});
+export const JobCalibration = z
+  .object({
+    noOracle: z.array(z.string()).default([]),
+    rescore: z.boolean().default(true),
+    mode: z.literal("policy").optional(),
+    budgetMin: z.number().positive().max(30).optional(),
+  })
+  .refine((c) => (c.mode === "policy" ? c.budgetMin !== undefined : c.budgetMin === undefined), {
+    message: "a policy integration check requires a total budget of at most 30 minutes",
+  });
 export type JobCalibration = z.infer<typeof JobCalibration>;
 
 /** `POST /bench/calibrations`: sample tasks (or take the given ones) and calibrate them. */
-export const CalibrationRequest = z.strictObject({
+const BenchmarkCalibrationRequest = z.strictObject({
   benchmark: ProfileName,
   tasks: z.array(z.string()).default([]),
   sample: z.number().int().min(1).max(100).default(3),
@@ -321,6 +327,19 @@ export const CalibrationRequest = z.strictObject({
   rescore: z.boolean().default(true),
   timeoutMin: z.number().positive().optional(),
 });
+export const CalibrationRequest = z.union([
+  BenchmarkCalibrationRequest,
+  z.strictObject({
+    benchmark: ProfileName,
+    policyRef: ProfileName,
+    samplePlan: SamplePlan.refine((p) => p.items.length >= 2 && p.items.length <= 5, {
+      message: "policy integration checks require a frozen plan of 2–5 episodes",
+    }),
+    budgetMin: z.number().positive().max(30).default(20),
+    rescore: z.boolean().default(true),
+    timeoutMin: z.number().positive().optional(),
+  }),
+]);
 export type CalibrationRequestInput = z.input<typeof CalibrationRequest>;
 
 export const CheckResult = z.enum(["passed", "failed", "not_run"]);
@@ -341,11 +360,23 @@ export const CalibrationReport = z.object({
   tasks: z.array(z.string()),
   methods: z.array(z.string()),
   seeds: z.number().int(),
-  /** `running`: trials not finished; `rescoring`: the rescore from saved evidence is in progress. */
+  /** `rescoring` also covers policy checks waiting for final resource cleanup. */
   phase: z.enum(["running", "rescoring", "done"]),
   checks: z.array(CalibrationCheck),
   /** Done, no check failed and at least one passed (`not_run` checks are listed, not counted). */
   calibrated: z.boolean(),
+  /** Present only for sampled model-path checks; these do not calibrate benchmark score semantics. */
+  mode: z.literal("policy").optional(),
+  policyRef: ProfileName.optional(),
+  samples: z.number().int().positive().optional(),
+  budget: z
+    .object({
+      minutes: z.number().positive(),
+      deadlineAt: z.string(),
+      executionEndedAt: z.string().optional(),
+      expiredAt: z.string().optional(),
+    })
+    .optional(),
   createdAt: z.string(),
   endedAt: z.string().nullable(),
   /** The benchmark checkout at submission, so a later change can be told apart. */
@@ -366,18 +397,35 @@ const CommonBenchJobSpec = z.object({
   /** Override the per-task solve timeout. */
   timeoutMin: z.number().positive().optional(),
 });
-export const BenchJobSpec = z.union([
-  CommonBenchJobSpec.extend({
-    seeds: z.number().int().min(1).max(100).default(1),
-    samplePlan: z.never().optional(),
-    batchSize: z.never().optional(),
-  }),
-  CommonBenchJobSpec.extend({
-    seeds: z.never().optional(),
-    samplePlan: SamplePlan,
-    batchSize: z.number().int().min(2).max(256).optional(),
-  }),
-]);
+export const BenchJobSpec = z
+  .union([
+    CommonBenchJobSpec.extend({
+      seeds: z.number().int().min(1).max(100).default(1),
+      samplePlan: z.never().optional(),
+      batchSize: z.never().optional(),
+    }),
+    CommonBenchJobSpec.extend({
+      seeds: z.never().optional(),
+      samplePlan: SamplePlan,
+      batchSize: z.number().int().min(2).max(256).optional(),
+    }),
+  ])
+  .refine(
+    (s) =>
+      s.calibration?.mode !== "policy" ||
+      Boolean(
+        s.samplePlan &&
+          s.samplePlan.items.length >= 2 &&
+          s.samplePlan.items.length <= 5 &&
+          s.methods.length === 1 &&
+          s.methods[0]?.agent === "policy" &&
+          s.batchSize === s.samplePlan.items.length,
+      ),
+    {
+      message:
+        "policy integration checks require 2–5 planned episodes, one policy and a fixed batch",
+    },
+  );
 export type BenchJobSpec = z.infer<typeof BenchJobSpec>;
 export type BenchJobSpecInput = z.input<typeof BenchJobSpec>;
 
@@ -731,9 +779,13 @@ export const BenchJob = z.object({
   state: z.enum(["running", "done", "cancelled"]),
   /**
    * A calibration job's rescore step, run by the daemon once its trials have ended: `started` while
-   * rescoring, `done` afterwards (`note`: why it was skipped or partial).
+   * rescoring, `done` afterwards (`note`: why it was skipped or partial). Cleanup ends separately.
    */
   rescore: z.object({ state: z.enum(["started", "done"]), note: z.string().optional() }).optional(),
+  /** Execution (including scoring and automatic rescore) ended; cleanup may still be pending. */
+  calibrationExecutionEndedAt: z.string().optional(),
+  /** Budget exhaustion is durable across daemon restarts, including the automatic rescore phase. */
+  calibrationExpiredAt: z.string().optional(),
   createdAt: z.string(),
   endedAt: z.string().nullable(),
 });
@@ -904,6 +956,8 @@ export const CatalogEntry = z.object({
   refreshing: z.boolean(),
   /** Calibration jobs, newest first (at most five). */
   calibrations: z.array(CalibrationReport),
+  /** Model-path checks are separate from benchmark semantic calibration and fidelity. */
+  policyChecks: z.array(CalibrationReport).optional(),
   /** Jobs of this benchmark (all methods). */
   jobs: z.number().int(),
   methods: z.array(CatalogMethod),

@@ -70,3 +70,42 @@ it("shows skipped checks and links failing trials to their evidence", () => {
     "No calibration recorded",
   );
 });
+
+it("shows model integration checks separately from benchmark calibration", () => {
+  const policy = report({
+    mode: "policy",
+    policyRef: "groot",
+    samples: 2,
+    budget: { minutes: 20, deadlineAt: "2026-11-05T00:20:00.000Z" },
+  });
+  const e = { ...entry([]), policyChecks: [policy] };
+  expect(calState(e)).toBe("none");
+  const cell = renderToStaticMarkup(<CalibrationCell e={e} />);
+  expect(cell).toContain("not calibrated");
+  expect(cell).toContain("Policy integration passed");
+  const detail = renderToStaticMarkup(<CalibrationDetail e={e} />);
+  expect(detail).toContain("Policy integration checks");
+  expect(detail).toContain("2 frozen episodes");
+  expect(detail).toContain("20 minute total budget");
+  expect(detail).toContain("statistical equivalence remain separate");
+});
+
+it("shows completed execution waiting for cleanup without claiming acceptance", () => {
+  const policy = report({
+    mode: "policy",
+    policyRef: "groot",
+    samples: 2,
+    phase: "rescoring",
+    calibrated: false,
+    budget: {
+      minutes: 20,
+      deadlineAt: "2026-11-05T00:20:00.000Z",
+      executionEndedAt: "2026-11-05T00:01:00.000Z",
+    },
+  });
+  const e = { ...entry([]), policyChecks: [policy] };
+  expect(renderToStaticMarkup(<CalibrationCell e={e} />)).toContain("Policy check running");
+  expect(renderToStaticMarkup(<CalibrationDetail e={e} />)).toContain(
+    "execution finished; waiting for resource cleanup",
+  );
+});

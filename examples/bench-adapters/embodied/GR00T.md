@@ -99,6 +99,11 @@ while the declared service random stream continues in order. Calls have deadline
 retried. Saved-evidence verification runs separately per episode on CPU, without model or simulator
 startup. See the [batch guide](../../../docs/guides/embodied-batches.md) for retry and cancellation scope.
 
+For routine onboarding, use `orbit bench calibrate BENCHMARK --policy POLICY --sample-plan PLAN
+--budget 20` with 2–5 frozen episodes. The daemon bounds the whole check, including startup,
+verification and selected rescore. See [policy integration checks](../../../docs/guides/policy-integration-checks.md).
+This is sampled model-path validation; native-semantic calibration and full-suite statistics remain separate.
+
 The connector requires dense action time indices `0..horizon-1` before inference. Raw predicted
 actions must be numeric and finite before any gripper conversion, including rows outside the
 executed prefix. Rejected numeric arrays remain in `chunks/<call>.rejected.npy` with pickle disabled;
