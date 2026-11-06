@@ -116,6 +116,30 @@ it("admits explicit GR00T identities and main-GPU sharing without changing saved
     expect(PolicyDefinition.safeParse(changed).success).toBe(false);
 });
 
+it("freezes the OpenVLA-OFT recipe without adding fields to existing policy snapshots", () => {
+  const original = policy();
+  const input = {
+    ...original,
+    connector: "openvla-ws",
+    replanSteps: 8,
+    ioAdapter: "libero-native",
+    randomness: { backend: "torch", initialSeed: 0, scope: "service" },
+  };
+  const parsed = PolicyDefinition.parse(input);
+  expect(parsed.connector).toBe("openvla-ws");
+  expect(resolveBinding(benchmarkProfile, parsed.profile, reference.observationMap).digest).toBe(
+    resolveBinding(benchmarkProfile, original.profile, reference.observationMap).digest,
+  );
+  for (const changed of [
+    { ...input, replanSteps: undefined },
+    { ...input, replanSteps: 5 },
+    { ...input, ioAdapter: "gr00t-flat" },
+    { ...input, randomness: original.randomness },
+  ])
+    expect(PolicyDefinition.safeParse(changed).success).toBe(false);
+  expect(PolicyDefinition.parse(original)).toEqual(original);
+});
+
 function comparisonFixture() {
   const job = BenchJob.parse({
     id: "synthetic-job",
