@@ -52,6 +52,9 @@ export function solveVerdict(solve: Run): {
 
 export const shouldCheckAgentFailure = (solve: Run): boolean => solveVerdict(solve).verify;
 
+export const agentFailureKind = (failure: AgentFailure): FailureKind =>
+  failure.kind === "agent_configuration_failed" ? "infra" : "model_unavailable";
+
 export const agentFailureIssue = (failure: AgentFailure): string =>
   `Agent stopped: ${failure.kind} (${failure.message})`;
 
@@ -92,11 +95,11 @@ export function classify(
     ...(score?.episode ? { episode: score.episode } : {}),
     ...(evaluation === "invalid" && failure ? { failure } : {}),
   });
-  // The first setup problem decides the failure kind: memory, the Agent's model, then a service.
+  // The first setup problem decides the failure kind: memory, Agent setup, then a service.
   const setupFailure: FailureKind | undefined = oom
     ? "budget_exceeded"
-    : agentIssue
-      ? "model_unavailable"
+    : agent
+      ? agentFailureKind(agent)
       : serviceIssues.length
         ? "infra"
         : undefined;
@@ -105,8 +108,8 @@ export function classify(
     return out(sv.evaluation ?? "unknown", null, sv.issue ? [sv.issue] : [], sv.failure);
   const setup = [oom, agentIssue, ...serviceIssues].filter((x): x is string => x !== null);
   // The Agent could not work, so its leftovers are not verified (a rescore still can).
-  if (!verify && agentIssue)
-    return out("invalid", null, [...setup, "verify skipped"], "model_unavailable");
+  if (!verify && agent)
+    return out("invalid", null, [...setup, "verify skipped"], agentFailureKind(agent));
   if (!verify) return out("unknown", null, ["verify not run"]);
   // Verified in the solve run's container (its after phase), as Harbor's shared verifier mode.
   if (verify.id === solve.id && solve.spec.after) {

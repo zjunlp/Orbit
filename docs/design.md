@@ -507,6 +507,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 | solve 失败或超时 | 照常 verify（方法的结果；超时记入 issues） |
 | solve 因内存不足被杀（`usage.oomKilled`，资源申请的问题，不是方法的结果；仍照常 verify 并保留分数） | invalid |
 | solve 内的 Agent 从未产生成功模型回复，且最后一轮以明确的认证、额度、模型不可用或连接错误结束，或未结束但可信 CLI 日志尾部明确停在模型重连/认证刷新拒绝（`sessions.runAgentFailure` 读 Run 的 Agent home 与日志尾；`harness.agentErrorKind` 先看结构化错误码——Codex `codex_error_info` 及其 HTTP 状态码、Claude Code 的 `error`——再看文本；对所有适配器生效）：不提交 verify，记 `verify skipped` 并保留 OOM、服务失败等问题；显式 rescore 时照常评分并保留分数 | invalid |
+| Codex 在 session 创建前因无法读取 Run 私有 `config.toml` 而退出；仅在无 Codex/Claude transcript 时识别日志头前 16 KiB 内完整的原生权限错误，允许已知 PATH 提示与 Orbit after 阶段边界；不从普通工具权限错误推断 | invalid / `infra`（`agent_configuration_failed`），保留 shared verifier 的原始分数 |
 | verify 未启动、超时、内存不足，没有分数，或适配器判为无效（无 reward、scorer 内部错误、judge 不可用、模型不可用且 0 分） | invalid |
 | 其余 | valid |
 
@@ -519,7 +520,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   默认只预览；`--apply` 才执行。每个计划返回 `digest`（对 adopted、reclassified、removedRuns、removedJobs 的规范排序内容计算 SHA-256）；
   apply 可带 `expect`，CLI / Web 都传入已确认预览的 digest。daemon 在任何写入或删除前重新计算，摘要不符则拒绝并提示
   `plan changed since preview; preview again`。只接收全部 trial 已完成、Run 已清理且无后台更新的任务；同 benchmark、methods、options、metrics，
-  按 task × method × seed 对齐。归并先重读符合上述条件的 solve 的会话末轮错误：明确的认证、额度、模型连接故障
+  按 task × method × seed 对齐。归并先重读符合上述条件的 solve 的会话末轮错误及已知的 session 前配置故障；这些启动或模型访问问题
   会把旧的 valid / unknown 标记改为 invalid（包括同一次 solve 的评分历史），原始分数保留，结果的 `reclassified`
   列出这些 trial；不带来源时只做这一复核；预览不写回。读取后重新检查终态及归属。
   有效重试只替换无效位置，拒绝覆盖真正有效的成绩（包括 0 分）或从多份有效成绩里挑选。

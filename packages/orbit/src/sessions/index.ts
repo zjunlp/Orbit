@@ -424,7 +424,8 @@ function claudeModelResponse(e: Record<string, unknown>): boolean {
 
 /**
  * An explicit final model error invalidates a run only if the session contains no successful
- * model response. Errors in user/tool content are ignored; partial model work is still scored.
+ * model response. Native config errors before session creation also identify failed setup.
+ * Errors in user/tool content are ignored; partial model work is still scored.
  */
 export async function runAgentFailure(
   agentDir: string,
@@ -458,7 +459,10 @@ export async function runAgentFailure(
     }
   } else {
     const claude = (await jsonlBelow(join(agentDir, "claude", "projects"), 2))[0];
-    if (!claude) return null;
+    if (!claude) {
+      const failure = log ? await codexStartupFailure(agentDir, log) : null;
+      return failure ? { ...failure, message: clip(redact(failure.message), 200).text } : null;
+    }
     for await (const e of jsonLines(claude.file)) {
       if (e.isSidechain === true) continue;
       if (e.type === "system" && e.subtype === "api_error") {
@@ -492,6 +496,43 @@ export async function runAgentFailure(
   return kind && text !== null
     ? { kind, message: clip(redact(text || "API error"), 200).text }
     : null;
+}
+
+/** A failed config read precedes Codex session creation; accept only its native startup output. */
+async function codexStartupFailure(agentDir: string, log: string): Promise<AgentFailure | null> {
+  if (!(await stat(join(agentDir, "codex", "config.toml")).catch(() => null))?.isFile())
+    return null;
+  const fh = await open(log, "r").catch(() => null);
+  if (!fh) return null;
+  let head: string;
+  let complete: boolean;
+  try {
+    const size = (await fh.stat()).size;
+    const buf = Buffer.alloc(Math.min(size, 16 * 1024));
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    head = buf.subarray(0, bytesRead).toString("utf8");
+    complete = bytesRead === size;
+  } finally {
+    await fh.close();
+  }
+  const after = head.indexOf("\n[orbit] after phase output:\n");
+  if (!complete && after < 0) return null;
+  const lines = (after < 0 ? head : head.slice(0, after))
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const error = lines.pop();
+  if (
+    error !==
+      "Error loading config.toml: Failed to read config file /orbit/agent/codex/config.toml: Permission denied (os error 13)" ||
+    lines.some(
+      (line) =>
+        line !==
+        "WARNING: proceeding, even though we could not create PATH aliases: Permission denied (os error 13)",
+    )
+  )
+    return null;
+  return { kind: "agent_configuration_failed", message: error };
 }
 
 /** Codex's stderr while it retries the model connection, e.g. `ERROR: Reconnecting... 3/5`. */

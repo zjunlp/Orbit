@@ -615,6 +615,67 @@ it("verifies a recovered last turn and keeps the verifier's own timeout", async 
   expect(f.submit.mock.calls[0]?.[0].timeoutMin).toBe(7);
 });
 
+it.each([
+  [false, false],
+  [true, false],
+  [true, true],
+] as const)(
+  "classifies Codex startup failure (shared verifier: %s, model responded: %s)",
+  async (inline, responded) => {
+    const f = fixture();
+    const solve = Run.parse({
+      ...f.run,
+      state: "failed",
+      exitCode: 1,
+      spec: {
+        ...f.run.spec,
+        ...(inline
+          ? { backend: "docker", image: "fixture", after: { command: ["true"], timeoutMin: 1 } }
+          : {}),
+      },
+      ...(inline
+        ? { after: { state: "succeeded", exitCode: 0, reason: null, startedAt: at, endedAt: at } }
+        : {}),
+    });
+    f.store.putJob(f.job);
+    f.store.putRun(solve);
+    f.store.putTrial({ ...f.trial, state: "solving", solveRunId: solve.id });
+    const dirs = f.runs.dirs(solve.id);
+    write(join(dirs.agent, "codex/config.toml"), "");
+    write(
+      dirs.log,
+      "Error loading config.toml: Failed to read config file /orbit/agent/codex/config.toml: Permission denied (os error 13)\n\n[orbit] after phase output:\n",
+    );
+    if (responded)
+      write(
+        join(dirs.agent, "codex/sessions/rollout.jsonl"),
+        `${JSON.stringify({
+          type: "response_item",
+          payload: { type: "message", role: "assistant", content: [{ text: "Played the game." }] },
+        })}\n`,
+      );
+    vi.spyOn(AdapterClient.prototype, "score").mockResolvedValue({
+      score: 0,
+      maxScore: 1,
+      invalid: false,
+      issues: [],
+    });
+    f.bench.start();
+    await expect.poll(() => f.store.getTrial(f.trial.id)?.state).toBe("done");
+    const outcome = f.store.getTrial(f.trial.id)?.outcome;
+    expect(outcome).toMatchObject({
+      execution: "failed",
+      evaluation: responded ? "valid" : "invalid",
+      score: inline ? 0 : null,
+      cleanup: "done",
+    });
+    expect(outcome?.failure).toBe(responded ? undefined : "infra");
+    if (!responded)
+      expect(outcome?.issues.join(" ")).toContain("Agent stopped: agent_configuration_failed");
+    expect(f.submit).not.toHaveBeenCalled();
+  },
+);
+
 it.each([false, true])("scores an Agent failure with an after phase: %s", async (inline) => {
   const f = fixture();
   const solve = Run.parse({

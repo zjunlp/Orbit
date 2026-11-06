@@ -14,7 +14,7 @@ import {
 } from "../contracts/index.ts";
 import { UserError } from "../runs/errors.ts";
 import type { AgentFailure } from "../sessions/index.ts";
-import { agentFailureIssue, shouldCheckAgentFailure } from "./classify.ts";
+import { agentFailureIssue, agentFailureKind, shouldCheckAgentFailure } from "./classify.ts";
 import { isValid } from "./summary.ts";
 
 /** Group of a job's runs, so the run list and notifications see a job as one group. */
@@ -127,7 +127,7 @@ export function planConsolidation(input: {
       for (const outcome of [t.outcome, ...t.history.map((h) => h.outcome)]) {
         if (outcome?.evaluation !== "valid" && outcome?.evaluation !== "unknown") continue;
         outcome.evaluation = "invalid";
-        outcome.failure = "model_unavailable";
+        outcome.failure = agentFailureKind(failure);
         outcome.issues = [...new Set([...outcome.issues, issue])];
         changed = true;
       }
