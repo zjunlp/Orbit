@@ -530,6 +530,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
       numericOption("integer"),
     )
     .option("--sample-plan <file>", "frozen C6 sample plan JSON; mutually exclusive with --seeds")
+    .option(
+      "--batch-size <n>",
+      "fixed sequential episodes per solve Run (planned C6 only; service RNG continues)",
+      numericOption("integer"),
+    )
     .option("--timeout <min>", "solve timeout per trial in minutes", numericOption("float"))
     .option(
       "--checkpoint <GB>",
@@ -554,6 +559,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           task: string[];
           seeds?: number;
           samplePlan?: string;
+          batchSize?: number;
           timeout?: number;
           checkpoint?: number;
           option: string[];
@@ -564,6 +570,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
       ) => {
         if (o.samplePlan && o.seeds !== undefined)
           throw new Error("--sample-plan and --seeds are mutually exclusive");
+        if (o.batchSize !== undefined && !o.samplePlan)
+          throw new Error("--batch-size requires --sample-plan");
         const samplePlan = o.samplePlan
           ? SamplePlan.parse(JSON.parse(readFileSync(resolve(o.samplePlan), "utf8")))
           : undefined;
@@ -578,7 +586,9 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
             benchmark: name,
             tasks: o.task,
             methods: methods as never,
-            ...(samplePlan ? { samplePlan } : { seeds: o.seeds }),
+            ...(samplePlan
+              ? { samplePlan, ...(o.batchSize === undefined ? {} : { batchSize: o.batchSize }) }
+              : { seeds: o.seeds }),
             options: kv(o.option, "--option"),
             timeoutMin: o.timeout,
             checkpoint: o.checkpoint === undefined ? undefined : { maxSizeGB: o.checkpoint },
@@ -650,7 +660,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
 
   bench
     .command("cancel <job>")
-    .description("cancel a job's open trials (they end as unknown)")
+    .description("cancel unfinished work; sealed batch episodes are still verified")
     .action(async (id: string) => {
       const j = await (await client()).benchCancel(id);
       console.log(`${j.id} ${j.state}`);

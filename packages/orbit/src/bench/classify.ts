@@ -61,7 +61,9 @@ export function classify(
   score: ScoreResult | null,
   issues: string[] = [],
   agent: AgentFailure | null = null,
+  options: { independentEpisode?: boolean } = {},
 ): Outcome {
+  const independent = options.independentEpisode && verify !== null && score !== null;
   const base = { execution: solve.state as string, maxScore: score?.maxScore ?? 1 };
   const all = [...issues];
   if (solve.state === "failed" && timedOut(solve)) all.push("solve timed out");
@@ -100,10 +102,18 @@ export function classify(
       : serviceIssues.length
         ? "infra"
         : undefined;
-  const sv = solveVerdict(solve);
+  const sv: ReturnType<typeof solveVerdict> = independent ? { verify: true } : solveVerdict(solve);
   if (!sv.verify)
     return out(sv.evaluation ?? "unknown", null, sv.issue ? [sv.issue] : [], sv.failure);
-  const setup = [oom, agentIssue, ...serviceIssues].filter((x): x is string => x !== null);
+  const setup = independent
+    ? []
+    : [oom, agentIssue, ...serviceIssues].filter((x): x is string => x !== null);
+  if (independent)
+    all.push(
+      ...[oom, ...serviceIssues]
+        .filter((x): x is string => x !== null)
+        .map((issue) => `shared solve: ${issue}`),
+    );
   // The Agent could not work, so its leftovers are not verified (a rescore still can).
   if (!verify && agentIssue)
     return out("invalid", null, [...setup, "verify skipped"], "model_unavailable");

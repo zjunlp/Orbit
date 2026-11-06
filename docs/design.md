@@ -783,9 +783,9 @@ daemon 不参与逐步控制，任务、控制器和成功判定仍由 benchmark
 | 执行尝试 | 某个样本的一次执行；重试产生新尝试，保留前次证据 |
 | slot | 并行容量，不是统计样本 |
 
-默认一个 Trial 对应一个逻辑样本、一个 solve Run（现状）。adapter 显式声明批量执行时，一个 Run 才可执行固定样本集合，
-score 回复返回逐样本明细（或经校验的明细文件引用），每个样本独立带有效性；当前 `trial_runs.run_id` 唯一、`trialByRun`
-只返回一个 Trial，所以多个 Trial 共享一个 Run 还需先定义取消、清理、删除与产物归属，列为后续工作。
+默认一个 Trial 对应一个逻辑样本、一个 solve Run。原生 C6 adapter 声明固定批次能力后，可通过 `--batch-size` 让多个
+Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和重评。`trial_runs` 按 Run、Trial、阶段关联，保存 episode
+及尝试身份；事件通过 `trialsByRun` 推进全部关联项。批次只有不可变计划，执行状态仍由既有 Run 和 Trial 管理。
 轨迹事件带 sample / attempt / source / step 身份；计划数、完成数、有效数注明计数单位。
 
 ### 9.2 Bench 家族与接入路径
@@ -849,7 +849,7 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   旧矩阵、seed n→初态 n−1 规则和旧报告摘要保持原行为。
 - 首个目标固定 OpenPI LIBERO 与 pi05_libero。SDK 分离 Benchmark Adapter、PolicyClient、Connector、driver 和证据写入，
   显式保留旋转、resize、状态拼接、settle、horizon 与 replan_steps。原生判定与 Orbit 有效性分开，媒体失败不改变可信分数。
-  每 Trial 独立 solve / verify；重评只读该次 solve 证据，无模型或仿真。SDK 核心只依赖标准库与 NumPy，额外传输/媒体依赖单列。
+  默认每 Trial 独立 solve / verify；固定批次共享 solve，逐 Trial verify。重评只读该次 solve 证据，无模型或仿真。SDK 核心只依赖标准库与 NumPy，额外传输/媒体依赖单列。
   solve 和 verify 各保存自身的适配器、driver、SDK 源码包及摘要；重评记录新评分器身份，保留求解证据和原实现。
   验证器重算 sampleId，并逐项核对作业冻结的 sample、binding、policy、reference 和求解实现摘要。新证据记录原始 Run/trial，
   由 Run 标签声明版本以拒绝证据降级；归并保留 execution_trial，多次归并不改变其来源。旧证据按已保存的 trial/source_trial
@@ -867,8 +867,19 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   检查数值类型及有限性，拒绝的数值数组以禁止 pickle 的文件和诊断元数据保存，评测归为 `policy_act` 无效结果。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
   对没有原生终止的成功信号在片段边界结束；证据验证按 profile 选择 last/any 成功聚合。`gpusOf: main` 允许模型服务显式共享模拟器已租用的 GPU，禁止同时
   声明独立 role/GPU；没有新资源账本或调度器。配置、资产下载及验证边界见[接入说明](../examples/bench-adapters/embodied/GR00T.md)。
-- D2a 后续实现共享 solve Run、逐样本完成归属、SQLite 一致性备份及迁移恢复，并测量逐 Trial verify 的开销；当前 store 没有
-  自动备份。D2b 的第二组端点已先行接入，唯一语义直连规则仍待提炼。首期不引入模型池、转换图搜索或另一套作业状态机。
+- D2a 固定批次使用 `BenchJob.spec.batchSize`（默认不启用）；按方法、计划顺序及相同资源覆盖拆分，成员与 attemptId、episodeId、
+  完整清单摘要在提交时冻结。`solve` 适配请求的可选 `batch` 带完整有序 Trial 上下文，运行中不追加成员。模型服务每 Run 启动一次；
+  逐项重建并 reset 环境、清空动作片段及连接器状态，模型随机流按已声明的 service 作用域连续推进，不声称远端 RNG 已复位。
+  容器总 watchdog 为逐 episode 预算之和；SDK 在控制边界检查单 episode 期限，模型调用仍有独立超时，状态性调用不重试。
+- 批次将原子封存的必要证据写入 `episodes/<episodeId>`，完成判定先于可选媒体。终止后按样本核验，后续服务失败、OOM 或取消
+  不覆盖已封存且独立验证通过的结果；Run 原始执行状态与资源测量保留。取消影响整个共享 Run，CLI/Web 明示范围；未完成项
+  保留 unknown/invalid。重启可按冻结 batch 标签接管已提交但尚未关联的 Run。重评一个 Trial 不改变其他项；报告记录共享 Run、
+  batch 摘要及 episode/attempt 定位。归并核对完整随机流前缀，保护已有效的完成项；共享文件由 Run 持有，仅随最后所属作业删除，
+  采用重试结果时把旧 solve、verify、outcome 与评分历史存入 `Trial.priorAttempts`，保留原始失败证据及引用；
+  资源统计对 Run 去重并注明整批测量。子集执行不是服务随机流批次的同条件重试。
+- SQLite 第 7 次迁移将 `trial_runs` 改为多引用。已有库升级前由 daemon 用 `VACUUM INTO` 创建包含已提交 WAL 的一致性备份，
+  在 `<db>.backups` 保存 0600 文件，独立打开检查完整性和版本；备份失败不迁移，迁移在单个事务中完成，失败回滚并停止启动。
+  固定批次及恢复说明见[批量运行](guides/embodied-batches.md)。跨 Run 模型池、共享 verify 和通用语义直连仍后置。
 
 ### 9.5 Agent 与环境的桥
 
@@ -958,7 +969,7 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
   给出官方值、样本数、missing 与 partial；`bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
   在 job 结束、取消、重新评分或归并后、且结果与上一修订不同时写入，旧 job 首次读取时补一份 `backfill`；计划 digest 由
   benchmark、tasks、seeds、methods、options 计算。API `GET /bench/jobs/:id/reports`，CLI `orbit bench report`，Web job 页 Reports。
-  尚未实现：多个 Trial 共享一个 Run 的批量执行、attempt/retry 的显式计数与规则（目前 attempt 即报告中引用的 trial 与 Run）。
+  C6 已支持固定共享 solve 批次及逐 episode 尝试定位；通用 attempt/retry 的显式计数与自动重试规则仍后置。
 - **报告修订**：计划集合（样本清单 + digest）固定，追加任务或 seed 产生新集合版本；报告不可原地覆盖，每版记录采用的
   attempt/result 清单、错误与缺项的分母规则、聚合器版本；补跑产生新修订，旧报告与原始失败保留。只有遵循上游的结果选择、
   重试与缺项规则，才继续称为官方口径。

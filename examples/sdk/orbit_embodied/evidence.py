@@ -72,6 +72,14 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
                 raise ValueError("evidence differs from the frozen " + name)
         if identity.get("implementationDigest") != expected["solveImplementationDigest"]:
             raise ValueError("solve implementation differs from the frozen registration")
+        if identity.get("batch") != expected.get("batch"):
+            raise ValueError("episode batch prefix or attempt differs from the frozen plan")
+        if expected.get("batch"):
+            batch = expected["batch"]
+            member = batch["plan"]["members"][batch["index"]]
+            if (member["episodeId"] != episode_id or member["sampleRef"] != sample_ref
+                    or digest({key: value for key, value in batch["plan"].items() if key != "digest"}) != batch["plan"]["digest"]):
+                raise ValueError("batch sample or episode attempt mismatch")
         if not episode_id.startswith(expected["executionTrialId"] + "."):
             raise ValueError("episode attempt belongs to another execution trial")
         execution = {"runId": expected["solveRunId"], "trialId": expected["executionTrialId"]}

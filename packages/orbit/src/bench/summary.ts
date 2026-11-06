@@ -68,6 +68,13 @@ function evaluationConditions(job: PlanConditions, tasks: string[]) {
     scoreKind: job.capabilities?.scoreKind ?? null,
     official: job.official ?? null,
     options: job.spec.options,
+    ...(job.spec.batchSize
+      ? {
+          batchSize: job.spec.batchSize,
+          orderedSamples: job.spec.samplePlan?.digest,
+          batchBudgets: job.spec.samplePlan?.items.map((item) => executionBudget(job, item.taskId)),
+        }
+      : {}),
     budgets: [...tasks].sort().map((task) => executionBudget(job, task)),
   };
 }
@@ -112,6 +119,18 @@ function entry(t: Trial, metric: string): ReportEntry {
     ...sampleIdentity(t),
     solveRunId: t.solveRunId,
     verifyRunId: t.verifyRunId,
+    ...(t.batch
+      ? {
+          batch: {
+            id: t.batch.plan.id,
+            attemptId: t.batch.plan.attemptId,
+            planDigest: t.batch.plan.digest,
+            episodeId: t.batch.plan.members[t.batch.index]?.episodeId as string,
+            index: t.batch.index,
+            size: t.batch.plan.members.length,
+          },
+        }
+      : {}),
     evaluation: t.outcome?.evaluation ?? "pending",
     ...(t.outcome?.failure ? { failure: t.outcome.failure } : {}),
     value: t.outcome ? metricValue(t.outcome, metric) : null,

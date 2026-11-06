@@ -166,7 +166,7 @@ describe("reports", () => {
     expect(planDigest(a)).toBe(planDigest({ spec: { ...a.spec, tasks: ["b", "a"] } }));
     expect(planDigest(a)).not.toBe(planDigest({ spec: { ...a.spec, tasks: ["a", "b", "c"] } }));
     expect(planDigest(a)).not.toBe(
-      planDigest({ spec: { ...a.spec, seeds: 3, samplePlan: undefined } }),
+      planDigest({ spec: { ...a.spec, seeds: 3, samplePlan: undefined, batchSize: undefined } }),
     );
   });
 

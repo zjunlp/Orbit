@@ -306,9 +306,11 @@ describe("planned sample and explicit binding contracts", () => {
   });
 });
 
-it.each([false, true])(
-  "freezes independent policies and bindings per job (shared GPU: %s)",
-  async (shared) => {
+it.each([false, true, "batch-separate", "batch-shared"])(
+  "freezes independent policies and bindings per job (execution mode: %s)",
+  async (mode) => {
+    const shared = mode === true || mode === "batch-shared";
+    const batch = typeof mode === "string";
     const home = mkdtempSync(join(tmpdir(), "orbit-embodied-test-"));
     homes.push(home);
     const paths = orbitPaths({ ORBIT_HOME: home });
@@ -344,6 +346,7 @@ it.each([false, true])(
             profile: reference.id,
             semanticProfile: benchmarkProfile,
             observationMap: reference.observationMap,
+            batch: { maxEpisodes: 128 },
           },
         },
       }),
@@ -406,12 +409,24 @@ it.each([false, true])(
     const job = await bench.submit({
       benchmark: "synthetic",
       samplePlan: plan(),
+      ...(batch ? { batchSize: 2 } : {}),
       methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
     });
     await expect
       .poll(() => store.trials(job.id).filter((t) => t.state === "solving").length)
       .toBe(2);
     expect(job.spec.tasks).toEqual(["synthetic:task"]);
+    if (batch) {
+      const trials = store.trials(job.id);
+      expect(solve).toHaveBeenCalledTimes(1);
+      expect(new Set(trials.map((trial) => trial.solveRunId)).size).toBe(1);
+      expect(store.trialsByRun(trials[0]?.solveRunId ?? "", "solve")).toHaveLength(2);
+      expect(() => store.trialByRun(trials[0]?.solveRunId ?? "")).toThrow("multiple trials");
+      expect(solve.mock.calls[0]?.[1]?.plan.members.map((member) => member.sampleRef)).toEqual(
+        plan().items.map((sample) => sample.sampleId),
+      );
+      expect(submit.mock.calls[0]?.[0].params?.batchDigest).toBe(trials[0]?.batch?.plan.digest);
+    }
     const changedRuntime = structuredClone(job);
     const frozenPolicy = changedRuntime.spec.methods[0]?.policySnapshot;
     if (!frozenPolicy) throw new Error("missing policy snapshot");
@@ -453,12 +468,15 @@ it.each([false, true])(
       store.putRun(complete);
       runs.emit("change", { run: complete });
     }
-    for (const trial of store.trials(job.id)) finish(trial.solveRunId);
+    for (const runId of new Set(store.trials(job.id).map((trial) => trial.solveRunId)))
+      finish(runId);
     await expect.poll(() => verify.mock.calls.length).toBe(2);
     await expect
       .poll(() => store.trials(job.id).filter((t) => t.state === "verifying").length)
       .toBe(2);
-    expect(submit.mock.calls.slice(2).every(([spec]) => !spec.services?.length)).toBe(true);
+    expect(submit.mock.calls.slice(batch ? 1 : 2).every(([spec]) => !spec.services?.length)).toBe(
+      true,
+    );
     for (const trial of store.trials(job.id)) finish(trial.verifyRunId);
     await expect.poll(() => store.getJob(job.id)?.state).toBe("done");
     const before = store.trials(job.id);
@@ -471,7 +489,7 @@ it.each([false, true])(
     await expect
       .poll(() => store.trials(job.id).find((t) => t.id === first.id)?.state)
       .toBe("done");
-    expect(solve).toHaveBeenCalledTimes(2);
+    expect(solve).toHaveBeenCalledTimes(batch ? 1 : 2);
     expect(store.trials(job.id)[1]).toEqual(before[1]);
     expect(store.trials(job.id)[0]?.history).toHaveLength(1);
     const report = buildReport(
@@ -563,11 +581,11 @@ it.each([false, true])(
     bench.rescore(sourceJob.id, { trials: [adopted.id] });
     await expect.poll(() => verify.mock.calls.length).toBe(4);
     expect(verify.mock.calls.at(-1)?.[1]?.run.spec.tags).toMatchObject({
-      trial: adopted.id,
+      ...(!batch ? { trial: adopted.id } : { batch_size: "2" }),
       execution_trial: sourceTrial.id,
     });
     finish(store.getTrial(adopted.id)?.verifyRunId ?? null);
     await expect.poll(() => store.getTrial(adopted.id)?.outcome?.evaluation).toBe("valid");
-    expect(solve).toHaveBeenCalledTimes(2);
+    expect(solve).toHaveBeenCalledTimes(batch ? 1 : 2);
   },
 );

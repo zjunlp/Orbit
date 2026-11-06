@@ -97,9 +97,15 @@ packaged `reference.json`; every phase still requires its content to match the r
 
 D1 starts a fresh policy service for every trial. The stock OpenPI protocol cannot reset its
 JAX random stream: independently running a later episode does not prove equivalence to the
-upstream multi-episode stream. Shared solve batches belong to D2a; broader compatibility and
+upstream multi-episode stream. Fixed sequential solve batches are available through `--batch-size`;
+their service-scoped random stream advances in frozen sample order. Broader compatibility and
 automatic direct mappings remain future work. The OpenPI simulator configuration uses CPU OSMesa;
 renderer changes are explicit conditions and need their own reference checks.
+
+Add `--batch-size 8` to the planned `orbit bench run` command to load the model once for each
+fixed group of up to eight compatible episodes. Each episode retains its own Trial, native evidence
+and CPU verifier. Cancelling the shared Run stops unfinished episodes and preserves independently
+verifiable completed results. See [batch execution and recovery](../../../docs/guides/embodied-batches.md).
 
 Saved evidence includes requested action chunks, executed controls with source observation and
 chunk indexes, native verdict, required state, timing, the contract and resolved binding. Optional

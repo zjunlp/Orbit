@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import type { AuthEntry, AuthStore } from "../auth/index.ts";
 import type { OrbitPaths } from "../config/paths.ts";
 import {
+  type AdapterSolveBatch,
   type AdapterTasksResponse,
   type AgentCapabilities,
   type AgentDefinition,
@@ -74,6 +75,7 @@ export { compareJobs, summarize } from "./summary.ts";
 
 import { DatasetRegistry } from "../workspace/datasets.ts";
 import { asiMethodProblem } from "./asi.ts";
+import { assignSolveBatches } from "./batches.ts";
 import { PolicyRegistry } from "./policies.ts";
 import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
@@ -116,6 +118,7 @@ export class BenchService {
   /** Trials being advanced, and those changed meanwhile (advanced once more afterwards). */
   private readonly busy = new Set<string>();
   private readonly again = new Set<string>();
+  private readonly batchBusy = new Set<string>();
   /** Task listings of registered benchmarks for the catalog, refreshed in the background. */
   private readonly listings = new Map<string, Listing>();
   private listingQueue: Promise<void> = Promise.resolve();
@@ -187,6 +190,12 @@ export class BenchService {
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
     const all = info.tasks;
+    if (
+      spec.batchSize &&
+      (!info.capabilities?.embodied?.batch ||
+        spec.batchSize > info.capabilities.embodied.batch.maxEpisodes)
+    )
+      throw new UserError("batchSize exceeds the benchmark's declared fixed-batch support");
     const names = new Set<string>();
     const resolvedBindings: Record<string, ResolvedBinding> = {};
     for (const m of spec.methods) {
@@ -312,6 +321,11 @@ export class BenchService {
         };
         this.deps.store.putTrial(t);
         ids.push(t.id);
+      }
+      if (spec.batchSize) {
+        const planned = this.deps.store.trials(job.id);
+        assignSolveBatches(job, planned);
+        for (const trial of planned) this.deps.store.putTrial(trial);
       }
     });
     this.advanceAll(ids);
@@ -532,7 +546,7 @@ export class BenchService {
   }
 
   private ownerJob(runId: string): BenchJob | null {
-    const t = this.deps.store.trialByRun(runId);
+    const t = this.deps.store.trialsByRun(runId)[0];
     return t ? this.deps.store.getJob(t.jobId) : null;
   }
 
@@ -645,7 +659,7 @@ export class BenchService {
           if (!run) throw new UserError(`missing run ${rid}`);
           const blocker = this.deps.runs.deleteBlocker(run, true);
           if (blocker) throw new UserError(blocker);
-          if (this.deps.store.trialByRun(rid)?.id !== t.id)
+          if (!this.deps.store.trialsByRun(rid).some((owner) => owner.id === t.id))
             throw new UserError(`inconsistent run ownership: ${rid}`);
           oldRuns.set(rid, run);
         }
@@ -706,6 +720,9 @@ export class BenchService {
     if (trials.some((t) => this.busy.has(t.id)))
       throw new UserError(`bench job ${id} is still being updated; try again shortly`);
     const ids = trials.flatMap(trialRunIds).filter((r) => this.deps.runs.get(r));
+    for (const runId of new Set(ids))
+      if (this.deps.store.trialsByRun(runId).some((owner) => owner.jobId !== id))
+        throw new UserError(`shared run ${runId} is still referenced by another job`);
     const out = await this.deps.runs.delete(ids, { forJob: true });
     this.deps.store.deleteJob(id);
     rmSync(join(this.deps.paths.bench, id), { recursive: true, force: true });
@@ -770,7 +787,8 @@ export class BenchService {
     const solve = t.solveRunId ? this.deps.runs.get(t.solveRunId) : null;
     if (!solve) return "has no solve run";
     if (solve.remote) return `solve output stays on ${solve.node}`;
-    if (!solveVerdict(solve).verify) return `solve run ${solve.state}; nothing to verify`;
+    if (!solveVerdict(solve).verify && !this.hasEpisodeEvidence(t, solve))
+      return `solve run ${solve.state}; nothing to verify`;
     if (solve.spec.after) return "verified in the solve environment, which is gone";
     if (!existsSync(this.deps.runs.dirs(solve.id).output)) return "solve output is gone";
     return null;
@@ -784,10 +802,15 @@ export class BenchService {
     job.endedAt = nowIso();
     this.deps.store.putJob(job);
     const trials = this.deps.store.trials(id).filter((t) => t.state !== "done");
+    const cancelledRuns = new Set<string>();
     for (const t of trials) {
       const runId =
         t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null;
-      if (runId) await this.deps.runs.cancel(runId).catch(() => undefined);
+      // Completed batch evidence is still verified after a job cancellation.
+      if (runId && !(t.batch && t.state === "verifying") && !cancelledRuns.has(runId)) {
+        cancelledRuns.add(runId);
+        await this.deps.runs.cancel(runId).catch(() => undefined);
+      }
     }
     this.advanceAll(trials.map((t) => t.id));
     return job;
@@ -797,8 +820,7 @@ export class BenchService {
 
   private onRun(run: Run): void {
     if (!("bench" in run.spec.tags) && !run.spec.group?.startsWith("bench-")) return;
-    const t = this.deps.store.trialByRun(run.id);
-    if (t) void this.advance(t.id);
+    for (const t of this.deps.store.trialsByRun(run.id)) void this.advance(t.id);
   }
 
   private async advance(id: string): Promise<void> {
@@ -836,6 +858,7 @@ export class BenchService {
         method,
         ...sampleIdentity(t),
         ...(t.sampleRef ? { sample, binding } : {}),
+        ...(t.batch ? { batch: t.batch } : {}),
         options: job.spec.options,
         timeoutMin: job.spec.timeoutMin ?? job.resources?.[t.task]?.timeoutMin,
         resources: job.resources?.[t.task],
@@ -868,6 +891,13 @@ export class BenchService {
           job: job.id,
           trial: t.id,
           ...(t.sampleRef ? { execution_trial: t.id } : {}),
+          ...(t.batch && phase === "solve"
+            ? {
+                execution_batch: t.batch.plan.id,
+                batch_attempt: t.batch.plan.attemptId,
+                batch_size: String(t.batch.plan.members.length),
+              }
+            : {}),
           phase,
         },
         params: {
@@ -875,6 +905,7 @@ export class BenchService {
           method: t.method,
           ...(t.sampleRef ? { sampleRef: t.sampleRef } : { seed: String(t.seed) }),
           phase,
+          ...(t.batch && phase === "solve" ? { batchDigest: t.batch.plan.digest } : {}),
         },
       },
       { folder },
@@ -957,6 +988,7 @@ export class BenchService {
 
   /** A job cancelled while a run was being submitted: cancel that run too. */
   private async cancelIfJobCancelled(jobId: string, t: Trial, runId: string): Promise<void> {
+    if (t.batch && runId === t.verifyRunId) return;
     if (this.cancelled(jobId, t) && this.deps.store.getRun(runId)?.stopRequested !== "cancel")
       await this.deps.runs.cancel(runId).catch(() => undefined);
   }
@@ -1007,53 +1039,10 @@ export class BenchService {
 
   private async stepPending(job: BenchJob, t: Trial): Promise<void> {
     if (job.state === "cancelled") return this.skipped(t, "unknown", "job cancelled");
-    let spec: RunSpecInput;
+    if (t.batch) return this.stepBatchPending(job, t);
     try {
-      const { b, trial } = this.context(job, t);
-      const response = await this.adapter(b).solve(trial);
-      const reply = { ...response, spec: structuredClone(response.spec) };
-      if (trial.method.agent === "policy") {
-        const definition = trial.method.policySnapshot;
-        if (!definition) throw new Error("missing frozen policy definition");
-        const services = (reply.spec.services ?? []) as ServiceSpec[];
-        if (services.some((service) => service.name === "policy" || service.role === "policy"))
-          throw new Error("the benchmark adapter may not define the independent policy service");
-        const service = {
-          ...structuredClone(definition.service),
-          name: "policy",
-          ...(definition.service.gpusOf ? {} : { role: "policy" as const }),
-        };
-        if (definition.weights) {
-          const source = new DatasetRegistry(join(this.deps.paths.home, "datasets.json")).path(
-            definition.weights.dataset,
-          );
-          if (!source)
-            throw new Error(`policy dataset not registered: ${definition.weights.dataset}`);
-          service.binds.push({ source, target: definition.weights.target, mode: "ro" });
-        }
-        reply.spec.services = [...services, service];
-        reply.spec.dependsOn = [
-          ...new Set([...((reply.spec.dependsOn ?? []) as string[]), "policy"]),
-        ];
-      }
-
-      spec = applyOverride(
-        toRunSpec(
-          reply.spec,
-          trial.method,
-          b,
-          "solve",
-          () => this.agentDef(trial.method),
-          trial.staging,
-        ),
-        job.resources?.[t.task],
-        job.spec.timeoutMin,
-      );
-      t.issues = [...t.issues, ...reply.issues];
-    } catch (e) {
-      return this.skipped(t, "invalid", `solve spec: ${(e as Error).message}`);
-    }
-    try {
+      const { spec, issues } = await this.solveSpec(job, t);
+      t.issues.push(...issues);
       const run = await this.submitRun(job, t, "solve", spec);
       t.solveRunId = run.id;
       t.state = "solving";
@@ -1064,15 +1053,134 @@ export class BenchService {
     }
   }
 
+  private async solveSpec(job: BenchJob, t: Trial, batch?: AdapterSolveBatch) {
+    const { b, trial } = this.context(job, t);
+    const response = await this.adapter(b).solve(trial, batch);
+    const reply = { ...response, spec: structuredClone(response.spec) };
+    if (trial.method.agent === "policy") {
+      const definition = trial.method.policySnapshot;
+      if (!definition) throw new Error("missing frozen policy definition");
+      const services = (reply.spec.services ?? []) as ServiceSpec[];
+      if (services.some((service) => service.name === "policy" || service.role === "policy"))
+        throw new Error("the benchmark adapter may not define the independent policy service");
+      const service = {
+        ...structuredClone(definition.service),
+        name: "policy",
+        ...(definition.service.gpusOf ? {} : { role: "policy" as const }),
+      };
+      if (definition.weights) {
+        const source = new DatasetRegistry(join(this.deps.paths.home, "datasets.json")).path(
+          definition.weights.dataset,
+        );
+        if (!source)
+          throw new Error(`policy dataset not registered: ${definition.weights.dataset}`);
+        service.binds.push({ source, target: definition.weights.target, mode: "ro" });
+      }
+      reply.spec.services = [...services, service];
+      reply.spec.dependsOn = [
+        ...new Set([...((reply.spec.dependsOn ?? []) as string[]), "policy"]),
+      ];
+    }
+
+    const spec = applyOverride(
+      toRunSpec(
+        reply.spec,
+        trial.method,
+        b,
+        "solve",
+        () => this.agentDef(trial.method),
+        trial.staging,
+      ),
+      batch && job.resources?.[t.task]?.timeoutMin
+        ? {
+            ...job.resources[t.task],
+            timeoutMin: (job.resources[t.task]?.timeoutMin ?? 0) * batch.trials.length,
+          }
+        : job.resources?.[t.task],
+      job.spec.timeoutMin === undefined
+        ? undefined
+        : job.spec.timeoutMin * (batch?.trials.length ?? 1),
+    );
+    if (batch && spec.after) throw new Error("shared solves require independent verification");
+    return { spec, issues: reply.issues };
+  }
+
+  private async stepBatchPending(job: BenchJob, t: Trial): Promise<void> {
+    const plan = t.batch?.plan;
+    if (!plan || this.batchBusy.has(plan.id)) return;
+    this.batchBusy.add(plan.id);
+    try {
+      const members = plan.members.map((member) => this.deps.store.getTrial(member.trialId));
+      if (members.some((member) => !member || member.batch?.plan.digest !== plan.digest))
+        throw new Error("fixed batch membership differs from its frozen plan");
+      const trials = members as Trial[];
+      const existing = this.deps.runs
+        .storeList({ group: benchGroup(job.id), limit: 100_000 })
+        .filter(
+          (run) =>
+            run.spec.tags.execution_batch === plan.id &&
+            run.spec.params.batchDigest === plan.digest,
+        );
+      if (existing.length > 1) throw new Error("multiple runs claim one fixed batch attempt");
+      let run = existing[0];
+      let issues: string[] = [];
+      if (!run) {
+        const reply = await this.solveSpec(job, trials[0] as Trial, {
+          plan,
+          trials: trials.map((member) => this.context(job, member).trial),
+        });
+        if (this.deps.store.getJob(job.id)?.state === "cancelled") return;
+        issues = reply.issues;
+        run = await this.submitRun(job, trials[0] as Trial, "solve", reply.spec);
+      }
+      const solve = run;
+      this.deps.store.tx(() => {
+        for (const member of trials) {
+          const fresh = this.deps.store.getTrial(member.id) as Trial;
+          fresh.solveRunId = solve.id;
+          if (fresh.state === "pending") fresh.state = "solving";
+          if (fresh.state === "done" && fresh.outcome) fresh.outcome.cleanup = cleanupOf(solve);
+          fresh.issues = [...new Set([...fresh.issues, ...issues])];
+          this.deps.store.putTrial(fresh);
+        }
+      });
+      await this.cancelIfJobCancelled(job.id, t, run.id);
+      this.advanceAll(trials.map((member) => member.id));
+    } catch (e) {
+      for (const member of this.deps.store.trials(job.id))
+        if (member.batch?.plan.id === plan.id && member.state === "pending")
+          this.skipped(member, "invalid", `batch solve rejected: ${(e as Error).message}`);
+    } finally {
+      this.batchBusy.delete(plan.id);
+    }
+  }
+
+  private hasEpisodeEvidence(t: Trial, solve: Run): boolean {
+    const member = t.batch?.plan.members[t.batch.index];
+    return Boolean(
+      member &&
+        existsSync(
+          join(
+            this.deps.runs.dirs(solve.id).output,
+            "episodes",
+            member.episodeId,
+            "evidence-manifest.json",
+          ),
+        ),
+    );
+  }
+
   private async stepSolving(job: BenchJob, t: Trial, solve: Run): Promise<void> {
     if (!isTerminal(solve.state)) return this.cancelIfJobCancelled(job.id, t, solve.id);
+    if (t.batch && solve.cleanup === "pending") return;
+    const batchEvidence = this.hasEpisodeEvidence(t, solve);
     const sv = solveVerdict(solve);
     // An Agent that could not reach or use its model left nothing worth verifying; an explicit
     // rescore (history kept) verifies anyway, and an after phase has already verified.
     const agent = t.history.length === 0 ? await this.agentFailure(solve) : null;
     if (agent && !solve.spec.after)
       return this.finish(t, classify(solve, null, null, t.issues, agent));
-    if (!sv.verify || this.cancelled(job.id, t)) {
+    if ((!sv.verify || this.cancelled(job.id, t)) && !batchEvidence) {
       const outcome = classify(solve, null, null, t.issues);
       if (sv.verify) {
         outcome.evaluation = "unknown";
@@ -1153,7 +1261,9 @@ export class BenchService {
         await addEfeTrajectory(dirs.output, solve, score, messages, t.task);
     }
     const agent = await this.agentFailure(solve);
-    const outcome = classify(solve, verify, score, t.issues, agent);
+    const outcome = classify(solve, verify, score, t.issues, agent, {
+      independentEpisode: Boolean(t.batch),
+    });
     this.recordMetrics(job, verify, outcome);
     this.finish(t, outcome);
   }

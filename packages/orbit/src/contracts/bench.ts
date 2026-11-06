@@ -6,6 +6,7 @@ import {
 } from "./categories.ts";
 import { EnvName, ProfileName } from "./common.ts";
 import {
+  BatchEpisode,
   EmbodiedCapabilities,
   PolicyDefinition,
   ResolvedBinding,
@@ -369,8 +370,13 @@ export const BenchJobSpec = z.union([
   CommonBenchJobSpec.extend({
     seeds: z.number().int().min(1).max(100).default(1),
     samplePlan: z.never().optional(),
+    batchSize: z.never().optional(),
   }),
-  CommonBenchJobSpec.extend({ seeds: z.never().optional(), samplePlan: SamplePlan }),
+  CommonBenchJobSpec.extend({
+    seeds: z.never().optional(),
+    samplePlan: SamplePlan,
+    batchSize: z.number().int().min(2).max(256).optional(),
+  }),
 ]);
 export type BenchJobSpec = z.infer<typeof BenchJobSpec>;
 export type BenchJobSpecInput = z.input<typeof BenchJobSpec>;
@@ -563,6 +569,15 @@ export const Scoring = z.object({
 });
 export type Scoring = z.infer<typeof Scoring>;
 
+export const ExecutionAttempt = z.object({
+  solveRunId: z.string(),
+  verifyRunId: z.string().nullable(),
+  batch: BatchEpisode.optional(),
+  outcome: Outcome.nullable(),
+  history: z.array(Scoring),
+});
+export type ExecutionAttempt = z.infer<typeof ExecutionAttempt>;
+
 export const TrialState = z.enum(["pending", "solving", "verifying", "done"]);
 export const Trial = z
   .object({
@@ -573,6 +588,9 @@ export const Trial = z
     state: TrialState,
     solveRunId: z.string().nullable(),
     verifyRunId: z.string().nullable(),
+    batch: BatchEpisode.optional(),
+    /** Earlier executions retained when a compatible batch retry is adopted. */
+    priorAttempts: z.array(ExecutionAttempt).optional(),
     /** Notes gathered before the outcome (e.g. artifacts the solve run did not produce). */
     issues: z.array(z.string()).default([]),
     outcome: Outcome.nullable(),
@@ -587,11 +605,18 @@ export const Trial = z
   .and(SampleIdentity);
 export type Trial = z.infer<typeof Trial>;
 
-/** Every run a trial has had: its solve run, its verify run and earlier verify runs. */
+/** Every referenced execution and scoring, including retained batch retry attempts. */
 export function trialRunIds(t: Trial): string[] {
-  return [t.solveRunId, t.verifyRunId, ...t.history.map((h) => h.verifyRunId)].filter(
-    (r): r is string => Boolean(r),
-  );
+  return [
+    t.solveRunId,
+    t.verifyRunId,
+    ...t.history.map((h) => h.verifyRunId),
+    ...(t.priorAttempts ?? []).flatMap((attempt) => [
+      attempt.solveRunId,
+      attempt.verifyRunId,
+      ...attempt.history.map((history) => history.verifyRunId),
+    ]),
+  ].filter((r): r is string => Boolean(r));
 }
 
 /** Merge completed retries or append new tasks, preserving their evaluation validity. */
@@ -759,6 +784,16 @@ export const ReportEntry = z
     task: z.string(),
     solveRunId: z.string().nullable(),
     verifyRunId: z.string().nullable(),
+    batch: z
+      .object({
+        id: z.string(),
+        attemptId: z.string(),
+        planDigest: z.string(),
+        episodeId: z.string(),
+        index: z.number().int().nonnegative(),
+        size: z.number().int().positive(),
+      })
+      .optional(),
     /** `pending` when the trial has no outcome yet. */
     evaluation: z.enum(["valid", "invalid", "unknown", "pending"]),
     failure: FailureKind.optional(),
