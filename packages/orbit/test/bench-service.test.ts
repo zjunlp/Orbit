@@ -296,6 +296,7 @@ it("lists jobs with one trial aggregate query and the same counts and task-weigh
         task: `task-${i % 3}`,
         method: i % 2 ? "empty" : "other",
         seed: i,
+        sampleRef: undefined,
         state: outcome ? "done" : i % 2 ? "solving" : "verifying",
         outcome,
         history: outcome

@@ -1,4 +1,5 @@
 import { type MetricDef, metricValue } from "@zjunlp/orbit/metrics";
+import { sampleLabel } from "@zjunlp/orbit/naming";
 import { ScoreCell } from "../../components/BenchMetrics.tsx";
 import { Link } from "../../components/ui.tsx";
 import type { Trial } from "../../lib/api.ts";
@@ -25,7 +26,7 @@ export function TrialCell({ t, seeds, metric }: { t: Trial; seeds: number; metri
   const o = t.outcome;
   const phase = t.state === "done" ? null : t.history.length ? "rescoring" : t.state;
   const title = [
-    `${t.task} · ${t.method}${seeds > 1 ? ` #${t.seed}` : ""}`,
+    `${t.task} · ${t.method}${t.sampleRef || seeds > 1 ? ` #${sampleLabel(t)}` : ""}`,
     phase ? `state: ${phase}` : `evaluation: ${o?.evaluation} · execution: ${o?.execution}`,
     o && o.score !== null ? `score: ${fmtScore(o.score)} / ${fmtScore(o.maxScore)}` : null,
     ...Object.entries(o?.metrics ?? {}).map(([k, v]) => `${k}: ${fmtScore(v)}`),
@@ -44,7 +45,13 @@ export function TrialCell({ t, seeds, metric }: { t: Trial; seeds: number; metri
       evaluation={o ? o.evaluation : "pending"}
       href={trialPath(t.jobId, t.id)}
       title={title}
-      note={phase === "verifying" ? "verify" : seeds > 1 ? `#${t.seed}` : undefined}
+      note={
+        phase === "verifying"
+          ? "verify"
+          : t.sampleRef || seeds > 1
+            ? `#${sampleLabel(t)}`
+            : undefined
+      }
     />
   );
 }

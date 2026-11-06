@@ -151,6 +151,7 @@ function privatePaths(paths: OrbitPaths): { path: string; mode: number }[] {
       paths.cluster,
       paths.datasets,
       paths.benchmarks,
+      join(paths.home, "policies.json"),
       paths.daemonFile,
       paths.daemonLog,
       join(paths.home, "daemon.lock"),

@@ -39,10 +39,14 @@ import {
   isTerminal,
   type Method,
   type Outcome,
+  type ResolvedBinding,
   type Run,
   type RunDeletion,
   type RunSpecInput,
   type ScoreResult,
+  type ServiceSpec,
+  sampleIdentity,
+  sampleLabel,
   sampleTasks,
   type Trial,
   trialRunIds,
@@ -68,10 +72,13 @@ import { compareJobs, summarize } from "./summary.ts";
 export { benchGroup } from "./consolidate.ts";
 export { compareJobs, summarize } from "./summary.ts";
 
+import { DatasetRegistry } from "../workspace/datasets.ts";
 import { asiMethodProblem } from "./asi.ts";
+import { PolicyRegistry } from "./policies.ts";
 import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { applyOverride, loadResources, resolveResources, usageRows } from "./resources.ts";
+import { checkSamplePlan, resolveBinding } from "./samples.ts";
 import { buildReport, sameReport } from "./summary.ts";
 import { addEfeTrajectory } from "./trajectory-artifacts.ts";
 
@@ -102,6 +109,7 @@ function failed(solve: Run, issues: string[], issue: string): Outcome {
 const LISTING_TTL_MS = 10 * 60_000;
 
 export class BenchService {
+  readonly policies: PolicyRegistry;
   private readonly deps: BenchServiceDeps;
   /** Agent definitions; built-ins when the caller (tests, embedders) did not supply a registry. */
   private readonly agents: AgentRegistry;
@@ -114,6 +122,7 @@ export class BenchService {
 
   constructor(deps: BenchServiceDeps) {
     this.deps = deps;
+    this.policies = new PolicyRegistry(join(deps.paths.home, "policies.json"));
     this.agents = deps.agents ?? builtinRegistry();
     deps.runs.on("change", ({ run }) => this.onRun(run));
   }
@@ -179,6 +188,7 @@ export class BenchService {
     const info = await this.infoOf(b);
     const all = info.tasks;
     const names = new Set<string>();
+    const resolvedBindings: Record<string, ResolvedBinding> = {};
     for (const m of spec.methods) {
       if (names.has(m.name)) throw new UserError(`duplicate method name: ${m.name}`);
       names.add(m.name);
@@ -187,14 +197,58 @@ export class BenchService {
       const asi = b.adapter === "asi" ? asiMethodProblem(m) : null;
       if (asi) throw new UserError(`${m.name}: ${asi}`);
       this.checkMethod(m, info.capabilities?.requires ?? []);
+      if (m.agent === "policy") {
+        const policy = this.policies.get(m.policyRef ?? "");
+        if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
+        m.policySnapshot = structuredClone(policy);
+        const endpoint = info.capabilities?.embodied;
+        if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
+        try {
+          resolvedBindings[m.name] = resolveBinding(
+            endpoint.semanticProfile,
+            policy.profile,
+            endpoint.observationMap,
+          );
+        } catch (e) {
+          throw new UserError(`${m.name}: ${(e as Error).message}`);
+        }
+      }
     }
-    if (spec.tasks.length === 0) spec.tasks = all.filter((t) => t.supported).map((t) => t.id);
+    if (spec.tasks.length === 0)
+      spec.tasks = spec.samplePlan
+        ? [...new Set(spec.samplePlan.items.map((sample) => sample.taskId))]
+        : all.filter((t) => t.supported).map((t) => t.id);
     for (const id of spec.tasks) {
       const t = all.find((x) => x.id === id);
       if (!t) throw new UserError(`task not found in ${b.name}: ${id}`);
       if (!t.supported) throw new UserError(`task ${id} is not supported: ${t.reason}`);
     }
     if (spec.tasks.length === 0) throw new UserError(`${b.name} has no supported tasks`);
+    if (spec.samplePlan) {
+      try {
+        checkSamplePlan(spec.samplePlan);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+      if (spec.methods.some((m) => m.agent !== "policy"))
+        throw new UserError("planned C6 jobs currently require independent policy methods");
+      for (const sample of spec.samplePlan.items) {
+        if (sample.benchmarkProfile !== info.capabilities?.embodied?.profile)
+          throw new UserError("sample evaluation profile does not match the benchmark");
+        if (!spec.tasks.includes(sample.taskId))
+          throw new UserError(`sample task is not selected: ${sample.taskId}`);
+        const expectedAsset = all.find((task) => task.id === sample.taskId)?.tags
+          .initialStateDigest;
+        if (expectedAsset && expectedAsset !== sample.initialStateDigest)
+          throw new UserError(`initial-state asset differs from the benchmark: ${sample.taskId}`);
+      }
+      if (spec.tasks.some((task) => !spec.samplePlan?.items.some((s) => s.taskId === task)))
+        throw new UserError("every selected task needs at least one planned sample");
+    } else if (spec.methods.some((m) => m.agent === "policy")) {
+      throw new UserError(
+        "policy methods require a frozen samplePlan; legacy seeds cannot identify their samples",
+      );
+    }
     let resources: BenchJob["resources"] = null;
     if (b.resources) {
       try {
@@ -211,6 +265,7 @@ export class BenchService {
       id: newId(),
       spec,
       benchmarkSnapshot: structuredClone(b),
+      ...(spec.samplePlan ? { resolvedBindings } : {}),
       ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
       ...(info.official ? { official: structuredClone(info.official) } : {}),
       resources,
@@ -225,27 +280,39 @@ export class BenchService {
     const ids: string[] = [];
     this.deps.store.tx(() => {
       this.deps.store.putJob(job);
-      for (const task of spec.tasks)
-        for (const m of spec.methods)
-          for (let seed = 1; seed <= spec.seeds; seed++) {
-            const t: Trial = {
-              id: `${job.id}.${String(++n).padStart(5, "0")}`,
-              jobId: job.id,
-              task,
-              method: m.name,
-              seed,
-              state: "pending",
-              solveRunId: null,
-              verifyRunId: null,
-              issues: [],
-              outcome: null,
-              history: [],
-              createdAt: job.createdAt,
-              endedAt: null,
-            };
-            this.deps.store.putTrial(t);
-            ids.push(t.id);
-          }
+      const slots = spec.samplePlan
+        ? spec.samplePlan.items.flatMap((sample) =>
+            spec.methods.map((method) => ({
+              method,
+              sample: { task: sample.taskId, sampleRef: sample.sampleId },
+            })),
+          )
+        : spec.tasks.flatMap((task) =>
+            spec.methods.flatMap((method) =>
+              Array.from({ length: spec.seeds ?? 1 }, (_, index) => ({
+                method,
+                sample: { task, seed: index + 1 },
+              })),
+            ),
+          );
+      for (const { sample, method } of slots) {
+        const t: Trial = {
+          ...sample,
+          id: `${job.id}.${String(++n).padStart(5, "0")}`,
+          jobId: job.id,
+          method: method.name,
+          state: "pending",
+          solveRunId: null,
+          verifyRunId: null,
+          issues: [],
+          outcome: null,
+          history: [],
+          createdAt: job.createdAt,
+          endedAt: null,
+        };
+        this.deps.store.putTrial(t);
+        ids.push(t.id);
+      }
     });
     this.advanceAll(ids);
     return job;
@@ -755,13 +822,20 @@ export class BenchService {
   private context(job: BenchJob, t: Trial): { b: Benchmark; trial: TrialInput } {
     const method = job.spec.methods.find((m) => m.name === t.method);
     if (!method) throw new Error(`method ${t.method} not in job ${job.id}`);
+    const sample = t.sampleRef
+      ? job.spec.samplePlan?.items.find((s) => s.sampleId === t.sampleRef)
+      : undefined;
+    const binding = job.resolvedBindings?.[t.method];
+    if (t.sampleRef && (!sample || sample.taskId !== t.task || !binding))
+      throw new Error("trial sample reference or binding does not match its frozen job");
     return {
       b: job.benchmarkSnapshot ?? this.benchmark(job.spec.benchmark),
       trial: {
         id: t.id,
         task: t.task,
         method,
-        seed: t.seed,
+        ...sampleIdentity(t),
+        ...(t.sampleRef ? { sample, binding } : {}),
         options: job.spec.options,
         timeoutMin: job.spec.timeoutMin ?? job.resources?.[t.task]?.timeoutMin,
         resources: job.resources?.[t.task],
@@ -786,16 +860,22 @@ export class BenchService {
         ...(phase === "solve" && job.spec.checkpoint ? { checkpoint: job.spec.checkpoint } : {}),
         // Scoring reads run outputs from this node's disk, so benchmark runs stay here.
         resources: { ...spec.resources, node: this.deps.runs.nodeName },
-        name: `${t.task} · ${t.method}${job.spec.seeds > 1 ? ` #${t.seed}` : ""} · ${phase}`,
+        name: `${t.task} · ${t.method}${t.sampleRef || (job.spec.seeds ?? 1) > 1 ? ` #${sampleLabel(t)}` : ""} · ${phase}`,
         group: benchGroup(job.id),
         tags: {
           ...spec.tags,
           bench: job.spec.benchmark,
           job: job.id,
           trial: t.id,
+          ...(t.sampleRef ? { execution_trial: t.id } : {}),
           phase,
         },
-        params: { task: t.task, method: t.method, seed: String(t.seed), phase },
+        params: {
+          task: t.task,
+          method: t.method,
+          ...(t.sampleRef ? { sampleRef: t.sampleRef } : { seed: String(t.seed) }),
+          phase,
+        },
       },
       { folder },
     );
@@ -930,7 +1010,33 @@ export class BenchService {
     let spec: RunSpecInput;
     try {
       const { b, trial } = this.context(job, t);
-      const reply = await this.adapter(b).solve(trial);
+      const response = await this.adapter(b).solve(trial);
+      const reply = { ...response, spec: structuredClone(response.spec) };
+      if (trial.method.agent === "policy") {
+        const definition = trial.method.policySnapshot;
+        if (!definition) throw new Error("missing frozen policy definition");
+        const services = (reply.spec.services ?? []) as ServiceSpec[];
+        if (services.some((service) => service.name === "policy" || service.role === "policy"))
+          throw new Error("the benchmark adapter may not define the independent policy service");
+        const service = {
+          ...structuredClone(definition.service),
+          name: "policy",
+          role: "policy" as const,
+        };
+        if (definition.weights) {
+          const source = new DatasetRegistry(join(this.deps.paths.home, "datasets.json")).path(
+            definition.weights.dataset,
+          );
+          if (!source)
+            throw new Error(`policy dataset not registered: ${definition.weights.dataset}`);
+          service.binds.push({ source, target: definition.weights.target, mode: "ro" });
+        }
+        reply.spec.services = [...services, service];
+        reply.spec.dependsOn = [
+          ...new Set([...((reply.spec.dependsOn ?? []) as string[]), "policy"]),
+        ];
+      }
+
       spec = applyOverride(
         toRunSpec(
           reply.spec,

@@ -9,13 +9,15 @@ import {
   type BenchJobDetail,
   type Benchmark,
   type Run,
+  sampleKey,
+  sampleLabel,
   type Trial,
   trialRunIds,
 } from "../contracts/index.ts";
 import { UserError } from "../runs/errors.ts";
 import type { AgentFailure } from "../sessions/index.ts";
 import { agentFailureIssue, shouldCheckAgentFailure } from "./classify.ts";
-import { isValid } from "./summary.ts";
+import { executionBudget, isValid } from "./summary.ts";
 
 /** Group of a job's runs, so the run list and notifications see a job as one group. */
 export const benchGroup = (jobId: string) => `bench-${jobId}`;
@@ -133,7 +135,7 @@ export function planConsolidation(input: {
         reclassified.push({ job: d.job.id, trial: t.id, task: t.task, kind: failure.kind });
     }
   const newlyInvalid = new Set(reclassified.map((r) => r.trial));
-  const key = (t: Trial) => JSON.stringify([t.task, t.method, t.seed]);
+  const key = (t: Trial) => JSON.stringify([t.method, sampleKey(t)]);
   const trials = new Map(target.trials.map((t) => [key(t), structuredClone(t)]));
   const adopted: BenchConsolidateResult["adopted"] = [];
   const adoptedKeys = new Set<string>();
@@ -146,6 +148,9 @@ export function planConsolidation(input: {
     if (
       (!sameMethodSetup(d.job, target.job) &&
         !(f.allowTransportDifferences && equivalentTransport(target.job, d.job, transport))) ||
+      Boolean(d.job.spec.samplePlan) !== Boolean(target.job.spec.samplePlan) ||
+      (Boolean(d.job.spec.samplePlan) &&
+        !isDeepStrictEqual(d.job.spec.samplePlan, target.job.spec.samplePlan)) ||
       d.job.spec.seeds !== target.job.spec.seeds ||
       d.job.spec.timeoutMin !== target.job.spec.timeoutMin ||
       !isDeepStrictEqual(d.job.spec.options, target.job.spec.options) ||
@@ -155,7 +160,7 @@ export function planConsolidation(input: {
     for (const t of d.trials) {
       if (adoptedKeys.has(key(t)))
         throw new UserError(
-          `duplicate ${originalTaskIds.has(t.task) ? "source" : "appended"} trial ${t.task} / ${t.method} / ${t.seed}`,
+          `duplicate ${originalTaskIds.has(t.task) ? "source" : "appended"} trial ${t.task} / ${t.method} / ${sampleLabel(t)}`,
         );
       const prev = trials.get(key(t));
       if (!prev) {
@@ -175,7 +180,7 @@ export function planConsolidation(input: {
         continue;
       }
       if (!originalTaskIds.has(t.task))
-        throw new UserError(`duplicate appended trial ${t.task} / ${t.method} / ${t.seed}`);
+        throw new UserError(`duplicate appended trial ${t.task} / ${t.method} / ${sampleLabel(t)}`);
       const protectedTarget =
         isValid(prev) || prev.history.some((h) => h.outcome.evaluation === "valid");
       const retrySucceeded = t.solveRunId && oldRuns.get(t.solveRunId)?.state === "succeeded";
@@ -192,6 +197,10 @@ export function planConsolidation(input: {
         t.outcome?.evaluation === "invalid" &&
         !t.history.some((h) => h.outcome.evaluation === "valid");
       if (isValid(t) || retainInvalid) {
+        if (!isDeepStrictEqual(executionBudget(d.job, t.task), executionBudget(target.job, t.task)))
+          throw new UserError(
+            `incompatible source job ${d.job.id}: execution budget for ${t.task}`,
+          );
         if (f.pruneInvalid && newlyInvalid.has(prev.id))
           throw new UserError(
             `trial ${prev.id} was just reclassified; review it without sources before pruning`,
@@ -252,6 +261,15 @@ export function planConsolidation(input: {
       r.spec.group = benchGroup(id);
       r.spec.tags = {
         ...r.spec.tags,
+        ...(t.sampleRef
+          ? {
+              execution_trial:
+                r.spec.tags.execution_trial ??
+                r.spec.tags.source_trial ??
+                r.spec.tags.trial ??
+                a.sourceTrial,
+            }
+          : {}),
         job: id,
         trial: t.id,
         source_job: a.sourceJob,

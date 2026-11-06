@@ -1,4 +1,5 @@
 import { type MetricDef, metricValue } from "@zjunlp/orbit/metrics";
+import { sampleLabel } from "@zjunlp/orbit/naming";
 import { MetricSwitch, ScoreCell } from "../../components/BenchMetrics.tsx";
 import { Link } from "../../components/ui.tsx";
 import type { BenchJob, MethodSummary, Trial } from "../../lib/api.ts";
@@ -27,7 +28,7 @@ export function TrialBrowser(props: {
   const shown = trials.filter(
     (t) =>
       (!method || t.method === method) &&
-      (!seed || String(t.seed) === seed) &&
+      (!seed || (t.sampleRef ?? String(t.seed)) === seed) &&
       (!task || t.task === task) &&
       t.task.toLowerCase().includes(search.toLowerCase()) &&
       matchesTrial(t, job, filter),
@@ -58,7 +59,7 @@ export function TrialBrowser(props: {
             </button>
           ))}
         </div>
-        {selectedTasks.length > 0 && (
+        {selectedTasks.length > 0 && !job.spec.samplePlan && (
           <Link
             className="btn sm"
             href={`/bench/new?${newQuery}`}
@@ -106,7 +107,24 @@ export function TrialBrowser(props: {
             ))}
           </select>
         </label>
-        {job.spec.seeds > 1 && (
+        {job.spec.samplePlan && (
+          <label>
+            Initial state
+            <select
+              className="input"
+              value={seed}
+              onChange={(e) => setQuery({ seed: e.target.value })}
+            >
+              <option value="">All samples</option>
+              {job.spec.samplePlan.items.map((sample) => (
+                <option key={sample.sampleId} value={sample.sampleId}>
+                  {sample.taskId} · init {sample.initialStateId} · repeat {sample.repetition}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {(job.spec.seeds ?? 1) > 1 && (
           <label>
             Seed
             <select
@@ -115,7 +133,7 @@ export function TrialBrowser(props: {
               onChange={(e) => setQuery({ seed: e.target.value })}
             >
               <option value="">All seeds</option>
-              {Array.from({ length: job.spec.seeds }, (_, i) => i + 1).map((n) => (
+              {Array.from({ length: job.spec.seeds ?? 1 }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>
@@ -165,7 +183,7 @@ export function TrialBrowser(props: {
                   </td>
                   <td>
                     {t.method}
-                    <span className="faint"> · {t.seed}</span>
+                    <span className="faint"> · {sampleLabel(t)}</span>
                   </td>
                   <td>
                     <ScoreCell

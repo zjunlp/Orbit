@@ -161,9 +161,10 @@ export function BenchJobDetail({ id }: { id: string }) {
               </Link>
             )}
             <span className="faint">
-              {tasks.length} tasks × {methods.length} methods × {job.spec.seeds} seed
-              {job.spec.seeds > 1 ? "s" : ""} · started {dateTime(job.createdAt)} ·{" "}
-              {duration(end - Date.parse(job.createdAt))}
+              {job.spec.samplePlan
+                ? `${job.spec.samplePlan.items.length} samples × ${methods.length} methods`
+                : `${tasks.length} tasks × ${methods.length} methods × ${job.spec.seeds} seeds`}{" "}
+              · started {dateTime(job.createdAt)} · {duration(end - Date.parse(job.createdAt))}
             </span>
             {Object.entries(job.spec.options).map(([k, v]) => (
               <span key={k} className="chip mono">

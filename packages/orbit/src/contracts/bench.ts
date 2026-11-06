@@ -5,6 +5,13 @@ import {
   type BenchCategory as Category,
 } from "./categories.ts";
 import { EnvName, ProfileName } from "./common.ts";
+import {
+  EmbodiedCapabilities,
+  PolicyDefinition,
+  ResolvedBinding,
+  SampleIdentity,
+  SamplePlan,
+} from "./embodied.ts";
 import { Folder } from "./folders.ts";
 import { CheckpointPolicy } from "./runs.ts";
 
@@ -129,11 +136,11 @@ export type MetricSpecInput = z.input<typeof MetricSpec>;
 
 /**
  * Method kinds that are not Agent CLIs. They cannot be registered as Agent names (`policy` is
- * reserved for model-service methods and not runnable yet).
+ * reserved for independently registered model services).
  */
 export const RESERVED_METHOD_AGENTS = ["external", "oracle", "empty", "policy"] as const;
 /** Runnable non-CLI method kinds. */
-export const SPECIAL_METHOD_AGENTS = ["external", "oracle", "empty"] as const;
+export const SPECIAL_METHOD_AGENTS = ["external", "oracle", "empty", "policy"] as const;
 /** Kept for older imports: the method kinds Orbit shipped with before the Agent registry. */
 export const METHOD_AGENTS = ["codex", "claude-code", ...SPECIAL_METHOD_AGENTS] as const;
 
@@ -143,8 +150,10 @@ export const METHOD_AGENTS = ["codex", "claude-code", ...SPECIAL_METHOD_AGENTS] 
  */
 export const MethodAgent = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, "agent must be an Agent name or external/oracle/empty")
-  .refine((a) => a !== "policy", "policy methods are reserved and not supported yet");
+  .regex(
+    /^[a-z0-9][a-z0-9._-]{0,63}$/,
+    "agent must be an Agent name or external/oracle/empty/policy",
+  );
 export type MethodAgent = z.infer<typeof MethodAgent>;
 
 /**
@@ -201,6 +210,7 @@ export function calibrationDefaults(
 export const BenchCapabilities = z
   .object({
     category: BenchCategory.optional(),
+    embodied: EmbodiedCapabilities.optional(),
     profiles: z.array(z.string().max(40)).max(12).default([]),
     /** Subject-area tags shown in the UI (e.g. `embodied`), independent of the category. */
     domains: z
@@ -250,6 +260,9 @@ export const Method = z
   .object({
     name: ProfileName,
     agent: MethodAgent,
+    policyRef: ProfileName.optional(),
+    /** Authoritative registry snapshot populated at submission. */
+    policySnapshot: PolicyDefinition.optional(),
     auth: ProfileName.optional(),
     model: z.string().optional(),
     /** Reasoning effort, e.g. `high`. */
@@ -266,6 +279,15 @@ export const Method = z
     /** Variable names copied from the daemon environment into solve only. */
     passEnv: z.array(EnvName).optional(),
   })
+  .refine(
+    (m) =>
+      m.agent === "policy"
+        ? Boolean(m.policyRef) && !m.auth && !m.bundle && !m.model
+        : !m.policyRef && !m.policySnapshot,
+    {
+      message: "policy methods need policyRef and take no CLI auth, model or bundle",
+    },
+  )
   .refine((m) => !isCliMethod(m) || Boolean(m.auth), {
     message: "CLI agent methods need an auth profile",
   })
@@ -330,21 +352,26 @@ export const CalibrationReport = z.object({
 });
 export type CalibrationReport = z.infer<typeof CalibrationReport>;
 
-export const BenchJobSpec = z.object({
+const CommonBenchJobSpec = z.object({
   name: z.string().max(200).optional(),
   calibration: JobCalibration.optional(),
   benchmark: ProfileName,
   /** Task ids; default: every supported task. */
   tasks: z.array(z.string()).default([]),
   methods: z.array(Method).min(1),
-  /** Repetitions per task × method. */
-  seeds: z.number().int().min(1).max(100).default(1),
   /** Adapter options, e.g. asi `promptLevel` (default b1). */
   options: z.record(z.string(), z.string()).default({}),
   checkpoint: CheckpointPolicy.optional(),
   /** Override the per-task solve timeout. */
   timeoutMin: z.number().positive().optional(),
 });
+export const BenchJobSpec = z.union([
+  CommonBenchJobSpec.extend({
+    seeds: z.number().int().min(1).max(100).default(1),
+    samplePlan: z.never().optional(),
+  }),
+  CommonBenchJobSpec.extend({ seeds: z.never().optional(), samplePlan: SamplePlan }),
+]);
 export type BenchJobSpec = z.infer<typeof BenchJobSpec>;
 export type BenchJobSpecInput = z.input<typeof BenchJobSpec>;
 
@@ -537,26 +564,27 @@ export const Scoring = z.object({
 export type Scoring = z.infer<typeof Scoring>;
 
 export const TrialState = z.enum(["pending", "solving", "verifying", "done"]);
-export const Trial = z.object({
-  id: z.string(),
-  jobId: z.string(),
-  task: z.string(),
-  method: z.string(),
-  seed: z.number().int(),
-  state: TrialState,
-  solveRunId: z.string().nullable(),
-  verifyRunId: z.string().nullable(),
-  /** Notes gathered before the outcome (e.g. artifacts the solve run did not produce). */
-  issues: z.array(z.string()).default([]),
-  outcome: Outcome.nullable(),
-  /**
-   * Earlier scorings, oldest first. A rescore moves the current verify run and outcome here and
-   * verifies the same solve run again; `verifyRunId` / `outcome` are always the latest.
-   */
-  history: z.array(Scoring).default([]),
-  createdAt: z.string(),
-  endedAt: z.string().nullable(),
-});
+export const Trial = z
+  .object({
+    id: z.string(),
+    jobId: z.string(),
+    task: z.string(),
+    method: z.string(),
+    state: TrialState,
+    solveRunId: z.string().nullable(),
+    verifyRunId: z.string().nullable(),
+    /** Notes gathered before the outcome (e.g. artifacts the solve run did not produce). */
+    issues: z.array(z.string()).default([]),
+    outcome: Outcome.nullable(),
+    /**
+     * Earlier scorings, oldest first. A rescore moves the current verify run and outcome here and
+     * verifies the same solve run again; `verifyRunId` / `outcome` are always the latest.
+     */
+    history: z.array(Scoring).default([]),
+    createdAt: z.string(),
+    endedAt: z.string().nullable(),
+  })
+  .and(SampleIdentity);
 export type Trial = z.infer<typeof Trial>;
 
 /** Every run a trial has had: its solve run, its verify run and earlier verify runs. */
@@ -660,6 +688,7 @@ export const BenchJob = z.object({
   spec: BenchJobSpec,
   /** Non-secret registration fixed at submission; absent only for legacy jobs. */
   benchmarkSnapshot: Benchmark.optional(),
+  resolvedBindings: z.record(z.string(), ResolvedBinding).optional(),
   capabilities: BenchCapabilities.optional(),
   /** The benchmark's own aggregation rule at submission, when its adapter declares one. */
   official: OfficialRule.optional(),
@@ -722,20 +751,21 @@ export const MethodSummary = z.object({
 export type MethodSummary = z.infer<typeof MethodSummary>;
 
 /** One planned sample in a report: the trial (attempt) whose result was used and its value. */
-export const ReportEntry = z.object({
-  trial: z.string(),
-  /** `<task>#<seed>`: the logical sample, stable across retries and merges. */
-  sample: z.string(),
-  task: z.string(),
-  seed: z.number().int(),
-  solveRunId: z.string().nullable(),
-  verifyRunId: z.string().nullable(),
-  /** `pending` when the trial has no outcome yet. */
-  evaluation: z.enum(["valid", "invalid", "unknown", "pending"]),
-  failure: FailureKind.optional(),
-  /** The primary metric (Orbit's view uses valid entries only). */
-  value: z.number().nullable(),
-});
+export const ReportEntry = z
+  .object({
+    trial: z.string(),
+    /** Legacy `<task>#<seed>` or planned sampleRef, stable across retries and merges. */
+    sample: z.string(),
+    task: z.string(),
+    solveRunId: z.string().nullable(),
+    verifyRunId: z.string().nullable(),
+    /** `pending` when the trial has no outcome yet. */
+    evaluation: z.enum(["valid", "invalid", "unknown", "pending"]),
+    failure: FailureKind.optional(),
+    /** The primary metric (Orbit's view uses valid entries only). */
+    value: z.number().nullable(),
+  })
+  .and(SampleIdentity);
 export type ReportEntry = z.infer<typeof ReportEntry>;
 
 /**
@@ -878,6 +908,7 @@ export const BenchCompare = z.object({
     z.string(),
     z.object({
       pairedTasks: z.number().int(),
+      pairedTaskIds: z.array(z.string()).optional(),
       columns: z.record(
         z.string(),
         z.object({
@@ -915,8 +946,12 @@ export type BenchUsageRow = z.infer<typeof BenchUsageRow>;
 export const BenchUsage = z.object({ jobs: z.array(z.string()), rows: z.array(BenchUsageRow) });
 export type BenchUsage = z.infer<typeof BenchUsage>;
 
-export function isAgentMethod(m: { agent: string }): boolean {
-  return isCliMethod(m) || m.agent === "external";
+export function isAgentMethod(m: { agent: string; policySnapshot?: { kind?: string } }): boolean {
+  return (
+    isCliMethod(m) ||
+    m.agent === "external" ||
+    (m.agent === "policy" && m.policySnapshot?.kind !== "calibration")
+  );
 }
 
 /** Any method whose agent is not a reserved kind runs an Agent CLI from the registry. */
