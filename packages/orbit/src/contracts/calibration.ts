@@ -234,6 +234,33 @@ export function calibrationRunsClean(runs: ReadonlyMap<string, Run | null>): boo
   );
 }
 
+/** Reconstruct legacy completion from execution timestamps, never from delayed cleanup. */
+export function calibrationExecutionEnd(
+  job: BenchJob,
+  trials: Trial[],
+  runs: ReadonlyMap<string, Run | null>,
+): string | null {
+  if (job.spec.calibration?.mode !== "policy") return null;
+  if (job.calibrationExecutionEndedAt) return job.calibrationExecutionEndedAt;
+  if (
+    job.state === "running" ||
+    !trials.length ||
+    trials.some((t) => t.state !== "done") ||
+    [...runs.values()].some((run) => !run || !isTerminal(run.state))
+  )
+    return null;
+  const rescoreSettled =
+    job.state === "cancelled" ||
+    !job.spec.calibration.rescore ||
+    job.capabilities?.rescore === "none" ||
+    job.rescore?.state === "done" ||
+    (job.rescore?.state === "started" && Boolean(job.rescore.note || trials[0]?.history.length));
+  if (!rescoreSettled) return null;
+  const ends = [...trials.map((t) => t.endedAt), ...[...runs.values()].map((r) => r?.endedAt)];
+  if (ends.some((end) => !end || !Number.isFinite(Date.parse(end)))) return null;
+  return new Date(Math.max(...ends.map((end) => Date.parse(end as string)))).toISOString();
+}
+
 /** The report of a calibration job (`spec.calibration`), or null for other jobs. */
 export function calibrationReport(
   job: BenchJob,
@@ -247,13 +274,16 @@ export function calibrationReport(
     ...(runs ?? []),
   ]);
   const clean = c.mode !== "policy" || calibrationRunsClean(relatedRuns);
+  const executionEndedAt = calibrationExecutionEnd(job, trials, relatedRuns);
   // Cleanup is confirmed after the outcome; a pending one is not judged yet.
   const open = !clean || trials.some((x) => x.state !== "done" || x.outcome?.cleanup === "pending");
   const phase =
-    c.mode === "policy" && job.rescore?.state !== "done"
-      ? job.rescore?.state === "started" || job.state !== "running"
-        ? "rescoring"
-        : "running"
+    c.mode === "policy"
+      ? job.state === "running"
+        ? "running"
+        : open || !job.calibrationExecutionEndedAt || !job.endedAt
+          ? "rescoring"
+          : "done"
       : job.state === "running" || (open && !job.rescore)
         ? "running"
         : job.rescore?.state === "started" || open
@@ -301,13 +331,15 @@ export function calibrationReport(
       "acceptance budget",
       !job.calibrationExpiredAt &&
         job.state !== "cancelled" &&
-        Boolean(job.endedAt && Date.parse(job.endedAt) <= Date.parse(deadlineAt as string)),
+        Boolean(
+          executionEndedAt && Date.parse(executionEndedAt) <= Date.parse(deadlineAt as string),
+        ),
       job.calibrationExpiredAt
         ? `total budget exhausted at ${job.calibrationExpiredAt}; unfinished checks did not pass`
         : job.state === "cancelled"
           ? "integration check cancelled"
           : `${c.budgetMin} minute wall-clock budget, including queue, model startup, verification and rescore`,
-      phase !== "done" && !job.calibrationExpiredAt && job.state !== "cancelled",
+      !executionEndedAt && !job.calibrationExpiredAt && job.state !== "cancelled",
     );
     const method = job.spec.methods[0];
     add(
@@ -405,6 +437,7 @@ export function calibrationReport(
           budget: {
             minutes: c.budgetMin as number,
             deadlineAt: deadlineAt as string,
+            ...(executionEndedAt ? { executionEndedAt } : {}),
             ...(job.calibrationExpiredAt ? { expiredAt: job.calibrationExpiredAt } : {}),
           },
         }

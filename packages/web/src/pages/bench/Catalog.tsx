@@ -543,6 +543,9 @@ function CalibrationResult({ r }: { r: CalibrationReport }) {
             Policy {r.policyRef} · {r.samples} frozen episodes · {r.budget?.minutes} minute total
             budget
             {r.budget?.expiredAt ? " · budget exhausted" : ""}
+            {r.phase !== "done" && r.budget?.executionEndedAt
+              ? " · execution finished; waiting for resource cleanup"
+              : ""}
           </span>
         ) : (
           <span>

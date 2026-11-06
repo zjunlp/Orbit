@@ -360,7 +360,7 @@ export const CalibrationReport = z.object({
   tasks: z.array(z.string()),
   methods: z.array(z.string()),
   seeds: z.number().int(),
-  /** `running`: trials not finished; `rescoring`: the rescore from saved evidence is in progress. */
+  /** `rescoring` also covers policy checks waiting for final resource cleanup. */
   phase: z.enum(["running", "rescoring", "done"]),
   checks: z.array(CalibrationCheck),
   /** Done, no check failed and at least one passed (`not_run` checks are listed, not counted). */
@@ -373,6 +373,7 @@ export const CalibrationReport = z.object({
     .object({
       minutes: z.number().positive(),
       deadlineAt: z.string(),
+      executionEndedAt: z.string().optional(),
       expiredAt: z.string().optional(),
     })
     .optional(),
@@ -778,9 +779,11 @@ export const BenchJob = z.object({
   state: z.enum(["running", "done", "cancelled"]),
   /**
    * A calibration job's rescore step, run by the daemon once its trials have ended: `started` while
-   * rescoring, `done` afterwards (`note`: why it was skipped or partial).
+   * rescoring, `done` afterwards (`note`: why it was skipped or partial). Cleanup ends separately.
    */
   rescore: z.object({ state: z.enum(["started", "done"]), note: z.string().optional() }).optional(),
+  /** Execution (including scoring and automatic rescore) ended; cleanup may still be pending. */
+  calibrationExecutionEndedAt: z.string().optional(),
   /** Budget exhaustion is durable across daemon restarts, including the automatic rescore phase. */
   calibrationExpiredAt: z.string().optional(),
   createdAt: z.string(),

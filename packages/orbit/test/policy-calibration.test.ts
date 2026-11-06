@@ -15,11 +15,13 @@ import { ensureHome, orbitPaths } from "../src/config/paths.ts";
 import {
   AdapterTasksResponse,
   BenchJobSpec,
+  CalibrationReport,
   CalibrationRequest,
   formatCalibration,
   Run,
 } from "../src/contracts/index.ts";
 import { RunService } from "../src/runs/service.ts";
+import * as sessions from "../src/sessions/index.ts";
 import { Store } from "../src/store/index.ts";
 
 const fixtures: { home: string; store: Store; bench: BenchService }[] = [];
@@ -41,7 +43,7 @@ function plan(count = 2) {
       initialStateId: String(i),
       initialStateDigest: `sha256:${"a".repeat(64)}`,
       environmentSeed: 7,
-      policySeed: 0,
+      policySeed: 0 as const,
       repetition: 0,
     };
     return { ...content, sampleId: contentDigest(content) };
@@ -447,7 +449,7 @@ it("cancels an unlinked durable solve on restart and waits for its cleanup witho
     phase: "rescoring",
     calibrated: false,
   });
-  expect(f.store.getJob(job.id)?.rescore?.state).not.toBe("done");
+  expect(f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBeUndefined();
   f.finish(run.id, "cancelled");
   await expect.poll(() => recovered.job(job.id).calibration?.phase).toBe("done");
   expect(recovered.job(job.id).calibration?.calibrated).toBe(false);
@@ -507,11 +509,16 @@ it.each(["pending", "failed"] as const)(
     const report = f.bench.job(job.id).calibration;
     expect(report).toMatchObject({ phase: "rescoring", calibrated: false });
     expect(report?.checks.find((c) => c.name === "cleanup confirmed")?.result).not.toBe("passed");
-    expect(f.store.getJob(job.id)?.rescore?.state).toBe("started");
+    await expect.poll(() => f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBeTruthy();
+    expect(f.store.getJob(job.id)?.rescore?.state).toBe("done");
     // The report must also distrust an old completion marker from before this fix.
     const current = f.store.getJob(job.id);
     if (!current) throw new Error("missing job");
-    f.store.putJob({ ...current, rescore: { state: "done" } });
+    f.store.putJob({
+      ...current,
+      calibrationExecutionEndedAt: undefined,
+      rescore: { state: "done" },
+    });
     expect(f.bench.job(job.id).calibration).toMatchObject({
       phase: "rescoring",
       calibrated: false,
@@ -524,6 +531,194 @@ it.each(["pending", "failed"] as const)(
     expect(f.submit).toHaveBeenCalledTimes(4);
   },
 );
+
+it.each([false, true])(
+  "keeps the budget during automatic rescore planning (legacy marker: %s)",
+  async (legacy) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.spyOn(sessions, "loadRunAgentTranscript").mockResolvedValue(null);
+    vi.spyOn(sessions, "runAgentFailure").mockResolvedValue(null);
+    const f = fixture();
+    let calls = 0;
+    let release: ((r: Awaited<ReturnType<AdapterClient["verify"]>>) => void) | undefined;
+    vi.mocked(AdapterClient.prototype.verify).mockImplementation(async () => {
+      if (++calls === 3)
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      return {
+        spec: { image: "synthetic", command: ["true"], resources: { gpus: 0 } },
+        issues: [],
+      };
+    });
+    const job = await f.bench.calibrate(f.request);
+    await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "solving")).toBe(true);
+    f.finish(f.store.trials(job.id)[0]?.solveRunId ?? null);
+    await expect
+      .poll(() => f.store.trials(job.id).every((t) => t.state === "verifying"))
+      .toBe(true);
+    for (const t of f.store.trials(job.id)) f.finish(t.verifyRunId);
+    await expect.poll(() => calls).toBe(3);
+    await setImmediate();
+    expect(f.store.getJob(job.id)?.rescore?.state).toBe("started");
+    expect(f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBeUndefined();
+    if (legacy) {
+      const current = f.store.getJob(job.id);
+      if (!current) throw new Error("missing job");
+      f.store.putJob({ ...current, rescore: { state: "done" } });
+    }
+    vi.setSystemTime(Date.now() + 21 * 60_000);
+    await f.bench.enforceCalibrationBudgets();
+    release?.({
+      spec: { image: "synthetic", command: ["true"], resources: { gpus: 0 } },
+      issues: [],
+    });
+    await expect.poll(() => f.bench.job(job.id).calibration?.phase).toBe("done");
+    expect(f.store.getJob(job.id)?.state).toBe("cancelled");
+    expect(f.bench.job(job.id).calibration?.calibrated).toBe(false);
+    expect(f.store.getJob(job.id)?.calibrationExpiredAt).toBeTruthy();
+    expect(f.submit).toHaveBeenCalledTimes(3);
+  },
+);
+
+it.each([false, true])(
+  "keeps on-time acceptance while historical cleanup crosses the deadline (restart: %s)",
+  async (restart) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const f = fixture();
+    const job = await f.bench.calibrate(f.request);
+    await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "solving")).toBe(true);
+    f.finish(f.store.trials(job.id)[0]?.solveRunId ?? null);
+    await expect
+      .poll(() => f.store.trials(job.id).every((t) => t.state === "verifying"))
+      .toBe(true);
+    const original = f.store.getRun(f.store.trials(job.id)[0]?.verifyRunId ?? "");
+    if (!original) throw new Error("missing original verifier");
+    const pending = {
+      ...original,
+      state: "succeeded" as const,
+      cleanup: "pending" as const,
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+    };
+    f.store.putRun(pending);
+    f.runs.emit("change", { run: pending });
+    f.finish(f.store.trials(job.id)[1]?.verifyRunId ?? null);
+    await expect.poll(() => f.store.trials(job.id)[0]?.history.length).toBe(1);
+    await expect.poll(() => f.store.trials(job.id)[0]?.state).toBe("verifying");
+    f.finish(f.store.trials(job.id)[0]?.verifyRunId ?? null);
+    await expect.poll(() => f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBeTruthy();
+    const executionEndedAt = f.store.getJob(job.id)?.calibrationExecutionEndedAt;
+    expect(f.bench.job(job.id).calibration).toMatchObject({
+      phase: "rescoring",
+      calibrated: false,
+      budget: { executionEndedAt },
+    });
+    expect(
+      f.bench.job(job.id).calibration?.checks.find((c) => c.name === "acceptance budget")?.result,
+    ).toBe("passed");
+    let bench = f.bench;
+    vi.setSystemTime(Date.now() + 21 * 60_000);
+    if (restart) {
+      bench.stop();
+      bench = new BenchService(f.deps);
+      const active = fixtures[0];
+      if (!active) throw new Error("missing fixture");
+      active.bench = bench;
+    }
+    await bench.enforceCalibrationBudgets();
+    if (restart) bench.start();
+    expect(f.store.getJob(job.id)?.calibrationExpiredAt).toBeUndefined();
+    expect(f.store.getJob(job.id)?.state).toBe("done");
+    expect(bench.job(job.id).calibration?.phase).toBe("rescoring");
+    const cleaned = { ...pending, cleanup: "done" as const };
+    f.store.putRun(cleaned);
+    f.runs.emit("change", { run: cleaned });
+    await expect.poll(() => bench.job(job.id).calibration?.phase).toBe("done");
+    expect(bench.job(job.id).calibration?.calibrated).toBe(true);
+    expect(f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBe(executionEndedAt);
+    expect(Date.parse(f.store.getJob(job.id)?.endedAt ?? "")).toBeGreaterThan(
+      Date.parse(executionEndedAt ?? ""),
+    );
+    expect(f.cancel).not.toHaveBeenCalled();
+    expect(f.submit).toHaveBeenCalledTimes(4);
+  },
+);
+
+it("restores legacy completion from execution timestamps and keeps later manual CPU rescore outside that budget", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const f = fixture();
+  const job = await f.bench.calibrate(f.request);
+  await f.firstScores(job.id);
+  f.finish(f.store.trials(job.id)[0]?.verifyRunId ?? null);
+  await expect.poll(() => f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBeTruthy();
+  const current = f.store.getJob(job.id);
+  if (!current) throw new Error("missing job");
+  const expectedEnd = current.calibrationExecutionEndedAt;
+  vi.setSystemTime(Date.now() + 21 * 60_000);
+  f.store.putJob({
+    ...current,
+    calibrationExecutionEndedAt: undefined,
+    endedAt: new Date().toISOString(),
+  });
+  await f.bench.enforceCalibrationBudgets();
+  expect(f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBe(expectedEnd);
+  expect(f.store.getJob(job.id)?.calibrationExpiredAt).toBeUndefined();
+  const selected = f.store.trials(job.id)[0];
+  if (!selected) throw new Error("missing trial");
+  f.bench.rescore(job.id, { trials: [selected.id] });
+  await expect.poll(() => f.store.getTrial(selected.id)?.state).toBe("verifying");
+  await f.bench.enforceCalibrationBudgets();
+  f.finish(f.store.getTrial(selected.id)?.verifyRunId ?? null);
+  await expect.poll(() => f.bench.job(job.id).calibration?.phase).toBe("done");
+  expect(f.bench.job(job.id).calibration?.calibrated).toBe(true);
+  expect(f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBe(expectedEnd);
+  expect(f.cancel).not.toHaveBeenCalled();
+  expect(f.solve).toHaveBeenCalledTimes(1);
+});
+
+it("keeps CLI polling while execution is finished but cleanup remains", async () => {
+  vi.useFakeTimers();
+  const report = CalibrationReport.parse({
+    benchmark: "synthetic",
+    job: "job",
+    tasks: ["task"],
+    methods: ["policy"],
+    seeds: 1,
+    phase: "rescoring",
+    checks: [],
+    calibrated: false,
+    mode: "policy",
+    policyRef: "synthetic",
+    samples: 2,
+    budget: {
+      minutes: 20,
+      deadlineAt: "2026-11-06T00:20:00.000Z",
+      executionEndedAt: "2026-11-06T00:01:00.000Z",
+    },
+    createdAt: "2026-11-06T00:00:00.000Z",
+    endedAt: null,
+    source: null,
+  });
+  const client = {
+    benchCalibrate: vi.fn().mockResolvedValue({ id: "job" }),
+    benchJob: vi
+      .fn()
+      .mockResolvedValueOnce({ calibration: report })
+      .mockResolvedValueOnce({ calibration: { ...report, phase: "done", calibrated: true } }),
+  };
+  const progress = vi.fn();
+  const waiting = calibrate(client as unknown as OrbitClient, "synthetic", {
+    policyRef: "synthetic",
+    samplePlan: plan(),
+    waitMin: 1,
+    progress,
+  });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect((await waiting).calibrated).toBe(true);
+  expect(progress).toHaveBeenCalledWith("execution finished; waiting for resource cleanup");
+  expect(client.benchJob).toHaveBeenCalledTimes(2);
+});
 
 it("stops the selected rescore when the budget expires after the job initially ended", async () => {
   const f = fixture();

@@ -27,16 +27,19 @@ export async function calibrate(
   for (;;) {
     const r = (await c.benchJob(job.id)).calibration;
     if (!r) throw new Error(`job ${job.id} is not a calibration job`);
-    if (r.phase !== phase) {
-      phase = r.phase;
+    const stage = r.phase !== "done" && r.budget?.executionEndedAt ? "cleanup" : r.phase;
+    if (stage !== phase) {
+      phase = stage;
       progress?.(
         phase === "running"
           ? r.mode === "policy"
             ? `job ${job.id}: ${r.samples} frozen episode(s), policy ${r.policyRef}, ${r.budget?.minutes} minute total budget`
             : `job ${job.id}: ${r.tasks.length} task(s) × ${r.methods.join(", ")} × ${r.seeds} seed(s)`
-          : phase === "rescoring"
-            ? "rescoring from saved evidence"
-            : "",
+          : phase === "cleanup"
+            ? "execution finished; waiting for resource cleanup"
+            : phase === "rescoring"
+              ? "rescoring from saved evidence"
+              : "",
       );
     }
     if (r.phase === "done") return r;

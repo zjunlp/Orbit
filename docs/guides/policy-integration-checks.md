@@ -29,6 +29,13 @@ Cleanup can extend beyond the execution budget. Restart preserves the original d
 work receives stop intent before recovered queued Runs are scheduled. Closing the CLI does not
 remove the daemon's budget. `--wait` only limits how long the CLI waits for a report.
 
+The budget remains active during adapter planning, scoring and automatic rescore, even when no new
+Run has been created yet. After all requested work ends, its execution completion time is frozen as
+`budget.executionEndedAt`. Work finished within the deadline keeps its budget result while cleanup
+continues, including across restart. A delayed cleanup cannot cause a new execution-budget failure.
+The final report still waits for cleanup; CLI and Web show that waiting stage. Explicit later CPU
+rescore does not reopen or rewrite the original acceptance budget.
+
 Cancellation also finds job-owned Runs persisted before their Trial linkage was written. Acceptance
 waits for all owned current and historical Runs to terminate, finish cleanup and release their
 leases. A successful new verifier does not hide an older verifier awaiting cleanup; cleanup events

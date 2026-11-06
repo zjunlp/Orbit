@@ -89,3 +89,23 @@ it("shows model integration checks separately from benchmark calibration", () =>
   expect(detail).toContain("20 minute total budget");
   expect(detail).toContain("statistical equivalence remain separate");
 });
+
+it("shows completed execution waiting for cleanup without claiming acceptance", () => {
+  const policy = report({
+    mode: "policy",
+    policyRef: "groot",
+    samples: 2,
+    phase: "rescoring",
+    calibrated: false,
+    budget: {
+      minutes: 20,
+      deadlineAt: "2026-11-05T00:20:00.000Z",
+      executionEndedAt: "2026-11-05T00:01:00.000Z",
+    },
+  });
+  const e = { ...entry([]), policyChecks: [policy] };
+  expect(renderToStaticMarkup(<CalibrationCell e={e} />)).toContain("Policy check running");
+  expect(renderToStaticMarkup(<CalibrationDetail e={e} />)).toContain(
+    "execution finished; waiting for resource cleanup",
+  );
+});
