@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "id": "groot-google-reference/1",
+  "scoreName": "GR00T native Google Robot success",
+  "reference": {
+    "evaluation": {
+      "repository": "https://github.com/NVIDIA/Isaac-GR00T",
+      "commit": "7b304f95b95790490b79bd263ba57015c3c12dfd"
+    },
+    "libero": {
+      "commit": "8f1084e3132a39270c3a13ebe37270a43ece2a01"
+    },
+    "simpler": {
+      "commit": "8a2d286c926c1371927caa7651a412b4cc331756",
+      "maniskillCommit": "c2a9e87c186300b694da6f2497dd68d2c347a4b7"
+    },
+    "files": {
+      "gr00t/eval/rollout_policy.py": "sha256:e0833d57826f26e5b05e46e202f56eeae53fbb0e22b1c8b7c6b2271320e66132",
+      "gr00t/eval/sim/wrapper/multistep_wrapper.py": "sha256:8b2e7b8dea5399c1e1b51e9d9419aa32309aa9b46aaad88223d8dae6b3e56237",
+      "gr00t/policy/server_client.py": "sha256:d29d2e68e97ceae1762243315f23f22e696538da60fecd87d9a1391d20f7f1b9",
+      "gr00t/policy/gr00t_policy.py": "sha256:0a9fd201a23c972bf8c216496e61de32aca945cfdad5222f7dbfc5015f60c89a",
+      "gr00t/eval/sim/SimplerEnv/simpler_env.py": "sha256:e7f9a9129bfeb4b5e16410b699a960af742abb28b119608d90c13516cafe0840",
+      "external_dependencies/SimplerEnv/simpler_env/__init__.py": "sha256:d12b2be350fb5ff2671e4b1334d67c7afc6bef90919db6e9e15d42abad393c61",
+      "external_dependencies/SimplerEnv/simpler_env/utils/env/observation_utils.py": "sha256:ddfaa1d46d557d3d61387ae4717f067616accb76262089cf9eacbe193263272b",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/agents/controllers/pd_ee_pose.py": "sha256:b3d62a3f46ae9eb69f017b91671d8d29de818a51e5aa7ac9066628fabdcf3538",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/put_on_in_scene.py": "sha256:977fc830b8fb3903b72862d7082bacf06fb3d092f867a93be503d00671bf5a74",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/open_small_drawer_in_scene.py": "sha256:04a8fa89fc0e3378f02f0c276e3c343e5d36596203a4bb612efc6b9377b111b9",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/base_env.py": "sha256:26eaa0789e9f5b4174ed4be392c9bf8df6050050a83da29771a45ead31cd5958",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/grasp_single_in_scene.py": "sha256:c067aa46582a2ad9ced5a360b583221a9be635fab578368a0441685dced1965d",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/move_near_in_scene.py": "sha256:32f67ef26591b7b652ade2c583ec68645ab7a6de5e01739b584dec3c5a953d29",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/open_drawer_in_scene.py": "sha256:dc1ee0a1f1733ab58b5dbcfcd458590c201e8c2d20db60efe5ba507da61a5100",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/envs/custom_scenes/place_in_closed_drawer_in_scene.py": "sha256:679f59ad2ff832f845436c19e6a5bc6550e4f7b0f6a111d62763c57ff8025be4",
+      "examples/SimplerEnv/README.md": "sha256:8c7cc8784b8a1eeb4491434c6b35b4daa456fa59e5c1f7374fde9ec5df9032d1",
+      "examples/SimplerEnv/fractal_modality.json": "sha256:b2cea76cf61f163b1d39fde0f13b558ea4552f0105e09b37ec067f962a69aaec",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/agents/robots/googlerobot.py": "sha256:c9f137e625dcc943e8d47ee694df41cc858cba031495076861ea8090e799a00f",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/agents/configs/google_robot/defaults.py": "sha256:ecef6b2ba76b7925dfdf8c02ae328c36d1dabd897e1990266a52dd61e99973ce",
+      "external_dependencies/SimplerEnv/ManiSkill2_real2sim/mani_skill2_real2sim/agents/base_agent.py": "sha256:5ac8a9384cbe32f2ff61dace4f1f444ff5397f906f26ec74379497400bae0a99"
+    }
+  },
+  "environment": {
+    "kind": "registered-gym",
+    "registration": "gr00t.eval.sim.SimplerEnv.simpler_env",
+    "register": "register_simpler_envs",
+    "tasks": [
+      "simpler_env_google/google_robot_pick_coke_can",
+      "simpler_env_google/google_robot_pick_object",
+      "simpler_env_google/google_robot_move_near",
+      "simpler_env_google/google_robot_open_drawer",
+      "simpler_env_google/google_robot_close_drawer",
+      "simpler_env_google/google_robot_place_in_closed_drawer"
+    ],
+    "horizon": 300,
+    "reset": "environmentSeed+initialStateId",
+    "success": "any native info.success; preserve native termination, otherwise terminate at chunk boundary"
+  },
+  "benchmarkProfile": {
+    "id": "google-official-gym/1",
+    "observations": {
+      "video.image": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [256, 320, 3],
+        "camera": "overhead_camera",
+        "layout": "HWC",
+        "format": "RGB-resized256x320"
+      },
+      "state.x": {
+        "semantic": "eef-position-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.y": {
+        "semantic": "eef-position-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.z": {
+        "semantic": "eef-position-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.rx": {
+        "semantic": "eef-quaternion-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.ry": {
+        "semantic": "eef-quaternion-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.rz": {
+        "semantic": "eef-quaternion-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.rw": {
+        "semantic": "eef-quaternion-w",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.gripper": {
+        "semantic": "google-gripper-closedness",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "joint",
+        "unit": "1-minus-native-open-ratio"
+      },
+      "annotation.human.action.task_description": {
+        "semantic": "task-language",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "google-ee-delta",
+      "shape": [7],
+      "controller": "arm_pd_ee_delta_pose_align_interpolate_by_planner_gripper_pd_joint_target_delta_pos_interpolate_by_planner",
+      "frame": "ee_align-about-current-FK-origin",
+      "unit": "translation:metre;rotation:radian",
+      "rotation": "axis-angle",
+      "gripper": "fractal-unit-interval;native=-(2*x-1);sticky15",
+      "order": ["x", "y", "z", "roll", "pitch", "yaw", "gripper"]
+    }
+  },
+  "policyProfile": {
+    "id": "groot-google-input/1",
+    "observations": {
+      "video.image": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [256, 320, 3],
+        "camera": "overhead_camera",
+        "layout": "HWC",
+        "format": "RGB-resized256x320"
+      },
+      "state.x": {
+        "semantic": "eef-position-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.y": {
+        "semantic": "eef-position-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.z": {
+        "semantic": "eef-position-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "metre"
+      },
+      "state.rx": {
+        "semantic": "eef-quaternion-x",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.ry": {
+        "semantic": "eef-quaternion-y",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.rz": {
+        "semantic": "eef-quaternion-z",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.rw": {
+        "semantic": "eef-quaternion-w",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "robot-base",
+        "unit": "dimensionless",
+        "format": "xyzw-component"
+      },
+      "state.gripper": {
+        "semantic": "google-gripper-closedness",
+        "dtype": "float32",
+        "shape": [1],
+        "frame": "joint",
+        "unit": "1-minus-native-open-ratio"
+      },
+      "annotation.human.action.task_description": {
+        "semantic": "task-language",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "google-ee-delta",
+      "shape": [7],
+      "controller": "arm_pd_ee_delta_pose_align_interpolate_by_planner_gripper_pd_joint_target_delta_pos_interpolate_by_planner",
+      "frame": "ee_align-about-current-FK-origin",
+      "unit": "translation:metre;rotation:radian",
+      "rotation": "axis-angle",
+      "gripper": "fractal-unit-interval;native=-(2*x-1);sticky15",
+      "order": ["x", "y", "z", "roll", "pitch", "yaw", "gripper"]
+    }
+  },
+  "observationMap": {
+    "video.image": "video.image",
+    "state.x": "state.x",
+    "state.y": "state.y",
+    "state.z": "state.z",
+    "state.rx": "state.rx",
+    "state.ry": "state.ry",
+    "state.rz": "state.rz",
+    "state.rw": "state.rw",
+    "state.gripper": "state.gripper",
+    "annotation.human.action.task_description": "annotation.human.action.task_description"
+  },
+  "parameters": {
+    "controlHz": 3,
+    "renderSize": 256,
+    "settleSteps": 0,
+    "replanSteps": 1,
+    "policySeed": 0,
+    "successRule": "any"
+  },
+  "status": {
+    "sourceAudit": "pinned",
+    "images": "unverified",
+    "positiveCalibration": "not_run",
+    "nativeParity": "not_run"
+  }
+}

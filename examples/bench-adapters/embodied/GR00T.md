@@ -12,6 +12,10 @@ OpenPI-pinned simulator, 10 settle steps, suite horizons and 5-step replanning. 
 checkpoint supplied here is trained for `libero_spatial`; this configuration does not reproduce
 NVIDIA's distinct LIBERO evaluation protocol or claim statistical parity with its published scores.
 
+`profiles/groot-google.json` adds the six official Google Robot tasks with the Fractal checkpoint.
+It uses the same model service, connector and native Gym driver. Its rectangular camera,
+quaternion state and gripper handling are distinct from WidowX and have a separate frozen profile.
+
 ## Assets and images
 
 Keep source checkouts, weights, generated registrations and logs outside the Orbit checkout.
@@ -42,6 +46,10 @@ against NVIDIA's pinned public Hugging Face content identity. ModelScope is a co
 its owner name is not treated as proof of provenance. `HF_TOKEN`, when needed for the Hugging Face
 source, is read from the environment. `--direct-download` bypasses proxy variables only for asset
 transfers, while metadata requests retain the usual environment settings.
+Use `--models fractal backbone` to fetch only Google Robot inference assets and the shared
+backbone, or `--models bridge backbone` for WidowX. Completed files are verified and reused;
+selected downloads preserve the other assets' manifest entries. `--direct-download` can also
+be used with ModelScope when a direct connection is available.
 
 The launcher validates the original checkpoint, statistics and backbone cache before loading.
 It derives temporary metadata pointing at the pinned local backbone snapshot, because this
@@ -117,3 +125,39 @@ the rejected chunk; earlier completed controls remain available for review and v
 
 `fixtures/zero_groot.py` is an explicit stateless calibration policy, not a GR00T model substitute.
 The source profiles deliberately do not certify full-suite calibration or statistical parity.
+
+## Google Robot / Fractal
+
+Use the same pinned GR00T source, policy image and native SimplerEnv image above. The public
+`nvidia/GR00T-N1.7-SimplerEnv-Fractal` checkpoint is stored in `fractal/` next to `bridge/`;
+both use the shared `hub/` backbone cache and the existing `groot-n17` named dataset.
+
+```bash
+python3 examples/bench-adapters/embodied/fetch_groot.py --models fractal backbone \
+  --source modelscope --output-dir "$GROOT_ASSETS"
+PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure_groot.py \
+  --reference-source "$GROOT_SOURCE" --weights "$GROOT_ASSETS" --profile google --share-gpu \
+  --policy-image orbit/groot-policy:reference --benchmark-image orbit/simpler-native:reference \
+  --output-dir "$LOCAL_GROOT_CONFIG/google"
+orbit data add groot-n17 "$GROOT_ASSETS"
+orbit policy add "$LOCAL_GROOT_CONFIG/google/policy.json"
+orbit bench add-file "$LOCAL_GROOT_CONFIG/google/benchmark.json"
+python3 examples/bench-adapters/embodied/plan.py --reference-source "$GROOT_SOURCE" \
+  --reference-file examples/bench-adapters/embodied/profiles/groot-google.json \
+  --task simpler_env_google/google_robot_pick_coke_can \
+  --task simpler_env_google/google_robot_move_near --initial-state 0 --environment-seed 7 \
+  > "$LOCAL_GROOT_CONFIG/google/samples.json"
+orbit bench calibrate simpler-google-native --policy groot-n17-google \
+  --sample-plan "$LOCAL_GROOT_CONFIG/google/samples.json" --budget 20 --json
+```
+
+`simpler-google-native` lists pick-coke-can, pick-object, move-near, open-drawer, close-drawer and
+place-in-closed-drawer. Native task initialization coverage and sampled model validation are
+separate from full-task performance. Registration does not certify a success rate for every task.
+
+The Google recipe uses 256×320 overhead RGB, robot-base position and xyzw quaternion fields,
+native gripper closedness, 3 Hz control and a 300-step horizon. The model predicts eight actions;
+the pinned official evaluator executes one and replans. Its native wrapper converts the gripper
+as `-(2*x-1)` and holds a triggered command for 15 control steps, resetting this state between
+episodes. These conversions stay in the official Google wrapper. The connector forwards the
+flat fields, and evidence retains both requested and actually executed native actions.

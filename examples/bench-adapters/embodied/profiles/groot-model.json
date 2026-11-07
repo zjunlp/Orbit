@@ -31,6 +31,11 @@
       "repository": "nvidia/Cosmos-Reason2-2B",
       "revision": "9ce19a195e423419c349abfc86fd07178b230561",
       "prefix": ""
+    },
+    "fractal": {
+      "repository": "nvidia/GR00T-N1.7-SimplerEnv-Fractal",
+      "revision": "fb8357ff66e3cc8dec369e2bf7dbe9e6740511b2",
+      "prefix": ""
     }
   }
 }

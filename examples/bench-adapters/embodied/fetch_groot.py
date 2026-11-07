@@ -95,14 +95,22 @@ def main():
     parser.add_argument("--source", choices=("huggingface", "modelscope"), default="huggingface")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--direct-download", action="store_true", help="Bypass proxy environment variables for asset transfers only")
+    parser.add_argument("--models", nargs="+", help="Select model entries such as fractal backbone; default: all")
     args = parser.parse_args()
     if not 1 <= args.workers <= 16:
         parser.error("workers must be between 1 and 16")
     reference = json.loads((Path(__file__).parent / "profiles/groot-model.json").read_text())
+    selected = set(args.models or reference["models"])
+    if selected - set(reference["models"]):
+        parser.error("unknown model entries: " + ", ".join(sorted(selected - set(reference["models"]))))
     jobs = []
     for target, model in reference["models"].items():
+        if target not in selected:
+            continue
         repository, revision, prefix = model["repository"], model["revision"], model["prefix"]
         metadata = read_json("https://huggingface.co/api/models/" + repository + "/revision/" + revision + "?blobs=true")
+        if metadata["sha"] != revision:
+            raise ValueError("Hub metadata differs from the pinned model revision: " + repository)
         destination = args.output_dir / target
         if target == "backbone":
             cache = args.output_dir / "hub" / ("models--" + repository.replace("/", "--"))
@@ -134,7 +142,10 @@ def main():
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         for result in as_completed([pool.submit(fetch, job, direct=args.direct_download) for job in jobs]):
             rows.append(result.result())
-    (args.output_dir / "asset-manifest.json").write_text(json.dumps(rows, indent=2) + "\n")
+    manifest = args.output_dir / "asset-manifest.json"
+    previous = json.loads(manifest.read_text()) if manifest.exists() else []
+    merged = {(row["repository"], row["revision"], row["path"]): row for row in previous + rows}
+    manifest.write_text(json.dumps([merged[key] for key in sorted(merged)], indent=2) + "\n")
 
 
 if __name__ == "__main__":

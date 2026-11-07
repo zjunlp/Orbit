@@ -19,7 +19,7 @@ REFERENCE = json.loads((Path(__file__).resolve().parents[2] / "bench-adapters/em
 
 
 class Endpoint:
-    def __init__(self, *, timeout=False, ordering=None, libero=False, indices=None, actions=None):
+    def __init__(self, *, timeout=False, ordering=None, libero=False, indices=None, actions=None, profile=None):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
         self.socket.setsockopt(zmq.LINGER, 0)
@@ -29,7 +29,7 @@ class Endpoint:
         self.timeout, self.ordering = timeout, ordering
         self.indices = list(range(16)) if indices is None else indices
         self.actions = actions or {}
-        self.profile = copy.deepcopy(REFERENCE["policyProfile"])
+        self.profile = copy.deepcopy(profile or REFERENCE["policyProfile"])
         if libero:
             self.profile["observations"].pop("video.image_0")
             self.profile["observations"]["video.image"] = {}
@@ -74,6 +74,31 @@ class Endpoint:
 
 
 class GrootTests(unittest.TestCase):
+    def test_google_profile_preserves_rectangular_camera_quaternion_fields_and_one_step_execution(self):
+        path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/profiles/groot-google.json"
+        reference = json.loads(path.read_text())
+        profile = reference["policyProfile"]
+        observation = {name: "move the can" if description["dtype"] == "string" else
+                       np.zeros(description["shape"], dtype=description["dtype"])
+                       for name, description in profile["observations"].items()}
+        observation["state.rw"][:] = 1
+        server = Endpoint(profile=profile, indices=list(range(8)))
+        client = None
+        try:
+            client = GrootClient(server.url, profile, timeout=1, replan_steps=reference["parameters"]["replanSteps"])
+            client.reset({"policySeed": 0})
+            self.assertEqual(client.act(observation).shape, (8, 7))
+            self.assertEqual(client.replan_steps, 1)
+            self.assertEqual(server.inputs["video.image"].shape, (1, 1, 256, 320, 3))
+            self.assertEqual(set(server.inputs), set(profile["observations"]))
+            np.testing.assert_array_equal(server.inputs["state.rw"], [[[1]]])
+            with self.assertRaises(ValueError):
+                resolve_binding(REFERENCE["benchmarkProfile"], profile, reference["observationMap"])
+        finally:
+            if client is not None:
+                client.close()
+            server.close()
+
     def observation(self):
         return {name: "把勺子放到毛巾上" if description["dtype"] == "string" else
                 np.zeros(description["shape"], dtype=description["dtype"])

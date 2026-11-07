@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--reference-source", type=Path, required=True)
     parser.add_argument("--benchmark-source", type=Path)
     parser.add_argument("--weights", type=Path, required=True)
-    parser.add_argument("--profile", choices=("libero", "widowx"), required=True)
+    parser.add_argument("--profile", choices=("libero", "widowx", "google"), required=True)
     parser.add_argument("--policy-image", required=True)
     parser.add_argument("--benchmark-image", required=True)
     parser.add_argument("--share-gpu", action="store_true")
@@ -35,7 +35,7 @@ def main():
     for name, expected in model_reference["files"].items():
         if file_digest(args.reference_source / name) != expected:
             raise ValueError("model reference source content changed: " + name)
-    reference_file = HERE / "reference.json" if args.profile == "libero" else HERE / "profiles/groot-widowx.json"
+    reference_file = HERE / "reference.json" if args.profile == "libero" else HERE / ("profiles/groot-" + args.profile + ".json")
     reference = json.loads(reference_file.read_text())
     if args.profile == "libero" and args.benchmark_source is None:
         parser.error("LIBERO reuses the pinned OpenPI benchmark; provide --benchmark-source")
@@ -43,17 +43,17 @@ def main():
     for name, expected in reference["reference"]["files"].items():
         if file_digest(root / name) != expected:
             raise ValueError("reference source content changed: " + name)
-    checkpoint = args.weights / ("libero_spatial" if args.profile == "libero" else "bridge")
+    checkpoint = args.weights / {"libero": "libero_spatial", "widowx": "bridge", "google": "fractal"}[args.profile]
     index = json.loads((checkpoint / "model.safetensors.index.json").read_text())
     if any(not (checkpoint / name).is_file() for name in set(index["weight_map"].values())):
         raise ValueError("checkpoint download is incomplete")
-    if list(args.weights.rglob("*.partial")):
+    if list(checkpoint.rglob("*.partial")) or list((args.weights / "hub").rglob("*.partial")):
         raise ValueError("asset downloads are still in progress")
     model = tree_digest(checkpoint)
     normalization = file_digest(checkpoint / "statistics.json")
     backbone = tree_digest(args.weights / "hub")
     model_image, benchmark_image = image_id(args.policy_image), image_id(args.benchmark_image)
-    embodiment = "LIBERO_PANDA" if args.profile == "libero" else "SIMPLER_ENV_WIDOWX"
+    embodiment = {"libero": "LIBERO_PANDA", "widowx": "SIMPLER_ENV_WIDOWX", "google": "SIMPLER_ENV_GOOGLE"}[args.profile]
     name = "groot-n17-" + args.profile
     runtime_checkpoint = "/weights/" + checkpoint.name
     service = {
@@ -78,13 +78,13 @@ def main():
         "normalizationDigest": normalization, "backboneDigest": backbone, "service": service,
         "weights": {"dataset": "groot-n17", "target": "/weights"},
     }
-    gpu_sim = args.profile == "widowx" or args.share_gpu
+    gpu_sim = args.profile != "libero" or args.share_gpu
     benchmark = {
-        "name": "libero-native" if args.profile == "libero" else "simpler-widowx-native",
+        "name": "libero-native" if args.profile == "libero" else "simpler-" + args.profile + "-native",
         "adapter": str(HERE / "adapter.py"), "path": str(root),
         "config": {"image": benchmark_image, "python": "/.venv/bin/python" if args.profile == "libero" else "/usr/local/bin/python", "reference": json.dumps(reference),
                    "profileDigest": digest(reference), "implementationDigest": implementation_digest(),
-                   "simGpus": "1" if gpu_sim else "0", "renderer": "vulkan" if args.profile == "widowx" else "egl" if gpu_sim else "osmesa",
+                   "simGpus": "1" if gpu_sim else "0", "renderer": "vulkan" if args.profile != "libero" else "egl" if gpu_sim else "osmesa",
                    **({"simGpuMemGB": str(args.sim_gpu_mem_gb)} if gpu_sim else {})},
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
