@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .binding import check_sample, digest
+from .binding import check_sample, digest, reference_horizon
 
 
 def write_json(path, value):
@@ -96,7 +96,7 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     reference = contract["identity"].get("reference", {})
     if "parameters" in reference:
         task = contract["sample"]["taskId"]
-        horizon = reference.get("environment", {}).get("horizon", reference.get("horizons", {}).get(task.split(":")[0]))
+        horizon = reference_horizon(reference, task)
         if horizon is not None and contract["horizon"] != horizon:
             raise ValueError("episode horizon differs from the frozen reference")
         if contract["replanSteps"] != reference["parameters"]["replanSteps"]:

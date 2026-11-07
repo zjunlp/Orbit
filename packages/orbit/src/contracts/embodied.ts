@@ -82,7 +82,7 @@ export const PolicyDefinition = z
     version: z.string().min(1),
     kind: z.enum(["model", "calibration"]).default("model"),
     connector: z.enum(["openpi-ws", "groot-zmq", "openvla-ws"]),
-    ioAdapter: z.enum(["gr00t-flat", "libero-native"]).optional(),
+    ioAdapter: z.enum(["gr00t-flat", "libero-native", "robocasa-native"]).optional(),
     replanSteps: z.number().int().positive().optional(),
     backboneDigest: ContentDigest.optional(),
     randomness: z
@@ -126,6 +126,8 @@ export const PolicyDefinition = z
     weights: z.object({ dataset: ProfileName, target: z.string().startsWith("/") }).optional(),
   })
   .superRefine((definition, ctx) => {
+    if (definition.ioAdapter === "robocasa-native" && definition.connector !== "openpi-ws")
+      ctx.addIssue({ code: "custom", message: "The RoboCasa I/O adapter requires OpenPI" });
     if (definition.normalizationKey && definition.connector !== "openvla-ws")
       ctx.addIssue({
         code: "custom",

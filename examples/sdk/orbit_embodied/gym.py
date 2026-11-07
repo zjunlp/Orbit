@@ -6,7 +6,7 @@ import importlib
 from pathlib import Path
 import numpy as np
 
-from .binding import seed_asset
+from .binding import reference_horizon, seed_asset
 from .driver import StepResult
 
 
@@ -19,21 +19,30 @@ class GymBenchmark:
         config = reference["environment"]
         if task not in config["tasks"]:
             raise ValueError("task is not in the frozen environment catalog")
-        self.horizon = config["horizon"]
+        self.horizon = reference_horizon(reference, task)
         self.env, self.video = None, None
         self.success = False
         self.steps = 0
         self.native_action = None
         self.reset_actions = []
 
-    def reset(self, sample):
+    def reset_seed(self, sample):
         if sample["taskId"] != self.task or sample["initialStateDigest"] != seed_asset(self.reference, self.task):
             raise ValueError("reset recipe differs from the frozen sample plan")
+        return sample["environmentSeed"] + int(sample["initialStateId"])
+
+    def reset(self, sample):
+        seed = self.reset_seed(sample)
         config = self.reference["environment"]
         module = importlib.import_module(config["registration"])
         getattr(module, config["register"])()
         import gymnasium
         self.env = gymnasium.make(self.task)
+        self.capture_native_step()
+        observation, _info = self.env.reset(seed=seed)
+        return self.observation(observation)
+
+    def capture_native_step(self):
         native = self.env.unwrapped
         native = getattr(native, "env", getattr(native, "_env", None))
         if native is None:
@@ -43,8 +52,6 @@ class GymBenchmark:
             self.native_action = np.asarray(action).tolist()
             return step(action, *args, **kwargs)
         native.step = record
-        observation, _info = self.env.reset(seed=sample["environmentSeed"] + int(sample["initialStateId"]))
-        return self.observation(observation)
 
     def observation(self, raw):
         result = {}

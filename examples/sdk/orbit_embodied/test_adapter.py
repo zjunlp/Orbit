@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from orbit_embodied import digest, resolve_binding
+from orbit_embodied.binding import reference_horizon, seed_asset
 from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 
@@ -127,6 +128,36 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertEqual(verifier["resources"]["gpus"], 0)
             self.assertNotIn("services", verifier)
             self.assertFalse(verifier["network"])
+
+    def test_robocasa_plans_task_horizons_and_mounts_assets_only_for_solve(self):
+        reference = json.loads((ADAPTER.parent / "profiles/robocasa365-atomic-seen.json").read_text())
+        assets = reference["environment"]["assets"]
+        assets["digest"] = "sha256:" + "b" * 64
+        task = "robocasa/OpenDrawer"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            config = request["benchmark"]["config"]
+            config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+            trial = request["trial"]
+            trial["task"] = task
+            content = {key: value for key, value in trial["sample"].items() if key != "sampleId"}
+            content.update(taskId=task, benchmarkProfile=reference["id"], initialStateDigest=seed_asset(reference, task))
+            trial["sample"] = {**content, "sampleId": digest(content)}
+            trial["sampleRef"] = trial["sample"]["sampleId"]
+            profile = {**reference["benchmarkProfile"], "id": "synthetic-robocasa-policy/1"}
+            trial["method"]["policySnapshot"]["profile"] = profile
+            trial["binding"] = resolve_binding(reference["benchmarkProfile"], profile, reference["observationMap"])
+            request["solve"]["run"]["spec"]["params"].update(task=task, sampleRef=trial["sampleRef"])
+            with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                catalog = adapter.tasks(request)
+                solve = adapter.solve(request)["spec"]
+            self.assertEqual(len(catalog["tasks"]), 18)
+            self.assertEqual(catalog["official"]["unit"], "task")
+            self.assertEqual(reference_horizon(reference, task), 750)
+            self.assertEqual(reference_horizon(reference, "robocasa/OpenStandMixerHead"), 450)
+            self.assertEqual(solve["mounts"][-1], {"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
+            self.assertFalse(any("dataset" in mount for mount in adapter.verify(request)["spec"]["mounts"]))
 
     def test_second_model_profile_reuses_the_same_libero_benchmark(self):
         with tempfile.TemporaryDirectory() as temporary:

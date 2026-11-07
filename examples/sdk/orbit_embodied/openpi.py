@@ -1,4 +1,4 @@
-"""OpenPI's binary WebSocket protocol and LIBERO observation preprocessing."""
+"""OpenPI's binary WebSocket protocol and native observation preprocessing."""
 
 from __future__ import annotations
 
@@ -36,16 +36,35 @@ def prepare_libero_observation(observation, resize_size=224):
             "observation/state": state, "prompt": str(observation["instruction"])}
 
 
+def prepare_robocasa_observation(observation, resize_size=224):
+    from openpi_client import image_tools
+
+    def image(name):
+        # The native Gym wrapper already puts the images in the orientation used for training.
+        raw = np.ascontiguousarray(observation["video.robot0_" + name])
+        return image_tools.convert_to_uint8(image_tools.resize_with_pad(raw, resize_size, resize_size))
+
+    state = np.concatenate([observation["state." + name] for name in (
+        "end_effector_position_relative", "end_effector_rotation_relative",
+        "base_position", "base_rotation", "gripper_qpos",
+    )])
+    return {"observation/image": image("agentview_left"),
+            "observation/wrist_image": image("eye_in_hand"),
+            "observation/right_image": image("agentview_right"),
+            "observation/state": state, "prompt": observation["annotation.human.task_description"]}
+
+
 class OpenPIClient:
     """Bounded calls, with no retries of stateful inference or claimed remote reset."""
 
-    def __init__(self, url, *, timeout=120, replan_steps=5):
+    def __init__(self, url, *, timeout=120, replan_steps=5, prepare=prepare_libero_observation):
         from openpi_client import msgpack_numpy
         from websockets.sync.client import connect
 
         if replan_steps < 1:
             raise ValueError("replan_steps must be positive")
         self.replan_steps = replan_steps
+        self.prepare = prepare
         self.timeout = timeout
         self.codec = msgpack_numpy
         self.connection = connect(url, compression=None, max_size=64 * 1024 * 1024,
@@ -66,7 +85,7 @@ class OpenPIClient:
         from websockets.exceptions import ConnectionClosed
         from .driver import EpisodeFailure
         try:
-            self.connection.send(self.codec.packb(prepare_libero_observation(observation)))
+            self.connection.send(self.codec.packb(self.prepare(observation)))
             response = self.connection.recv(timeout=self.timeout)
         except TimeoutError as exc:
             raise EpisodeFailure("call_watchdog", "OpenPI inference deadline expired; request was not retried") from exc

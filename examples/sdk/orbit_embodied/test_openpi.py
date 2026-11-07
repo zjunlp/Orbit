@@ -7,7 +7,7 @@ import numpy as np
 from openpi_client import msgpack_numpy
 from websockets.sync.server import serve
 
-from orbit_embodied.openpi import OpenPIClient, prepare_libero_observation
+from orbit_embodied.openpi import OpenPIClient, prepare_libero_observation, prepare_robocasa_observation
 
 
 def observation():
@@ -26,6 +26,26 @@ class OpenPITests(unittest.TestCase):
         np.testing.assert_array_equal(result["observation/image"], expected)
         np.testing.assert_array_equal(result["observation/state"], [1., 2., 3., 0., 0., 0., 0.1, -0.1])
         self.assertEqual(result["prompt"], raw["instruction"])
+
+    def test_robocasa_preserves_native_camera_orientation_and_state_order(self):
+        from openpi_client import image_tools
+
+        rows, columns = np.indices((256, 256), dtype=np.uint8)
+        image = np.stack((rows, columns, rows ^ columns), axis=-1)
+        cameras = {"agentview_left": image, "agentview_right": image[::-1], "eye_in_hand": image[:, ::-1]}
+        raw = {"video.robot0_" + key: value for key, value in cameras.items()}
+        state = np.arange(16, dtype=np.float32)
+        raw.update({"state.end_effector_position_relative": state[0:3],
+                    "state.end_effector_rotation_relative": state[3:7],
+                    "state.base_position": state[7:10], "state.base_rotation": state[10:14],
+                    "state.gripper_qpos": state[14:16], "annotation.human.task_description": "open the drawer"})
+        result = prepare_robocasa_observation(raw)
+        for key, camera in (("image", "agentview_left"), ("right_image", "agentview_right"),
+                            ("wrist_image", "eye_in_hand")):
+            expected = image_tools.resize_with_pad(np.ascontiguousarray(cameras[camera]), 224, 224)
+            np.testing.assert_array_equal(result["observation/" + key], expected)
+        np.testing.assert_array_equal(result["observation/state"], state)
+        self.assertEqual(result["prompt"], "open the drawer")
 
     def test_native_binary_roundtrip_and_no_remote_reseed_claim(self):
         requests = []

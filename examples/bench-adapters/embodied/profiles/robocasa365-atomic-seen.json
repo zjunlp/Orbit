@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "id": "robocasa365-atomic-seen/1",
+  "scoreName": "RoboCasa365 Atomic-Seen success",
+  "scoreUnit": "task",
+  "reference": {
+    "robocasa": {
+      "repository": "https://github.com/robocasa/robocasa.git",
+      "commit": "8f3c96ec8d1bfcd8126cad2bca887da98d30e997"
+    },
+    "robosuite": {
+      "repository": "https://github.com/ARISE-Initiative/robosuite.git",
+      "commit": "5ce6643f3092639d08f7b0f90ed1c6a84f50552c",
+      "files": {
+        "robosuite/robots/mobile_robot.py": "sha256:8299df62a8a942cc206906c11dacac444a5d914058044203d394bf75198d779b",
+        "robosuite/models/robots/compositional.py": "sha256:109eb998a1219864ac1209cac5850ab531f508eb63337025803337078a7d02f1",
+        "robosuite/controllers/composite/composite_controller.py": "sha256:28e1bd7d1f48d6f6d9799dd6ef748040fe2833d384f905bcdc6369a67cfab6d0"
+      }
+    },
+    "evaluation": {
+      "repository": "https://github.com/robocasa-benchmark/openpi.git",
+      "commit": "ca4c6d710db75e276bc7c866a57bd7e4aee5b6e8",
+      "files": {
+        "examples/robocasa/main.py": "sha256:14608e8a1aad8a1f938b16b3cc46a33f029f0310ed3625d1334b8d8029254883"
+      }
+    },
+    "files": {
+      "robocasa/utils/dataset_registry.py": "sha256:d9a1d9f44442f01514827f8e1c64e08a9e434c3ad641b361ab435041a80063c1",
+      "robocasa/utils/dataset_registry_utils.py": "sha256:9ea74602711ab9c499314bc3d94c4b61db6fe85bebf616cce573b9d39ba02e3b",
+      "robocasa/wrappers/gym_wrapper.py": "sha256:185a6f72a5240f5c97e79181f2051d57f8a1e8589d28ebd1ae022ea8eedc4eda",
+      "robocasa/utils/env_utils.py": "sha256:4ccf45bf29fbf460f4f13ed714fd535b393ad913b4a0e8212e377eaa60291f03",
+      "robocasa/environments/kitchen/kitchen.py": "sha256:35b1395ce65d51b993296aff1881fd5371542aec4c4e8ffc38c3f775327b5c56",
+      "robocasa/scripts/download_kitchen_assets.py": "sha256:b7082077c42300b6b75b8a27336f19c96fcd73f0460657c10bd8855f3366c0a6",
+      "robocasa/models/objects/objects.py": "sha256:2f09e332ff854aaaf39999c090f025de9a414cbbfd0d1dfc0fca1fee97da59e2"
+    }
+  },
+  "environment": {
+    "kind": "robocasa365",
+    "split": "pretrain",
+    "tasks": [
+      "robocasa/CloseBlenderLid",
+      "robocasa/CloseFridge",
+      "robocasa/CloseToasterOvenDoor",
+      "robocasa/CoffeeSetupMug",
+      "robocasa/NavigateKitchen",
+      "robocasa/OpenCabinet",
+      "robocasa/OpenDrawer",
+      "robocasa/OpenStandMixerHead",
+      "robocasa/PickPlaceCounterToCabinet",
+      "robocasa/PickPlaceCounterToStove",
+      "robocasa/PickPlaceDrawerToCounter",
+      "robocasa/PickPlaceSinkToCounter",
+      "robocasa/PickPlaceToasterToCounter",
+      "robocasa/SlideDishwasherRack",
+      "robocasa/TurnOffStove",
+      "robocasa/TurnOnElectricKettle",
+      "robocasa/TurnOnMicrowave",
+      "robocasa/TurnOnSinkFaucet"
+    ],
+    "horizons": {
+      "robocasa/CloseBlenderLid": 900,
+      "robocasa/CloseFridge": 900,
+      "robocasa/CloseToasterOvenDoor": 450,
+      "robocasa/CoffeeSetupMug": 600,
+      "robocasa/NavigateKitchen": 450,
+      "robocasa/OpenCabinet": 1050,
+      "robocasa/OpenDrawer": 750,
+      "robocasa/OpenStandMixerHead": 450,
+      "robocasa/PickPlaceCounterToCabinet": 750,
+      "robocasa/PickPlaceCounterToStove": 600,
+      "robocasa/PickPlaceDrawerToCounter": 750,
+      "robocasa/PickPlaceSinkToCounter": 900,
+      "robocasa/PickPlaceToasterToCounter": 600,
+      "robocasa/SlideDishwasherRack": 450,
+      "robocasa/TurnOffStove": 750,
+      "robocasa/TurnOnElectricKettle": 450,
+      "robocasa/TurnOnMicrowave": 450,
+      "robocasa/TurnOnSinkFaucet": 600
+    },
+    "assets": {
+      "dataset": "robocasa365-assets",
+      "target": "/opt/orbit/robocasa365-assets",
+      "view": "/opt/robocasa/robocasa/models/assets"
+    }
+  },
+  "benchmarkProfile": {
+    "id": "robocasa365-panda-omron-native/1",
+    "observations": {
+      "video.robot0_agentview_left": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "camera": "agentview_left",
+        "layout": "HWC"
+      },
+      "video.robot0_agentview_right": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "camera": "agentview_right",
+        "layout": "HWC"
+      },
+      "video.robot0_eye_in_hand": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [256, 256, 3],
+        "camera": "eye_in_hand",
+        "layout": "HWC"
+      },
+      "state.end_effector_position_relative": {
+        "semantic": "end_effector_position",
+        "dtype": "float32",
+        "shape": [3],
+        "frame": "robot_base",
+        "unit": "m"
+      },
+      "state.end_effector_rotation_relative": {
+        "semantic": "end_effector_orientation",
+        "dtype": "float32",
+        "shape": [4],
+        "frame": "robot_base",
+        "format": "quaternion_xyzw"
+      },
+      "state.base_position": {
+        "semantic": "base_position",
+        "dtype": "float32",
+        "shape": [3],
+        "frame": "world",
+        "unit": "m"
+      },
+      "state.base_rotation": {
+        "semantic": "base_orientation",
+        "dtype": "float32",
+        "shape": [4],
+        "frame": "world",
+        "format": "quaternion_xyzw"
+      },
+      "state.gripper_qpos": {
+        "semantic": "gripper_joint_position",
+        "dtype": "float32",
+        "shape": [2],
+        "frame": "gripper_joints",
+        "unit": "m"
+      },
+      "annotation.human.task_description": {
+        "semantic": "language_instruction",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "panda_omron_mobile_manipulation",
+      "shape": [12],
+      "controller": "robocasa_panda_omron_composite",
+      "frame": "robocasa_native_mobile_and_arm",
+      "unit": "normalized_native_control",
+      "rotation": "axis_angle_delta",
+      "gripper": "close_at_or_above_0.5",
+      "order": [
+        "eef_x",
+        "eef_y",
+        "eef_z",
+        "eef_rx",
+        "eef_ry",
+        "eef_rz",
+        "gripper_close",
+        "base_x",
+        "base_y",
+        "base_yaw",
+        "torso",
+        "control_mode"
+      ]
+    }
+  },
+  "observationMap": {
+    "video.robot0_agentview_left": "video.robot0_agentview_left",
+    "video.robot0_agentview_right": "video.robot0_agentview_right",
+    "video.robot0_eye_in_hand": "video.robot0_eye_in_hand",
+    "state.end_effector_position_relative": "state.end_effector_position_relative",
+    "state.end_effector_rotation_relative": "state.end_effector_rotation_relative",
+    "state.base_position": "state.base_position",
+    "state.base_rotation": "state.base_rotation",
+    "state.gripper_qpos": "state.gripper_qpos",
+    "annotation.human.task_description": "annotation.human.task_description"
+  },
+  "parameters": {
+    "controlHz": 20,
+    "renderSize": 256,
+    "resizeSize": 224,
+    "replanSteps": 5,
+    "settleSteps": 0,
+    "environmentSeed": 7,
+    "successRule": "last"
+  },
+  "randomness": {
+    "environment": "Independent first Gym rollout from seed environmentSeed + initialStateId"
+  }
+}

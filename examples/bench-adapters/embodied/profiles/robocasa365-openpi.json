@@ -1,0 +1,29 @@
+{
+  "source": {
+    "repository": "https://github.com/robocasa-benchmark/openpi.git",
+    "commit": "ca4c6d710db75e276bc7c866a57bd7e4aee5b6e8",
+    "files": {
+      "pyproject.toml": "sha256:03607c742e33fe7d3151ee708b44b2cafab2f42ab4cdc0620e4014a3794eb717",
+      "src/openpi/training/config.py": "sha256:b82bd22cfc12abb3e71faf486193f619ecad2aeb525d2a7dc619028ca419c1da",
+      "src/openpi/policies/policy_config.py": "sha256:e159a01492d32dbfd7df83857b2a4d3d85d70d2ca137ad91eb7fef91e9652d8f",
+      "src/openpi/policies/robocasa_policy.py": "sha256:60af69ba36d36c6743d5a594c83c67efcbc4e2f5d4d698f1d426371c8f746bd0",
+      "src/openpi/serving/websocket_policy_server.py": "sha256:1370d345e6c3c5b8f15573050e485e60a5b423d1df33e24b237805e6b442b026"
+    }
+  },
+  "checkpoint": {
+    "repository": "robocasa/robocasa365_checkpoints",
+    "revision": "c484448aba1a9b60a04c9b0ca117241518ea69f3",
+    "prefix": "pi05_pretrain_human300/multitask_learning/75000",
+    "config": "pi05_pretrain_human300",
+    "digest": "sha256:579752c98f70d587c6a2e0a38b3936fd0ab776898a4aa8ced88c20ba93877aae",
+    "normalizationDigest": "sha256:528b0e2711f28abafa844460413d9d88458c84cbb4b37d1a6c35b2b4503f0db5"
+  },
+  "nativeProfile": "robocasa365-panda-omron-native/1",
+  "profileId": "openpi-robocasa365-input/1",
+  "replanSteps": 5,
+  "randomness": {
+    "backend": "jax",
+    "initialKey": 0,
+    "scope": "service"
+  }
+}
