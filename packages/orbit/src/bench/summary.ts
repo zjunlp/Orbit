@@ -21,6 +21,7 @@ import {
   resolveMetrics,
   taskMeans,
 } from "../contracts/metrics.ts";
+import { splitBatches } from "./batches.ts";
 import { contentDigest } from "./samples.ts";
 
 export const isValid = (t: Trial) => t.outcome?.evaluation === "valid";
@@ -73,6 +74,12 @@ function evaluationConditions(job: PlanConditions, tasks: string[]) {
           batchSize: job.spec.batchSize,
           orderedSamples: job.spec.samplePlan?.digest,
           batchBudgets: job.spec.samplePlan?.items.map((item) => executionBudget(job, item.taskId)),
+          // The partition itself: one shared model service vs. separate launches changes the random stream.
+          batchSizes: splitBatches(
+            job,
+            job.spec.samplePlan?.items ?? [],
+            (item) => item.taskId,
+          ).map((group) => group.length),
         }
       : {}),
     budgets: [...tasks].sort().map((task) => executionBudget(job, task)),

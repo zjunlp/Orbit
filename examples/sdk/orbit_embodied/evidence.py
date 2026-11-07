@@ -129,6 +129,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         raise ValueError("invalid native verdict")
     if result["valid"] and (result.get("failure") or not controls or result["steps"] > contract["horizon"]):
         raise ValueError("valid verdict contradicts execution evidence")
+    budget = contract.get("episodeBudgetSec")
+    if result["valid"] and budget is not None and any(row["wallSeconds"] >= budget for row in controls):
+        raise ValueError("valid verdict exceeds the episode deadline")
     if result["valid"]:
         if "initial-state.json" not in manifest["files"]:
             raise ValueError("initial-state evidence is missing")

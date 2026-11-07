@@ -60,14 +60,37 @@ export function matchesTrial(t: Trial, job: BenchJob, filter: string): boolean {
   return true;
 }
 
+/** Per-task change; tasks the daemon did not pair (different samples or conditions) are unavailable. */
 export function comparisonChange(
   base: number | null | undefined,
   value: number | null | undefined,
   higherIsBetter: boolean,
+  paired = true,
 ): string {
-  if (base == null || value == null) return "unavailable";
+  if (!paired || base == null || value == null) return "unavailable";
   if (base === value) return "unchanged";
   return value > base === higherIsBetter ? "improved" : "regressed";
+}
+
+/** Rows matching a change filter between the baseline and target columns. */
+export function changedRows(
+  c: BenchCompare,
+  metric: { name: string; higherIsBetter: boolean },
+  base: string | undefined,
+  target: string | undefined,
+  change: string,
+): BenchCompare["rows"] {
+  const pairedIds = c.stats[metric.name]?.pairedTaskIds;
+  return c.rows.filter(
+    (row) =>
+      change === "all" ||
+      comparisonChange(
+        base ? row.values[metric.name]?.[base] : null,
+        target ? row.values[metric.name]?.[target] : null,
+        metric.higherIsBetter,
+        !pairedIds || pairedIds.includes(row.task),
+      ) === change,
+  );
 }
 
 export function withBaseline(comparison: BenchCompare, baseline: string): BenchCompare {

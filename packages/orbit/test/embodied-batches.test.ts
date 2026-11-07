@@ -257,6 +257,36 @@ it("adopts a persisted batch Run after a crash before trial links were written",
   expect(adapter).not.toHaveBeenCalled();
 });
 
+it("stops an unlinked batch Run of a job cancelled before a restart", async () => {
+  const f = fixture();
+  const tags = { ...f.solve.spec.tags, job: f.job.id };
+  const solve = Run.parse({ ...f.solve, spec: { ...f.solve.spec, tags } });
+  f.store.putRun(solve);
+  f.store.putJob({ ...f.job, state: "cancelled", endedAt: f.at });
+  const cancel = vi.spyOn(f.runs, "cancel").mockImplementation(async (id) => {
+    const stopping = { ...(f.store.getRun(id) as Run), stopRequested: "cancel" as const };
+    f.store.putRun(stopping);
+    return stopping;
+  });
+  // Restart order: stop intent is restored before RunService schedules queued work.
+  await f.bench.enforceCalibrationBudgets();
+  expect(cancel).toHaveBeenCalledWith(solve.id);
+  f.bench.start();
+  await expect
+    .poll(() => f.store.trials(f.job.id).every((trial) => trial.state === "done"))
+    .toBe(true);
+  expect(cancel).toHaveBeenCalledTimes(1);
+  expect(f.store.trialsByRun(solve.id, "solve")).toHaveLength(3);
+  expect(f.store.trials(f.job.id).every((t) => t.outcome?.cleanup === "pending")).toBe(true);
+  const stopped = { ...solve, state: "cancelled" as const, cleanup: "done" as const };
+  f.store.putRun(stopped);
+  f.runs.emit("change", { run: stopped });
+  await expect
+    .poll(() => f.store.trials(f.job.id).every((t) => t.outcome?.cleanup === "done"))
+    .toBe(true);
+  expect(f.submit).not.toHaveBeenCalled();
+});
+
 it("keeps shared cleanup pending when cancellation races with Run submission", async () => {
   const f = fixture();
   const method = f.job.spec.methods[0];
@@ -328,6 +358,43 @@ it("freezes sequential membership and separates batch conditions from single-epi
   assignSolveBatches(changed, trials);
   expect(trials.map((trial) => trial.batch?.plan.members.length)).toEqual([2, 2, 1]);
   expect(batchConditions(trials[1] as Trial)).not.toEqual(batchConditions(f.trials[1] as Trial));
+});
+
+it("splits batches by the same effective budget that comparison conditions record", () => {
+  const f = fixture();
+  const items = (f.job.spec.samplePlan?.items ?? []).slice(0, 2).map((item, index) => {
+    const { sampleId: _, ...content } = { ...item, taskId: index ? "b" : "a" };
+    return { ...content, sampleId: contentDigest(content) };
+  });
+  const job = (resources?: BenchJob["resources"]) => {
+    const j = structuredClone(f.job);
+    j.spec = {
+      ...j.spec,
+      tasks: ["a", "b"],
+      batchSize: 2,
+      timeoutMin: 30,
+      samplePlan: { version: 1, items, digest: contentDigest(items) },
+    } as BenchJob["spec"];
+    if (resources) j.resources = resources;
+    return j;
+  };
+  const sizes = (j: BenchJob) => {
+    const trials = items.map((item, index) =>
+      Trial.parse({ ...f.trials[index], task: item.taskId, sampleRef: item.sampleId }),
+    );
+    assignSolveBatches(j, trials);
+    return trials.map((trial) => trial.batch?.plan.members.length);
+  };
+  // Per-task timeouts are overridden by the job timeout: one shared service either way.
+  const overridden = job({ a: { timeoutMin: 10 }, b: { timeoutMin: 20 } });
+  const plain = job();
+  expect(sizes(overridden)).toEqual([2, 2]);
+  expect(sizes(plain)).toEqual([2, 2]);
+  expect(planDigest(overridden)).toBe(planDigest(plain));
+  // A real budget change splits the batch and changes the recorded conditions.
+  const split = job({ a: { memGB: 4 } });
+  expect(sizes(split)).toEqual([1, 1]);
+  expect(planDigest(split)).not.toBe(planDigest(plain));
 });
 
 it("does not replace a valid completed episode merely because its shared Run later failed", () => {

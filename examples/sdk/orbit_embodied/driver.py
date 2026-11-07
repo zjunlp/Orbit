@@ -42,16 +42,19 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     directory.mkdir(parents=True, exist_ok=False)
     write_json(directory / "resolved-binding.json", binding)
     sample_ref = sample["sampleId"]
+    start = time.monotonic()
+    # Seconds from start; the verifier rejects valid results whose control steps end past it.
+    budget = None if deadline is None else deadline - start
     contract = {
         "version": 2 if "execution" in identity else 1, "sampleRef": sample_ref, "episodeId": episode_id,
         "sample": sample, "sampleDigest": digest(sample), "bindingDigest": binding["digest"],
         "horizon": benchmark.horizon, "replanSteps": policy.replan_steps, "identity": identity,
+        **({"episodeBudgetSec": budget} if budget is not None else {}),
     }
     write_json(directory / "contract.json", contract)
     result = {"version": 1, "sampleRef": sample_ref, "episodeId": episode_id,
               "success": False, "valid": False, "steps": 0, "issues": []}
     stage = "reset_failed"
-    start = time.monotonic()
     recording = False
     completed = False
     sealed = False
@@ -140,6 +143,8 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                 log.write(json.dumps(row, allow_nan=False) + "\n")
                 log.flush()
                 result["steps"] = step + 1
+                if budget is not None and row["wallSeconds"] >= budget:
+                    raise EpisodeFailure("call_watchdog", "episode watchdog expired during an environment step")
                 chunk_index += 1
                 observation = native.observation
                 if native.terminated:
