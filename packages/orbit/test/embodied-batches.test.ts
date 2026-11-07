@@ -329,10 +329,15 @@ it("keeps shared cleanup pending when cancellation races with Run submission", a
   });
   f.bench.start();
   await expect.poll(() => cancel.mock.calls.length).toBe(1);
-  const peers = f.store.trials(f.job.id).slice(1);
-  expect(
-    peers.every((trial) => trial.state === "done" && trial.outcome?.cleanup === "pending"),
-  ).toBe(true);
+  // The in-flight submission links the shared Run, so peers wait for its cleanup.
+  await expect
+    .poll(() =>
+      f.store
+        .trials(f.job.id)
+        .slice(1)
+        .every((trial) => trial.state === "done" && trial.outcome?.cleanup === "pending"),
+    )
+    .toBe(true);
   const stopped = { ...f.solve, state: "cancelled" as const, cleanup: "done" as const };
   f.store.putRun(stopped);
   f.runs.emit("change", { run: stopped });

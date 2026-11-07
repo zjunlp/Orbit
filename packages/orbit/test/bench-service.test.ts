@@ -96,6 +96,32 @@ function fixture(adapter = "harbor") {
   return { home, paths, source, store, runs, registry, bench, run, job, trial, submit, auth };
 }
 
+it("adopts a live solve submitted before a restart instead of solving the trial twice", async () => {
+  const f = fixture();
+  f.store.putJob(f.job);
+  f.store.putTrial(f.trial);
+  const live = Run.parse({
+    ...f.run,
+    id: "unlinked",
+    state: "running",
+    endedAt: null,
+    cleanup: "pending",
+    spec: {
+      ...f.run.spec,
+      group: `bench-${f.job.id}`,
+      tags: { job: f.job.id, trial: f.trial.id, phase: "solve" },
+    },
+  });
+  f.store.putRun(live);
+  const solve = vi.spyOn(AdapterClient.prototype, "solve");
+  await f.bench.enforceCalibrationBudgets();
+  f.bench.start();
+  await expect.poll(() => f.store.getTrial(f.trial.id)?.solveRunId).toBe("unlinked");
+  expect(f.store.getTrial(f.trial.id)?.state).toBe("solving");
+  expect(f.submit).not.toHaveBeenCalled();
+  expect(solve).not.toHaveBeenCalled();
+});
+
 it("retains registration settings through removal, restart and saved-output rescoring", async () => {
   const f = fixture();
   const executable = join(f.home, "adapter.cjs");

@@ -228,10 +228,19 @@ export function sampleLabel(value: { seed?: number; sampleRef?: string }): strin
   return value.sampleRef ? value.sampleRef.slice(7, 19) : String(value.seed);
 }
 
+/** Position of each planned sample, so planned trials sort in plan order rather than by digest. */
+export function planRank(plan?: { items: { sampleId: string }[] }): Map<string, number> {
+  return new Map((plan?.items ?? []).map((item, index) => [item.sampleId, index]));
+}
+
 export function sampleOrder(
   a: { seed?: number; sampleRef?: string },
   b: { seed?: number; sampleRef?: string },
+  rank?: ReadonlyMap<string, number>,
 ): number {
+  const ra = a.sampleRef ? rank?.get(a.sampleRef) : undefined;
+  const rb = b.sampleRef ? rank?.get(b.sampleRef) : undefined;
+  if (ra !== undefined && rb !== undefined) return ra - rb;
   return a.sampleRef || b.sampleRef
     ? (a.sampleRef ?? String(a.seed)).localeCompare(b.sampleRef ?? String(b.seed))
     : (a.seed ?? 0) - (b.seed ?? 0);

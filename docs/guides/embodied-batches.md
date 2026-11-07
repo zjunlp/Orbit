@@ -38,10 +38,11 @@ task and marks shared measurements; it does not divide the peaks into fictional 
 Shared artifacts stay with their Run and are removed through the finished job's existing deletion
 flow. A Run with remaining job references cannot be independently removed.
 
-Before a schema upgrade, the daemon snapshots an existing SQLite database into `<db>.backups`.
-SQLite creates the snapshot with committed WAL contents included; Orbit opens it independently,
-checks integrity and schema version, then migrates the original in one transaction. A failed backup
-or migration prevents startup. Backups are private and are not automatically pruned.
+Before a schema upgrade, the daemon snapshots an existing SQLite database into
+`<db>.backups/v<version>.sqlite` and prints that path. SQLite creates the snapshot with committed
+WAL contents included; Orbit opens it independently, checks integrity and schema version, then
+migrates the original in one transaction. A failed backup or migration prevents startup. Backups
+are private; a retried upgrade replaces the backup of the same version rather than adding copies.
 
 To inspect a recovery copy, stop the daemon for that home and preserve its database and WAL files.
 Copy a validated `.sqlite` backup into a separate home as `orbit.db`, retain the original configuration

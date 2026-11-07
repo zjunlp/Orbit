@@ -124,7 +124,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
   private readonly samplers = new Map<string, UsageSampler>();
   /** Runs from a primary still being received (see `submitRemote`). */
   private readonly receiving = new Map<string, Promise<Run>>();
-  private readonly gpuMode = docker.detectGpuMode();
+  private readonly gpuMode = docker.gpuModeProbe();
   private cached: { at: number; value: NodeResources } | null = null;
   private timer: NodeJS.Timeout | null = null;
   private reconcileTimer: NodeJS.Timeout | null = null;
@@ -176,7 +176,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       finalize: (run, state, exitCode, reason) => this.finalize(run, state, exitCode, reason),
       finishAuth: (run) => this.finishAuth(run),
       get gpuMode() {
-        return service.gpuMode;
+        return service.gpuMode();
       },
       get homeLabel() {
         return service.homeLabel;

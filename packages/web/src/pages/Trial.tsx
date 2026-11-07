@@ -4,7 +4,7 @@
 // UI does not know). Without a review (older trials and adapters) the page guesses: the solve's
 // Markdown report and the verifier's JSON. The Agent session and all outputs are always there.
 import { fmtMetric, type MetricDef, metricValue, resolveMetrics } from "@zjunlp/orbit/metrics";
-import { sampleLabel, sampleOrder } from "@zjunlp/orbit/naming";
+import { planRank, sampleLabel, sampleOrder } from "@zjunlp/orbit/naming";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { IconAlert, IconFile, IconFlask } from "../components/icons.tsx";
 import { joinPath, Markdown } from "../components/Markdown.tsx";
@@ -140,7 +140,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const evidence = job.capabilities?.rescore === "evidence";
   const gui =
     review?.files.some((f) => f.kind === "trajectory" || f.kind === "conversation") ?? false;
-  const nav = neighbours(d.data.trials, trial);
+  const nav = neighbours(d.data.trials, trial, job.spec.samplePlan);
   const rescoreLabel = evidence ? "Recheck evidence" : "Rescore";
   const rescore = async () => {
     if (
@@ -916,9 +916,11 @@ export const failedTrial = (t: Trial) =>
     t.outcome.score < t.outcome.maxScore);
 
 /** The previous and next trial of the job (by task, method, seed) and the next failed one. */
-export function neighbours(trials: Trial[], t: Trial) {
+export function neighbours(trials: Trial[], t: Trial, plan?: { items: { sampleId: string }[] }) {
+  const rank = planRank(plan);
   const order = [...trials].sort(
-    (a, b) => a.task.localeCompare(b.task) || a.method.localeCompare(b.method) || sampleOrder(a, b),
+    (a, b) =>
+      a.task.localeCompare(b.task) || a.method.localeCompare(b.method) || sampleOrder(a, b, rank),
   );
   const i = order.findIndex((x) => x.id === t.id);
   const after = [...order.slice(i + 1), ...order.slice(0, Math.max(i, 0))];

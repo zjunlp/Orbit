@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
+import { chmodSync, closeSync, mkdirSync, openSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -164,21 +164,28 @@ export class Store {
       const directory = `${file}.backups`;
       mkdirSync(directory, { recursive: true, mode: 0o700 });
       chmodSync(directory, 0o700);
-      backup = join(directory, `v${row.user_version}-${randomUUID()}.sqlite`);
-      // SQLite's snapshot includes committed WAL pages; copying the main file does not.
-      this.db.prepare("VACUUM INTO ?").run(backup);
-      chmodSync(backup, 0o600);
-      const restored = new DatabaseSync(backup, { readOnly: true });
+      // One backup per source version: a retried failed migration replaces it, never piles up copies.
+      backup = join(directory, `v${row.user_version}.sqlite`);
+      const partial = `${backup}.${randomUUID()}.partial`;
       try {
-        const integrity = restored.prepare("PRAGMA integrity_check").all();
-        if (
-          integrity.length !== 1 ||
-          integrity[0]?.integrity_check !== "ok" ||
-          restored.prepare("PRAGMA user_version").get()?.user_version !== row.user_version
-        )
-          throw new Error("migration backup failed restore validation");
+        // SQLite's snapshot includes committed WAL pages; copying the main file does not.
+        this.db.prepare("VACUUM INTO ?").run(partial);
+        chmodSync(partial, 0o600);
+        const restored = new DatabaseSync(partial, { readOnly: true });
+        try {
+          const integrity = restored.prepare("PRAGMA integrity_check").all();
+          if (
+            integrity.length !== 1 ||
+            integrity[0]?.integrity_check !== "ok" ||
+            restored.prepare("PRAGMA user_version").get()?.user_version !== row.user_version
+          )
+            throw new Error("migration backup failed restore validation");
+        } finally {
+          restored.close();
+        }
+        renameSync(partial, backup);
       } finally {
-        restored.close();
+        rmSync(partial, { force: true });
       }
     }
     this.db.exec("BEGIN IMMEDIATE");

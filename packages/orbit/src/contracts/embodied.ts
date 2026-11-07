@@ -75,87 +75,56 @@ export const BatchEpisode = z
   );
 export type BatchEpisode = z.infer<typeof BatchEpisode>;
 
-/** A policy definition is independent of a benchmark registration. */
-export const PolicyDefinition = z
-  .strictObject({
-    name: ProfileName,
-    version: z.string().min(1),
-    kind: z.enum(["model", "calibration"]).default("model"),
-    connector: z.enum(["openpi-ws", "groot-zmq", "openvla-ws"]),
-    ioAdapter: z.enum(["gr00t-flat", "libero-native"]).optional(),
-    replanSteps: z.number().int().positive().optional(),
-    backboneDigest: ContentDigest.optional(),
-    randomness: z
-      .union([
-        z.object({
-          backend: z.literal("jax"),
-          initialKey: z.literal(0),
-          scope: z.literal("service"),
-        }),
-        z.object({ backend: z.literal("stateless"), scope: z.literal("stateless") }),
-        z.object({
-          backend: z.literal("torch"),
-          initialSeed: z.literal(0),
-          scope: z.literal("service"),
-        }),
-      ])
-      .default({ backend: "jax", initialKey: 0, scope: "service" }),
-    profile: SemanticProfile,
-    port: z.number().int().min(1).max(65535).default(8000),
-    callTimeoutSec: z.number().positive().default(300),
-    checkpointDigest: ContentDigest,
-    normalizationDigest: ContentDigest,
-    service: ServiceSpec.refine(
-      (service) => Boolean(service.healthcheck),
-      "a policy needs a readiness health check",
+/**
+ * A policy definition is independent of a benchmark registration. Connector-specific requirements
+ * are checked where definitions are registered (`bench/policies.ts`), not in this shared shape.
+ */
+export const PolicyDefinition = z.strictObject({
+  name: ProfileName,
+  version: z.string().min(1),
+  kind: z.enum(["model", "calibration"]).default("model"),
+  connector: z.enum(["openpi-ws", "groot-zmq", "openvla-ws"]),
+  ioAdapter: z.enum(["gr00t-flat", "libero-native"]).optional(),
+  replanSteps: z.number().int().positive().optional(),
+  backboneDigest: ContentDigest.optional(),
+  randomness: z
+    .union([
+      z.object({
+        backend: z.literal("jax"),
+        initialKey: z.literal(0),
+        scope: z.literal("service"),
+      }),
+      z.object({ backend: z.literal("stateless"), scope: z.literal("stateless") }),
+      z.object({
+        backend: z.literal("torch"),
+        initialSeed: z.literal(0),
+        scope: z.literal("service"),
+      }),
+    ])
+    .default({ backend: "jax", initialKey: 0, scope: "service" }),
+  profile: SemanticProfile,
+  port: z.number().int().min(1).max(65535).default(8000),
+  callTimeoutSec: z.number().positive().default(300),
+  checkpointDigest: ContentDigest,
+  normalizationDigest: ContentDigest,
+  service: ServiceSpec.refine(
+    (service) => Boolean(service.healthcheck),
+    "a policy needs a readiness health check",
+  )
+    .refine(
+      (service) => Boolean(service.image && /(?:^|@)sha256:[a-f0-9]{64}$/.test(service.image)),
+      "a policy needs an immutable image ID or repository digest",
     )
-      .refine(
-        (service) => Boolean(service.image && /(?:^|@)sha256:[a-f0-9]{64}$/.test(service.image)),
-        "a policy needs an immutable image ID or repository digest",
-      )
-      .refine(
-        (service) => service.binds.length === 0,
-        "policy weights use a named dataset; host binds are unsupported",
-      )
-      .refine(
-        (service) =>
-          !service.gpusOf || (service.gpusOf === "main" && !service.role && !service.gpus),
-        "a shared policy must explicitly use main GPUs without its own role or GPU reservation",
-      ),
-    weights: z.object({ dataset: ProfileName, target: z.string().startsWith("/") }).optional(),
-  })
-  .superRefine((definition, ctx) => {
-    if (definition.connector === "openvla-ws") {
-      if (definition.replanSteps !== 8 || definition.ioAdapter !== "libero-native")
-        ctx.addIssue({
-          code: "custom",
-          message: "OpenVLA-OFT requires the explicit eight-step native LIBERO I/O recipe",
-        });
-      if (definition.kind === "model" && definition.randomness.backend !== "torch")
-        ctx.addIssue({
-          code: "custom",
-          message: "OpenVLA-OFT models require a torch random-stream declaration",
-        });
-    }
-    if (definition.connector !== "groot-zmq") return;
-    if (
-      !definition.replanSteps ||
-      !definition.ioAdapter ||
-      (definition.ioAdapter === "gr00t-flat" && !definition.profile.action.order?.length)
+    .refine(
+      (service) => service.binds.length === 0,
+      "policy weights use a named dataset; host binds are unsupported",
     )
-      ctx.addIssue({
-        code: "custom",
-        message: "GR00T requires an explicit execution horizon and action ordering",
-      });
-    if (
-      definition.kind === "model" &&
-      (definition.randomness.backend !== "torch" || !definition.backboneDigest)
-    )
-      ctx.addIssue({
-        code: "custom",
-        message: "GR00T models require a torch random-stream declaration and backbone digest",
-      });
-  });
+    .refine(
+      (service) => !service.gpusOf || (service.gpusOf === "main" && !service.role && !service.gpus),
+      "a shared policy must explicitly use main GPUs without its own role or GPU reservation",
+    ),
+  weights: z.object({ dataset: ProfileName, target: z.string().startsWith("/") }).optional(),
+});
 export type PolicyDefinition = z.infer<typeof PolicyDefinition>;
 export type PolicyDefinitionInput = z.input<typeof PolicyDefinition>;
 export const PolicyList = z.object({ policies: z.array(PolicyDefinition) });

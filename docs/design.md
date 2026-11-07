@@ -244,7 +244,8 @@ alternate（兼容 linked worktree），结束或失败后删除，不向用户�
 提交时发出 warning 事件，CLI show 与 Web Code 页提示子模块内容未被快照。数据和权重不进快照，用命名 dataset 只读挂载。
 
 **容器**：GPU 优先用 CDI（`--device nvidia.com/gpu=<UUID>`，Docker `info.CDISpecDirs` 声明的目录中存在
-NVIDIA spec 时）；未启用或能力查询失败则用 `--gpus device=<UUID>`，不能只凭本机文件判定。启动后核对 `nvidia-smi -L` 与租约一致。默认以宿主用户
+NVIDIA spec 时）；未启用或能力查询失败则用 `--gpus device=<UUID>`，不能只凭本机文件判定。首次使用时探测，
+Docker 应答后固定结果；查询失败（如 daemon 先于 Docker 启动）至多每分钟重试一次。启动后核对 `nvidia-smi -L` 与租约一致。默认以宿主用户
 `uid:gid` 运行（产物归属正确），`--root` 例外。每个 Run 的记录目录挂载为 `/orbit`（rw）。
 没有租到 GPU 的容器设置 `NVIDIA_VISIBLE_DEVICES=void`，避免镜像默认值暴露全部 GPU。`image` 本地不存在时先
 `docker pull`（输出写入 Run 日志），拉取失败记为环境失败。daemon 重启后重新附着容器时，日志截回启动时记录的
@@ -883,7 +884,7 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   采用重试结果时把旧 solve、verify、outcome 与评分历史存入 `Trial.priorAttempts`，保留原始失败证据及引用；
   资源统计对 Run 去重并注明整批测量。子集执行不是服务随机流批次的同条件重试。
 - SQLite 第 7 次迁移将 `trial_runs` 改为多引用。已有库升级前由 daemon 用 `VACUUM INTO` 创建包含已提交 WAL 的一致性备份，
-  在 `<db>.backups` 保存 0600 文件，独立打开检查完整性和版本；备份失败不迁移，迁移在单个事务中完成，失败回滚并停止启动。
+  在 `<db>.backups/v<版本>.sqlite` 保存 0600 文件（重试同版本迁移时替换，不累积），独立打开检查完整性和版本；备份失败不迁移，迁移在单个事务中完成，失败回滚并停止启动。
   固定批次及恢复说明见[批量运行](guides/embodied-batches.md)。跨 Run 模型池、共享 verify 和通用语义直连仍后置。
 - **接入验收预算**：端点协议正确性、benchmark 原生语义与模型完整套件成绩分别验证。新增 benchmark 先检查完整目录与资产清单，
   挑选代表任务做初始化、少量控制步及固定观测/动作、原生判定和正负例校准；全任务可启动性另记覆盖率，未验证的任务不宣称已验证。
@@ -897,8 +898,6 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   `calibrationExecutionEndedAt` 单独冻结评分工作的完成时间（含自动重评规划与执行），预算只覆盖到这里；清理等待不追加超时失败。
   自动完成入口重新核对全部 Trial 和所属 Run 已结束，避免重复回调把尚在规划的重评提前标成完成。
   `endedAt` 在清理确认后写入；报告通过 `budget.executionEndedAt`、CLI/Web 提示区分工作已结束和清理仍在进行。
-  旧作业缺少冻结时间且已手动重评时，按各样本首次评分及首样本首次自动重评的保留历史恢复原时间；
-  仅排除原验收结束后创建的 CPU 验证，不把后续手动重评计入原预算，也不凭旧完成标记跳过尚未完成的首次重评。
   报告显式标为 policy 接入，catalog 单独列出，不提升 benchmark 原生语义校准或 fidelity；原 empty/oracle 校准保持原行为。
   该入口只接受真实模型、2–5 个冻结样本及固定批次，禁止用归并拼成验收通过。使用方式见[轻量接入检查](guides/policy-integration-checks.md)。
   验证证据按实现、协议/profile、benchmark 源码及资产、镜像等身份限定复用范围；变更模型权重需重验模型路径，变更驱动语义需重验对应原生对照。

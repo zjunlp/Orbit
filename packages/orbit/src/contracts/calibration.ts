@@ -234,54 +234,7 @@ export function calibrationRunsClean(runs: ReadonlyMap<string, Run | null>): boo
   );
 }
 
-function legacyCalibrationEnd(
-  job: BenchJob,
-  trials: Trial[],
-  runs: ReadonlyMap<string, Run | null>,
-): string | null {
-  if (
-    job.state !== "done" ||
-    job.rescore?.state !== "done" ||
-    !trials.length ||
-    (job.spec.calibration?.rescore && job.rescore.note)
-  )
-    return null;
-  const required = new Set<string>();
-  const ends: number[] = [];
-  for (const [index, trial] of trials.entries()) {
-    // Original acceptance scores every episode, then rescores only the first one once.
-    const count = job.spec.calibration?.rescore && index === 0 ? 2 : 1;
-    const scores = [...trial.history, trial].slice(0, count);
-    if (!trial.solveRunId || scores.length !== count) return null;
-    required.add(trial.solveRunId);
-    for (const score of scores) {
-      if (!score.outcome || !score.verifyRunId || !score.endedAt) return null;
-      required.add(score.verifyRunId);
-      ends.push(Date.parse(score.endedAt));
-    }
-  }
-  for (const id of required) {
-    const run = runs.get(id);
-    if (!run || !isTerminal(run.state) || !run.endedAt) return null;
-    ends.push(Date.parse(run.endedAt));
-  }
-  if (ends.some((end) => !Number.isFinite(end))) return null;
-  const end = Math.max(...ends);
-  for (const [id, run] of runs) {
-    if (required.has(id)) continue;
-    // Only later CPU verification can be outside the original execution budget.
-    if (
-      run?.spec.tags.phase !== "verify" ||
-      run.spec.resources.gpus !== 0 ||
-      run.spec.services.length !== 0 ||
-      !(Date.parse(run.createdAt) >= end)
-    )
-      return null;
-  }
-  return new Date(end).toISOString();
-}
-
-/** Reconstruct legacy completion from execution timestamps, never from delayed cleanup. */
+/** Completion of the scored work from execution timestamps, never from delayed cleanup. */
 export function calibrationExecutionEnd(
   job: BenchJob,
   trials: Trial[],
@@ -289,8 +242,6 @@ export function calibrationExecutionEnd(
 ): string | null {
   if (job.spec.calibration?.mode !== "policy") return null;
   if (job.calibrationExecutionEndedAt) return job.calibrationExecutionEndedAt;
-  const legacy = legacyCalibrationEnd(job, trials, runs);
-  if (legacy) return legacy;
   if (
     job.state === "running" ||
     !trials.length ||

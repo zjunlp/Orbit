@@ -12,7 +12,7 @@ import type {
   ReportEntry,
   Trial,
 } from "../contracts/index.ts";
-import { sampleIdentity, sampleKey, sampleOrder } from "../contracts/index.ts";
+import { planRank, sampleIdentity, sampleKey, sampleOrder } from "../contracts/index.ts";
 import {
   aggregate,
   metricValue,
@@ -226,6 +226,7 @@ export function buildReport(
 ): BenchReport {
   const metric = primaryMetric(resolveMetrics(job.metrics)).name;
   const rule = job.official ?? null;
+  const rank = planRank(job.spec.samplePlan);
   return {
     jobId: job.id,
     revision,
@@ -238,7 +239,7 @@ export function buildReport(
     methods: job.spec.methods.map(({ name }) => {
       const ts = trials
         .filter((t) => t.method === name)
-        .sort((a, b) => a.task.localeCompare(b.task) || sampleOrder(a, b));
+        .sort((a, b) => a.task.localeCompare(b.task) || sampleOrder(a, b, rank));
       const entries = ts.map((t) => entry(t, metric));
       const count = (e: ReportEntry["evaluation"]) =>
         entries.filter((x) => x.evaluation === e).length;
