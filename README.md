@@ -461,6 +461,7 @@ Orbit is in early development (0.1.1). See [project status](docs/status.md) for 
 | --- | --- |
 | Connect agents and manage plugins | [Plugin guide](plugin/README.md) |
 | Add a benchmark or size task resources | [Benchmark adapter guide](docs/guides/bench-adapter.md) |
+| Add an embodied policy or native benchmark | [Onboarding templates](docs/guides/embodied-onboarding.md) · [Compatibility matrix](docs/guides/embodied-compatibility.md) |
 | Connect several machines | [Multi-node guide](docs/guides/multi-node.md) |
 | Understand architecture and support | [Design](docs/design.md) · [Project status](docs/status.md) |
 | Build and publish a package | [Release guide](docs/guides/releasing.md) |
