@@ -149,7 +149,7 @@ it("freezes the OpenVLA-OFT recipe without adding fields to existing policy snap
   ).toBe(false);
 });
 
-it("binds a RoboCasa OpenPI policy with the native observation and action profile", () => {
+it("binds OpenPI and GR00T policies with the native RoboCasa observation and action profile", () => {
   const recipe = JSON.parse(
     readFileSync(
       new URL(
@@ -170,6 +170,17 @@ it("binds a RoboCasa OpenPI policy with the native observation and action profil
     resolveBinding(recipe.benchmarkProfile, parsed.profile, recipe.observationMap),
   ).toBeTruthy();
   expect(PolicyDefinition.safeParse({ ...input, connector: "groot-zmq" }).success).toBe(false);
+  const groot = PolicyDefinition.parse({
+    ...input,
+    connector: "groot-zmq",
+    replanSteps: 16,
+    backboneDigest: `sha256:${"c".repeat(64)}`,
+    randomness: { backend: "torch", initialSeed: 0, scope: "service" },
+    profile: { ...recipe.benchmarkProfile, id: "gr00t-n15-robocasa365-input/1" },
+  });
+  expect(
+    resolveBinding(recipe.benchmarkProfile, groot.profile, recipe.observationMap),
+  ).toBeTruthy();
   expect(() =>
     resolveBinding(recipe.benchmarkProfile, policyProfile, recipe.observationMap),
   ).toThrow();

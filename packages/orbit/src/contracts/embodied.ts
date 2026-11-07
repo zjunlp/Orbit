@@ -126,8 +126,6 @@ export const PolicyDefinition = z
     weights: z.object({ dataset: ProfileName, target: z.string().startsWith("/") }).optional(),
   })
   .superRefine((definition, ctx) => {
-    if (definition.ioAdapter === "robocasa-native" && definition.connector !== "openpi-ws")
-      ctx.addIssue({ code: "custom", message: "The RoboCasa I/O adapter requires OpenPI" });
     if (definition.normalizationKey && definition.connector !== "openvla-ws")
       ctx.addIssue({
         code: "custom",

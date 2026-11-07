@@ -136,9 +136,19 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         if initial["sampleRef"] != sample_ref or initial["initialStateId"] != contract["sample"].get("initialStateId") or initial["initialStateDigest"] != contract["sample"].get("initialStateDigest"):
             raise ValueError("initial-state evidence differs from the sample plan")
     rule = contract["identity"].get("reference", {}).get("parameters", {}).get("successRule", "last")
-    if rule not in ("last", "any"):
+    if rule not in ("last", "any", "chunk-last-any"):
         raise ValueError("unsupported native success aggregation")
-    success = any(row["nativeSuccess"] for row in controls) if rule == "any" else bool(controls and controls[-1]["nativeSuccess"])
+    if rule == "chunk-last-any":
+        if result["valid"] and not controls[-1]["terminated"]:
+            raise ValueError("chunked episode has no terminal control step")
+        boundaries = controls[contract["replanSteps"] - 1::contract["replanSteps"]]
+        if controls and len(controls) % contract["replanSteps"]:
+            boundaries.append(controls[-1])
+        success = any(row["nativeSuccess"] for row in boundaries)
+    elif rule == "any":
+        success = any(row["nativeSuccess"] for row in controls)
+    else:
+        success = bool(controls and controls[-1]["nativeSuccess"])
     if result["valid"] and result["success"] != success:
         raise ValueError("native verdict contradicts the declared control-step aggregation")
     if result["valid"] and not result["success"] and result["steps"] != contract["horizon"]:

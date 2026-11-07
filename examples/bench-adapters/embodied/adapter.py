@@ -96,7 +96,7 @@ def tasks(req):
                                             "Environment": config["image"], "Renderer": config.get("renderer", "osmesa"),
                                             "Randomness": "fresh policy service per solve Run; fixed batches advance its declared stream in frozen order"}},
             "official": {"name": reference.get("scoreName", "OpenPI LIBERO success"), "version": source["commit"],
-                         "errors": "fail", "unit": reference.get("scoreUnit", "sample")}}
+                         "errors": reference.get("scoreErrors", "fail"), "unit": reference.get("scoreUnit", "sample")}}
 
 
 def stage(req):

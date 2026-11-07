@@ -884,6 +884,9 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   每个求解容器用链接视图为原生仿真生成的临时 XML 提供可写目录。
   `openpi-ws` 模型客户端的 `robocasa-native` I/O recipe 打包三路相机和 16 维状态，动作保持原生 12 维。评测复用冻结样本、
   固定批次、独立 CPU 验证与重评。原生统计按任务聚合，错误计入失败。见 [RoboCasa365 接入说明](../examples/bench-adapters/embodied/ROBOCASA365.md)。
+  GR00T N1.5 使用同一个环境 driver，评测 recipe 固定 RoboCasa 1.0.1 和原生 horizon。模型客户端通过 `groot-zmq` 发送原生
+  观测并把五组动作字段按固定顺序拼接为 12 维控制。每 16 步重规划，以任一动作段末尾的原生成功信号为准，并保留每步证据。
+  此 recipe 的统计排除无效 episode。两条 recipe 分别登记，模型和仿真条件各自固定。
   原生任务初始化覆盖、有限样本模型接入验证与完整套件统计是三个独立范围，见[套件说明](guides/libero-suites.md)。
 - D2a 固定批次使用 `BenchJob.spec.batchSize`（默认不启用）；按方法、计划顺序及相同资源覆盖拆分，成员与 attemptId、episodeId、
   完整清单摘要在提交时冻结。`solve` 适配请求的可选 `batch` 带完整有序 Trial 上下文，运行中不追加成员。模型服务每 Run 启动一次；

@@ -7,6 +7,10 @@ import numpy as np
 from .wire import pack, unpack
 
 LIBERO_ORDER = ["x", "y", "z", "roll", "pitch", "yaw", "gripper"]
+ROBOCASA_ACTIONS = {
+    "end_effector_position": 3, "end_effector_rotation": 3, "gripper_close": 1,
+    "base_motion": 4, "control_mode": 1,
+}
 
 
 def libero_inputs(observation):
@@ -28,8 +32,13 @@ class GrootClient:
         import zmq
         self.profile, self.replan_steps = profile, replan_steps
         self.io_adapter = io_adapter
-        self.order = LIBERO_ORDER if io_adapter == "libero-native" else profile["action"]["order"]
-        if io_adapter not in ("gr00t-flat", "libero-native"):
+        if io_adapter == "libero-native":
+            self.order = LIBERO_ORDER
+        elif io_adapter == "robocasa-native":
+            self.order = list(ROBOCASA_ACTIONS)
+        elif io_adapter == "gr00t-flat":
+            self.order = profile["action"]["order"]
+        else:
             raise ValueError("unsupported GR00T I/O adapter")
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
@@ -51,7 +60,7 @@ class GrootClient:
                 if modalities[key]["delta_indices"] != [0]:
                     raise ValueError("this connector requires single-observation temporal inputs")
                 required = {name if key == "language" else key + "." + name for name in modalities[key]["modality_keys"]}
-                provided = set(profile["observations"]) if io_adapter == "gr00t-flat" else {
+                provided = set(profile["observations"]) if io_adapter != "libero-native" else {
                     "video.image", "video.wrist_image", "state.x", "state.y", "state.z",
                     "state.roll", "state.pitch", "state.yaw", "state.gripper",
                     "annotation.human.action.task_description"}
@@ -105,6 +114,8 @@ class GrootClient:
             value = np.asarray(actions["action." + name])
             if value.ndim != 3 or value.shape[0] != 1:
                 raise ValueError("GR00T action field requires shape (1, horizon, dimension)")
+            if self.io_adapter == "robocasa-native" and value.shape[2] != ROBOCASA_ACTIONS[name]:
+                raise ValueError("RoboCasa GR00T action field has the wrong width: " + name)
             fields.append(value[0])
         chunk = np.concatenate(fields, axis=-1)
         if chunk.dtype.kind not in "buif" or not np.isfinite(chunk).all():

@@ -1,0 +1,44 @@
+{
+  "source": {
+    "repository": "https://github.com/robocasa-benchmark/Isaac-GR00T.git",
+    "commit": "9d7d7a9eb7ad30bd8ce30448d9ab53a918b45b10",
+    "files": {
+      "scripts/run_eval.py": "sha256:db6a47a61837c7cbc66e823855ffb582e76f1ba8c33846f2b7c66aa9b3c7a95e",
+      "gr00t/eval/simulation.py": "sha256:da6dd610d169a84717393769cd4b6ec19bb1872022634a1e9cd8cc9beb539111",
+      "gr00t/eval/wrappers/multistep_wrapper.py": "sha256:18d583355cc3580930b0436987469767863d10b0d95903454de1be3baa6d02d1",
+      "gr00t/experiment/data_config.py": "sha256:83107d265debc96b4215e31a10fbb522f090203dec2672b0a7a1969e5ee33ee9",
+      "gr00t/model/policy.py": "sha256:c6bd0bfb1356ac0185d2c6971dbc1208d01e84cb2b70854bd00fa80c3fb5c6c1",
+      "gr00t/model/transforms.py": "sha256:c3a8b3b04a36046f723787a013a61aa951a1e9185dd33578f8bad26653e5416a",
+      "gr00t/data/transform/state_action.py": "sha256:c9279334313fb6b56b46953bb5811edc4f9ea8c705e3fcd2f0c5e9cc6eacf98c",
+      "gr00t/model/backbone/eagle_backbone.py": "sha256:553d642fe1b5f7fca0b4d09a719a8df76ee21cca864d6292336c7656c5bc0b50",
+      "gr00t/model/gr00t_n1.py": "sha256:1b4a9653f3818f7417f2e99aa558be0abf19dc1cd05e3d026a987dde294f8138",
+      "gr00t/eval/get_eval_stats.py": "sha256:2d8ccc0d331882ebbc4e6e0447731dd3ba2ebf733ff0d4c142980af60f3e3350"
+    }
+  },
+  "benchmark": {
+    "robocasaCommit": "f970a0aac4675a7e97ed5771cade4ade7044b2af",
+    "files": {
+      "robocasa/utils/dataset_registry.py": "sha256:23e8e31bb56bae80de86c34eafadfe32dd1e1eba6608376152ba9fdda5532a4b",
+      "robocasa/scripts/download_kitchen_assets.py": "sha256:60e4524869434d0391f4f8a9801b15408338a43bd18192bb68f5d2eae6531033"
+    }
+  },
+  "checkpoint": {
+    "repository": "robocasa/robocasa365_checkpoints",
+    "revision": "c484448aba1a9b60a04c9b0ca117241518ea69f3",
+    "prefix": "gr00t_n1-5/multitask_learning/checkpoint-120000",
+    "digest": "sha256:a9684a6d848b2a43aba6612a38047ea342262ea8e35a3f7b5b62a29c186be76f",
+    "normalizationDigest": "sha256:8be0fc606c9220356bad497feefc4ae4daaa05670acccc31caecaa7ae5590b69"
+  },
+  "backbone": {
+    "path": "gr00t/model/backbone/eagle2_hg_model",
+    "digest": "sha256:558df0ccdba3765b979bc9b5bf99ffd68174e4b8cba9d8b57c16656e02983afa"
+  },
+  "nativeProfile": "robocasa365-panda-omron-native/1",
+  "profileId": "gr00t-n15-robocasa365-input/1",
+  "replanSteps": 16,
+  "randomness": {
+    "backend": "torch",
+    "initialSeed": 0,
+    "scope": "service"
+  }
+}
