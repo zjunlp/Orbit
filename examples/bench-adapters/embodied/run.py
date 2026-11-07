@@ -7,6 +7,7 @@ import sys
 import time
 
 from orbit_embodied import digest, run_episode, verify_episode
+from orbit_embodied.binding import reference_horizon
 from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 
@@ -19,9 +20,12 @@ class LazyPolicy:
 
     def reset(self, sample):
         if self.definition["connector"] == "openpi-ws":
-            from orbit_embodied.openpi import OpenPIClient
+            from orbit_embodied.openpi import OpenPIClient, prepare_libero_observation, prepare_robocasa_observation
+            prepare = (prepare_robocasa_observation if self.definition.get("ioAdapter") == "robocasa-native"
+                       else prepare_libero_observation)
             self.client = OpenPIClient("ws://policy:" + str(self.definition["port"]),
-                                      timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps)
+                                      timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps,
+                                      prepare=prepare)
         elif self.definition["connector"] == "groot-zmq":
             from orbit_embodied.groot import GrootClient
             self.client = GrootClient("tcp://policy:" + str(self.definition["port"]), self.definition["profile"],
@@ -108,17 +112,21 @@ def main(argv):
 
 def execute_episode(request, destination, cancelled=None):
     sample = request["sample"]
-    if sample["benchmarkProfile"] != request["reference"]["id"]:
+    reference = request["reference"]
+    if sample["benchmarkProfile"] != reference["id"]:
         raise ValueError("sample evaluation profile differs from the frozen reference")
-    if request["reference"].get("environment", {}).get("kind") == "registered-gym":
+    kind = reference.get("environment", {}).get("kind")
+    if kind == "registered-gym":
         from orbit_embodied.gym import GymBenchmark
-        benchmark = GymBenchmark(request["reference"], sample["taskId"])
-        expected_horizon = request["reference"]["environment"]["horizon"]
+        benchmark = GymBenchmark(reference, sample["taskId"])
+    elif kind == "robocasa365":
+        from orbit_embodied.robocasa import RoboCasaBenchmark
+        benchmark = RoboCasaBenchmark(reference, sample["taskId"])
     else:
         from orbit_embodied.libero import LiberoBenchmark
         suite, name = sample["taskId"].split(":", 1)
         benchmark = LiberoBenchmark(suite, name)
-        expected_horizon = request["reference"]["horizons"][suite]
+    expected_horizon = reference_horizon(reference, sample["taskId"])
     policy = LazyPolicy(request["policy"])
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]

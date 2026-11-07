@@ -155,6 +155,32 @@ it("freezes the OpenVLA-OFT recipe without adding fields to existing policy snap
   expect(registrable({ ...original, normalizationKey: "libero_object_no_noops" })).toBe(false);
 });
 
+it("binds a RoboCasa OpenPI policy with the native observation and action profile", () => {
+  const recipe = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../examples/bench-adapters/embodied/profiles/robocasa365-atomic-seen.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const input = {
+    ...policy(),
+    ioAdapter: "robocasa-native",
+    replanSteps: 5,
+    profile: { ...recipe.benchmarkProfile, id: "openpi-robocasa365-input/1" },
+  };
+  const parsed = PolicyDefinition.parse(input);
+  expect(
+    resolveBinding(recipe.benchmarkProfile, parsed.profile, recipe.observationMap),
+  ).toBeTruthy();
+  expect(registrable({ ...input, connector: "groot-zmq" })).toBe(false);
+  expect(() =>
+    resolveBinding(recipe.benchmarkProfile, policyProfile, recipe.observationMap),
+  ).toThrow();
+});
+
 function comparisonFixture() {
   const job = BenchJob.parse({
     id: "synthetic-job",

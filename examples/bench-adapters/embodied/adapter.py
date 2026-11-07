@@ -14,7 +14,7 @@ SDK = HERE.parents[1] / "sdk"
 sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
-from orbit_embodied.binding import check_sample, file_digest, seed_asset
+from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, seed_asset
 
 
 def implementation_digest():
@@ -72,7 +72,7 @@ def tasks(req):
     root, config, reference = settings(req)
     suite = config.get("suite", "libero_spatial")
     environment = reference.get("environment", {})
-    if environment.get("kind") == "registered-gym":
+    if environment.get("kind") in GENERATED_ENVIRONMENTS:
         listing = [{"id": task, "title": task.split("/")[-1].replace("_", " "),
                     "supported": True, "reason": None, "tags": {"initialStateDigest": seed_asset(reference, task)}}
                    for task in environment["tasks"]]
@@ -91,7 +91,7 @@ def tasks(req):
                                             "Environment": config["image"], "Renderer": config.get("renderer", "osmesa"),
                                             "Randomness": "fresh policy service per solve Run; fixed batches advance its declared stream in frozen order"}},
             "official": {"name": reference.get("scoreName", "OpenPI LIBERO success"), "version": source["commit"],
-                         "errors": "fail", "unit": "sample"}}
+                         "errors": "fail", "unit": reference.get("scoreUnit", "sample")}}
 
 
 def stage(req):
@@ -131,6 +131,10 @@ def solve_one(req):
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
             raise ValueError("simGpuMemGB needs a GPU simulator and a finite positive budget")
         resources["gpuMemGB"] = memory
+    mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
+    assets = reference.get("environment", {}).get("assets")
+    if assets:
+        mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim",
@@ -139,7 +143,7 @@ def solve_one(req):
                      "resources": resources,
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
                      "tags": {"embodied_evidence": "2"},
-                     "mounts": [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]}}
+                     "mounts": mounts}}
 
 
 def solve(req):
@@ -151,8 +155,7 @@ def solve(req):
         raise ValueError("batch plan digest mismatch")
     if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
         raise ValueError("batch membership or leader mismatch")
-    if reference_profile(req["benchmark"]["config"]).get("environment", {}).get("kind") == "registered-gym":
-        from orbit_embodied.binding import check_distinct_resets
+    if reference_profile(req["benchmark"]["config"]).get("environment", {}).get("kind") in GENERATED_ENVIRONMENTS:
         check_distinct_resets([trial["sample"] for trial in trials])
     payloads, reply = [], None
     for index, (trial, member) in enumerate(zip(trials, plan["members"])):

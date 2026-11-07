@@ -11,9 +11,11 @@ from unittest.mock import patch
 import numpy as np
 
 from orbit_embodied import digest, resolve_binding, run_episode, verify_episode
+from orbit_embodied.assets import tree_digest
 from orbit_embodied.binding import check_distinct_resets, seed_asset
 from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.gym import GymBenchmark
+from orbit_embodied.robocasa import prepare_assets
 
 
 REFERENCE = json.loads((Path(__file__).resolve().parents[2] / "bench-adapters/embodied/profiles/groot-widowx.json").read_text())
@@ -69,6 +71,24 @@ class Policy:
 
 
 class GymTests(unittest.TestCase):
+    def test_robocasa_can_write_transient_xml_beside_read_only_objects(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset, view = root / "dataset", root / "view"
+            original = dataset / "objects" / "bottle" / "model.xml"
+            original.parent.mkdir(parents=True)
+            original.write_text("<mujoco/>")
+            expected = tree_digest(dataset)
+            with self.assertRaisesRegex(ValueError, "frozen reference"):
+                prepare_assets(str(dataset), str(view), "wrong digest")
+            prepare_assets(str(dataset), str(view), expected)
+            model = view / original.relative_to(dataset)
+            self.assertTrue(model.is_symlink())
+            self.assertEqual(model.read_text(), original.read_text())
+            model.with_name("scaled.xml").write_text("<mujoco/>")
+            self.assertEqual(tree_digest(dataset), expected)
+            prepare_assets(str(dataset), str(view), expected)
+
     def test_reset_identity_macro_step_success_and_native_actions_are_preserved(self):
         reference = copy.deepcopy(REFERENCE)
         task = reference["environment"]["tasks"][0]

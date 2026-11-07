@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365")
+
 
 def digest(value):
     content = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False, ensure_ascii=False)
@@ -26,7 +28,17 @@ def check_sample(sample, sample_ref):
 
 
 def seed_asset(reference, task):
+    assets = reference["environment"].get("assets")
+    if assets and not assets.get("digest"):
+        raise ValueError("use the generated reference with the frozen environment asset digest")
     return digest({"reset": "environmentSeed+initialStateId", "task": task, "profile": digest(reference)})
+
+
+def reference_horizon(reference, task):
+    environment = reference.get("environment", {})
+    if "horizons" in environment:
+        return environment["horizons"][task]
+    return environment.get("horizon", reference.get("horizons", {}).get(task.split(":")[0]))
 
 
 def resolve_binding(benchmark, policy, observation_map):
