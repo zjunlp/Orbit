@@ -6,7 +6,7 @@ import importlib
 from pathlib import Path
 import numpy as np
 
-from .binding import seed_asset
+from .binding import reset_seed, seed_asset
 from .driver import StepResult
 
 
@@ -43,7 +43,7 @@ class GymBenchmark:
             self.native_action = np.asarray(action).tolist()
             return step(action, *args, **kwargs)
         native.step = record
-        observation, _info = self.env.reset(seed=sample["environmentSeed"] + int(sample["initialStateId"]))
+        observation, _info = self.env.reset(seed=reset_seed(sample))
         return self.observation(observation)
 
     def observation(self, raw):

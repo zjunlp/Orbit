@@ -125,6 +125,21 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(self.verify()["steps"], 3)
         self.assertFalse(result["valid"])
 
+    def test_converted_actions_keep_raw_output_and_are_audited(self):
+        class Converting(SyntheticPolicy):
+            conversion = "libero-gripper"
+
+        result = self.run_sample(SyntheticBenchmark(success_at=2), Converting())
+        raw = np.load(self.output / "chunks/0.raw.npy")
+        executed = np.load(self.output / "chunks/0.npy")
+        np.testing.assert_array_equal(raw[:, :-1], executed[:, :-1])
+        np.testing.assert_array_equal(executed[:, -1], -np.sign(2 * raw[:, -1] - 1))
+        self.assertTrue(self.verify()["success"])
+        np.save(self.output / "chunks/0.raw.npy", raw + 1, allow_pickle=False)
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "conversion"):
+            self.verify()
+
     def test_final_step_past_the_episode_deadline_is_invalid(self):
         import time
 

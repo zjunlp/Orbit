@@ -11,7 +11,7 @@ from unittest.mock import patch
 import numpy as np
 
 from orbit_embodied import digest, resolve_binding, run_episode, verify_episode
-from orbit_embodied.binding import seed_asset
+from orbit_embodied.binding import check_distinct_resets, seed_asset
 from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.gym import GymBenchmark
 
@@ -20,26 +20,30 @@ REFERENCE = json.loads((Path(__file__).resolve().parents[2] / "bench-adapters/em
 
 
 class Native:
-    def __init__(self):
+    def __init__(self, truncate_at=None):
         self.steps = 0
+        self.truncate_at = truncate_at
 
     def step(self, command):
         self.steps += 1
         observation = {name: "synthetic task" if description["dtype"] == "string" else
                        np.zeros(description["shape"], dtype=description["dtype"])
                        for name, description in REFERENCE["benchmarkProfile"]["observations"].items()}
+        if self.truncate_at is not None:
+            return observation, 0., False, self.steps == self.truncate_at, {"success": False}
         return observation, 0., False, False, {"success": self.steps == 2}
 
 
 class Wrapper:
-    def __init__(self):
-        self.env, self.unwrapped = Native(), self
+    def __init__(self, truncate_at=None):
+        self.env, self.unwrapped = Native(truncate_at), self
         self.seed, self.closed = None, False
 
     def reset(self, seed):
         self.seed = seed
+        truncate_at, self.env.truncate_at = self.env.truncate_at, None
         observation = self.env.step(np.zeros(7))[0]
-        self.env.steps = 0
+        self.env.steps, self.env.truncate_at = 0, truncate_at
         return observation, {}
 
     def step(self, action):
@@ -95,6 +99,39 @@ class GymTests(unittest.TestCase):
             seal(directory, result)
             with self.assertRaisesRegex(ValueError, "execution horizon"):
                 verify_episode(directory, sample["sampleId"], result["episodeId"])
+
+    def episode(self, wrapper, directory):
+        reference = copy.deepcopy(REFERENCE)
+        task = reference["environment"]["tasks"][0]
+        content = {"taskId": task, "benchmarkProfile": reference["id"], "initialStateId": "1",
+                   "initialStateDigest": seed_asset(reference, task), "environmentSeed": 7, "policySeed": 0, "repetition": 0}
+        sample = {**content, "sampleId": digest(content)}
+        binding = resolve_binding(reference["benchmarkProfile"], reference["policyProfile"], reference["observationMap"])
+        module = types.SimpleNamespace(register_simpler_envs=lambda: None)
+        gym = types.SimpleNamespace(make=lambda name: wrapper)
+        with patch.dict("sys.modules", {reference["environment"]["registration"]: module, "gymnasium": gym}):
+            result = run_episode(GymBenchmark(reference, task), Policy(), sample, binding, directory,
+                                 "synthetic-trial.attempt", {"reference": reference})
+        return sample, result
+
+    def test_native_truncation_before_horizon_is_a_valid_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "episode"
+            sample, result = self.episode(Wrapper(truncate_at=3), directory)
+            self.assertTrue(result["valid"])
+            self.assertFalse(result["success"])
+            self.assertEqual(result["steps"], 3)
+            verdict = verify_episode(directory, sample["sampleId"], result["episodeId"])
+            self.assertTrue(verdict["valid"] and not verdict["success"])
+
+    def test_samples_aliasing_one_native_reset_are_rejected(self):
+        def sample(seed, state):
+            content = {"taskId": "t", "benchmarkProfile": "p", "initialStateId": str(state),
+                       "initialStateDigest": "sha256:" + "a" * 64, "environmentSeed": seed, "policySeed": 0, "repetition": 0}
+            return {**content, "sampleId": digest(content)}
+        check_distinct_resets([sample(7, 0), sample(7, 1)])
+        with self.assertRaisesRegex(ValueError, "same native reset"):
+            check_distinct_resets([sample(7, 1), sample(8, 0)])
 
 
 if __name__ == "__main__":

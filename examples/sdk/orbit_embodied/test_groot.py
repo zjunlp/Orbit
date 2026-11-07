@@ -12,6 +12,7 @@ import zmq
 
 from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.groot import GrootClient, libero_inputs, pack, unpack
+from orbit_embodied.openpi import CONVERSIONS
 
 
 REFERENCE = json.loads((Path(__file__).resolve().parents[2] / "bench-adapters/embodied/profiles/groot-widowx.json").read_text())
@@ -35,7 +36,7 @@ class Endpoint:
             self.profile["observations"]["video.wrist_image"] = {}
             self.profile["observations"].pop("state.pad")
         self.requests, self.inputs = [], None
-        self.thread = threading.Thread(target=self.run)
+        self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
 
     def run(self):
@@ -241,8 +242,10 @@ class GrootTests(unittest.TestCase):
             chunk = client.act({"front_rgb": camera, "wrist_rgb": camera.copy(),
                 "eef_position": np.zeros(3), "eef_quaternion": np.array([0., 0., 0., 1.]),
                 "gripper_position": np.array([.01, .02]), "instruction": "test"})
-            np.testing.assert_array_equal(chunk[:, :6], np.tile(np.arange(6), (16, 1)))
-            np.testing.assert_array_equal(chunk[:, 6], -np.ones(16))
+            self.assertEqual(client.conversion, "libero-gripper")
+            native = CONVERSIONS[client.conversion](chunk)
+            np.testing.assert_array_equal(native[:, :6], np.tile(np.arange(6), (16, 1)))
+            np.testing.assert_array_equal(native[:, 6], -np.ones(16))
             np.testing.assert_array_equal(server.inputs["video.image"][0, 0], camera[::-1, ::-1])
             self.assertEqual(server.inputs["state.gripper"].shape, (1, 1, 2))
         finally:

@@ -123,8 +123,16 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     if requested.dtype.kind not in "buif":
                         write_json(chunks / (str(call) + ".rejected.json"), {"dtype": str(requested.dtype), "shape": list(requested.shape), "preview": repr(requested)[:500]})
                         raise ValueError("policy returned non-numeric actions")
+                    timing = {"sourceObservation": step, "inferSeconds": elapsed}
+                    conversion = getattr(policy, "conversion", None)
+                    if conversion is not None:
+                        from .openpi import CONVERSIONS
+                        # Keep the model's own output so a rescore can audit the native conversion.
+                        np.save(chunks / (str(call) + ".raw.npy"), requested, allow_pickle=False)
+                        requested = CONVERSIONS[conversion](requested)
+                        timing["conversion"] = conversion
                     np.save(chunks / (str(call) + ".npy"), requested, allow_pickle=False)
-                    write_json(chunks / (str(call) + ".json"), {"sourceObservation": step, "inferSeconds": elapsed})
+                    write_json(chunks / (str(call) + ".json"), timing)
                     if requested.ndim != 2 or requested.shape[1] != benchmark.action_size or len(requested) < policy.replan_steps or not np.isfinite(requested).all():
                         raise ValueError("policy action chunk has invalid shape, length or non-finite values")
                     chunk, chunk_index = requested[:policy.replan_steps], 0

@@ -10,10 +10,10 @@ LIBERO_ORDER = ["x", "y", "z", "roll", "pitch", "yaw", "gripper"]
 
 
 def libero_inputs(observation):
-    from .openpi import quaternion_to_axis_angle
+    from .openpi import libero_rgb, quaternion_to_axis_angle
     rotation = quaternion_to_axis_angle(observation["eef_quaternion"])
-    result = {"video.image": np.ascontiguousarray(observation["front_rgb"][::-1, ::-1]),
-              "video.wrist_image": np.ascontiguousarray(observation["wrist_rgb"][::-1, ::-1]),
+    result = {"video.image": libero_rgb(observation["front_rgb"]),
+              "video.wrist_image": libero_rgb(observation["wrist_rgb"]),
               "state.gripper": np.asarray(observation["gripper_position"], dtype=np.float32),
               "annotation.human.action.task_description": observation["instruction"]}
     for index, key in enumerate(("x", "y", "z")):
@@ -27,10 +27,11 @@ class GrootClient:
     def __init__(self, url, profile, *, timeout=120, replan_steps=8, io_adapter="gr00t-flat"):
         import zmq
         self.profile, self.replan_steps = profile, replan_steps
-        self.io_adapter = io_adapter
-        self.order = LIBERO_ORDER if io_adapter == "libero-native" else profile["action"]["order"]
         if io_adapter not in ("gr00t-flat", "libero-native"):
             raise ValueError("unsupported GR00T I/O adapter")
+        self.io_adapter = io_adapter
+        self.order = LIBERO_ORDER if io_adapter == "libero-native" else profile["action"]["order"]
+        self.conversion = "libero-gripper" if io_adapter == "libero-native" else None
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
         self.socket.setsockopt(zmq.LINGER, 0)
@@ -111,8 +112,6 @@ class GrootClient:
             from .driver import EpisodeFailure
             raise EpisodeFailure("policy_act", "GR00T returned non-numeric or non-finite raw actions",
                                  rejected_actions=chunk)
-        if self.io_adapter == "libero-native":
-            chunk[:, -1] = -np.sign(2 * chunk[:, -1] - 1)
         return chunk
 
     def close(self):

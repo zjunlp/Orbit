@@ -2,7 +2,6 @@
 """Orbit protocol 1 adapter: native environments, independent policy, one planned episode."""
 
 import ast
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -15,11 +14,7 @@ SDK = HERE.parents[1] / "sdk"
 sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
-from orbit_embodied.binding import check_sample, seed_asset
-
-
-def file_digest(path):
-    return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
+from orbit_embodied.binding import check_sample, file_digest, seed_asset
 
 
 def implementation_digest():
@@ -156,6 +151,9 @@ def solve(req):
         raise ValueError("batch plan digest mismatch")
     if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
         raise ValueError("batch membership or leader mismatch")
+    if reference_profile(req["benchmark"]["config"]).get("environment", {}).get("kind") == "registered-gym":
+        from orbit_embodied.binding import check_distinct_resets
+        check_distinct_resets([trial["sample"] for trial in trials])
     payloads, reply = [], None
     for index, (trial, member) in enumerate(zip(trials, plan["members"])):
         if (trial["id"] != member["trialId"] or trial["sampleRef"] != member["sampleRef"]
@@ -231,7 +229,7 @@ def verify(req):
                                  "/orbit-embodied/verify-request.json"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python"},
                      "resources": {"gpus": 0, "cpus": 1, "memGB": 1}, "timeoutMin": 2,
-                     "root": True, "network": False,
+                     "network": False,
                      "mounts": [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"},
                                 {"source": req["solve"]["output"], "target": "/solve", "mode": "ro"}]}}
 
