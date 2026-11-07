@@ -7,10 +7,7 @@ import numpy as np
 
 from .driver import StepResult
 from .evidence import file_digest
-
-
-HORIZONS = {"libero_spatial": 220, "libero_object": 280, "libero_goal": 300,
-            "libero_10": 520, "libero_90": 400}
+from .libero_suites import HORIZONS
 
 
 class LiberoBenchmark:

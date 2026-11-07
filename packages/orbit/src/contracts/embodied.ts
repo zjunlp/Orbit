@@ -107,6 +107,7 @@ export const PolicyDefinition = z.strictObject({
   callTimeoutSec: z.number().positive().default(300),
   checkpointDigest: ContentDigest,
   normalizationDigest: ContentDigest,
+  normalizationKey: z.string().min(1).optional(),
   service: ServiceSpec.refine(
     (service) => Boolean(service.healthcheck),
     "a policy needs a readiness health check",

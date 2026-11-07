@@ -12,12 +12,14 @@ from fetch_groot import fetch, read_json
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--model", choices=("spatial", "combined"), default="spatial")
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
     if not 1 <= args.workers <= 16:
         parser.error("workers must be between 1 and 16")
     reference = json.loads((Path(__file__).parent / "profiles/openvla-model.json").read_text())
-    repository, revision = reference["model"]["repository"], reference["model"]["revision"]
+    selected = reference["models"][args.model]
+    repository, revision = selected["repository"], selected["revision"]
     metadata = read_json("https://huggingface.co/api/models/" + repository + "/revision/" + revision + "?blobs=true")
     if metadata["sha"] != revision:
         raise ValueError("Hub metadata differs from the pinned model revision")

@@ -27,7 +27,10 @@ const CONNECTOR_RULES: Record<PolicyDefinition["connector"], (d: PolicyDefinitio
 };
 
 export function connectorIssues(definition: PolicyDefinition): string[] {
-  return CONNECTOR_RULES[definition.connector](definition);
+  const issues = CONNECTOR_RULES[definition.connector](definition);
+  if (definition.normalizationKey && definition.connector !== "openvla-ws")
+    issues.push("normalizationKey is supported by the OpenVLA connector");
+  return issues;
 }
 
 /** Persisted only by daemon routes, alongside the existing benchmark registry. */

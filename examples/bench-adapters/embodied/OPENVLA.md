@@ -6,7 +6,10 @@ checkpoint using [official OpenVLA-OFT inference functions](https://github.com/m
 It reuses Orbit's native LIBERO simulator, frozen semantic binding, fixed solve batches and
 independent CPU verification. It does not import vla-eval or launch an upstream evaluation loop.
 
-The supplied checkpoint supports **LIBERO Spatial**. Its independent policy profile accepts
+The default checkpoint supports **LIBERO Spatial**. `--model combined` selects the official
+joint Spatial/Object/Goal/Long checkpoint; `--suite` selects its matching normalization key and
+separate policy registration. See [suite selection](../../../docs/guides/libero-suites.md) for
+downloads and registration. Its independent policy profile accepts
 the same raw LIBERO observations and native actions as the existing policies. Camera rotation,
 quaternion conversion, official JPEG/Lanczos resize, 90% center crop, proprioception normalization
 and continuous L1 action head run in the model service. The client validates the entire raw
@@ -42,6 +45,8 @@ projector, and checks each against the pinned public Hub content hash. The LoRA 
 is unnecessary. Re-running the command validates completed files and resumes partial transfers.
 The launcher validates checkpoint and normalization digests, loads offline and permits the
 official loader to rewrite only a temporary checkpoint view. Original assets are mounted read-only.
+The frozen policy also carries `normalizationKey`; the client checks the server's selected key
+before inference, so suites sharing a checkpoint and statistics file remain distinguishable.
 TensorFlow image processing is restricted to CPU; Torch uses the leased GPU. The official
 default attention implementation is retained, with no FlashAttention requirement added.
 

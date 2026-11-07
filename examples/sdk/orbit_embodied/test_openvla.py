@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from unittest.mock import Mock, patch
 
 import numpy as np
 from websockets.sync.server import serve
@@ -22,6 +23,29 @@ def observation():
 
 
 class OpenVLATests(unittest.TestCase):
+    def test_same_checkpoint_with_the_wrong_normalization_key_is_rejected_before_inference(self):
+        path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/run.py"
+        spec = importlib.util.spec_from_file_location("embodied_run", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        identity = {"checkpointDigest": "checkpoint", "normalizationDigest": "statistics",
+                    "randomness": {"backend": "torch", "initialSeed": 0, "scope": "service"}}
+        definition = {"connector": "openvla-ws", "port": 8000, "callTimeoutSec": 1, "replanSteps": 8,
+                      "kind": "model", **identity, "normalizationKey": "libero_object_no_noops"}
+        for key, valid in (("libero_spatial_no_noops", False), ("libero_object_no_noops", True)):
+            client = Mock(metadata={"calibration": False, "orbit": identity, "unnormKey": key})
+            policy = module.LazyPolicy(definition)
+            with patch("orbit_embodied.openvla.OpenVLAClient", return_value=client):
+                if valid:
+                    policy.reset({"policySeed": 0})
+                    client.reset.assert_called_once()
+                else:
+                    with self.assertRaisesRegex(ValueError, "normalization key"):
+                        policy.reset({"policySeed": 0})
+                    client.reset.assert_not_called()
+                client.act.assert_not_called()
+            policy.close()
+
     def test_native_input_rotation_and_state_preserve_the_raw_observation(self):
         raw = observation()
         result = libero_inputs(raw)

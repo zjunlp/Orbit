@@ -17,7 +17,7 @@ fetcher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(fetcher)
 
 
-def configured_resources(root, *, shared, profile="widowx", simulator_memory=None):
+def configured_resources(root, *, shared, profile="widowx", simulator_memory=None, suite="libero_spatial"):
     """Synthetic assets and audit/image identities; exercise production configuration and planning."""
     adapter_spec = importlib.util.spec_from_file_location("resource_fixture_adapter", Path(SPEC.origin).with_name("adapter.py"))
     adapter = importlib.util.module_from_spec(adapter_spec)
@@ -28,7 +28,7 @@ def configured_resources(root, *, shared, profile="widowx", simulator_memory=Non
         config_spec.loader.exec_module(config)
     source, benchmark_source = root / "source", root / "benchmark"
     weights, output = root / "weights", root / "registrations"
-    checkpoint = weights / {"libero": "libero_spatial", "widowx": "bridge", "google": "fractal"}[profile]
+    checkpoint = weights / {"libero": suite, "widowx": "bridge", "google": "fractal"}[profile]
     checkpoint.mkdir(parents=True)
     (checkpoint / "model.safetensors.index.json").write_text(json.dumps({"weight_map": {"synthetic": "model.safetensors"}}))
     (checkpoint / "model.safetensors").write_bytes(b"explicit synthetic checkpoint")
@@ -44,7 +44,7 @@ def configured_resources(root, *, shared, profile="widowx", simulator_memory=Non
     argv = ["configure_groot.py", "--reference-source", str(source), "--weights", str(weights), "--profile", profile,
             "--policy-image", "synthetic", "--benchmark-image", "synthetic", "--output-dir", str(output)]
     if profile == "libero":
-        argv.extend(["--benchmark-source", str(benchmark_source)])
+        argv.extend(["--benchmark-source", str(benchmark_source), "--suite", suite])
     if shared:
         argv.append("--share-gpu")
     if simulator_memory is not None:
@@ -56,7 +56,7 @@ def configured_resources(root, *, shared, profile="widowx", simulator_memory=Non
     benchmark = json.loads((output / "benchmark.json").read_text())
     policy = json.loads((output / "policy.json").read_text())
     from orbit_embodied import digest, resolve_binding
-    task = "libero_spatial:synthetic" if profile == "libero" else reference["environment"]["tasks"][0]
+    task = suite + ":synthetic" if profile == "libero" else reference["environment"]["tasks"][0]
     content = {"taskId": task, "benchmarkProfile": reference["id"], "initialStateId": "0",
                "initialStateDigest": "sha256:" + "a" * 64, "environmentSeed": 7, "policySeed": 0, "repetition": 0}
     sample = {**content, "sampleId": digest(content)}

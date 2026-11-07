@@ -43,6 +43,9 @@ class LazyPolicy:
             raise ValueError("policy backbone identity differs from the frozen definition")
         if identity.get("randomness") != self.definition["randomness"]:
             raise ValueError("policy random-stream declaration does not match this reference")
+        if (self.definition.get("normalizationKey") is not None
+                and self.client.metadata.get("unnormKey") != self.definition["normalizationKey"]):
+            raise ValueError("policy normalization key differs from the frozen definition")
         self.client.reset(sample)
 
     @property

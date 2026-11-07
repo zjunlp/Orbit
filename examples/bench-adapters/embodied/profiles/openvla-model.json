@@ -33,5 +33,26 @@
   },
   "unnormKey": "libero_spatial_no_noops",
   "actionChunkSize": 8,
-  "ioAdapter": "libero-native"
+  "ioAdapter": "libero-native",
+  "models": {
+    "spatial": {
+      "repository": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+      "revision": "6d0231af0e48c5985f1ff86908f4674b84bc049b",
+      "checkpointStep": 150000,
+      "unnormKeys": {
+        "libero_spatial": "libero_spatial_no_noops"
+      }
+    },
+    "combined": {
+      "repository": "moojink/openvla-7b-oft-finetuned-libero-spatial-object-goal-10",
+      "revision": "638918f3d1c2e43a39a8a20772bdb8b91835e4b7",
+      "checkpointStep": 300000,
+      "unnormKeys": {
+        "libero_spatial": "libero_spatial_no_noops",
+        "libero_object": "libero_object_no_noops",
+        "libero_goal": "libero_goal_no_noops",
+        "libero_10": "libero_10_no_noops"
+      }
+    }
+  }
 }
