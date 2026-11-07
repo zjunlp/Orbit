@@ -138,6 +138,15 @@ it("freezes the OpenVLA-OFT recipe without adding fields to existing policy snap
   ])
     expect(PolicyDefinition.safeParse(changed).success).toBe(false);
   expect(PolicyDefinition.parse(original)).toEqual(original);
+  expect(original).not.toHaveProperty("normalizationKey");
+  expect(
+    PolicyDefinition.parse({ ...input, normalizationKey: "libero_object_no_noops" })
+      .normalizationKey,
+  ).toBe("libero_object_no_noops");
+  expect(PolicyDefinition.safeParse({ ...input, normalizationKey: "" }).success).toBe(false);
+  expect(
+    PolicyDefinition.safeParse({ ...original, normalizationKey: "libero_object_no_noops" }).success,
+  ).toBe(false);
 });
 
 function comparisonFixture() {

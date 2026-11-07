@@ -1,0 +1,107 @@
+# LIBERO suite selection
+
+Native LIBERO registrations support Spatial, Object, Goal and Long (the upstream `libero_10`
+identifier). Each suite uses the existing native driver and its pinned task catalog and initial
+states. Suite selection changes the task list and horizon, without changing the controller,
+raw observation profile, action interpretation or CPU evidence verifier.
+
+| Suite | CLI identifier | Tasks | Horizon | OpenPI recipe registration | OFT recipe registration |
+| --- | --- | --- | --- | --- | --- |
+| Spatial | `libero_spatial` | 10 | 220 | `libero-native` | `libero-oft-native` |
+| Object | `libero_object` | 10 | 280 | `libero-object-native` | `libero-oft-object-native` |
+| Goal | `libero_goal` | 10 | 300 | `libero-goal-native` | `libero-oft-goal-native` |
+| Long | `libero_10` | 10 | 520 | `libero-long-native` | `libero-oft-long-native` |
+
+The existing Spatial registration names remain the defaults. Additional suites get their own
+names, so adding Object does not overwrite the Spatial catalog. `LIBERO-90` is outside the
+matching-checkpoint coverage described here.
+
+## Model checkpoints
+
+| Model | Weights used across suites | Policy registration |
+| --- | --- | --- |
+| pi05 | The existing official `pi05_libero` checkpoint covers all four suites | `pi05-libero`, or `pi05-libero-shared` with `--share-gpu` |
+| GR00T N1.7 | Official matching `libero_spatial/`, `libero_object/`, `libero_goal/`, `libero_10/` subfolders | `groot-n17-libero`, `groot-n17-libero-object`, `groot-n17-libero-goal`, `groot-n17-libero-long` |
+| OpenVLA-OFT | The existing Spatial checkpoint, or the official joint Spatial/Object/Goal/Long checkpoint | `openvla-oft-libero-spatial`, or `openvla-oft-libero-combined-{spatial,object,goal,long}` |
+
+Pinned repositories and revisions are in [the GR00T model profile](../../examples/bench-adapters/embodied/profiles/groot-model.json)
+and [the OFT model profile](../../examples/bench-adapters/embodied/profiles/openvla-model.json).
+
+The joint OFT checkpoint stores four normalization keys. A configured policy selects exactly
+one suite key, records it as `normalizationKey`, and verifies the server's `unnormKey` handshake
+before inference. The checkpoint and normalization-file digests alone do not distinguish those
+four policies. Older policy snapshots without this optional field retain their original meaning.
+No normalization key is guessed from observation shapes or task names at runtime.
+
+A different checkpoint is a different model condition: the joint OFT model does not replace
+or inherit the verification status of the independently trained Spatial checkpoint. GR00T
+continues to use the existing OpenPI-pinned LIBERO runtime and recipe; OFT uses its explicit
+recipe. These remain distinct from full official-runtime or published-score equivalence.
+
+## Register a suite
+
+Keep sources, weights, generated configuration and audit outputs outside the checkout. Set the
+local variables used below to the corresponding locations. Follow the image and source setup in
+[the native adapter guide](../../examples/bench-adapters/embodied/README.md),
+[GR00T setup](../../examples/bench-adapters/embodied/GR00T.md) and
+[OpenVLA-OFT setup](../../examples/bench-adapters/embodied/OPENVLA.md).
+
+Use `SUITE=libero_object`, `libero_goal` or `libero_10` in these examples:
+
+```bash
+PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure.py \
+  --audit "$PI05_AUDIT" --reference-source "$OPENPI_SOURCE" --suite "$SUITE" \
+  --share-gpu --output-dir "$LOCAL_CONFIG/pi05/$SUITE"
+
+python3 examples/bench-adapters/embodied/fetch_groot.py \
+  --models libero_object libero_goal libero_10 backbone \
+  --source modelscope --output-dir "$GROOT_ASSETS"
+PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure_groot.py \
+  --reference-source "$GROOT_SOURCE" --benchmark-source "$OPENPI_SOURCE" \
+  --weights "$GROOT_ASSETS" --profile libero --suite "$SUITE" --share-gpu \
+  --policy-image orbit/groot-policy:reference --benchmark-image orbit/libero-zmq:reference \
+  --output-dir "$LOCAL_CONFIG/groot/$SUITE"
+
+python3 examples/bench-adapters/embodied/fetch_openvla.py --model combined \
+  --output-dir "$OFT_COMBINED_WEIGHTS"
+PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure_openvla.py \
+  --reference-source "$OPENVLA_SOURCE" --benchmark-source "$OPENPI_SOURCE" \
+  --weights "$OFT_COMBINED_WEIGHTS" --model combined --suite "$SUITE" --share-gpu \
+  --policy-image orbit/openvla-oft-policy:reference --benchmark-image orbit/libero-zmq:reference \
+  --output-dir "$LOCAL_CONFIG/oft/$SUITE"
+```
+
+The pi05 audit must cover its checkpoint and both runtime images. Its shared-GPU policy uses a
+separate name, preserving the default policy for CPU-rendered registrations. pi05 and GR00T
+produce the same native benchmark registration when source, suite, image and rendering options
+are equal. Register one such benchmark definition and the desired independent policies. Their
+named weight datasets are `pi05-libero` and `groot-n17`; the joint OFT checkpoint uses
+`openvla-oft-libero-combined`.
+
+For example, after configuring OFT for Object:
+
+```bash
+orbit data add openvla-oft-libero-combined "$OFT_COMBINED_WEIGHTS"
+orbit policy add "$LOCAL_CONFIG/oft/libero_object/policy.json"
+orbit bench add-file "$LOCAL_CONFIG/oft/libero_object/benchmark.json"
+python3 examples/bench-adapters/embodied/plan.py --reference-source "$OPENPI_SOURCE" \
+  --reference-file examples/bench-adapters/embodied/profiles/openvla-libero.json \
+  --suite libero_object --task "libero_object:$TASK_NAME" \
+  --initial-state 0 --initial-state 1 --environment-seed 0 \
+  > "$LOCAL_CONFIG/oft/libero_object/samples.json"
+orbit bench calibrate libero-oft-object-native --policy openvla-oft-libero-combined-object \
+  --sample-plan "$LOCAL_CONFIG/oft/libero_object/samples.json" --budget 20 --json
+```
+
+OpenPI/GR00T plans use `reference.json`, environment seed 7 and five-step replanning. OFT plans
+use `profiles/openvla-libero.json`, environment seed 0 and eight-step replanning. Task and initial
+state identities are frozen in the plan. The different recipes are different evaluation conditions;
+matching task names alone does not permit paired comparisons or merging.
+
+## Verification scope
+
+Catalog and native reset/control coverage are separate from model-path validation. Routine
+onboarding uses a bounded representative batch for each newly supported model/suite combination,
+independent CPU verification, selected rescore and resource cleanup. It does not certify every
+model/task pair, whole-suite success rates, official numerical parity or statistical equivalence.
+These larger studies require their own declared scope and compute budget.

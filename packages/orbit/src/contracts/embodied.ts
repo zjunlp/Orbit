@@ -105,6 +105,7 @@ export const PolicyDefinition = z
     callTimeoutSec: z.number().positive().default(300),
     checkpointDigest: ContentDigest,
     normalizationDigest: ContentDigest,
+    normalizationKey: z.string().min(1).optional(),
     service: ServiceSpec.refine(
       (service) => Boolean(service.healthcheck),
       "a policy needs a readiness health check",
@@ -125,6 +126,11 @@ export const PolicyDefinition = z
     weights: z.object({ dataset: ProfileName, target: z.string().startsWith("/") }).optional(),
   })
   .superRefine((definition, ctx) => {
+    if (definition.normalizationKey && definition.connector !== "openvla-ws")
+      ctx.addIssue({
+        code: "custom",
+        message: "normalizationKey is supported by the OpenVLA connector",
+      });
     if (definition.connector === "openvla-ws") {
       if (definition.replanSteps !== 8 || definition.ioAdapter !== "libero-native")
         ctx.addIssue({

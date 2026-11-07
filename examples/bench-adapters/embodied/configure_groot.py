@@ -8,6 +8,7 @@ import subprocess
 
 from adapter import HERE, digest, file_digest, implementation_digest, pinned
 from orbit_embodied.assets import tree_digest
+from orbit_embodied.libero_suites import SUITES, LABELS, benchmark_name
 
 
 def image_id(image):
@@ -23,12 +24,15 @@ def main():
     parser.add_argument("--benchmark-source", type=Path)
     parser.add_argument("--weights", type=Path, required=True)
     parser.add_argument("--profile", choices=("libero", "widowx", "google"), required=True)
+    parser.add_argument("--suite", choices=SUITES, default="libero_spatial")
     parser.add_argument("--policy-image", required=True)
     parser.add_argument("--benchmark-image", required=True)
     parser.add_argument("--share-gpu", action="store_true")
     parser.add_argument("--sim-gpu-mem-gb", type=float, default=4.0, help="Simulator memory budget per GPU in GB")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
+    if args.profile != "libero" and args.suite != "libero_spatial":
+        parser.error("--suite applies only to the LIBERO profile")
     if not math.isfinite(args.sim_gpu_mem_gb) or args.sim_gpu_mem_gb <= 0:
         parser.error("sim-gpu-mem-gb must be finite and positive")
     model_reference = json.loads((HERE / "profiles/groot-model.json").read_text())
@@ -43,7 +47,7 @@ def main():
     for name, expected in reference["reference"]["files"].items():
         if file_digest(root / name) != expected:
             raise ValueError("reference source content changed: " + name)
-    checkpoint = args.weights / {"libero": "libero_spatial", "widowx": "bridge", "google": "fractal"}[args.profile]
+    checkpoint = args.weights / {"libero": args.suite, "widowx": "bridge", "google": "fractal"}[args.profile]
     index = json.loads((checkpoint / "model.safetensors.index.json").read_text())
     if any(not (checkpoint / name).is_file() for name in set(index["weight_map"].values())):
         raise ValueError("checkpoint download is incomplete")
@@ -55,6 +59,8 @@ def main():
     model_image, benchmark_image = image_id(args.policy_image), image_id(args.benchmark_image)
     embodiment = {"libero": "LIBERO_PANDA", "widowx": "SIMPLER_ENV_WIDOWX", "google": "SIMPLER_ENV_GOOGLE"}[args.profile]
     name = "groot-n17-" + args.profile
+    if args.profile == "libero" and args.suite != "libero_spatial":
+        name += "-" + LABELS[args.suite]
     runtime_checkpoint = "/weights/" + checkpoint.name
     service = {
         "name": "policy", "image": model_image, "cpus": 4, "memGB": 32, "gpuMemGB": 24,
@@ -80,13 +86,15 @@ def main():
     }
     gpu_sim = args.profile != "libero" or args.share_gpu
     benchmark = {
-        "name": "libero-native" if args.profile == "libero" else "simpler-" + args.profile + "-native",
+        "name": benchmark_name(args.suite) if args.profile == "libero" else "simpler-" + args.profile + "-native",
         "adapter": str(HERE / "adapter.py"), "path": str(root),
         "config": {"image": benchmark_image, "python": "/.venv/bin/python" if args.profile == "libero" else "/usr/local/bin/python", "reference": json.dumps(reference),
                    "profileDigest": digest(reference), "implementationDigest": implementation_digest(),
                    "simGpus": "1" if gpu_sim else "0", "renderer": "vulkan" if args.profile != "libero" else "egl" if gpu_sim else "osmesa",
                    **({"simGpuMemGB": str(args.sim_gpu_mem_gb)} if gpu_sim else {})},
     }
+    if args.profile == "libero":
+        benchmark["config"]["suite"] = args.suite
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for filename, value in (("policy.json", policy), ("benchmark.json", benchmark), ("reference.json", reference)):
         (args.output_dir / filename).write_text(json.dumps(value, indent=2) + "\n")

@@ -412,6 +412,8 @@ function TrialConfiguration({ job, trial }: { job: BenchJob; trial: Trial }) {
     ["Execution horizon", method?.policySnapshot?.replanSteps],
     ["Backbone digest", method?.policySnapshot?.backboneDigest],
     ["Checkpoint digest", method?.policySnapshot?.checkpointDigest],
+    ["Normalization digest", method?.policySnapshot?.normalizationDigest],
+    ["Normalization key", method?.policySnapshot?.normalizationKey],
     ["Method", method?.name],
     ["Agent", method?.agent],
     ["Model", method?.model],

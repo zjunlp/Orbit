@@ -9,7 +9,9 @@ SimplerEnv wrapper. Neither path imports vla-eval or starts an upstream rollout 
 `profiles/groot-widowx.json` pins the SimplerEnv/ManiSkill source, seven WidowX Visual Matching
 tasks, control semantics and success reduction. LIBERO keeps `reference.json`, including its
 OpenPI-pinned simulator, 10 settle steps, suite horizons and 5-step replanning. The GR00T LIBERO
-checkpoint supplied here is trained for `libero_spatial`; this configuration does not reproduce
+checkpoints have separate weights for Spatial, Object, Goal and Long; `--suite` selects the
+matching subfolder and independent policy registration. Spatial remains the default. See
+[suite selection](../../../docs/guides/libero-suites.md). This configuration does not reproduce
 NVIDIA's distinct LIBERO evaluation protocol or claim statistical parity with its published scores.
 
 `profiles/groot-google.json` adds the six official Google Robot tasks with the Fractal checkpoint.
@@ -25,9 +27,10 @@ ManiSkill submodules. The existing OpenPI source/runtime from [README.md](README
 for LIBERO; do not replace its LIBERO submodule with NVIDIA's revision.
 
 ```bash
-python3 examples/bench-adapters/embodied/fetch_groot.py --output-dir "$GROOT_ASSETS"
+python3 examples/bench-adapters/embodied/fetch_groot.py --models libero_spatial bridge backbone \
+  --output-dir "$GROOT_ASSETS"
 # Alternatively, use the public nv-community ModelScope mirrors:
-python3 examples/bench-adapters/embodied/fetch_groot.py --source modelscope \
+python3 examples/bench-adapters/embodied/fetch_groot.py --models libero_spatial bridge backbone --source modelscope \
   --output-dir "$GROOT_ASSETS"
 
 docker build --label orbit.task=embodied-eval -f examples/bench-adapters/embodied/groot-base.Dockerfile \

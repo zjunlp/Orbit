@@ -8,9 +8,11 @@ remains unverified. See the task records for validation details.
 The existing vla-eval registrations remain separate.
 
 The additional GR00T connector reuses the same native LIBERO benchmark and supports native
-SimplerEnv WidowX. Provisioning and explicit evaluation conditions are in [GR00T.md](GR00T.md).
+SimplerEnv WidowX and Google Robot. Provisioning and explicit evaluation conditions are in [GR00T.md](GR00T.md).
 OpenVLA-OFT uses the same native LIBERO implementation with its own inference service and
 eight-step evaluation recipe; see [OPENVLA.md](OPENVLA.md).
+All three model families support Spatial, Object, Goal and Long through explicit suite and
+checkpoint selection; see [LIBERO suites](../../../docs/guides/libero-suites.md).
 
 The benchmark adapter lists official LIBERO tasks and runs one frozen sample per solve Run.
 Orbit adds the independently registered model service and leases both roles together. Verify
