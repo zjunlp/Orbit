@@ -28,17 +28,17 @@ def configured_resources(root, *, shared, profile="widowx", simulator_memory=Non
         config_spec.loader.exec_module(config)
     source, benchmark_source = root / "source", root / "benchmark"
     weights, output = root / "weights", root / "registrations"
-    checkpoint = weights / ("bridge" if profile == "widowx" else "libero_spatial")
+    checkpoint = weights / {"libero": "libero_spatial", "widowx": "bridge", "google": "fractal"}[profile]
     checkpoint.mkdir(parents=True)
     (checkpoint / "model.safetensors.index.json").write_text(json.dumps({"weight_map": {"synthetic": "model.safetensors"}}))
     (checkpoint / "model.safetensors").write_bytes(b"explicit synthetic checkpoint")
     (checkpoint / "statistics.json").write_text("{}")
     (weights / "hub").mkdir()
     (weights / "hub/backbone").write_bytes(b"explicit synthetic backbone")
-    reference = json.loads((adapter.HERE / ("profiles/groot-widowx.json" if profile == "widowx" else "reference.json")).read_text())
+    reference = json.loads((adapter.HERE / ("reference.json" if profile == "libero" else "profiles/groot-" + profile + ".json")).read_text())
     model = json.loads((adapter.HERE / "profiles/groot-model.json").read_text())
     audit = {(source / name).resolve(): expected for name, expected in model["files"].items()}
-    audit.update({((source if profile == "widowx" else benchmark_source) / name).resolve(): expected
+    audit.update({((benchmark_source if profile == "libero" else source) / name).resolve(): expected
                   for name, expected in reference["reference"]["files"].items()})
     original_digest = config.file_digest
     argv = ["configure_groot.py", "--reference-source", str(source), "--weights", str(weights), "--profile", profile,
@@ -56,7 +56,7 @@ def configured_resources(root, *, shared, profile="widowx", simulator_memory=Non
     benchmark = json.loads((output / "benchmark.json").read_text())
     policy = json.loads((output / "policy.json").read_text())
     from orbit_embodied import digest, resolve_binding
-    task = reference["environment"]["tasks"][0] if profile == "widowx" else "libero_spatial:synthetic"
+    task = "libero_spatial:synthetic" if profile == "libero" else reference["environment"]["tasks"][0]
     content = {"taskId": task, "benchmarkProfile": reference["id"], "initialStateId": "0",
                "initialStateDigest": "sha256:" + "a" * 64, "environmentSeed": 7, "policySeed": 0, "repetition": 0}
     sample = {**content, "sampleId": digest(content)}
@@ -74,14 +74,37 @@ class Response(io.BytesIO):
 
 
 class ProvisionTests(unittest.TestCase):
+    def test_selected_model_fetch_preserves_other_asset_identities_and_skips_training_files(self):
+        reference = json.loads((Path(SPEC.origin).parent / "profiles/groot-model.json").read_text())
+        model = reference["models"]["fractal"]
+        names = ["config.json", "statistics.json", "model.safetensors", "optimizer.pt", "training/model.safetensors"]
+        metadata = {"sha": model["revision"], "siblings": [{"rfilename": name, "size": 1} for name in names]}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            previous = {"repository": "synthetic/previous", "revision": "prior", "path": "model.safetensors", "sha256": "unchanged"}
+            (root / "asset-manifest.json").write_text(json.dumps([previous]))
+            def fetched(job, **_kwargs):
+                return {"repository": job[0], "revision": job[1], "path": job[2]["rfilename"], "sha256": "synthetic"}
+            argv = ["fetch_groot.py", "--output-dir", str(root), "--models", "fractal"]
+            with patch.object(sys, "argv", argv), patch.object(fetcher, "read_json", return_value=metadata) as read, \
+                    patch.object(fetcher, "fetch", side_effect=fetched) as fetch, contextlib.redirect_stdout(io.StringIO()):
+                fetcher.main()
+            self.assertEqual(read.call_count, 1)
+            self.assertIn(model["revision"], read.call_args[0][0])
+            self.assertEqual({call.args[0][2]["rfilename"] for call in fetch.call_args_list}, set(names[:3]))
+            self.assertTrue(all(call.args[0][3].parent == root / "fractal" for call in fetch.call_args_list))
+            manifest = json.loads((root / "asset-manifest.json").read_text())
+            self.assertIn(previous, manifest)
+            self.assertEqual(len(manifest), 4)
+
     def test_generated_gpu_budgets_survive_both_sharing_modes_and_benchmarks(self):
-        for profile in ("widowx", "libero"):
+        for profile in ("widowx", "libero", "google"):
             for shared in (False, True):
                 with self.subTest(profile=profile, shared=shared), tempfile.TemporaryDirectory() as temporary:
                     configured = configured_resources(Path(temporary), shared=shared, profile=profile)
                     service, resources = configured["policy"]["service"], configured["spec"]["resources"]
                     self.assertEqual(service["gpuMemGB"], 24)
-                    gpu_simulator = shared or profile == "widowx"
+                    gpu_simulator = shared or profile != "libero"
                     self.assertEqual(resources["gpus"], int(gpu_simulator))
                     self.assertEqual(resources.get("gpuMemGB"), 4 if gpu_simulator else None)
                     self.assertEqual(service.get("gpusOf"), "main" if shared else None)
