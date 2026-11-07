@@ -35,18 +35,28 @@ class RoboCasaBenchmark(GymBenchmark):
         import gymnasium
         from robocasa.utils.dataset_registry_utils import get_task_horizon
 
-        if math.ceil(get_task_horizon(self.task.split("/", 1)[1]) * 1.5) != self.horizon:
+        scale = config.get("horizonScale", 1.5)
+        if math.ceil(get_task_horizon(self.task.split("/", 1)[1]) * scale) != self.horizon:
             raise ValueError("RoboCasa task horizon differs from the frozen reference")
         np.random.seed(seed)
         self.env = gymnasium.make(self.task, split=config["split"], seed=seed)
         self.capture_native_step()
         observation, _ = self.env.reset()
+        self.success, self.steps = False, 0
         return self.observation(observation)
 
     def step(self, action):
         from robocasa.utils.env_utils import convert_action
 
-        raw, reward, _, _, info = self.env.step(convert_action(action))
-        self.success = bool(info["success"])
-        return StepResult(self.observation(raw), float(reward), self.success,
-                          self.success, native_action=self.native_action)
+        raw, reward, done, _, info = self.env.step(convert_action(action))
+        native_success = bool(info["success"])
+        self.steps += 1
+        parameters = self.reference["parameters"]
+        if parameters.get("successRule") == "chunk-last-any":
+            terminated = bool(done or self.steps == self.horizon)
+            if terminated or self.steps % parameters["replanSteps"] == 0:
+                self.success |= native_success
+        else:
+            self.success = terminated = native_success
+        return StepResult(self.observation(raw), float(reward), terminated,
+                          native_success, native_action=self.native_action)

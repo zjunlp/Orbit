@@ -21,6 +21,10 @@ RUN MUJOCO_GL=osmesa python -c 'import robocasa; from robocasa.utils.dataset_reg
     rm -rf /opt/robocasa/robocasa/models/assets
 ENTRYPOINT ["python"]
 
+FROM simulator AS simulator-gr00t
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system gymnasium==1.0.0 msgpack-numpy==0.4.8 pyzmq==26.4.0
+
 FROM openpi-base AS policy
 RUN sed -i 's|http://|https://|g' /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends \

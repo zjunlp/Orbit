@@ -30,8 +30,6 @@ export function connectorIssues(definition: PolicyDefinition): string[] {
   const issues = CONNECTOR_RULES[definition.connector](definition);
   if (definition.normalizationKey && definition.connector !== "openvla-ws")
     issues.push("normalizationKey is supported by the OpenVLA connector");
-  if (definition.ioAdapter === "robocasa-native" && definition.connector !== "openpi-ws")
-    issues.push("The RoboCasa I/O adapter requires OpenPI");
   return issues;
 }
 

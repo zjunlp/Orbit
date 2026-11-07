@@ -15,7 +15,7 @@ from orbit_embodied.assets import tree_digest
 from orbit_embodied.binding import check_distinct_resets, seed_asset
 from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.gym import GymBenchmark
-from orbit_embodied.robocasa import prepare_assets
+from orbit_embodied.robocasa import RoboCasaBenchmark, prepare_assets
 
 
 REFERENCE = json.loads((Path(__file__).resolve().parents[2] / "bench-adapters/embodied/profiles/groot-widowx.json").read_text())
@@ -71,6 +71,48 @@ class Policy:
 
 
 class GymTests(unittest.TestCase):
+    def test_robocasa_gr00t_scores_only_chunk_ends_including_the_final_partial_chunk(self):
+        reference = copy.deepcopy(REFERENCE)
+        task = reference["environment"]["tasks"][0]
+        reference["environment"]["horizon"] = 5
+        reference["parameters"].update(replanSteps=2, successRule="chunk-last-any")
+        content = {"taskId": task, "benchmarkProfile": reference["id"], "initialStateId": "0",
+                   "initialStateDigest": seed_asset(reference, task), "environmentSeed": 7, "policySeed": 0, "repetition": 0}
+        sample = {**content, "sampleId": digest(content)}
+        binding = resolve_binding(reference["benchmarkProfile"], reference["policyProfile"], reference["observationMap"])
+        observation = Native().step(None)[0]
+
+        class Benchmark(RoboCasaBenchmark):
+            action_size = 7
+
+            def reset(self, sample):
+                self.env = types.SimpleNamespace(step=self.native_step, close=lambda: None)
+                return observation
+
+            def native_step(self, _action):
+                return observation, 0., False, False, {"success": self.steps + 1 == success_step}
+
+            def start_video(self, _directory):
+                pass
+
+            def record_frame(self, _observation):
+                pass
+
+        policy = Policy()
+        policy.replan_steps = 2
+        native = types.SimpleNamespace(convert_action=lambda action: action)
+        for success_step, expected in ((1, False), (2, True), (5, True)):
+            with self.subTest(success_step=success_step), tempfile.TemporaryDirectory() as temporary, patch.dict(
+                "sys.modules", {"robocasa.utils.env_utils": native},
+            ):
+                directory = Path(temporary) / "episode"
+                result = run_episode(Benchmark(reference, task), policy, sample, binding, directory,
+                                     "synthetic-trial.attempt", {"reference": reference})
+                self.assertTrue(result["valid"])
+                self.assertEqual(result["steps"], 5)
+                self.assertEqual(result["success"], expected)
+                self.assertEqual(verify_episode(directory, sample["sampleId"], result["episodeId"])["success"], expected)
+
     def test_robocasa_can_write_transient_xml_beside_read_only_objects(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

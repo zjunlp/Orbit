@@ -11,7 +11,7 @@ import numpy as np
 import zmq
 
 from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
-from orbit_embodied.groot import GrootClient, libero_inputs, pack, unpack
+from orbit_embodied.groot import GrootClient, ROBOCASA_ACTIONS, libero_inputs, pack, unpack
 from orbit_embodied.openpi import CONVERSIONS
 
 
@@ -52,7 +52,9 @@ class Endpoint:
                 result = {key: {"__ModalityConfig__": True, "as_json": {"delta_indices": [0],
                     "modality_keys": [name.split(".", 1)[1] for name in profile["observations"] if name.startswith(key + ".")]}}
                           for key in ("video", "state")}
-                result["language"] = {"delta_indices": [0], "modality_keys": ["annotation.human.action.task_description"]}
+                result["language"] = {"delta_indices": [0], "modality_keys": [
+                    name for name in profile["observations"] if name.startswith("annotation.")
+                ]}
                 result["action"] = {"delta_indices": self.indices, "modality_keys": self.ordering or profile["action"]["order"]}
             elif request["endpoint"] == "reset":
                 result = {}
@@ -74,6 +76,30 @@ class Endpoint:
 
 
 class GrootTests(unittest.TestCase):
+    def test_robocasa_grouped_actions_preserve_native_order_and_widths(self):
+        path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/profiles/robocasa365-atomic-seen.json"
+        profile = json.loads(path.read_text())["benchmarkProfile"]
+        observation = {name: "open the drawer" if description["dtype"] == "string" else
+                       np.zeros(description["shape"], dtype=description["dtype"])
+                       for name, description in profile["observations"].items()}
+        actions = {"action." + key: np.full((1, 16, width), index, dtype=np.float32)
+                   for index, (key, width) in enumerate(ROBOCASA_ACTIONS.items())}
+        server = Endpoint(profile=profile, ordering=list(ROBOCASA_ACTIONS), actions=actions)
+        client = None
+        try:
+            client = GrootClient(server.url, profile, timeout=1, replan_steps=16, io_adapter="robocasa-native")
+            chunk = client.act(observation)
+            np.testing.assert_array_equal(chunk, np.tile([0, 0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4], (16, 1)))
+            self.assertEqual(server.inputs["video.robot0_eye_in_hand"].shape, (1, 1, 256, 256, 3))
+            self.assertEqual(server.inputs["annotation.human.task_description"], ["open the drawer"])
+            server.actions["action.control_mode"] = np.zeros((1, 16, 2), dtype=np.float32)
+            with self.assertRaisesRegex(ValueError, "wrong width"):
+                client.act(observation)
+        finally:
+            if client is not None:
+                client.close()
+            server.close()
+
     def test_google_profile_preserves_rectangular_camera_quaternion_fields_and_one_step_execution(self):
         path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/profiles/groot-google.json"
         reference = json.loads(path.read_text())
