@@ -5,6 +5,14 @@ import {
   type BenchCategory as Category,
 } from "./categories.ts";
 import { EnvName, ProfileName } from "./common.ts";
+import {
+  BatchEpisode,
+  EmbodiedCapabilities,
+  PolicyDefinition,
+  ResolvedBinding,
+  SampleIdentity,
+  SamplePlan,
+} from "./embodied.ts";
 import { Folder } from "./folders.ts";
 import { CheckpointPolicy } from "./runs.ts";
 
@@ -129,11 +137,11 @@ export type MetricSpecInput = z.input<typeof MetricSpec>;
 
 /**
  * Method kinds that are not Agent CLIs. They cannot be registered as Agent names (`policy` is
- * reserved for model-service methods and not runnable yet).
+ * reserved for independently registered model services).
  */
 export const RESERVED_METHOD_AGENTS = ["external", "oracle", "empty", "policy"] as const;
 /** Runnable non-CLI method kinds. */
-export const SPECIAL_METHOD_AGENTS = ["external", "oracle", "empty"] as const;
+export const SPECIAL_METHOD_AGENTS = ["external", "oracle", "empty", "policy"] as const;
 /** Kept for older imports: the method kinds Orbit shipped with before the Agent registry. */
 export const METHOD_AGENTS = ["codex", "claude-code", ...SPECIAL_METHOD_AGENTS] as const;
 
@@ -143,8 +151,10 @@ export const METHOD_AGENTS = ["codex", "claude-code", ...SPECIAL_METHOD_AGENTS] 
  */
 export const MethodAgent = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, "agent must be an Agent name or external/oracle/empty")
-  .refine((a) => a !== "policy", "policy methods are reserved and not supported yet");
+  .regex(
+    /^[a-z0-9][a-z0-9._-]{0,63}$/,
+    "agent must be an Agent name or external/oracle/empty/policy",
+  );
 export type MethodAgent = z.infer<typeof MethodAgent>;
 
 /**
@@ -201,6 +211,7 @@ export function calibrationDefaults(
 export const BenchCapabilities = z
   .object({
     category: BenchCategory.optional(),
+    embodied: EmbodiedCapabilities.optional(),
     profiles: z.array(z.string().max(40)).max(12).default([]),
     /** Subject-area tags shown in the UI (e.g. `embodied`), independent of the category. */
     domains: z
@@ -250,6 +261,9 @@ export const Method = z
   .object({
     name: ProfileName,
     agent: MethodAgent,
+    policyRef: ProfileName.optional(),
+    /** Authoritative registry snapshot populated at submission. */
+    policySnapshot: PolicyDefinition.optional(),
     auth: ProfileName.optional(),
     model: z.string().optional(),
     /** Reasoning effort, e.g. `high`. */
@@ -266,6 +280,15 @@ export const Method = z
     /** Variable names copied from the daemon environment into solve only. */
     passEnv: z.array(EnvName).optional(),
   })
+  .refine(
+    (m) =>
+      m.agent === "policy"
+        ? Boolean(m.policyRef) && !m.auth && !m.bundle && !m.model
+        : !m.policyRef && !m.policySnapshot,
+    {
+      message: "policy methods need policyRef and take no CLI auth, model or bundle",
+    },
+  )
   .refine((m) => !isCliMethod(m) || Boolean(m.auth), {
     message: "CLI agent methods need an auth profile",
   })
@@ -281,14 +304,20 @@ export type Method = z.infer<typeof Method>;
  * Marks a calibration job (design §9.15), fixed at submission: tasks whose reference solution is
  * partial or missing (their oracle trials are not judged) and whether to rescore once it ends.
  */
-export const JobCalibration = z.object({
-  noOracle: z.array(z.string()).default([]),
-  rescore: z.boolean().default(true),
-});
+export const JobCalibration = z
+  .object({
+    noOracle: z.array(z.string()).default([]),
+    rescore: z.boolean().default(true),
+    mode: z.literal("policy").optional(),
+    budgetMin: z.number().positive().max(30).optional(),
+  })
+  .refine((c) => (c.mode === "policy" ? c.budgetMin !== undefined : c.budgetMin === undefined), {
+    message: "a policy integration check requires a total budget of at most 30 minutes",
+  });
 export type JobCalibration = z.infer<typeof JobCalibration>;
 
 /** `POST /bench/calibrations`: sample tasks (or take the given ones) and calibrate them. */
-export const CalibrationRequest = z.strictObject({
+const BenchmarkCalibrationRequest = z.strictObject({
   benchmark: ProfileName,
   tasks: z.array(z.string()).default([]),
   sample: z.number().int().min(1).max(100).default(3),
@@ -298,6 +327,19 @@ export const CalibrationRequest = z.strictObject({
   rescore: z.boolean().default(true),
   timeoutMin: z.number().positive().optional(),
 });
+export const CalibrationRequest = z.union([
+  BenchmarkCalibrationRequest,
+  z.strictObject({
+    benchmark: ProfileName,
+    policyRef: ProfileName,
+    samplePlan: SamplePlan.refine((p) => p.items.length >= 2 && p.items.length <= 5, {
+      message: "policy integration checks require a frozen plan of 2–5 episodes",
+    }),
+    budgetMin: z.number().positive().max(30).default(20),
+    rescore: z.boolean().default(true),
+    timeoutMin: z.number().positive().optional(),
+  }),
+]);
 export type CalibrationRequestInput = z.input<typeof CalibrationRequest>;
 
 export const CheckResult = z.enum(["passed", "failed", "not_run"]);
@@ -318,11 +360,23 @@ export const CalibrationReport = z.object({
   tasks: z.array(z.string()),
   methods: z.array(z.string()),
   seeds: z.number().int(),
-  /** `running`: trials not finished; `rescoring`: the rescore from saved evidence is in progress. */
+  /** `rescoring` also covers policy checks waiting for final resource cleanup. */
   phase: z.enum(["running", "rescoring", "done"]),
   checks: z.array(CalibrationCheck),
   /** Done, no check failed and at least one passed (`not_run` checks are listed, not counted). */
   calibrated: z.boolean(),
+  /** Present only for sampled model-path checks; these do not calibrate benchmark score semantics. */
+  mode: z.literal("policy").optional(),
+  policyRef: ProfileName.optional(),
+  samples: z.number().int().positive().optional(),
+  budget: z
+    .object({
+      minutes: z.number().positive(),
+      deadlineAt: z.string(),
+      executionEndedAt: z.string().optional(),
+      expiredAt: z.string().optional(),
+    })
+    .optional(),
   createdAt: z.string(),
   endedAt: z.string().nullable(),
   /** The benchmark checkout at submission, so a later change can be told apart. */
@@ -330,21 +384,48 @@ export const CalibrationReport = z.object({
 });
 export type CalibrationReport = z.infer<typeof CalibrationReport>;
 
-export const BenchJobSpec = z.object({
+const CommonBenchJobSpec = z.object({
   name: z.string().max(200).optional(),
   calibration: JobCalibration.optional(),
   benchmark: ProfileName,
   /** Task ids; default: every supported task. */
   tasks: z.array(z.string()).default([]),
   methods: z.array(Method).min(1),
-  /** Repetitions per task × method. */
-  seeds: z.number().int().min(1).max(100).default(1),
   /** Adapter options, e.g. asi `promptLevel` (default b1). */
   options: z.record(z.string(), z.string()).default({}),
   checkpoint: CheckpointPolicy.optional(),
   /** Override the per-task solve timeout. */
   timeoutMin: z.number().positive().optional(),
 });
+export const BenchJobSpec = z
+  .union([
+    CommonBenchJobSpec.extend({
+      seeds: z.number().int().min(1).max(100).default(1),
+      samplePlan: z.never().optional(),
+      batchSize: z.never().optional(),
+    }),
+    CommonBenchJobSpec.extend({
+      seeds: z.never().optional(),
+      samplePlan: SamplePlan,
+      batchSize: z.number().int().min(2).max(256).optional(),
+    }),
+  ])
+  .refine(
+    (s) =>
+      s.calibration?.mode !== "policy" ||
+      Boolean(
+        s.samplePlan &&
+          s.samplePlan.items.length >= 2 &&
+          s.samplePlan.items.length <= 5 &&
+          s.methods.length === 1 &&
+          s.methods[0]?.agent === "policy" &&
+          s.batchSize === s.samplePlan.items.length,
+      ),
+    {
+      message:
+        "policy integration checks require 2–5 planned episodes, one policy and a fixed batch",
+    },
+  );
 export type BenchJobSpec = z.infer<typeof BenchJobSpec>;
 export type BenchJobSpecInput = z.input<typeof BenchJobSpec>;
 
@@ -536,34 +617,54 @@ export const Scoring = z.object({
 });
 export type Scoring = z.infer<typeof Scoring>;
 
-export const TrialState = z.enum(["pending", "solving", "verifying", "done"]);
-export const Trial = z.object({
-  id: z.string(),
-  jobId: z.string(),
-  task: z.string(),
-  method: z.string(),
-  seed: z.number().int(),
-  state: TrialState,
-  solveRunId: z.string().nullable(),
+export const ExecutionAttempt = z.object({
+  solveRunId: z.string(),
   verifyRunId: z.string().nullable(),
-  /** Notes gathered before the outcome (e.g. artifacts the solve run did not produce). */
-  issues: z.array(z.string()).default([]),
+  batch: BatchEpisode.optional(),
   outcome: Outcome.nullable(),
-  /**
-   * Earlier scorings, oldest first. A rescore moves the current verify run and outcome here and
-   * verifies the same solve run again; `verifyRunId` / `outcome` are always the latest.
-   */
-  history: z.array(Scoring).default([]),
-  createdAt: z.string(),
-  endedAt: z.string().nullable(),
+  history: z.array(Scoring),
 });
+export type ExecutionAttempt = z.infer<typeof ExecutionAttempt>;
+
+export const TrialState = z.enum(["pending", "solving", "verifying", "done"]);
+export const Trial = z
+  .object({
+    id: z.string(),
+    jobId: z.string(),
+    task: z.string(),
+    method: z.string(),
+    state: TrialState,
+    solveRunId: z.string().nullable(),
+    verifyRunId: z.string().nullable(),
+    batch: BatchEpisode.optional(),
+    /** Earlier executions retained when a compatible batch retry is adopted. */
+    priorAttempts: z.array(ExecutionAttempt).optional(),
+    /** Notes gathered before the outcome (e.g. artifacts the solve run did not produce). */
+    issues: z.array(z.string()).default([]),
+    outcome: Outcome.nullable(),
+    /**
+     * Earlier scorings, oldest first. A rescore moves the current verify run and outcome here and
+     * verifies the same solve run again; `verifyRunId` / `outcome` are always the latest.
+     */
+    history: z.array(Scoring).default([]),
+    createdAt: z.string(),
+    endedAt: z.string().nullable(),
+  })
+  .and(SampleIdentity);
 export type Trial = z.infer<typeof Trial>;
 
-/** Every run a trial has had: its solve run, its verify run and earlier verify runs. */
+/** Every referenced execution and scoring, including retained batch retry attempts. */
 export function trialRunIds(t: Trial): string[] {
-  return [t.solveRunId, t.verifyRunId, ...t.history.map((h) => h.verifyRunId)].filter(
-    (r): r is string => Boolean(r),
-  );
+  return [
+    t.solveRunId,
+    t.verifyRunId,
+    ...t.history.map((h) => h.verifyRunId),
+    ...(t.priorAttempts ?? []).flatMap((attempt) => [
+      attempt.solveRunId,
+      attempt.verifyRunId,
+      ...attempt.history.map((history) => history.verifyRunId),
+    ]),
+  ].filter((r): r is string => Boolean(r));
 }
 
 /** Merge completed retries or append new tasks, preserving their evaluation validity. */
@@ -660,6 +761,7 @@ export const BenchJob = z.object({
   spec: BenchJobSpec,
   /** Non-secret registration fixed at submission; absent only for legacy jobs. */
   benchmarkSnapshot: Benchmark.optional(),
+  resolvedBindings: z.record(z.string(), ResolvedBinding).optional(),
   capabilities: BenchCapabilities.optional(),
   /** The benchmark's own aggregation rule at submission, when its adapter declares one. */
   official: OfficialRule.optional(),
@@ -677,9 +779,13 @@ export const BenchJob = z.object({
   state: z.enum(["running", "done", "cancelled"]),
   /**
    * A calibration job's rescore step, run by the daemon once its trials have ended: `started` while
-   * rescoring, `done` afterwards (`note`: why it was skipped or partial).
+   * rescoring, `done` afterwards (`note`: why it was skipped or partial). Cleanup ends separately.
    */
   rescore: z.object({ state: z.enum(["started", "done"]), note: z.string().optional() }).optional(),
+  /** Execution (including scoring and automatic rescore) ended; cleanup may still be pending. */
+  calibrationExecutionEndedAt: z.string().optional(),
+  /** Budget exhaustion is durable across daemon restarts, including the automatic rescore phase. */
+  calibrationExpiredAt: z.string().optional(),
   createdAt: z.string(),
   endedAt: z.string().nullable(),
 });
@@ -722,20 +828,31 @@ export const MethodSummary = z.object({
 export type MethodSummary = z.infer<typeof MethodSummary>;
 
 /** One planned sample in a report: the trial (attempt) whose result was used and its value. */
-export const ReportEntry = z.object({
-  trial: z.string(),
-  /** `<task>#<seed>`: the logical sample, stable across retries and merges. */
-  sample: z.string(),
-  task: z.string(),
-  seed: z.number().int(),
-  solveRunId: z.string().nullable(),
-  verifyRunId: z.string().nullable(),
-  /** `pending` when the trial has no outcome yet. */
-  evaluation: z.enum(["valid", "invalid", "unknown", "pending"]),
-  failure: FailureKind.optional(),
-  /** The primary metric (Orbit's view uses valid entries only). */
-  value: z.number().nullable(),
-});
+export const ReportEntry = z
+  .object({
+    trial: z.string(),
+    /** Legacy `<task>#<seed>` or planned sampleRef, stable across retries and merges. */
+    sample: z.string(),
+    task: z.string(),
+    solveRunId: z.string().nullable(),
+    verifyRunId: z.string().nullable(),
+    batch: z
+      .object({
+        id: z.string(),
+        attemptId: z.string(),
+        planDigest: z.string(),
+        episodeId: z.string(),
+        index: z.number().int().nonnegative(),
+        size: z.number().int().positive(),
+      })
+      .optional(),
+    /** `pending` when the trial has no outcome yet. */
+    evaluation: z.enum(["valid", "invalid", "unknown", "pending"]),
+    failure: FailureKind.optional(),
+    /** The primary metric (Orbit's view uses valid entries only). */
+    value: z.number().nullable(),
+  })
+  .and(SampleIdentity);
 export type ReportEntry = z.infer<typeof ReportEntry>;
 
 /**
@@ -839,6 +956,8 @@ export const CatalogEntry = z.object({
   refreshing: z.boolean(),
   /** Calibration jobs, newest first (at most five). */
   calibrations: z.array(CalibrationReport),
+  /** Model-path checks are separate from benchmark semantic calibration and fidelity. */
+  policyChecks: z.array(CalibrationReport).optional(),
   /** Jobs of this benchmark (all methods). */
   jobs: z.number().int(),
   methods: z.array(CatalogMethod),
@@ -878,6 +997,7 @@ export const BenchCompare = z.object({
     z.string(),
     z.object({
       pairedTasks: z.number().int(),
+      pairedTaskIds: z.array(z.string()).optional(),
       columns: z.record(
         z.string(),
         z.object({
@@ -915,8 +1035,12 @@ export type BenchUsageRow = z.infer<typeof BenchUsageRow>;
 export const BenchUsage = z.object({ jobs: z.array(z.string()), rows: z.array(BenchUsageRow) });
 export type BenchUsage = z.infer<typeof BenchUsage>;
 
-export function isAgentMethod(m: { agent: string }): boolean {
-  return isCliMethod(m) || m.agent === "external";
+export function isAgentMethod(m: { agent: string; policySnapshot?: { kind?: string } }): boolean {
+  return (
+    isCliMethod(m) ||
+    m.agent === "external" ||
+    (m.agent === "policy" && m.policySnapshot?.kind !== "calibration")
+  );
 }
 
 /** Any method whose agent is not a reserved kind runs an Agent CLI from the registry. */

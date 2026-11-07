@@ -11,6 +11,7 @@ import {
   type AdapterRequest,
   type AdapterRunRef,
   type AdapterRunSpec,
+  type AdapterSolveBatch,
   AdapterSpecResponse,
   AdapterTasksResponse,
   type Benchmark,
@@ -156,8 +157,12 @@ export class AdapterClient {
     return parse(AdapterTasksResponse, "tasks", await this.call("tasks"));
   }
 
-  async solve(trial: TrialInput) {
-    return parse(AdapterSpecResponse, "solve", await this.call("solve", { trial }));
+  async solve(trial: TrialInput, batch?: AdapterSolveBatch) {
+    return parse(
+      AdapterSpecResponse,
+      "solve",
+      await this.call("solve", { trial, ...(batch ? { batch } : {}) }),
+    );
   }
 
   async verify(trial: TrialInput, solve: AdapterRunRef) {

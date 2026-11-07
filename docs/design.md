@@ -148,7 +148,11 @@ CLI 的运行/试跑/等待共用 `cli/run.ts`，表格与选项解析共用 for
 ## 4. 核心契约（R1 目标，字段以 `contracts/` 为准）
 
 **ResourceRequest**：`{ gpus, gpuMemGB?, gpuIds?, cpus, memGB, node? }`。Agent 按任务估算后提交；
-不满足时排队，而不是失败。
+没有可满足要求的节点时预检拒绝，符合条件的设备暂时被占用时排队。
+`gpuMemGB` 按每张卡总显存筛选。共享服务的显存预算由 `roleRequests` 加到 `gpusOf` 指定的拥有者，
+不增加 GPU 数量；拥有者和各独立角色分别检查容量、型号与指定卡，避免把主角色的门槛套到其他角色。
+预检与实际分配共用 GPU 筛选及联合匹配，确认独立角色能同时获得不同的卡；预检使用全部探测到的卡，
+实际分配排除忙碌与已租用的卡，区分硬件无法满足和暂时等待。
 
 **Lease**：`{ id, runId, node, gpuIds, cpus, memGB, state: active|released }`。
 只有确认容器已清理才释放。
@@ -239,8 +243,8 @@ alternate（兼容 linked worktree），结束或失败后删除，不向用户�
 子模块 gitlink 和 `ls-files` 返回的目录不递归复制，路径记入 `CodeSnapshot.skippedSubmodules`（旧记录默认 `[]`）；
 提交时发出 warning 事件，CLI show 与 Web Code 页提示子模块内容未被快照。数据和权重不进快照，用命名 dataset 只读挂载。
 
-**容器**：GPU 优先用 CDI（`--device nvidia.com/gpu=<UUID>`，检测到 `/etc/cdi` 或 `/var/run/cdi` 中的
-NVIDIA spec 时），否则 `--gpus device=<UUID>`；启动后核对 `nvidia-smi -L` 与租约一致。默认以宿主用户
+**容器**：GPU 优先用 CDI（`--device nvidia.com/gpu=<UUID>`，Docker `info.CDISpecDirs` 声明的目录中存在
+NVIDIA spec 时）；未启用或能力查询失败则用 `--gpus device=<UUID>`，不能只凭本机文件判定。启动后核对 `nvidia-smi -L` 与租约一致。默认以宿主用户
 `uid:gid` 运行（产物归属正确），`--root` 例外。每个 Run 的记录目录挂载为 `/orbit`（rw）。
 没有租到 GPU 的容器设置 `NVIDIA_VISIBLE_DEVICES=void`，避免镜像默认值暴露全部 GPU。`image` 本地不存在时先
 `docker pull`（输出写入 Run 日志），拉取失败记为环境失败。daemon 重启后重新附着容器时，日志截回启动时记录的
@@ -767,7 +771,8 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 ```
 
 原则：语义尽量交给原生实现（不重新解释同一个仿真器）；资源与状态只在 Orbit；每个 hub 先以 `native` 方式包装跑通、对齐，
-再按需增加工具桥与轨迹转换。Orbit 不自研 Agent 或 episode 循环（§1）。
+再按需增加工具桥与轨迹转换。Orbit 不自研 Agent 循环；C6 可在容器内使用薄的同步 driver 调用官方环境，
+daemon 不参与逐步控制，任务、控制器和成功判定仍由 benchmark 提供（§1、§9.4a）。
 
 ### 9.1a 评测身份
 
@@ -778,9 +783,9 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 | 执行尝试 | 某个样本的一次执行；重试产生新尝试，保留前次证据 |
 | slot | 并行容量，不是统计样本 |
 
-默认一个 Trial 对应一个逻辑样本、一个 solve Run（现状）。adapter 显式声明批量执行时，一个 Run 才可执行固定样本集合，
-score 回复返回逐样本明细（或经校验的明细文件引用），每个样本独立带有效性；当前 `trial_runs.run_id` 唯一、`trialByRun`
-只返回一个 Trial，所以多个 Trial 共享一个 Run 还需先定义取消、清理、删除与产物归属，列为后续工作。
+默认一个 Trial 对应一个逻辑样本、一个 solve Run。原生 C6 adapter 声明固定批次能力后，可通过 `--batch-size` 让多个
+Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和重评。`trial_runs` 按 Run、Trial、阶段关联，保存 episode
+及尝试身份；事件通过 `trialsByRun` 推进全部关联项。批次只有不可变计划，执行状态仍由既有 Run 和 Trial 管理。
 轨迹事件带 sample / attempt / source / step 身份；计划数、完成数、有效数注明计数单位。
 
 ### 9.2 Bench 家族与接入路径
@@ -814,9 +819,11 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
 ### 9.4 被评测对象：Agent 与 Policy
 
 - **Agent**：已实现的注册表（§6），任意 CLI，含自定义 harness。
-- **Policy**（`policy` 已作为保留名，尚不可运行；实现时新增 `PolicySpec`）：`{ image | dockerfile, command, port, protocol, health, resources(GPU), env, weights(dataset) }`，
-  `protocol ∈ vla-eval-ws | openpi-ws | gr00t-zmq | lite-http | custom`。policy 作为 trial 的 GPU service 启动，与 sim 一起**整组准入**
-  （gang lease：全部资源同时满足才启动，避免一半占着 GPU 等另一半）。模型权重走命名 dataset 只读挂载。
+- **Policy**：独立于 benchmark 登记的 `PolicyDefinition`（`policies.json`，daemon 唯一写者），固定模型 service、connector、
+  语义 profile、checkpoint 与归一化摘要，以及命名权重 dataset。`Method.agent = policy` 通过 `policyRef` 选择定义，提交时保存
+  权威快照；benchmark adapter 不解释模型启动参数。D1 先支持 `openpi-ws`，`vla-eval-ws / gr00t-zmq / lite-http / custom`
+  属于后续 connector，列表顺序不表示优先级。policy 为独立 GPU service，与仿真整组准入；仅接受固定镜像，模型 readiness 与
+  SDK 身份握手分别检查，权重以命名 dataset 只读挂载。
 - **按角色分配**：租约持久化 `main / sim / policy → gpuIds / devices / limits`，满足异构要求（如 sim 需 RTX、policy 需大显存）；
   首阶段同节点原子分配，逐组件核对设备映射，启动失败整组清理，清理确认前保留租约。
 - **native 的承载**：`native` 表示保留上游语义，不绑定宿主 process 后端。首个 vla-eval 接入采用：上游仿真镜像作为 Orbit Docker
@@ -825,6 +832,78 @@ score 回复返回逐样本明细（或经校验的明细文件引用），每�
   须先定义子资源的创建前登记、容量限制、取消后禁止新建、重启对账与清理确认，不能只删除现有校验开放。
 - 能力匹配：bench 声明 `requires`（`multiTurn`、`policyProtocol`、`gui`、`obs: rgb|depth|proprio`、`action: joint|ee|chunk`），提交前与
   Agent / Policy 声明比对，不匹配直接拒绝。
+
+### 9.4a 独立 Policy 与原生 C6（D1 闭环与样例协议对照已验证）
+
+- `orbit policy add / ls / rm`、`orbit bench add-file`、`bench run --sample-plan` 走现有 HTTP 控制面。直接 LIBERO 路径使用
+  `examples/bench-adapters/embodied` 与容器内 `examples/sdk/orbit_embodied`，不调用或导入 vla-eval；旧路径继续使用原登记。
+- `BenchCapabilities.embodied` 声明评测 profile、原始观测/动作语义和显式映射。提交时校验模型端 profile、单位、frame、相机和
+  动作描述，生成不可变 `ResolvedBinding`，随作业保存；缺字段或语义不符即拒绝，不按同名、维度或排序猜测对应。
+- `BenchJob.spec.samplePlan` 接收已展开并带摘要的有序计划。sampleId 由任务、profile、初态文件摘要与索引、环境 seed、模型
+  seed 和重复编号的规范内容生成。旧 Trial / 适配请求 / ReportEntry 仍要求 seed；新分支要求 sampleRef 且禁止 seed，
+  联合契约拒绝混用。Trial.id 沿用原格式，episodeId 标识实际尝试。旧任务和报告不重写，新报告使用 `orbit-report/2`。
+- 报告、合并、校准与界面使用真实样本身份。新旧作业禁止直接归并；计划和方法条件不符时拒绝合并。C6 配对统计还要求相同
+  有效样本及评测条件，不仅匹配任务名。计划摘要和配对判断共用冻结条件：适配器配置、环境变量名及非秘密值、源码、协议、
+  options 和实际生效的逐任务资源/timeout；登记时间和资源文件位置不参与。配对按共同任务检查条件，模型本身仍是比较变量。
+  归并已有任务时复用同一预算解析，逐个核对待采用样本的冻结资源和生效 timeout，传输别名不豁免预算检查；追加新任务携带来源预算。
+  旧矩阵、seed n→初态 n−1 规则和旧报告摘要保持原行为。
+- 首个目标固定 OpenPI LIBERO 与 pi05_libero。SDK 分离 Benchmark Adapter、PolicyClient、Connector、driver 和证据写入，
+  显式保留旋转、resize、状态拼接、settle、horizon 与 replan_steps。原生判定与 Orbit 有效性分开，媒体失败不改变可信分数。
+  默认每 Trial 独立 solve / verify；固定批次共享 solve，逐 Trial verify。重评只读该次 solve 证据，无模型或仿真。SDK 核心只依赖标准库与 NumPy，额外传输/媒体依赖单列。
+  solve 和 verify 各保存自身的适配器、driver、SDK 源码包及摘要；重评记录新评分器身份，保留求解证据和原实现。
+  验证器重算 sampleId，并逐项核对作业冻结的 sample、binding、policy、reference 和求解实现摘要。新证据记录原始 Run/trial，
+  由 Run 标签声明版本以拒绝证据降级；归并保留 execution_trial，多次归并不改变其来源。旧证据按已保存的 trial/source_trial
+  兼容验证，缺少可核对的来源即失败；不会改写旧证据来补造身份。验证结果同时绑定当前逻辑 trial、原始 solve Run 和验证请求摘要。
+  reference 在列举、执行规划、验证和评分阶段使用同一解析规则；省略时读取内置文件，仍必须匹配登记的 profileDigest，内容漂移即拒绝。
+- OpenPI 原生服务没有远端 RNG reset。D1 每 Trial 使用新服务并记录 JAX key 0 的 service 作用域，不宣称等价于参考 runner
+  连续运行到任意 episode 的随机状态。源码审核、合成端点检查、真实正例与原生对照分别记录，不能互相代替。
+  已完成真实 π₀.₅ checkpoint 的 CPU 与 GPU 正例开发验证、原生环境负例、单样本重评与清理。官方 runner 的确定性处理、
+  固定动作和原生 horizon 样例对照通过；共享编译模型、独立 key-0 流的真实协议控制下，实时输入、完整动作预测及物理轨迹精确一致。
+  独立 GPU 进程逐位比较未通过：重复官方路径对相同首个输入也产生不同预测，具体底层原因未定位。完整 suite 统计等价和后续 episode
+  随机流仍未验证，控制组通过不覆盖失败结论。工具为 `parity_plan.py / parity.py / parity_policy.py`，不作为生产模型池或默认保真度声明。
+- 第二组端点复用同一 Run 路径：`groot-zmq` 调用官方 GR00T 服务，模型端显式 `ioAdapter` 在原生 LIBERO 与 GR00T 输入间转换，
+  不改写 LIBERO benchmark profile；同一连接器也接收原生 SimplerEnv WidowX 七个任务的扁平字段。动作顺序、执行片段长度、Torch seed 0
+  及 backbone 内容摘要显式冻结，新增可选字段不补入旧 Policy 快照。GR00T 动作时间索引必须从 0 连续递增；原始动作在任何夹爪转换前
+  检查数值类型及有限性，拒绝的数值数组以禁止 pickle 的文件和诊断元数据保存，评测归为 `policy_act` 无效结果。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
+  对没有原生终止的成功信号在片段边界结束；证据验证按 profile 选择 last/any 成功聚合。`gpusOf: main` 允许模型服务显式共享模拟器已租用的 GPU，禁止同时
+  声明独立 role/GPU；没有新资源账本或调度器。配置、资产下载及验证边界见[接入说明](../examples/bench-adapters/embodied/GR00T.md)。
+- OpenVLA-OFT 的 `openvla-ws` 独立服务接收原生 LIBERO 观测，调用固定源码的官方图像、状态归一化与 L1 head 推理函数；
+  客户端在夹爪转换前验证完整原始动作。模型端使用独立 Python/Torch/Transformers 环境，checkpoint 和归一化摘要在启动时核对，
+  官方 loader 的配置同步只发生在临时视图。复用原生 LIBERO adapter、语义 binding、批次与验证器；`libero-oft-native` 是同一
+  benchmark 的显式评测 recipe（8 步动作块、环境种子 0），已有 OpenPI recipe 保持原配置。相同任务名不豁免不同 recipe 的比较条件；
+  沿用 OpenPI 固定的仿真运行时，不宣称与 OFT 官方完整环境或套件统计等价，见[使用与边界](../examples/bench-adapters/embodied/OPENVLA.md)。
+- D2a 固定批次使用 `BenchJob.spec.batchSize`（默认不启用）；按方法、计划顺序及相同资源覆盖拆分，成员与 attemptId、episodeId、
+  完整清单摘要在提交时冻结。`solve` 适配请求的可选 `batch` 带完整有序 Trial 上下文，运行中不追加成员。模型服务每 Run 启动一次；
+  逐项重建并 reset 环境、清空动作片段及连接器状态，模型随机流按已声明的 service 作用域连续推进，不声称远端 RNG 已复位。
+  容器总 watchdog 为逐 episode 预算之和；SDK 在控制边界检查单 episode 期限，模型调用仍有独立超时，状态性调用不重试。
+- 批次将原子封存的必要证据写入 `episodes/<episodeId>`，完成判定先于可选媒体。终止后按样本核验，后续服务失败、OOM 或取消
+  不覆盖已封存且独立验证通过的结果；Run 原始执行状态与资源测量保留。取消影响整个共享 Run，CLI/Web 明示范围；未完成项
+  保留 unknown/invalid。重启可按冻结 batch 标签接管已提交但尚未关联的 Run。重评一个 Trial 不改变其他项；报告记录共享 Run、
+  batch 摘要及 episode/attempt 定位。归并核对完整随机流前缀，保护已有效的完成项；共享文件由 Run 持有，仅随最后所属作业删除，
+  采用重试结果时把旧 solve、verify、outcome 与评分历史存入 `Trial.priorAttempts`，保留原始失败证据及引用；
+  资源统计对 Run 去重并注明整批测量。子集执行不是服务随机流批次的同条件重试。
+- SQLite 第 7 次迁移将 `trial_runs` 改为多引用。已有库升级前由 daemon 用 `VACUUM INTO` 创建包含已提交 WAL 的一致性备份，
+  在 `<db>.backups` 保存 0600 文件，独立打开检查完整性和版本；备份失败不迁移，迁移在单个事务中完成，失败回滚并停止启动。
+  固定批次及恢复说明见[批量运行](guides/embodied-batches.md)。跨 Run 模型池、共享 verify 和通用语义直连仍后置。
+- **接入验收预算**：端点协议正确性、benchmark 原生语义与模型完整套件成绩分别验证。新增 benchmark 先检查完整目录与资产清单，
+  挑选代表任务做初始化、少量控制步及固定观测/动作、原生判定和正负例校准；全任务可启动性另记覆盖率，未验证的任务不宣称已验证。
+  新增模型优先复用已校准 benchmark 检查 Policy/connector。需要宣称支持的新增组合
+  仍须少量真实模型端到端检查，不能只凭形状匹配宣称兼容。资源就绪后的常规接入验收以 2–5 个 episode、批次与独立重评等定向检查为主，
+  目标预算 10–30 分钟；达到预算仍未完成的检查如实标注，不转为通过。`bench calibrate --policy --sample-plan --budget` 已承接模型接入检查，
+  默认总预算 20 分钟、最多 30 分钟，覆盖排队、模型启动、求解、逐 episode CPU 验证和首次单样本重评；使用既有 Job/Trial/Run 状态，
+  预算到期持久记录并取消未完成工作，清理确认可延后；重启在恢复排队执行前补发过期停止意图。CLI 断开不解除预算。
+  停止与清理核对同时覆盖 Trial 当前/历史关联和 job 标签所属的已持久化 Run，避免提交完成但尚未写回关联时漏取消；
+  全部所属 Run 终止、清理完成并释放租约后才结束验收，清理事件会继续推进等待中的报告。
+  `calibrationExecutionEndedAt` 单独冻结评分工作的完成时间（含自动重评规划与执行），预算只覆盖到这里；清理等待不追加超时失败。
+  自动完成入口重新核对全部 Trial 和所属 Run 已结束，避免重复回调把尚在规划的重评提前标成完成。
+  `endedAt` 在清理确认后写入；报告通过 `budget.executionEndedAt`、CLI/Web 提示区分工作已结束和清理仍在进行。
+  旧作业缺少冻结时间且已手动重评时，按各样本首次评分及首样本首次自动重评的保留历史恢复原时间；
+  仅排除原验收结束后创建的 CPU 验证，不把后续手动重评计入原预算，也不凭旧完成标记跳过尚未完成的首次重评。
+  报告显式标为 policy 接入，catalog 单独列出，不提升 benchmark 原生语义校准或 fidelity；原 empty/oracle 校准保持原行为。
+  该入口只接受真实模型、2–5 个冻结样本及固定批次，禁止用归并拼成验收通过。使用方式见[轻量接入检查](guides/policy-integration-checks.md)。
+  验证证据按实现、协议/profile、benchmark 源码及资产、镜像等身份限定复用范围；变更模型权重需重验模型路径，变更驱动语义需重验对应原生对照。
+  完整统计对照作为单独、有预先声明范围和计算预算的研究任务，按需开展，不作为每个模型与 benchmark 组合的默认接入门槛。
+  抽样接入与语义校准不等于完整统计等价，报告保留这一差别。
 
 ### 9.5 Agent 与环境的桥
 
@@ -883,7 +962,8 @@ reservation 与 x-gpu-memory-gb，其他 deploy 设置继续拒绝。带 `x-orbi
 Compose 在一台机器上给每个 `count: N` 同样的前 N 张卡）：`main` 有 reservation 时由 main 租用（privileged 模式，
 Agent 本身用 GPU）；否则由第一个不在宿主命名空间里的服务租用并成为同名角色（standard 模式的 sim）；其余服务
 （如测 GPU 用量的 rcb_monitor）用 `ServiceSpec.gpusOf` 看到同一组卡而不额外租用。组内 count 必须相同；
-`x-gpu-memory-gb` 求和作为该卡的最小显存。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
+`x-gpu-memory-gb` 求和作为该卡的最小显存；已折叠到拥有者的预算不再重复累加。直接声明的 `gpusOf` 服务保留自身
+`gpuMemGB`，在通用角色规划中加入拥有者；未声明预算的监控服务保持原行为。`main` 另取 `shm_size`（`RunSpec.shmGB`）；服务的列表 `entrypoint`
 拆成 Docker 的可执行文件与前置参数。`[environment] gpu_types` 变成拥有该组卡的角色的 `gpuModels`（任一型号，
 名称整词顺序匹配），本机没有这些型号时提交即给出原因；登记 `-c gpuTypes=any` 时不限制型号并记为偏差。
 
@@ -913,7 +993,7 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
   给出官方值、样本数、missing 与 partial；`bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
   在 job 结束、取消、重新评分或归并后、且结果与上一修订不同时写入，旧 job 首次读取时补一份 `backfill`；计划 digest 由
   benchmark、tasks、seeds、methods、options 计算。API `GET /bench/jobs/:id/reports`，CLI `orbit bench report`，Web job 页 Reports。
-  尚未实现：多个 Trial 共享一个 Run 的批量执行、attempt/retry 的显式计数与规则（目前 attempt 即报告中引用的 trial 与 Run）。
+  C6 已支持固定共享 solve 批次及逐 episode 尝试定位；通用 attempt/retry 的显式计数与自动重试规则仍后置。
 - **报告修订**：计划集合（样本清单 + digest）固定，追加任务或 seed 产生新集合版本；报告不可原地覆盖，每版记录采用的
   attempt/result 清单、错误与缺项的分母规则、聚合器版本；补跑产生新修订，旧报告与原始失败保留。只有遵循上游的结果选择、
   重试与缺项规则，才继续称为官方口径。
@@ -998,7 +1078,7 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
 
 **原则**：跟随 hub 与协议，不逐个追 bench。新 bench 多数先进入某个 hub 或采用已有格式；Orbit 只支持少数事实标准，
 不自造协议：任务格式 → Harbor（EFE、Cua Bench、TB 系列）；GUI 交互 → CUA-Lite canonical tool call 与 MCP computer-use；
-具身 Policy → vla-eval 协议；具身 coding agent → EFE `/spec /observe /submit`。
+具身 Policy → 独立语义契约与模型原生 connector（首个为 OpenPI WebSocket，可选 vla-eval-ws）；具身 coding agent → EFE `/spec /observe /submit`。
 
 **三层接入**（新 bench 优先落到最低层）：
 

@@ -4,6 +4,7 @@
 // UI does not know). Without a review (older trials and adapters) the page guesses: the solve's
 // Markdown report and the verifier's JSON. The Agent session and all outputs are always there.
 import { fmtMetric, type MetricDef, metricValue, resolveMetrics } from "@zjunlp/orbit/metrics";
+import { sampleLabel, sampleOrder } from "@zjunlp/orbit/naming";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { IconAlert, IconFile, IconFlask } from "../components/icons.tsx";
 import { joinPath, Markdown } from "../components/Markdown.tsx";
@@ -201,7 +202,9 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
           <TrialResult t={trial} binary={job.capabilities?.scoreKind === "binary"} />
           <h1 className="ellipsis">
             {trial.task} <span className="faint">·</span> {trial.method}
-            {job.spec.seeds > 1 && <span className="faint"> #{trial.seed}</span>}
+            {(trial.sampleRef || (job.spec.seeds ?? 1) > 1) && (
+              <span className="faint"> #{sampleLabel(trial)}</span>
+            )}
           </h1>
           <div className="spacer" />
           {o && o.score !== null && (
@@ -372,7 +375,43 @@ function TrialConfiguration({ job, trial }: { job: BenchJob; trial: Trial }) {
   const rows: [string, unknown][] = [
     ["Benchmark", job.spec.benchmark],
     ["Task", trial.task],
-    ["Seed", trial.seed],
+    [trial.sampleRef ? "Sample" : "Seed", trial.sampleRef ?? trial.seed],
+    ...(trial.batch
+      ? ([
+          ["Shared solve batch", trial.batch.plan.id],
+          ["Episode position", `${trial.batch.index + 1} / ${trial.batch.plan.members.length}`],
+          [
+            "Model random stream",
+            trial.batch.plan.randomness === "service"
+              ? "Continues in fixed batch order; retries require the same full prefix"
+              : "Stateless",
+          ],
+          [
+            "Shared resources and cancellation",
+            "Solve duration and resource use cover the whole batch. Cancelling the solve stops all unfinished episodes; completed evidence is still verified.",
+          ],
+        ] satisfies [string, unknown][])
+      : []),
+    [
+      "Initial state",
+      job.spec.samplePlan?.items.find((s) => s.sampleId === trial.sampleRef)?.initialStateId,
+    ],
+    ["Sample conditions", job.spec.samplePlan?.items.find((s) => s.sampleId === trial.sampleRef)],
+    ["Policy", method?.policyRef],
+    [
+      "Earlier solve attempts",
+      trial.priorAttempts?.map((attempt) => ({
+        run: attempt.solveRunId,
+        batch: attempt.batch?.plan.id,
+        outcome: attempt.outcome,
+      })),
+    ],
+    ["Policy type", method?.policySnapshot?.kind],
+    ["Policy connector", method?.policySnapshot?.connector],
+    ["Policy I/O adapter", method?.policySnapshot?.ioAdapter],
+    ["Execution horizon", method?.policySnapshot?.replanSteps],
+    ["Backbone digest", method?.policySnapshot?.backboneDigest],
+    ["Checkpoint digest", method?.policySnapshot?.checkpointDigest],
     ["Method", method?.name],
     ["Agent", method?.agent],
     ["Model", method?.model],
@@ -879,7 +918,7 @@ export const failedTrial = (t: Trial) =>
 /** The previous and next trial of the job (by task, method, seed) and the next failed one. */
 export function neighbours(trials: Trial[], t: Trial) {
   const order = [...trials].sort(
-    (a, b) => a.task.localeCompare(b.task) || a.method.localeCompare(b.method) || a.seed - b.seed,
+    (a, b) => a.task.localeCompare(b.task) || a.method.localeCompare(b.method) || sampleOrder(a, b),
   );
   const i = order.findIndex((x) => x.id === t.id);
   const after = [...order.slice(i + 1), ...order.slice(0, Math.max(i, 0))];
@@ -918,7 +957,7 @@ function TrialLink({
     <Link
       className="btn sm"
       href={trialPath(jobId, t.id)}
-      title={`${t.task} · ${t.method} #${t.seed} (${keyHint})`}
+      title={`${t.task} · ${t.method} #${sampleLabel(t)} (${keyHint})`}
     >
       {label}
     </Link>

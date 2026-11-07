@@ -155,20 +155,29 @@ export function usageRows(
     const agents = new Set(d.job.spec.methods.filter(isAgentMethod).map((m) => m.name));
     for (const t of d.trials) {
       if (!agents.has(t.method)) continue;
-      const r = t.solveRunId ? getRun(t.solveRunId) : null;
-      if (!r || !isTerminal(r.state)) continue;
-      runs.set(t.task, [...(runs.get(t.task) ?? []), r]);
-      // The latest job's request is what a suggestion is compared against.
-      requested.set(t.task, r.spec);
+      for (const id of [
+        ...(t.priorAttempts ?? []).map((attempt) => attempt.solveRunId),
+        t.solveRunId,
+      ]) {
+        const r = id ? getRun(id) : null;
+        if (!r || !isTerminal(r.state)) continue;
+        const own = runs.get(t.task) ?? [];
+        if (!own.some((run) => run.id === r.id)) runs.set(t.task, [...own, r]);
+        // The latest job's current request is what a suggestion is compared against.
+        requested.set(t.task, r.spec);
+      }
     }
   }
   return [...runs.keys()].sort().map((task) => {
     const s = requested.get(task) as Run["spec"];
     const { cpus, memGB, gpus, gpuMemGB } = s.resources;
-    return usageRow(
+    const row = usageRow(
       task,
       { cpus, memGB, gpus, ...(gpuMemGB ? { gpuMemGB } : {}), timeoutMin: s.timeoutMin },
       runs.get(task) ?? [],
     );
+    if ((runs.get(task) ?? []).some((run) => Number(run.spec.tags.batch_size ?? 1) > 1))
+      row.notes.push("shared solve measurements cover the entire batch, not individual episodes");
+    return row;
   });
 }

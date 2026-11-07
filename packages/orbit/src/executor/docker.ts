@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   appendFileSync,
@@ -24,10 +24,22 @@ export const LABEL_PARENT = "orbit.parent";
 /** How GPUs are passed to containers: CDI devices (preferred) or the legacy `--gpus` flag. */
 export type GpuMode = "cdi" | "gpus";
 
-const CDI_DIRS = ["/etc/cdi", "/var/run/cdi"];
-
-/** Use CDI when an NVIDIA CDI spec is installed; `--gpus` is broken on some Docker versions. */
-export function detectGpuMode(dirs = CDI_DIRS): GpuMode {
+/** Prefer CDI only when Docker enables a spec directory containing NVIDIA devices. */
+export function detectGpuMode(dirs?: string[]): GpuMode {
+  if (!dirs) {
+    try {
+      const enabled: unknown = JSON.parse(
+        execFileSync("docker", ["info", "--format", "{{json .CDISpecDirs}}"], {
+          encoding: "utf8",
+          timeout: 2000,
+          stdio: ["ignore", "pipe", "ignore"],
+        }),
+      );
+      dirs = Array.isArray(enabled) && enabled.every((d) => typeof d === "string") ? enabled : [];
+    } catch {
+      return "gpus";
+    }
+  }
   for (const d of dirs) {
     let names: string[] = [];
     try {

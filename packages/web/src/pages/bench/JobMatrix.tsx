@@ -70,7 +70,7 @@ export function JobMatrix({
                   <td key={m}>
                     <div className="row" style={{ gap: 4, justifyContent: "center" }}>
                       {(cells.get(`${task}\u0000${m}`) ?? []).map((t) => (
-                        <TrialCell key={t.id} t={t} seeds={job.spec.seeds} metric={metric} />
+                        <TrialCell key={t.id} t={t} seeds={job.spec.seeds ?? 1} metric={metric} />
                       ))}
                     </div>
                   </td>

@@ -1,4 +1,6 @@
-import { closeSync, openSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   BenchJob,
@@ -12,7 +14,6 @@ import {
   RunEvent,
   type RunState,
   Trial,
-  trialRunIds,
 } from "../contracts/index.ts";
 import { aggregate, resolveMetrics, taskMeans } from "../contracts/metrics.ts";
 import { nowIso } from "../lib/ids.ts";
@@ -83,6 +84,22 @@ const MIGRATIONS = [
      doc TEXT NOT NULL,
      PRIMARY KEY (job_id, revision)
    );`,
+  `ALTER TABLE trial_runs RENAME TO trial_runs_legacy;
+   DROP INDEX trial_runs_trial;
+   CREATE TABLE trial_runs (
+     run_id TEXT NOT NULL,
+     trial_id TEXT NOT NULL,
+     phase TEXT NOT NULL CHECK (phase IN ('solve', 'verify')),
+     episode_id TEXT,
+     attempt_id TEXT,
+     PRIMARY KEY (run_id, trial_id, phase)
+   );
+   CREATE INDEX trial_runs_trial ON trial_runs(trial_id);
+   INSERT INTO trial_runs (run_id, trial_id, phase)
+     SELECT r.run_id, r.trial_id,
+       CASE WHEN r.run_id = t.solve_run THEN 'solve' ELSE 'verify' END
+     FROM trial_runs_legacy r JOIN trials t ON t.id = r.trial_id;
+   DROP TABLE trial_runs_legacy;`,
 ];
 
 /** Mirroring progress of a run placed on another node (primary only). */
@@ -115,6 +132,7 @@ const IN_FOLDER = `(${FOLDER} = ? OR substr(${FOLDER}, 1, length(?) + 1) = ? || 
 /** Typed access to the local sqlite database. Only the daemon opens it. */
 export class Store {
   readonly db: DatabaseSync;
+  readonly migrationBackup: string | null;
   private readonly commits: (() => void)[][] = [];
 
   constructor(file: string) {
@@ -128,7 +146,7 @@ export class Store {
     this.db = new DatabaseSync(file);
     try {
       this.db.exec("PRAGMA busy_timeout = 5000;");
-      this.migrate();
+      this.migrationBackup = this.migrate(file);
       this.db.exec("PRAGMA journal_mode = WAL;");
     } catch (e) {
       this.db.close();
@@ -136,21 +154,45 @@ export class Store {
     }
   }
 
-  private migrate(): void {
+  private migrate(file: string): string | null {
     const row = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
     if (row.user_version > MIGRATIONS.length)
       throw new Error(`database version ${row.user_version} is newer than supported; update Orbit`);
-    for (let v = row.user_version; v < MIGRATIONS.length; v++) {
-      this.db.exec("BEGIN");
+    if (row.user_version === MIGRATIONS.length) return null;
+    let backup: string | null = null;
+    if (row.user_version > 0 && file !== ":memory:") {
+      const directory = `${file}.backups`;
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      chmodSync(directory, 0o700);
+      backup = join(directory, `v${row.user_version}-${randomUUID()}.sqlite`);
+      // SQLite's snapshot includes committed WAL pages; copying the main file does not.
+      this.db.prepare("VACUUM INTO ?").run(backup);
+      chmodSync(backup, 0o600);
+      const restored = new DatabaseSync(backup, { readOnly: true });
       try {
-        this.db.exec(MIGRATIONS[v] as string);
-        this.db.exec(`PRAGMA user_version = ${v + 1}`);
-        this.db.exec("COMMIT");
-      } catch (e) {
-        this.db.exec("ROLLBACK");
-        throw e;
+        const integrity = restored.prepare("PRAGMA integrity_check").all();
+        if (
+          integrity.length !== 1 ||
+          integrity[0]?.integrity_check !== "ok" ||
+          restored.prepare("PRAGMA user_version").get()?.user_version !== row.user_version
+        )
+          throw new Error("migration backup failed restore validation");
+      } finally {
+        restored.close();
       }
     }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (let v = row.user_version; v < MIGRATIONS.length; v++) {
+        this.db.exec(MIGRATIONS[v] as string);
+        this.db.exec(`PRAGMA user_version = ${v + 1}`);
+      }
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+    return backup;
   }
 
   close(): void {
@@ -553,8 +595,7 @@ export class Store {
             "INSERT INTO trials (id, job_id, state, solve_run, verify_run, doc) VALUES (?, ?, ?, ?, ?, ?)",
           )
           .run(t.id, t.jobId, t.state, t.solveRunId, t.verifyRunId, JSON.stringify(t));
-        for (const id of trialRunIds(t))
-          this.db.prepare("INSERT INTO trial_runs (run_id, trial_id) VALUES (?, ?)").run(id, t.id);
+        this.linkTrialRuns(t);
       }
       for (const run of runs) this.putRun(run);
       this.putJob(job);
@@ -570,11 +611,38 @@ export class Store {
            verify_run = excluded.verify_run, doc = excluded.doc`,
         )
         .run(t.id, t.jobId, t.state, t.solveRunId, t.verifyRunId, JSON.stringify(t));
-      const link = this.db.prepare(
-        "INSERT OR IGNORE INTO trial_runs (run_id, trial_id) VALUES (?, ?)",
-      );
-      for (const r of trialRunIds(t)) link.run(r, t.id);
+      this.linkTrialRuns(t);
     });
+  }
+
+  private linkTrialRuns(t: Trial): void {
+    this.db.prepare("DELETE FROM trial_runs WHERE trial_id = ?").run(t.id);
+    const link = this.db.prepare(
+      "INSERT OR IGNORE INTO trial_runs (run_id, trial_id, phase, episode_id, attempt_id) VALUES (?, ?, ?, ?, ?)",
+    );
+    for (const attempt of [t, ...(t.priorAttempts ?? [])]) {
+      const episode = attempt.batch?.plan.members[attempt.batch.index];
+      if (attempt.solveRunId)
+        link.run(
+          attempt.solveRunId,
+          t.id,
+          "solve",
+          episode?.episodeId ?? null,
+          attempt.batch?.plan.attemptId ?? null,
+        );
+      for (const id of [
+        attempt.verifyRunId,
+        ...attempt.history.map((history) => history.verifyRunId),
+      ])
+        if (id)
+          link.run(
+            id,
+            t.id,
+            "verify",
+            episode?.episodeId ?? null,
+            attempt.batch?.plan.attemptId ?? null,
+          );
+    }
   }
 
   getTrial(id: string): Trial | null {
@@ -593,12 +661,19 @@ export class Store {
 
   /** The trial that owns a run: its solve run, verify run or an earlier verify run. */
   trialByRun(runId: string): Trial | null {
-    const row = this.db
+    const trials = this.trialsByRun(runId);
+    if (trials.length > 1) throw new Error("shared Run has multiple trials; use trialsByRun");
+    return trials[0] ?? null;
+  }
+
+  trialsByRun(runId: string, phase?: "solve" | "verify"): Trial[] {
+    const rows = this.db
       .prepare(
-        "SELECT t.doc FROM trial_runs r JOIN trials t ON t.id = r.trial_id WHERE r.run_id = ?",
+        `SELECT DISTINCT t.doc, t.id FROM trial_runs r JOIN trials t ON t.id = r.trial_id
+         WHERE r.run_id = ? ${phase ? "AND r.phase = ?" : ""} ORDER BY t.id`,
       )
-      .get(runId) as { doc: string } | undefined;
-    return row ? Trial.parse(JSON.parse(row.doc)) : null;
+      .all(...(phase ? [runId, phase] : [runId])) as { doc: string }[];
+    return rows.map((row) => Trial.parse(JSON.parse(row.doc)));
   }
 
   openTrials(): Trial[] {

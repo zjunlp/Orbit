@@ -296,6 +296,7 @@ it("lists jobs with one trial aggregate query and the same counts and task-weigh
         task: `task-${i % 3}`,
         method: i % 2 ? "empty" : "other",
         seed: i,
+        sampleRef: undefined,
         state: outcome ? "done" : i % 2 ? "solving" : "verifying",
         outcome,
         history: outcome
@@ -385,7 +386,7 @@ it.each(["solving", "verifying"] as const)(
 
 it("ignores ordinary run events before looking up trials, retaining tags and legacy groups", () => {
   const f = fixture();
-  const lookup = vi.spyOn(f.store, "trialByRun");
+  const lookup = vi.spyOn(f.store, "trialsByRun");
   for (let i = 0; i < 50; i++) f.runs.emit("change", { run: f.run });
   expect(lookup).not.toHaveBeenCalled();
   for (const spec of [

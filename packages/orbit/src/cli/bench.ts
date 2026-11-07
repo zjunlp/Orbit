@@ -9,6 +9,7 @@ import {
   type BenchJobDetail,
   type BenchJobList,
   type Benchmark,
+  BenchmarkInput,
   type BenchReport,
   type BenchTask,
   type BenchUsage,
@@ -18,6 +19,9 @@ import {
   formatCalibration,
   type MethodSummary,
   type MetricSpec,
+  PolicyDefinition,
+  SamplePlan,
+  sampleLabel,
   trialRunIds,
 } from "../contracts/index.ts";
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "../contracts/metrics.ts";
@@ -43,8 +47,10 @@ export function parseMethod(text: string): Record<string, string> {
   if (!head || i <= 0) throw new Error(`--method must be name=agent[,key=value...]: ${text}`);
   const m: Record<string, string> = { name: head.slice(0, i), agent: head.slice(i + 1) };
   for (const [k, v] of Object.entries(kv(rest, "--method option"))) {
-    if (!["auth", "model", "effort", "bundle", "entrypoint"].includes(k))
-      throw new Error(`unknown --method key ${k} (auth, model, effort, bundle, entrypoint)`);
+    if (!["auth", "model", "effort", "bundle", "entrypoint", "policyRef"].includes(k))
+      throw new Error(
+        `unknown --method key ${k} (auth, model, effort, bundle, entrypoint, policyRef)`,
+      );
     m[k] = k === "bundle" ? resolve(v) : v;
   }
   return m;
@@ -220,7 +226,7 @@ function formatJob(d: BenchJobDetail): string {
     rows.push([
       t.task,
       t.method,
-      String(t.seed),
+      sampleLabel(t),
       t.state,
       o?.evaluation ?? "-",
       (o?.score == null ? "-" : `${o.score}/${o.maxScore}`) +
@@ -327,10 +333,44 @@ export function formatCompare(c: BenchCompare, metric?: string): string {
 }
 
 export function registerBench(program: Command, client: () => Promise<OrbitClient>, print: Print) {
+  const policy = program.command("policy").description("independent model service definitions");
+  policy
+    .command("add <file>")
+    .option("--json", "print JSON")
+    .action(async (file: string, options: { json?: boolean }) => {
+      const definition = PolicyDefinition.parse(JSON.parse(readFileSync(resolve(file), "utf8")));
+      const saved = await (await client()).policyPut(definition);
+      print(options.json, saved, () => `registered policy ${saved.name} (${saved.version})`);
+    });
+  policy
+    .command("ls")
+    .option("--json", "print JSON")
+    .action(async (options: { json?: boolean }) => {
+      const policies = await (await client()).policies();
+      print(options.json, policies, () =>
+        table([
+          ["NAME", "VERSION", "CONNECTOR", "PROFILE"],
+          ...policies.map((p) => [p.name, p.version, p.connector, p.profile.id]),
+        ]),
+      );
+    });
+  policy.command("rm <name>").action(async (name: string) => {
+    await (await client()).policyRemove(name);
+    print(false, { ok: true }, () => `removed policy ${name}`);
+  });
   const bench = program
     .command("bench")
-    .description("benchmarks: trials of task × method × seed as solve + verify runs");
+    .description("benchmarks: planned samples or task × method × seed as solve + verify runs");
 
+  bench
+    .command("add-file <file>")
+    .description("register a benchmark from a JSON definition")
+    .option("--json", "print JSON")
+    .action(async (file: string, options: { json?: boolean }) => {
+      const definition = BenchmarkInput.parse(JSON.parse(readFileSync(resolve(file), "utf8")));
+      const saved = await (await client()).benchmarkPut(definition);
+      print(options.json, saved, () => `registered benchmark ${saved.name}`);
+    });
   bench
     .command("add <name> <path>")
     .description("register a benchmark checkout (its adapter must list the tasks)")
@@ -434,6 +474,13 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .option("--seeds <n>", "repetitions per task × method", numericOption("integer"), 2)
     .option("--no-oracle", "skip the oracle method")
     .option("--no-rescore", "skip rescoring from saved evidence")
+    .option("--policy <name>", "check a registered real model policy on a frozen sample plan")
+    .option("--sample-plan <file>", "2–5 frozen C6 episodes for --policy")
+    .option(
+      "--budget <min>",
+      "total policy-check wall-clock budget, including queue and rescore (default 20, maximum 30)",
+      numericOption("float"),
+    )
     .option("--timeout <min>", "solve timeout per trial in minutes", numericOption("float"))
     .option("--wait <min>", "give up waiting after this many minutes", numericOption("float"), 240)
     .option("--json", "print JSON")
@@ -450,8 +497,36 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           timeout?: number;
           wait: number;
           json?: boolean;
+          policy?: string;
+          samplePlan?: string;
+          budget?: number;
         },
+        command: Command,
       ) => {
+        if (o.policy || o.samplePlan || o.budget !== undefined) {
+          if (!o.policy || !o.samplePlan)
+            throw new Error("--policy and --sample-plan are required together");
+          if (
+            o.task ||
+            o.suite ||
+            ["sample", "seeds", "oracle"].some((key) => command.getOptionValueSource(key) === "cli")
+          )
+            throw new Error(
+              "policy checks use the frozen sample plan; --task, --suite, --sample, --seeds and --no-oracle do not apply",
+            );
+          const r = await calibrate(await client(), name, {
+            policyRef: o.policy,
+            samplePlan: SamplePlan.parse(JSON.parse(readFileSync(resolve(o.samplePlan), "utf8"))),
+            ...(o.budget === undefined ? {} : { budgetMin: o.budget }),
+            rescore: o.rescore,
+            ...(o.timeout ? { timeoutMin: o.timeout } : {}),
+            waitMin: o.wait,
+            progress: o.json ? undefined : (t) => t && console.error(t),
+          });
+          print(o.json, r, () => formatCalibration(r));
+          if (!r.calibrated) process.exitCode = 1;
+          return;
+        }
         const r = await calibrate(await client(), name, {
           ...(o.task ? { tasks: o.task } : {}),
           sample: o.sample,
@@ -470,10 +545,10 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
 
   bench
     .command("run <benchmark>")
-    .description("start a job: every task × method × seed becomes a trial")
+    .description("start a job from a sample plan or task × method × seed")
     .option(
       "-m, --method <spec>",
-      "name=agent[,auth=P,model=M,effort=E,bundle=DIR,entrypoint=E]; agent: codex | claude-code | external | oracle | empty",
+      "name=agent[,auth=P,model=M,effort=E,bundle=DIR,entrypoint=E,policyRef=P]; agent: CLI name | external | oracle | empty | policy",
       (v, p: string[]) => [...p, v],
       [],
     )
@@ -484,7 +559,17 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
       (v, p: string[]) => [...p, v],
       [],
     )
-    .option("--seeds <n>", "repetitions per task × method", numericOption("integer"), 1)
+    .option(
+      "--seeds <n>",
+      "legacy repetitions per task × method (default: 1)",
+      numericOption("integer"),
+    )
+    .option("--sample-plan <file>", "frozen C6 sample plan JSON; mutually exclusive with --seeds")
+    .option(
+      "--batch-size <n>",
+      "fixed sequential episodes per solve Run (planned C6 only; service RNG continues)",
+      numericOption("integer"),
+    )
     .option("--timeout <min>", "solve timeout per trial in minutes", numericOption("float"))
     .option(
       "--checkpoint <GB>",
@@ -507,7 +592,9 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           method: string[];
           methodsFile?: string;
           task: string[];
-          seeds: number;
+          seeds?: number;
+          samplePlan?: string;
+          batchSize?: number;
           timeout?: number;
           checkpoint?: number;
           option: string[];
@@ -516,6 +603,13 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           json?: boolean;
         },
       ) => {
+        if (o.samplePlan && o.seeds !== undefined)
+          throw new Error("--sample-plan and --seeds are mutually exclusive");
+        if (o.batchSize !== undefined && !o.samplePlan)
+          throw new Error("--batch-size requires --sample-plan");
+        const samplePlan = o.samplePlan
+          ? SamplePlan.parse(JSON.parse(readFileSync(resolve(o.samplePlan), "utf8")))
+          : undefined;
         const methods: unknown[] = o.method.map(parseMethod);
         if (o.methodsFile)
           methods.push(...(JSON.parse(readFileSync(o.methodsFile, "utf8")) as unknown[]));
@@ -527,7 +621,9 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
             benchmark: name,
             tasks: o.task,
             methods: methods as never,
-            seeds: o.seeds,
+            ...(samplePlan
+              ? { samplePlan, ...(o.batchSize === undefined ? {} : { batchSize: o.batchSize }) }
+              : { seeds: o.seeds }),
             options: kv(o.option, "--option"),
             timeoutMin: o.timeout,
             checkpoint: o.checkpoint === undefined ? undefined : { maxSizeGB: o.checkpoint },
@@ -538,7 +634,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           o.json,
           job,
           () =>
-            `started ${job.id}: ${job.spec.tasks.length} tasks × ${job.spec.methods.length} methods × ${job.spec.seeds} seeds`,
+            `started ${job.id}: ${job.spec.methods.length} methods × ${job.spec.samplePlan ? `${job.spec.samplePlan.items.length} planned samples` : `${job.spec.tasks.length} tasks × ${job.spec.seeds} seeds`}`,
         );
       },
     );
@@ -599,7 +695,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
 
   bench
     .command("cancel <job>")
-    .description("cancel a job's open trials (they end as unknown)")
+    .description("cancel unfinished work; sealed batch episodes are still verified")
     .action(async (id: string) => {
       const j = await (await client()).benchCancel(id);
       console.log(`${j.id} ${j.state}`);

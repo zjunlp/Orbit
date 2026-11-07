@@ -1,0 +1,32 @@
+# Official inference dependencies, including the bidirectional-attention fork.
+torch==2.2.0
+torchvision==0.17.0
+torchaudio==2.2.0
+numpy==1.26.4
+transformers @ git+https://github.com/moojink/transformers-openvla-oft.git@bc339d9ad707454c0c115970db43c260067c61ab
+dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46
+accelerate==0.30.1
+draccus==0.8.0
+einops==0.8.1
+huggingface-hub==0.25.2
+json-numpy==2.1.0
+jsonlines==4.0.0
+matplotlib==3.8.4
+peft==0.11.1
+protobuf==3.20.3
+rich==13.9.4
+sentencepiece==0.1.99
+timm==0.9.10
+tokenizers==0.19.1
+wandb==0.18.7
+tensorflow==2.15.0
+tensorflow-datasets==4.9.3
+tensorflow-graphics==2021.12.3
+diffusers==0.30.3
+imageio==2.37.0
+websockets==13.1
+msgpack==1.1.0
+msgpack-numpy==0.4.8
+tensorflow-metadata==1.14.0
+pillow==10.4.0
+setuptools==70.3.0

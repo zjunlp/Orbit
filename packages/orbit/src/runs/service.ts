@@ -349,7 +349,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     if (run.remote && this.store.getSync(run.id)?.done === false)
       return `${run.id} is still being mirrored from ${run.node}`;
     if (!forJob) {
-      const t = this.store.trialByRun(run.id);
+      const t = this.store.trialsByRun(run.id)[0];
       if (t) return `${run.id} belongs to bench job ${t.jobId}; delete the job instead`;
     }
     return null;

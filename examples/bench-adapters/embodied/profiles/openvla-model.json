@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "openvla-oft-libero-policy-reference/1",
+  "sources": {
+    "openvla": {
+      "repository": "https://github.com/moojink/openvla-oft",
+      "commit": "e4287e94541f459edc4feabc4e181f537cd569a8"
+    },
+    "transformers": {
+      "repository": "https://github.com/moojink/transformers-openvla-oft",
+      "commit": "bc339d9ad707454c0c115970db43c260067c61ab"
+    },
+    "dlimp": {
+      "repository": "https://github.com/moojink/dlimp_openvla",
+      "commit": "040105d256bd28866cc6620621a3d5f7b6b91b46"
+    }
+  },
+  "files": {
+    "pyproject.toml": "sha256:f0c820b3ee1dc9e4d379d1d28b3558c6cb0c5106fb6fb5ecb4abb46e377125cc",
+    "experiments/robot/openvla_utils.py": "sha256:eed754d7c5f9821aae2fe0531dbe01df8c11df0d5c79b4aeeb9bb4452124bdf5",
+    "experiments/robot/robot_utils.py": "sha256:93541b01edd4de49fcc9a1d9249e11fea008b9502fd755096503aaec93773da0",
+    "experiments/robot/libero/libero_utils.py": "sha256:489c16dc8220845b2936ddb81aafd7469061d2009b0edddb2f85703bc51a204f",
+    "experiments/robot/libero/run_libero_eval.py": "sha256:701a20b6ca2942aa36e0e7d567b25647268b936a23af79c5893534f10bec7802",
+    "prismatic/extern/hf/modeling_prismatic.py": "sha256:b5431a074c0025a12e46dc954a5e18d1d73477babb5ae42e3a12ab4b907f33a6",
+    "prismatic/vla/constants.py": "sha256:5b53c3a07cf1ed27bf94a88da9929e82818792d6fdc32343d133afea1a0acf3d",
+    "prismatic/models/action_heads.py": "sha256:8e42df65d6407d64d47457286d9be05466d25d8a0f094aa9dfb90de84a9aa7cc",
+    "prismatic/models/projectors.py": "sha256:3ac1ef82215b30792bdaf9c980cf8b93046dec1b220597cfc0f536bfe5ebdf42",
+    "prismatic/training/train_utils.py": "sha256:6ecc95436fde63ce023e2ba7151826d96a915b5d5c2ec5698750022580b0e7b3"
+  },
+  "model": {
+    "repository": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+    "revision": "6d0231af0e48c5985f1ff86908f4674b84bc049b"
+  },
+  "unnormKey": "libero_spatial_no_noops",
+  "actionChunkSize": 8,
+  "ioAdapter": "libero-native"
+}

@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import type { AuthEntry, AuthStore } from "../auth/index.ts";
 import type { OrbitPaths } from "../config/paths.ts";
 import {
+  type AdapterSolveBatch,
   type AdapterTasksResponse,
   type AgentCapabilities,
   type AgentDefinition,
@@ -29,8 +30,10 @@ import {
   type BenchUsage,
   CalibrationRequest,
   type CalibrationRequestInput,
+  calibrationExecutionEnd,
   calibrationMethods,
   calibrationReport,
+  calibrationRunsClean,
   capabilityAllows,
   Folder,
   type FolderExportResult,
@@ -39,10 +42,14 @@ import {
   isTerminal,
   type Method,
   type Outcome,
+  type ResolvedBinding,
   type Run,
   type RunDeletion,
   type RunSpecInput,
   type ScoreResult,
+  type ServiceSpec,
+  sampleIdentity,
+  sampleLabel,
   sampleTasks,
   type Trial,
   trialRunIds,
@@ -68,10 +75,14 @@ import { compareJobs, summarize } from "./summary.ts";
 export { benchGroup } from "./consolidate.ts";
 export { compareJobs, summarize } from "./summary.ts";
 
+import { DatasetRegistry } from "../workspace/datasets.ts";
 import { asiMethodProblem } from "./asi.ts";
+import { assignSolveBatches } from "./batches.ts";
+import { PolicyRegistry } from "./policies.ts";
 import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { applyOverride, loadResources, resolveResources, usageRows } from "./resources.ts";
+import { checkSamplePlan, resolveBinding } from "./samples.ts";
 import { buildReport, sameReport } from "./summary.ts";
 import { addEfeTrajectory } from "./trajectory-artifacts.ts";
 
@@ -102,18 +113,23 @@ function failed(solve: Run, issues: string[], issue: string): Outcome {
 const LISTING_TTL_MS = 10 * 60_000;
 
 export class BenchService {
+  readonly policies: PolicyRegistry;
   private readonly deps: BenchServiceDeps;
   /** Agent definitions; built-ins when the caller (tests, embedders) did not supply a registry. */
   private readonly agents: AgentRegistry;
   /** Trials being advanced, and those changed meanwhile (advanced once more afterwards). */
   private readonly busy = new Set<string>();
   private readonly again = new Set<string>();
+  private readonly batchBusy = new Set<string>();
+  private readonly calibrationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private stopped = false;
   /** Task listings of registered benchmarks for the catalog, refreshed in the background. */
   private readonly listings = new Map<string, Listing>();
   private listingQueue: Promise<void> = Promise.resolve();
 
   constructor(deps: BenchServiceDeps) {
     this.deps = deps;
+    this.policies = new PolicyRegistry(join(deps.paths.home, "policies.json"));
     this.agents = deps.agents ?? builtinRegistry();
     deps.runs.on("change", ({ run }) => this.onRun(run));
   }
@@ -123,6 +139,8 @@ export class BenchService {
    * background: advancing them may call adapters, which must not hold up the daemon's start.
    */
   start(): void {
+    this.stopped = false;
+    for (const job of this.deps.store.listJobs(10_000)) this.armCalibrationBudget(job);
     for (const t of this.deps.store.pendingTrialCleanup()) {
       if (this.reconcileCleanup(t))
         this.deps.log?.(`bench trial ${t.id}: repaired outcome cleanup`);
@@ -132,6 +150,63 @@ export class BenchService {
     for (const j of this.deps.store.listJobs(10_000))
       if (j.spec.calibration && j.state !== "running" && j.rescore?.state !== "done")
         if (!this.deps.store.hasOpenTrials(j.id)) this.afterCalibration(j.id);
+  }
+
+  stop(): void {
+    this.stopped = true;
+    for (const timer of this.calibrationTimers.values()) clearTimeout(timer);
+    this.calibrationTimers.clear();
+  }
+
+  /** Restore stop intent before RunService starts scheduling recovered queued work. */
+  async enforceCalibrationBudgets(): Promise<void> {
+    for (const stored of this.deps.store.listJobs(10_000)) {
+      const job = this.settlePolicyExecution(stored);
+      const deadline = this.calibrationDeadline(job);
+      if (deadline !== null && Date.now() >= deadline) await this.expireCalibration(job.id);
+    }
+  }
+
+  private calibrationDeadline(job: BenchJob): number | null {
+    const c = job.spec.calibration;
+    return c?.mode === "policy" && !job.calibrationExecutionEndedAt
+      ? Date.parse(job.createdAt) + (c.budgetMin as number) * 60_000
+      : null;
+  }
+
+  private clearCalibrationTimer(id: string): void {
+    clearTimeout(this.calibrationTimers.get(id));
+    this.calibrationTimers.delete(id);
+  }
+
+  private armCalibrationBudget(job: BenchJob): void {
+    const deadline = this.calibrationDeadline(job);
+    if (deadline === null || this.stopped || this.calibrationTimers.has(job.id)) return;
+    const timer = setTimeout(
+      () => {
+        this.calibrationTimers.delete(job.id);
+        void this.expireCalibration(job.id).catch((e) =>
+          this.deps.log?.(`calibration budget ${job.id}: ${e.message}`),
+        );
+      },
+      Math.max(1, deadline - Date.now()),
+    );
+    timer.unref();
+    this.calibrationTimers.set(job.id, timer);
+  }
+
+  private async expireCalibration(id: string): Promise<void> {
+    const stored = this.deps.store.getJob(id);
+    if (!stored) return;
+    const job = this.settlePolicyExecution(stored);
+    const deadline = this.calibrationDeadline(job);
+    if (deadline === null || Date.now() < deadline) return;
+    if (!job.calibrationExpiredAt) {
+      job.calibrationExpiredAt = nowIso();
+      this.deps.store.putJob(job);
+    }
+    await this.cancel(id);
+    if (!this.deps.store.hasOpenTrials(id)) this.afterCalibration(id);
   }
 
   /** Advance trials one after another in the background (each may run adapter processes). */
@@ -178,7 +253,14 @@ export class BenchService {
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
     const all = info.tasks;
+    if (
+      spec.batchSize &&
+      (!info.capabilities?.embodied?.batch ||
+        spec.batchSize > info.capabilities.embodied.batch.maxEpisodes)
+    )
+      throw new UserError("batchSize exceeds the benchmark's declared fixed-batch support");
     const names = new Set<string>();
+    const resolvedBindings: Record<string, ResolvedBinding> = {};
     for (const m of spec.methods) {
       if (names.has(m.name)) throw new UserError(`duplicate method name: ${m.name}`);
       names.add(m.name);
@@ -187,14 +269,62 @@ export class BenchService {
       const asi = b.adapter === "asi" ? asiMethodProblem(m) : null;
       if (asi) throw new UserError(`${m.name}: ${asi}`);
       this.checkMethod(m, info.capabilities?.requires ?? []);
+      if (m.agent === "policy") {
+        const policy = this.policies.get(m.policyRef ?? "");
+        if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
+        if (spec.calibration?.mode === "policy" && policy.kind !== "model")
+          throw new UserError(
+            "policy integration checks require a real model registration, not a calibration fixture",
+          );
+        m.policySnapshot = structuredClone(policy);
+        const endpoint = info.capabilities?.embodied;
+        if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
+        try {
+          resolvedBindings[m.name] = resolveBinding(
+            endpoint.semanticProfile,
+            policy.profile,
+            endpoint.observationMap,
+          );
+        } catch (e) {
+          throw new UserError(`${m.name}: ${(e as Error).message}`);
+        }
+      }
     }
-    if (spec.tasks.length === 0) spec.tasks = all.filter((t) => t.supported).map((t) => t.id);
+    if (spec.tasks.length === 0)
+      spec.tasks = spec.samplePlan
+        ? [...new Set(spec.samplePlan.items.map((sample) => sample.taskId))]
+        : all.filter((t) => t.supported).map((t) => t.id);
     for (const id of spec.tasks) {
       const t = all.find((x) => x.id === id);
       if (!t) throw new UserError(`task not found in ${b.name}: ${id}`);
       if (!t.supported) throw new UserError(`task ${id} is not supported: ${t.reason}`);
     }
     if (spec.tasks.length === 0) throw new UserError(`${b.name} has no supported tasks`);
+    if (spec.samplePlan) {
+      try {
+        checkSamplePlan(spec.samplePlan);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+      if (spec.methods.some((m) => m.agent !== "policy"))
+        throw new UserError("planned C6 jobs currently require independent policy methods");
+      for (const sample of spec.samplePlan.items) {
+        if (sample.benchmarkProfile !== info.capabilities?.embodied?.profile)
+          throw new UserError("sample evaluation profile does not match the benchmark");
+        if (!spec.tasks.includes(sample.taskId))
+          throw new UserError(`sample task is not selected: ${sample.taskId}`);
+        const expectedAsset = all.find((task) => task.id === sample.taskId)?.tags
+          .initialStateDigest;
+        if (expectedAsset && expectedAsset !== sample.initialStateDigest)
+          throw new UserError(`initial-state asset differs from the benchmark: ${sample.taskId}`);
+      }
+      if (spec.tasks.some((task) => !spec.samplePlan?.items.some((s) => s.taskId === task)))
+        throw new UserError("every selected task needs at least one planned sample");
+    } else if (spec.methods.some((m) => m.agent === "policy")) {
+      throw new UserError(
+        "policy methods require a frozen samplePlan; legacy seeds cannot identify their samples",
+      );
+    }
     let resources: BenchJob["resources"] = null;
     if (b.resources) {
       try {
@@ -211,6 +341,7 @@ export class BenchService {
       id: newId(),
       spec,
       benchmarkSnapshot: structuredClone(b),
+      ...(spec.samplePlan ? { resolvedBindings } : {}),
       ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
       ...(info.official ? { official: structuredClone(info.official) } : {}),
       resources,
@@ -225,28 +356,46 @@ export class BenchService {
     const ids: string[] = [];
     this.deps.store.tx(() => {
       this.deps.store.putJob(job);
-      for (const task of spec.tasks)
-        for (const m of spec.methods)
-          for (let seed = 1; seed <= spec.seeds; seed++) {
-            const t: Trial = {
-              id: `${job.id}.${String(++n).padStart(5, "0")}`,
-              jobId: job.id,
-              task,
-              method: m.name,
-              seed,
-              state: "pending",
-              solveRunId: null,
-              verifyRunId: null,
-              issues: [],
-              outcome: null,
-              history: [],
-              createdAt: job.createdAt,
-              endedAt: null,
-            };
-            this.deps.store.putTrial(t);
-            ids.push(t.id);
-          }
+      const slots = spec.samplePlan
+        ? spec.samplePlan.items.flatMap((sample) =>
+            spec.methods.map((method) => ({
+              method,
+              sample: { task: sample.taskId, sampleRef: sample.sampleId },
+            })),
+          )
+        : spec.tasks.flatMap((task) =>
+            spec.methods.flatMap((method) =>
+              Array.from({ length: spec.seeds ?? 1 }, (_, index) => ({
+                method,
+                sample: { task, seed: index + 1 },
+              })),
+            ),
+          );
+      for (const { sample, method } of slots) {
+        const t: Trial = {
+          ...sample,
+          id: `${job.id}.${String(++n).padStart(5, "0")}`,
+          jobId: job.id,
+          method: method.name,
+          state: "pending",
+          solveRunId: null,
+          verifyRunId: null,
+          issues: [],
+          outcome: null,
+          history: [],
+          createdAt: job.createdAt,
+          endedAt: null,
+        };
+        this.deps.store.putTrial(t);
+        ids.push(t.id);
+      }
+      if (spec.batchSize) {
+        const planned = this.deps.store.trials(job.id);
+        assignSolveBatches(job, planned);
+        for (const trial of planned) this.deps.store.putTrial(trial);
+      }
     });
+    this.armCalibrationBudget(job);
     this.advanceAll(ids);
     return job;
   }
@@ -292,7 +441,7 @@ export class BenchService {
     const job = this.deps.store.getJob(id);
     if (!job) throw new NotFoundError(`bench job not found: ${id}`);
     const trials = this.deps.store.trials(id);
-    const calibration = calibrationReport(job, trials);
+    const calibration = this.calibration(job, trials);
     return {
       job,
       trials,
@@ -314,8 +463,24 @@ export class BenchService {
    */
   async calibrate(input: CalibrationRequestInput): Promise<BenchJob> {
     const parsed = CalibrationRequest.safeParse(input);
-    if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
+    if (!parsed.success) {
+      const policy = input && typeof input === "object" && "policyRef" in input;
+      const issues = parsed.error.issues.flatMap((issue) =>
+        issue.code === "invalid_union" ? (issue.errors.at(policy ? -1 : 0) ?? [issue]) : [issue],
+      );
+      throw new UserError(issues.map((issue) => issue.message).join("; "));
+    }
     const r = parsed.data;
+    if ("policyRef" in r)
+      return this.submit({
+        name: `policy check ${r.benchmark} / ${r.policyRef}`,
+        benchmark: r.benchmark,
+        methods: [{ name: "policy", agent: "policy", policyRef: r.policyRef }],
+        samplePlan: r.samplePlan,
+        batchSize: r.samplePlan.items.length,
+        calibration: { mode: "policy", budgetMin: r.budgetMin, rescore: r.rescore },
+        timeoutMin: Math.min(r.timeoutMin ?? r.budgetMin, r.budgetMin),
+      });
     const info = await this.infoOf(this.benchmark(r.benchmark));
     this.remember(r.benchmark, info);
     const oracle = r.oracle && info.capabilities?.calibration?.oracle !== "none";
@@ -339,13 +504,17 @@ export class BenchService {
 
   /** A calibration job's trials have all ended: rescore it once from saved evidence, then finish. */
   private afterCalibration(id: string): void {
+    if (this.stopped) return;
     const job = this.deps.store.getJob(id);
     const c = job?.spec.calibration;
-    if (!job || !c || job.rescore?.state === "done") return;
+    if (!job || !c || this.deps.store.hasOpenTrials(id)) return;
+    if (c.mode === "policy" && this.settlePolicyExecution(job).calibrationExecutionEndedAt) return;
+    if (job.rescore?.state === "done") return;
     const done = (note?: string) => {
       const fresh = this.deps.store.getJob(id) ?? job;
       fresh.rescore = { state: "done", ...(note ? { note } : {}) };
       this.deps.store.putJob(fresh);
+      this.settlePolicyExecution(fresh);
     };
     const skip =
       job.rescore?.state === "started"
@@ -364,7 +533,8 @@ export class BenchService {
     job.rescore = { state: "started" };
     this.deps.store.putJob(job);
     try {
-      const r = this.rescore(id);
+      const first = c.mode === "policy" ? this.deps.store.trials(id)[0]?.id : undefined;
+      const r = this.rescore(id, first ? { trials: [first] } : {});
       if (r.skipped.length) {
         const fresh = this.deps.store.getJob(id) ?? job;
         fresh.rescore = {
@@ -378,6 +548,48 @@ export class BenchService {
     }
   }
 
+  private settlePolicyExecution(job: BenchJob): BenchJob {
+    if (job.spec.calibration?.mode !== "policy") return job;
+    const trials = this.deps.store.trials(job.id);
+    const runs = this.calibrationRuns(job, trials);
+    const ended = calibrationExecutionEnd(job, trials, runs);
+    if (!ended) return job;
+    let changed = false;
+    if (!job.calibrationExecutionEndedAt) {
+      job.calibrationExecutionEndedAt = ended;
+      job.rescore = { ...job.rescore, state: "done" };
+      job.endedAt = null;
+      const deadline =
+        Date.parse(job.createdAt) + (job.spec.calibration.budgetMin as number) * 60_000;
+      if (Date.parse(ended) > deadline && !job.calibrationExpiredAt)
+        job.calibrationExpiredAt = ended;
+      this.clearCalibrationTimer(job.id);
+      changed = true;
+    }
+    if (!job.endedAt && !this.deps.store.hasOpenTrials(job.id) && calibrationRunsClean(runs)) {
+      job.endedAt = nowIso();
+      changed = true;
+    }
+    if (changed) this.deps.store.putJob(job);
+    return job;
+  }
+
+  private calibrationRuns(job: BenchJob, trials: Trial[]): Map<string, Run | null> {
+    const runs = new Map(
+      trials.flatMap(trialRunIds).map((id) => [id, this.deps.runs.get(id)] as const),
+    );
+    // A submitted Run is durable before its Trial linkage is written.
+    for (const run of this.deps.runs.storeList({ group: benchGroup(job.id), limit: 100_000 }))
+      if (run.spec.tags.job === job.id) runs.set(run.id, run);
+    return runs;
+  }
+
+  private calibration(job: BenchJob, trials: Trial[]) {
+    const runs =
+      job.spec.calibration?.mode === "policy" ? this.calibrationRuns(job, trials) : undefined;
+    return calibrationReport(job, trials, runs);
+  }
+
   /** Every registered benchmark with its listing, calibrations, real methods and fidelity. */
   catalog(refresh: string[] = []): BenchCatalog {
     const jobs = this.jobs(10_000).jobs;
@@ -385,10 +597,14 @@ export class BenchService {
       entries: this.deps.registry.list().map((b) => {
         this.refreshListing(b, refresh.includes(b.name));
         const own = jobs.filter((j) => j.spec.benchmark === b.name);
-        const calibrations = own
-          .filter((j) => j.spec.calibration)
-          .slice(0, 5)
-          .map((j) => calibrationReport(j, this.deps.store.trials(j.id)))
+        const selected = [
+          ...own
+            .filter((j) => j.spec.calibration && j.spec.calibration.mode !== "policy")
+            .slice(0, 5),
+          ...own.filter((j) => j.spec.calibration?.mode === "policy").slice(0, 5),
+        ];
+        const calibrations = selected
+          .map((j) => this.calibration(j, this.deps.store.trials(j.id)))
           .filter((r) => r !== null);
         return catalogEntry(b, this.listing(b.name), own, calibrations);
       }),
@@ -465,7 +681,7 @@ export class BenchService {
   }
 
   private ownerJob(runId: string): BenchJob | null {
-    const t = this.deps.store.trialByRun(runId);
+    const t = this.deps.store.trialsByRun(runId)[0];
     return t ? this.deps.store.getJob(t.jobId) : null;
   }
 
@@ -578,7 +794,7 @@ export class BenchService {
           if (!run) throw new UserError(`missing run ${rid}`);
           const blocker = this.deps.runs.deleteBlocker(run, true);
           if (blocker) throw new UserError(blocker);
-          if (this.deps.store.trialByRun(rid)?.id !== t.id)
+          if (!this.deps.store.trialsByRun(rid).some((owner) => owner.id === t.id))
             throw new UserError(`inconsistent run ownership: ${rid}`);
           oldRuns.set(rid, run);
         }
@@ -639,6 +855,9 @@ export class BenchService {
     if (trials.some((t) => this.busy.has(t.id)))
       throw new UserError(`bench job ${id} is still being updated; try again shortly`);
     const ids = trials.flatMap(trialRunIds).filter((r) => this.deps.runs.get(r));
+    for (const runId of new Set(ids))
+      if (this.deps.store.trialsByRun(runId).some((owner) => owner.jobId !== id))
+        throw new UserError(`shared run ${runId} is still referenced by another job`);
     const out = await this.deps.runs.delete(ids, { forJob: true });
     this.deps.store.deleteJob(id);
     rmSync(join(this.deps.paths.bench, id), { recursive: true, force: true });
@@ -665,6 +884,7 @@ export class BenchService {
       ...f.trials.filter((x) => !all.some((t) => t.id === x)).map((x) => `trial ${x}`),
     ];
     if (unknown.length) throw new UserError(`not in job ${id}: ${unknown.join(", ")}`);
+    this.settlePolicyExecution(job);
     const picked = all.filter(
       (t) =>
         (!f.tasks.length || f.tasks.includes(t.task)) &&
@@ -703,7 +923,8 @@ export class BenchService {
     const solve = t.solveRunId ? this.deps.runs.get(t.solveRunId) : null;
     if (!solve) return "has no solve run";
     if (solve.remote) return `solve output stays on ${solve.node}`;
-    if (!solveVerdict(solve).verify) return `solve run ${solve.state}; nothing to verify`;
+    if (!solveVerdict(solve).verify && !this.hasEpisodeEvidence(t, solve))
+      return `solve run ${solve.state}; nothing to verify`;
     if (solve.spec.after) return "verified in the solve environment, which is gone";
     if (!existsSync(this.deps.runs.dirs(solve.id).output)) return "solve output is gone";
     return null;
@@ -712,26 +933,42 @@ export class BenchService {
   async cancel(id: string): Promise<BenchJob> {
     const job = this.deps.store.getJob(id);
     if (!job) throw new NotFoundError(`bench job not found: ${id}`);
-    if (job.state !== "running") return job;
+    const policyCheck = job.spec.calibration?.mode === "policy";
+    if (job.state !== "running" && !(policyCheck && !job.calibrationExecutionEndedAt)) return job;
     job.state = "cancelled";
     job.endedAt = nowIso();
     this.deps.store.putJob(job);
-    const trials = this.deps.store.trials(id).filter((t) => t.state !== "done");
-    for (const t of trials) {
-      const runId =
-        t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null;
-      if (runId) await this.deps.runs.cancel(runId).catch(() => undefined);
-    }
+    if (policyCheck) this.clearCalibrationTimer(id);
+    const all = this.deps.store.trials(id);
+    const trials = all.filter((t) => t.state !== "done");
+    const runIds = policyCheck
+      ? [...this.calibrationRuns(job, all).values()]
+          .filter((run): run is Run => run !== null && !isTerminal(run.state))
+          .map((run) => run.id)
+      : trials
+          // Completed ordinary batch evidence is still verified after cancellation.
+          .filter((t) => !(t.batch && t.state === "verifying"))
+          .map((t) =>
+            t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null,
+          )
+          .filter((id): id is string => id !== null);
+    for (const runId of new Set(runIds)) await this.deps.runs.cancel(runId).catch(() => undefined);
     this.advanceAll(trials.map((t) => t.id));
+    if (policyCheck && !trials.length) this.afterCalibration(id);
     return job;
   }
 
   // ---- trial state machine ----
 
   private onRun(run: Run): void {
+    if (this.stopped) return;
     if (!("bench" in run.spec.tags) && !run.spec.group?.startsWith("bench-")) return;
-    const t = this.deps.store.trialByRun(run.id);
-    if (t) void this.advance(t.id);
+    for (const t of this.deps.store.trialsByRun(run.id)) void this.advance(t.id);
+    const job = this.deps.store.getJob(run.spec.tags.job ?? "");
+    if (job?.spec.calibration?.mode === "policy")
+      setImmediate(() => {
+        if (!this.stopped && !this.deps.store.hasOpenTrials(job.id)) this.afterCalibration(job.id);
+      });
   }
 
   private async advance(id: string): Promise<void> {
@@ -755,13 +992,21 @@ export class BenchService {
   private context(job: BenchJob, t: Trial): { b: Benchmark; trial: TrialInput } {
     const method = job.spec.methods.find((m) => m.name === t.method);
     if (!method) throw new Error(`method ${t.method} not in job ${job.id}`);
+    const sample = t.sampleRef
+      ? job.spec.samplePlan?.items.find((s) => s.sampleId === t.sampleRef)
+      : undefined;
+    const binding = job.resolvedBindings?.[t.method];
+    if (t.sampleRef && (!sample || sample.taskId !== t.task || !binding))
+      throw new Error("trial sample reference or binding does not match its frozen job");
     return {
       b: job.benchmarkSnapshot ?? this.benchmark(job.spec.benchmark),
       trial: {
         id: t.id,
         task: t.task,
         method,
-        seed: t.seed,
+        ...sampleIdentity(t),
+        ...(t.sampleRef ? { sample, binding } : {}),
+        ...(t.batch ? { batch: t.batch } : {}),
         options: job.spec.options,
         timeoutMin: job.spec.timeoutMin ?? job.resources?.[t.task]?.timeoutMin,
         resources: job.resources?.[t.task],
@@ -778,6 +1023,15 @@ export class BenchService {
   }
 
   private async submitRun(job: BenchJob, t: Trial, phase: "solve" | "verify", spec: RunSpecInput) {
+    const fresh = this.deps.store.getJob(job.id) ?? job;
+    const deadline = this.calibrationDeadline(fresh);
+    if (
+      fresh.spec.calibration?.mode === "policy" &&
+      (this.cancelled(job.id, t) || (deadline !== null && Date.now() >= deadline))
+    ) {
+      if (deadline !== null && Date.now() >= deadline) await this.expireCalibration(job.id);
+      throw new UserError("policy integration check stopped before Run submission");
+    }
     // Read again: the job may have been moved to another folder meanwhile.
     const folder = this.deps.store.getJob(job.id)?.folder ?? job.folder;
     return this.deps.runs.submit(
@@ -786,16 +1040,30 @@ export class BenchService {
         ...(phase === "solve" && job.spec.checkpoint ? { checkpoint: job.spec.checkpoint } : {}),
         // Scoring reads run outputs from this node's disk, so benchmark runs stay here.
         resources: { ...spec.resources, node: this.deps.runs.nodeName },
-        name: `${t.task} · ${t.method}${job.spec.seeds > 1 ? ` #${t.seed}` : ""} · ${phase}`,
+        name: `${t.task} · ${t.method}${t.sampleRef || (job.spec.seeds ?? 1) > 1 ? ` #${sampleLabel(t)}` : ""} · ${phase}`,
         group: benchGroup(job.id),
         tags: {
           ...spec.tags,
           bench: job.spec.benchmark,
           job: job.id,
           trial: t.id,
+          ...(t.sampleRef ? { execution_trial: t.id } : {}),
+          ...(t.batch && phase === "solve"
+            ? {
+                execution_batch: t.batch.plan.id,
+                batch_attempt: t.batch.plan.attemptId,
+                batch_size: String(t.batch.plan.members.length),
+              }
+            : {}),
           phase,
         },
-        params: { task: t.task, method: t.method, seed: String(t.seed), phase },
+        params: {
+          task: t.task,
+          method: t.method,
+          ...(t.sampleRef ? { sampleRef: t.sampleRef } : { seed: String(t.seed) }),
+          phase,
+          ...(t.batch && phase === "solve" ? { batchDigest: t.batch.plan.digest } : {}),
+        },
       },
       { folder },
     );
@@ -872,12 +1140,24 @@ export class BenchService {
    * trial being rescored is never affected by an earlier cancel.
    */
   private cancelled(jobId: string, t: Trial): boolean {
-    return t.history.length === 0 && this.deps.store.getJob(jobId)?.state === "cancelled";
+    const job = this.deps.store.getJob(jobId);
+    return (
+      job?.state === "cancelled" &&
+      (t.history.length === 0 ||
+        (job.spec.calibration?.mode === "policy" && !job.calibrationExecutionEndedAt))
+    );
   }
 
   /** A job cancelled while a run was being submitted: cancel that run too. */
   private async cancelIfJobCancelled(jobId: string, t: Trial, runId: string): Promise<void> {
-    if (this.cancelled(jobId, t) && this.deps.store.getRun(runId)?.stopRequested !== "cancel")
+    if (
+      t.batch &&
+      runId === t.verifyRunId &&
+      this.deps.store.getJob(jobId)?.spec.calibration?.mode !== "policy"
+    )
+      return;
+    const run = this.deps.store.getRun(runId);
+    if (this.cancelled(jobId, t) && run && !isTerminal(run.state) && run.stopRequested !== "cancel")
       await this.deps.runs.cancel(runId).catch(() => undefined);
   }
 
@@ -927,27 +1207,10 @@ export class BenchService {
 
   private async stepPending(job: BenchJob, t: Trial): Promise<void> {
     if (job.state === "cancelled") return this.skipped(t, "unknown", "job cancelled");
-    let spec: RunSpecInput;
+    if (t.batch) return this.stepBatchPending(job, t);
     try {
-      const { b, trial } = this.context(job, t);
-      const reply = await this.adapter(b).solve(trial);
-      spec = applyOverride(
-        toRunSpec(
-          reply.spec,
-          trial.method,
-          b,
-          "solve",
-          () => this.agentDef(trial.method),
-          trial.staging,
-        ),
-        job.resources?.[t.task],
-        job.spec.timeoutMin,
-      );
-      t.issues = [...t.issues, ...reply.issues];
-    } catch (e) {
-      return this.skipped(t, "invalid", `solve spec: ${(e as Error).message}`);
-    }
-    try {
+      const { spec, issues } = await this.solveSpec(job, t);
+      t.issues.push(...issues);
       const run = await this.submitRun(job, t, "solve", spec);
       t.solveRunId = run.id;
       t.state = "solving";
@@ -958,15 +1221,145 @@ export class BenchService {
     }
   }
 
+  private async solveSpec(job: BenchJob, t: Trial, batch?: AdapterSolveBatch) {
+    const { b, trial } = this.context(job, t);
+    const response = await this.adapter(b).solve(trial, batch);
+    const reply = { ...response, spec: structuredClone(response.spec) };
+    if (trial.method.agent === "policy") {
+      const definition = trial.method.policySnapshot;
+      if (!definition) throw new Error("missing frozen policy definition");
+      const services = (reply.spec.services ?? []) as ServiceSpec[];
+      if (services.some((service) => service.name === "policy" || service.role === "policy"))
+        throw new Error("the benchmark adapter may not define the independent policy service");
+      const service = {
+        ...structuredClone(definition.service),
+        name: "policy",
+        ...(definition.service.gpusOf ? {} : { role: "policy" as const }),
+      };
+      if (definition.weights) {
+        const source = new DatasetRegistry(join(this.deps.paths.home, "datasets.json")).path(
+          definition.weights.dataset,
+        );
+        if (!source)
+          throw new Error(`policy dataset not registered: ${definition.weights.dataset}`);
+        service.binds.push({ source, target: definition.weights.target, mode: "ro" });
+      }
+      reply.spec.services = [...services, service];
+      reply.spec.dependsOn = [
+        ...new Set([...((reply.spec.dependsOn ?? []) as string[]), "policy"]),
+      ];
+    }
+
+    const spec = applyOverride(
+      toRunSpec(
+        reply.spec,
+        trial.method,
+        b,
+        "solve",
+        () => this.agentDef(trial.method),
+        trial.staging,
+      ),
+      batch && job.resources?.[t.task]?.timeoutMin
+        ? {
+            ...job.resources[t.task],
+            timeoutMin: (job.resources[t.task]?.timeoutMin ?? 0) * batch.trials.length,
+          }
+        : job.resources?.[t.task],
+      job.spec.timeoutMin === undefined
+        ? undefined
+        : job.spec.timeoutMin * (batch?.trials.length ?? 1),
+    );
+    if (batch && spec.after) throw new Error("shared solves require independent verification");
+    return { spec, issues: reply.issues };
+  }
+
+  private async stepBatchPending(job: BenchJob, t: Trial): Promise<void> {
+    const plan = t.batch?.plan;
+    if (!plan || this.batchBusy.has(plan.id)) return;
+    this.batchBusy.add(plan.id);
+    try {
+      const members = plan.members.map((member) => this.deps.store.getTrial(member.trialId));
+      if (members.some((member) => !member || member.batch?.plan.digest !== plan.digest))
+        throw new Error("fixed batch membership differs from its frozen plan");
+      const trials = members as Trial[];
+      const existing = this.deps.runs
+        .storeList({ group: benchGroup(job.id), limit: 100_000 })
+        .filter(
+          (run) =>
+            run.spec.tags.execution_batch === plan.id &&
+            run.spec.params.batchDigest === plan.digest,
+        );
+      if (existing.length > 1) throw new Error("multiple runs claim one fixed batch attempt");
+      let run = existing[0];
+      let issues: string[] = [];
+      if (!run) {
+        const reply = await this.solveSpec(job, trials[0] as Trial, {
+          plan,
+          trials: trials.map((member) => this.context(job, member).trial),
+        });
+        if (this.deps.store.getJob(job.id)?.state === "cancelled") return;
+        issues = reply.issues;
+        run = await this.submitRun(job, trials[0] as Trial, "solve", reply.spec);
+      }
+      const solve = this.deps.runs.get(run.id) ?? run;
+      this.deps.store.tx(() => {
+        for (const member of trials) {
+          const fresh = this.deps.store.getTrial(member.id) as Trial;
+          fresh.solveRunId = solve.id;
+          if (fresh.state === "pending") fresh.state = "solving";
+          if (fresh.state === "done" && fresh.outcome) fresh.outcome.cleanup = cleanupOf(solve);
+          fresh.issues = [...new Set([...fresh.issues, ...issues])];
+          this.deps.store.putTrial(fresh);
+        }
+      });
+      await this.cancelIfJobCancelled(job.id, t, run.id);
+      this.advanceAll(trials.map((member) => member.id));
+    } catch (e) {
+      for (const member of this.deps.store.trials(job.id))
+        if (member.batch?.plan.id === plan.id && member.state === "pending")
+          this.skipped(member, "invalid", `batch solve rejected: ${(e as Error).message}`);
+    } finally {
+      this.batchBusy.delete(plan.id);
+    }
+  }
+
+  private hasEpisodeEvidence(t: Trial, solve: Run): boolean {
+    const member = t.batch?.plan.members[t.batch.index];
+    return Boolean(
+      member &&
+        existsSync(
+          join(
+            this.deps.runs.dirs(solve.id).output,
+            "episodes",
+            member.episodeId,
+            "evidence-manifest.json",
+          ),
+        ),
+    );
+  }
+
   private async stepSolving(job: BenchJob, t: Trial, solve: Run): Promise<void> {
     if (!isTerminal(solve.state)) return this.cancelIfJobCancelled(job.id, t, solve.id);
+    if (t.batch && solve.cleanup === "pending") return;
+    if (job.spec.calibration?.mode === "policy" && this.cancelled(job.id, t)) {
+      const outcome = classify(solve, null, null, t.issues);
+      outcome.evaluation = "unknown";
+      outcome.score = null;
+      outcome.issues.push(
+        job.calibrationExpiredAt
+          ? "policy calibration budget exhausted"
+          : "policy integration check cancelled",
+      );
+      return this.finish(t, outcome);
+    }
+    const batchEvidence = this.hasEpisodeEvidence(t, solve);
     const sv = solveVerdict(solve);
     // An Agent that could not reach or use its model left nothing worth verifying; an explicit
     // rescore (history kept) verifies anyway, and an after phase has already verified.
     const agent = t.history.length === 0 ? await this.agentFailure(solve) : null;
     if (agent && !solve.spec.after)
       return this.finish(t, classify(solve, null, null, t.issues, agent));
-    if (!sv.verify || this.cancelled(job.id, t)) {
+    if ((!sv.verify || this.cancelled(job.id, t)) && !batchEvidence) {
       const outcome = classify(solve, null, null, t.issues);
       if (sv.verify) {
         outcome.evaluation = "unknown";
@@ -1047,7 +1440,9 @@ export class BenchService {
         await addEfeTrajectory(dirs.output, solve, score, messages, t.task);
     }
     const agent = await this.agentFailure(solve);
-    const outcome = classify(solve, verify, score, t.issues, agent);
+    const outcome = classify(solve, verify, score, t.issues, agent, {
+      independentEpisode: Boolean(t.batch),
+    });
     this.recordMetrics(job, verify, outcome);
     this.finish(t, outcome);
   }

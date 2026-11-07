@@ -165,7 +165,9 @@ describe("reports", () => {
     const a = job();
     expect(planDigest(a)).toBe(planDigest({ spec: { ...a.spec, tasks: ["b", "a"] } }));
     expect(planDigest(a)).not.toBe(planDigest({ spec: { ...a.spec, tasks: ["a", "b", "c"] } }));
-    expect(planDigest(a)).not.toBe(planDigest({ spec: { ...a.spec, seeds: 3 } }));
+    expect(planDigest(a)).not.toBe(
+      planDigest({ spec: { ...a.spec, seeds: 3, samplePlan: undefined, batchSize: undefined } }),
+    );
   });
 
   it("stores revisions append-only and treats unchanged results as the same report", () => {
