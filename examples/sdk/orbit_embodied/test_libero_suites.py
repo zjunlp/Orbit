@@ -25,6 +25,33 @@ def load(name, filename):
 
 
 class SuiteTests(unittest.TestCase):
+    def test_libero_90_registration_requires_only_a_simulator_audit(self):
+        adapter = load("suite_native_adapter", "adapter.py")
+        with patch.dict(sys.modules, {"adapter": adapter}):
+            config = load("suite_native_config", "configure.py")
+        reference = json.loads((HERE / "reference.json").read_text())
+        image = "sha256:" + "a" * 64
+        audit = {"profileDigest": digest(reference), "checks": [{"result": "passed"}],
+                 "checkpoint": {"result": "not_run"},
+                 "images": {"benchmark": {"result": "passed", "id": image}, "policy": {"result": "not_run"}}}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "audit.json"
+            path.write_text(json.dumps(audit))
+            output = root / "native"
+            argv = ["configure.py", "--audit", str(path), "--reference-source", str(root),
+                    "--output-dir", str(output), "--suite", "libero_90"]
+            with patch.object(sys, "argv", argv):
+                with self.assertRaisesRegex(ValueError, "checkpoint and policy image"):
+                    config.main()
+            with patch.object(sys, "argv", argv + ["--benchmark-only"]), contextlib.redirect_stdout(io.StringIO()):
+                config.main()
+            benchmark = json.loads((output / "benchmark.json").read_text())
+            self.assertEqual(benchmark["name"], "libero-90-native")
+            self.assertEqual(benchmark["config"]["suite"], "libero_90")
+            self.assertEqual(benchmark["config"]["image"], image)
+            self.assertFalse((output / "policy.json").exists())
+
     def test_pi05_and_groot_share_benchmark_conditions_and_use_matching_suite_weights(self):
         adapter = load("suite_adapter", "adapter.py")
         with patch.dict(sys.modules, {"adapter": adapter}):

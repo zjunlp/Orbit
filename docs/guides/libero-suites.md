@@ -1,9 +1,9 @@
 # LIBERO suite selection
 
-Native LIBERO registrations support Spatial, Object, Goal and Long (the upstream `libero_10`
-identifier). Each suite uses the existing native driver and its pinned task catalog and initial
-states. Suite selection changes the task list and horizon, without changing the controller,
-raw observation profile, action interpretation or CPU evidence verifier.
+Native LIBERO registrations cover all 130 tasks from the pinned upstream catalog, including
+the two LIBERO-100 splits (LIBERO-90 and Long). Each suite uses the same native driver, raw
+observation profile, action interpretation and CPU evidence verifier. The suite selects the
+task catalog, initial-state assets and horizon.
 
 | Suite | CLI identifier | Tasks | Horizon | OpenPI recipe registration | OFT recipe registration |
 | --- | --- | --- | --- | --- | --- |
@@ -11,12 +11,16 @@ raw observation profile, action interpretation or CPU evidence verifier.
 | Object | `libero_object` | 10 | 280 | `libero-object-native` | `libero-oft-object-native` |
 | Goal | `libero_goal` | 10 | 300 | `libero-goal-native` | `libero-oft-goal-native` |
 | Long | `libero_10` | 10 | 520 | `libero-long-native` | `libero-oft-long-native` |
+| LIBERO-90 | `libero_90` | 90 | 400 | `libero-90-native` | — |
 
 The existing Spatial registration names remain the defaults. Additional suites get their own
-names, so adding Object does not overwrite the Spatial catalog. `LIBERO-90` is outside the
-matching-checkpoint coverage described here.
+names, so adding Object does not overwrite the Spatial catalog. The benchmark-only mode
+registers any native suite with a simulator audit.
 
 ## Model checkpoints
+
+Matching-checkpoint validation covers Spatial, Object, Goal and Long. LIBERO-90 has native
+environment coverage and awaits matching-checkpoint validation.
 
 | Model | Weights used across suites | Policy registration |
 | --- | --- | --- |
@@ -46,7 +50,25 @@ local variables used below to the corresponding locations. Follow the image and 
 [GR00T setup](../../examples/bench-adapters/embodied/GR00T.md) and
 [OpenVLA-OFT setup](../../examples/bench-adapters/embodied/OPENVLA.md).
 
-Use `SUITE=libero_object`, `libero_goal` or `libero_10` in these examples:
+Register LIBERO-90 using the pinned OpenPI simulator image:
+
+```bash
+mkdir -p "$LOCAL_CONFIG"
+python3 examples/bench-adapters/embodied/audit.py \
+  --reference-source "$OPENPI_SOURCE" --benchmark-image "$LIBERO_SIM_IMAGE" \
+  > "$LOCAL_CONFIG/libero-90-audit.json"
+python3 examples/bench-adapters/embodied/configure.py --benchmark-only \
+  --audit "$LOCAL_CONFIG/libero-90-audit.json" --reference-source "$OPENPI_SOURCE" \
+  --suite libero_90 --output-dir "$LOCAL_CONFIG/libero-90"
+orbit bench add-file "$LOCAL_CONFIG/libero-90/benchmark.json"
+orbit bench tasks libero-90-native --json
+```
+
+Use `plan.py --suite libero_90` with task IDs from this registration. Its 400-step horizon
+comes from the pinned OpenPI evaluator. The native C6 evaluation uses frozen initial states
+and the LIBERO success signal.
+
+Use `SUITE=libero_object`, `libero_goal` or `libero_10` in these model setup examples:
 
 ```bash
 PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure.py \
