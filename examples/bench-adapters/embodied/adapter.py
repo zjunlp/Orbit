@@ -16,6 +16,7 @@ sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
 from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, seed_asset
+from orbit_embodied.simpler import initial_state_count, scene_at
 
 
 def check_source(root, source, files):
@@ -86,6 +87,9 @@ def tasks(req):
         listing = [{"id": task, "title": task.split("/")[-1].replace("_", " "),
                     "supported": True, "reason": None, "tags": {"initialStateDigest": seed_asset(reference, task)}}
                    for task in environment["tasks"]]
+        if "simplerScenes" in environment:
+            for task in listing:
+                task["tags"]["initialStateCount"] = str(initial_state_count(environment, task["id"]))
     else:
         if suite not in reference["horizons"]:
             raise ValueError("unsupported LIBERO suite")
@@ -120,6 +124,10 @@ def solve_one(req):
     if "seed" in trial or not trial.get("sample") or trial["sampleRef"] != trial["sample"]["sampleId"]:
         raise ValueError("native embodied execution requires a planned sample, not legacy seeds")
     check_sample(trial["sample"], trial["sampleRef"])
+    environment = reference.get("environment", {})
+    if "simplerScenes" in environment:
+        sample = trial["sample"]
+        scene_at(environment, sample["taskId"], int(sample["initialStateId"]))
     definition = trial["method"].get("policySnapshot")
     if not definition:
         raise ValueError("missing or incompatible frozen policy definition")
@@ -142,7 +150,6 @@ def solve_one(req):
             raise ValueError("simGpuMemGB needs a GPU simulator and a finite positive budget")
         resources["gpuMemGB"] = memory
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
-    environment = reference.get("environment", {})
     assets = environment.get("assets")
     if assets:
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
@@ -167,8 +174,9 @@ def solve(req):
         raise ValueError("batch plan digest mismatch")
     if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
         raise ValueError("batch membership or leader mismatch")
-    if reference_profile(req["benchmark"]["config"]).get("environment", {}).get("kind") in GENERATED_ENVIRONMENTS:
-        check_distinct_resets([trial["sample"] for trial in trials])
+    reference = reference_profile(req["benchmark"]["config"])
+    if reference.get("environment", {}).get("kind") in GENERATED_ENVIRONMENTS:
+        check_distinct_resets([trial["sample"] for trial in trials], reference)
     payloads, reply = [], None
     for index, (trial, member) in enumerate(zip(trials, plan["members"])):
         if (trial["id"] != member["trialId"] or trial["sampleRef"] != member["sampleRef"]

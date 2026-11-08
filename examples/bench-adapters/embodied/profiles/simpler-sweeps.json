@@ -1,0 +1,827 @@
+{
+  "files": {
+    "scripts/octo_bridge.sh": "sha256:50534c010fbb5534b3d97e2dba4c8f9c68147981620325f6e0f0ced12c649d5c",
+    "scripts/octo_drawer_variant_agg.sh": "sha256:08c3a2cab6610e708b263d7cb053e8e6e50726bb423dea67b2ecd66e390825c2",
+    "scripts/octo_drawer_visual_matching.sh": "sha256:d38d6ccb943b56275a576d148ca28773399ae6257482139d2b92f5307b0948d2",
+    "scripts/octo_move_near_variant_agg.sh": "sha256:d6408f52b54e5ccf78e869b5403a376074c4aa683e89463cbe20a7d717561228",
+    "scripts/octo_move_near_visual_matching.sh": "sha256:707bb0a95af2fbcc4103b5db510f5677b294934c7e42a922d4774de642f2de60",
+    "scripts/octo_pick_coke_can_variant_agg.sh": "sha256:f8cb4bee0527b388516cf0247bec4417f45c45cbd65b669dc09728b3dac2c23a",
+    "scripts/octo_pick_coke_can_visual_matching.sh": "sha256:3b34dec9cfa47fcc01282a2d6636c8408c112a05ef21bb112fda55ee80c7cf42",
+    "scripts/octo_put_in_drawer_variant_agg.sh": "sha256:0899c09d3d7fa70e8a296842440bb468afa179eecf673a27f7de26f2e372ac2c",
+    "scripts/octo_put_in_drawer_visual_matching.sh": "sha256:fb2060589f42f210e0f5a3f321f4686b5f68974b603eb1c89b523fda9e15f557",
+    "scripts/rt1_drawer_variant_agg.sh": "sha256:a3df95bf760828409623b0dfdcf2b75ff802b8748f9e1a033026a2c3a0c6e76c",
+    "scripts/rt1_drawer_visual_matching.sh": "sha256:c8c4fcf12266c7b1474772f4007364804eb1c89982dbefce9fbd22bcfe1164f0",
+    "scripts/rt1_move_near_variant_agg.sh": "sha256:85e8c364f54816e42e799470576f4ad520deee6044f3f2b1936915c04b83406c",
+    "scripts/rt1_move_near_visual_matching.sh": "sha256:83e04f28d90035b921fb8957a4b9a14fdb567181f59a49fbb84b1d88b17ae540",
+    "scripts/rt1_pick_coke_can_variant_agg.sh": "sha256:146a9aaaf991708fbf83accae6d54dee2e44546772cf81a275d336506f83a51e",
+    "scripts/rt1_pick_coke_can_visual_matching.sh": "sha256:0e64a7f465afe67b41e10dac36543ab10130b05ca3926a2d3a6513c0447c1b0a",
+    "scripts/rt1_put_in_drawer_variant_agg.sh": "sha256:bddd1fd6d2c7ca71f86e8005c3519b1f850e0917c5cb852cecc96bff46ed0dfe",
+    "scripts/rt1_put_in_drawer_visual_matching.sh": "sha256:ee48631b1e42046e82b74ae0f52f1b0e0a8f138bfc61feaf386d8e2506534886",
+    "scripts/rt1x_bridge.sh": "sha256:ad0bb6435de546aa1a44a7cacfaf5e59a7abc088222cc2c7bbf8ec061f5696b8",
+    "simpler_env/evaluation/argparse.py": "sha256:ae4c9942d0bafe23cf5f2bdc8d18ae3518211ea77fd628a3defb9f8aa6cdb6ec",
+    "simpler_env/evaluation/maniskill2_evaluator.py": "sha256:42bdfc0ccc3f35a20e010509d244ca3dbad825c3ac2feeb21ead933cd51f1b1c",
+    "simpler_env/utils/env/env_builder.py": "sha256:2d5710df48917bf27c533463d9e5110c2ea209665d22ace67e6cdfd7b93eb005"
+  },
+  "profiles": {
+    "widowx-visual-matching": {
+      "bridge": {
+        "defaults": {
+          "controlHz": 5,
+          "simHz": 500,
+          "objectEpisodes": [0.0, 24.0],
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "widowx_carrot_on_plate": {
+                "robot": "widowx",
+                "horizon": 60,
+                "env": "PutCarrotOnPlateInScene-v0",
+                "scene": "bridge_table_1_v1",
+                "overlay": "real_inpainting/bridge_real_eval_1.png",
+                "robotX": [0.147, 0.147, 1.0],
+                "robotY": [0.028, 0.028, 1.0]
+              },
+              "widowx_put_eggplant_in_basket": {
+                "robot": "widowx_sink_camera_setup",
+                "horizon": 120,
+                "env": "PutEggplantInBasketScene-v0",
+                "scene": "bridge_table_1_v2",
+                "overlay": "real_inpainting/bridge_sink.png",
+                "robotX": [0.127, 0.127, 1.0],
+                "robotY": [0.06, 0.06, 1.0]
+              },
+              "widowx_spoon_on_towel": {
+                "robot": "widowx",
+                "horizon": 60,
+                "env": "PutSpoonOnTableClothInScene-v0",
+                "scene": "bridge_table_1_v1",
+                "overlay": "real_inpainting/bridge_real_eval_1.png",
+                "robotX": [0.147, 0.147, 1.0],
+                "robotY": [0.028, 0.028, 1.0]
+              },
+              "widowx_stack_cube": {
+                "robot": "widowx",
+                "horizon": 60,
+                "env": "StackGreenCubeOnYellowCubeBakedTexInScene-v0",
+                "scene": "bridge_table_1_v1",
+                "overlay": "real_inpainting/bridge_real_eval_1.png",
+                "robotX": [0.147, 0.147, 1.0],
+                "robotY": [0.028, 0.028, 1.0]
+              }
+            },
+            "settings": [{}]
+          }
+        ]
+      }
+    },
+    "google-variant-aggregation": {
+      "drawer": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "simHz": 513,
+          "horizon": 113,
+          "robotX": [0.65, 0.85, 3.0],
+          "robotY": [-0.2, 0.2, 3.0],
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+          "objectX": [0.0, 0.0, 1.0],
+          "objectY": [0.0, 0.0, 1.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_close_bottom_drawer": {
+                "env": "CloseBottomDrawerCustomInScene-v0",
+                "build": {
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_close_middle_drawer": {
+                "env": "CloseMiddleDrawerCustomInScene-v0",
+                "build": {
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_close_top_drawer": {
+                "env": "CloseTopDrawerCustomInScene-v0",
+                "build": {
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_open_bottom_drawer": {
+                "env": "OpenBottomDrawerCustomInScene-v0",
+                "build": {
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_open_middle_drawer": {
+                "env": "OpenMiddleDrawerCustomInScene-v0",
+                "build": {
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_open_top_drawer": {
+                "env": "OpenTopDrawerCustomInScene-v0",
+                "build": {
+                  "shader_dir": "rt"
+                }
+              }
+            },
+            "settings": [
+              { "build": { "light_mode": "brighter" }, "scene": "frl_apartment_stage_simple" },
+              { "build": { "light_mode": "darker" }, "scene": "frl_apartment_stage_simple" },
+              { "build": { "station_name": "mk_station2" }, "scene": "frl_apartment_stage_simple" },
+              { "build": { "station_name": "mk_station3" }, "scene": "frl_apartment_stage_simple" },
+              { "scene": "frl_apartment_stage_simple" },
+              { "scene": "modern_bedroom_no_roof" },
+              { "scene": "modern_office_no_roof" }
+            ]
+          }
+        ]
+      },
+      "move-near": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "simHz": 513,
+          "horizon": 80,
+          "robotX": [0.35, 0.35, 1.0],
+          "robotY": [0.21, 0.21, 1.0],
+          "objectEpisodes": [0.0, 60.0],
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.09, -0.09, 1.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_move_near": {}
+            },
+            "settings": [
+              {
+                "build": { "no_distractor": true },
+                "env": "MoveNearGoogleInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "build": { "slightly_brighter_lighting": true },
+                "env": "MoveNearGoogleInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "build": { "slightly_darker_lighting": true },
+                "env": "MoveNearGoogleInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              { "env": "MoveNearAltGoogleCamera2InScene-v0", "scene": "google_pick_coke_can_1_v4" },
+              { "env": "MoveNearAltGoogleCameraInScene-v0", "scene": "google_pick_coke_can_1_v4" },
+              {
+                "env": "MoveNearGoogleInScene-v0",
+                "scene": "Baked_sc1_staging_objaverse_cabinet1_h870"
+              },
+              {
+                "env": "MoveNearGoogleInScene-v0",
+                "scene": "Baked_sc1_staging_objaverse_cabinet2_h870"
+              },
+              { "env": "MoveNearGoogleInScene-v0", "scene": "google_pick_coke_can_1_v4" },
+              {
+                "env": "MoveNearGoogleInScene-v0",
+                "scene": "google_pick_coke_can_1_v4_alt_background"
+              },
+              {
+                "env": "MoveNearGoogleInScene-v0",
+                "scene": "google_pick_coke_can_1_v4_alt_background_2"
+              }
+            ]
+          }
+        ]
+      },
+      "coke-can": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "simHz": 513,
+          "horizon": 80,
+          "robotX": [0.35, 0.35, 1.0],
+          "robotY": [0.2, 0.2, 1.0],
+          "objectX": [-0.35, -0.12, 5.0],
+          "objectY": [-0.02, 0.42, 5.0],
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_pick_horizontal_coke_can": {
+                "build": {
+                  "lr_switch": true
+                }
+              },
+              "google_robot_pick_standing_coke_can": {
+                "build": {
+                  "upright": true
+                }
+              },
+              "google_robot_pick_vertical_coke_can": {
+                "build": {
+                  "laid_vertically": true
+                }
+              }
+            },
+            "settings": [
+              {
+                "build": { "distractor_config": "more" },
+                "env": "GraspSingleOpenedCokeCanDistractorInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "build": { "slightly_brighter_lighting": true },
+                "env": "GraspSingleOpenedCokeCanInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "build": { "slightly_darker_lighting": true },
+                "env": "GraspSingleOpenedCokeCanInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "env": "GraspSingleOpenedCokeCanAltGoogleCamera2InScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "env": "GraspSingleOpenedCokeCanAltGoogleCameraInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "env": "GraspSingleOpenedCokeCanDistractorInScene-v0",
+                "scene": "google_pick_coke_can_1_v4"
+              },
+              {
+                "env": "GraspSingleOpenedCokeCanInScene-v0",
+                "scene": "Baked_sc1_staging_objaverse_cabinet1_h870"
+              },
+              {
+                "env": "GraspSingleOpenedCokeCanInScene-v0",
+                "scene": "Baked_sc1_staging_objaverse_cabinet2_h870"
+              },
+              { "env": "GraspSingleOpenedCokeCanInScene-v0", "scene": "google_pick_coke_can_1_v4" },
+              {
+                "env": "GraspSingleOpenedCokeCanInScene-v0",
+                "scene": "google_pick_coke_can_1_v4_alt_background"
+              },
+              {
+                "env": "GraspSingleOpenedCokeCanInScene-v0",
+                "scene": "google_pick_coke_can_1_v4_alt_background_2"
+              }
+            ]
+          }
+        ]
+      },
+      "place-apple": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "simHz": 513,
+          "horizon": 200,
+          "env": "PlaceIntoClosedTopDrawerCustomInScene-v0",
+          "robotX": [0.65, 0.65, 1.0],
+          "robotY": [-0.2, 0.2, 3.0],
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+          "objectX": [-0.08, -0.02, 3.0],
+          "objectY": [-0.02, 0.08, 3.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_place_apple_in_closed_top_drawer": {
+                "build": {
+                  "shader_dir": "rt",
+                  "model_ids": "apple"
+                }
+              }
+            },
+            "settings": [
+              { "build": { "light_mode": "brighter" }, "scene": "frl_apartment_stage_simple" },
+              { "build": { "light_mode": "darker" }, "scene": "frl_apartment_stage_simple" },
+              { "build": { "station_name": "mk_station2" }, "scene": "frl_apartment_stage_simple" },
+              { "build": { "station_name": "mk_station3" }, "scene": "frl_apartment_stage_simple" },
+              { "scene": "frl_apartment_stage_simple" },
+              { "scene": "modern_bedroom_no_roof" },
+              { "scene": "modern_office_no_roof" }
+            ]
+          }
+        ]
+      }
+    },
+    "google-visual-matching": {
+      "drawer": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "simHz": 513,
+          "horizon": 113,
+          "scene": "dummy_drawer",
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "objectX": [0.0, 0.0, 1.0],
+          "objectY": [0.0, 0.0, 1.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_close_bottom_drawer": {
+                "env": "CloseBottomDrawerCustomInScene-v0",
+                "build": {
+                  "station_name": "mk_station_recolor",
+                  "light_mode": "simple",
+                  "disable_bad_material": true,
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_close_middle_drawer": {
+                "env": "CloseMiddleDrawerCustomInScene-v0",
+                "build": {
+                  "station_name": "mk_station_recolor",
+                  "light_mode": "simple",
+                  "disable_bad_material": true,
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_close_top_drawer": {
+                "env": "CloseTopDrawerCustomInScene-v0",
+                "build": {
+                  "station_name": "mk_station_recolor",
+                  "light_mode": "simple",
+                  "disable_bad_material": true,
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_open_bottom_drawer": {
+                "env": "OpenBottomDrawerCustomInScene-v0",
+                "build": {
+                  "station_name": "mk_station_recolor",
+                  "light_mode": "simple",
+                  "disable_bad_material": true,
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_open_middle_drawer": {
+                "env": "OpenMiddleDrawerCustomInScene-v0",
+                "build": {
+                  "station_name": "mk_station_recolor",
+                  "light_mode": "simple",
+                  "disable_bad_material": true,
+                  "shader_dir": "rt"
+                }
+              },
+              "google_robot_open_top_drawer": {
+                "env": "OpenTopDrawerCustomInScene-v0",
+                "build": {
+                  "station_name": "mk_station_recolor",
+                  "light_mode": "simple",
+                  "disable_bad_material": true,
+                  "shader_dir": "rt"
+                }
+              }
+            },
+            "settings": [
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [-0.182, -0.182, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.02, -0.02, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a2.png",
+                "robotX": [0.889, 0.889, 1.0],
+                "robotY": [-0.203, -0.203, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.06, -0.06, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b1.png",
+                "robotX": [0.752, 0.752, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b2.png",
+                "robotX": [0.851, 0.851, 1.0],
+                "robotY": [0.035, 0.035, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c2.png",
+                "robotX": [0.865, 0.865, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [-0.182, -0.182, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.02, -0.02, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a2.png",
+                "robotX": [0.889, 0.889, 1.0],
+                "robotY": [-0.203, -0.203, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.06, -0.06, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b1.png",
+                "robotX": [0.752, 0.752, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b2.png",
+                "robotX": [0.851, 0.851, 1.0],
+                "robotY": [0.035, 0.035, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c2.png",
+                "robotX": [0.865, 0.865, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_a1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [-0.182, -0.182, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.02, -0.02, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_a2.png",
+                "robotX": [0.889, 0.889, 1.0],
+                "robotY": [-0.203, -0.203, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.06, -0.06, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_b1.png",
+                "robotX": [0.752, 0.752, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_b2.png",
+                "robotX": [0.851, 0.851, 1.0],
+                "robotY": [0.035, 0.035, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_c1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_c2.png",
+                "robotX": [0.865, 0.865, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_a1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [-0.182, -0.182, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.02, -0.02, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_a2.png",
+                "robotX": [0.889, 0.889, 1.0],
+                "robotY": [-0.203, -0.203, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.06, -0.06, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_b1.png",
+                "robotX": [0.752, 0.752, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_b2.png",
+                "robotX": [0.851, 0.851, 1.0],
+                "robotY": [0.035, 0.035, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_c1.png",
+                "robotX": [0.765, 0.765, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_c2.png",
+                "robotX": [0.865, 0.865, 1.0],
+                "robotY": [0.222, 0.222, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.025, -0.025, 1.0]
+              }
+            ]
+          }
+        ]
+      },
+      "move-near": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "simHz": 513,
+          "horizon": 80,
+          "env": "MoveNearGoogleBakedTexInScene-v0",
+          "scene": "google_pick_coke_can_1_v4",
+          "overlay": "real_inpainting/google_move_near_real_eval_1.png",
+          "robotX": [0.35, 0.35, 1.0],
+          "robotY": [0.21, 0.21, 1.0],
+          "objectEpisodes": [0.0, 60.0],
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.09, -0.09, 1.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_move_near": {}
+            },
+            "settings": [
+              { "build": { "urdf_version": "recolor_cabinet_visual_matching_1" } },
+              { "build": { "urdf_version": "recolor_tabletop_visual_matching_1" } },
+              { "build": { "urdf_version": "recolor_tabletop_visual_matching_2" } },
+              {}
+            ]
+          }
+        ]
+      },
+      "coke-can": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "horizon": 80,
+          "env": "GraspSingleOpenedCokeCanInScene-v0",
+          "scene": "google_pick_coke_can_1_v4",
+          "overlay": "real_inpainting/google_coke_can_real_eval_1.png",
+          "robotX": [0.35, 0.35, 1.0],
+          "robotY": [0.2, 0.2, 1.0],
+          "objectX": [-0.35, -0.12, 5.0],
+          "objectY": [-0.02, 0.42, 5.0],
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_pick_horizontal_coke_can": {
+                "build": {
+                  "lr_switch": true
+                }
+              },
+              "google_robot_pick_standing_coke_can": {
+                "build": {
+                  "upright": true
+                }
+              },
+              "google_robot_pick_vertical_coke_can": {
+                "build": {
+                  "laid_vertically": true
+                }
+              }
+            },
+            "settings": [
+              { "build": { "urdf_version": "recolor_cabinet_visual_matching_1" }, "simHz": 501 },
+              { "build": { "urdf_version": "recolor_cabinet_visual_matching_1" }, "simHz": 513 },
+              { "build": { "urdf_version": "recolor_tabletop_visual_matching_1" }, "simHz": 501 },
+              { "build": { "urdf_version": "recolor_tabletop_visual_matching_1" }, "simHz": 513 },
+              { "build": { "urdf_version": "recolor_tabletop_visual_matching_2" }, "simHz": 501 },
+              { "build": { "urdf_version": "recolor_tabletop_visual_matching_2" }, "simHz": 513 },
+              { "simHz": 501 },
+              { "simHz": 513 }
+            ]
+          }
+        ]
+      },
+      "place-apple": {
+        "defaults": {
+          "robot": "google_robot_static",
+          "controlHz": 3,
+          "simHz": 513,
+          "horizon": 200,
+          "env": "PlaceIntoClosedTopDrawerCustomInScene-v0",
+          "scene": "dummy_drawer",
+          "quat": [0.0, 0.0, 0.0, 1.0],
+          "objectX": [-0.08, -0.02, 3.0],
+          "objectY": [-0.02, 0.08, 3.0]
+        },
+        "groups": [
+          {
+            "tasks": {
+              "google_robot_place_apple_in_closed_top_drawer": {
+                "build": {
+                  "station_name": "mk_station_recolor",
+                  "light_mode": "simple",
+                  "disable_bad_material": true,
+                  "model_ids": "baked_apple_v2",
+                  "shader_dir": "rt"
+                }
+              }
+            },
+            "settings": [
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_cabinet_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_1" },
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "build": { "urdf_version": "recolor_tabletop_visual_matching_2" },
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_a0.png",
+                "robotX": [0.644, 0.644, 1.0],
+                "robotY": [-0.179, -0.179, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.03, -0.03, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_b0.png",
+                "robotX": [0.652, 0.652, 1.0],
+                "robotY": [0.009, 0.009, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              },
+              {
+                "overlay": "real_inpainting/open_drawer_c0.png",
+                "robotX": [0.665, 0.665, 1.0],
+                "robotY": [0.224, 0.224, 1.0],
+                "rpy": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

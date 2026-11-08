@@ -31,7 +31,9 @@ def seed_asset(reference, task):
     assets = reference["environment"].get("assets")
     if assets and not assets.get("digest"):
         raise ValueError("use the generated reference with the frozen environment asset digest")
-    return digest({"reset": "environmentSeed+initialStateId", "task": task, "profile": digest(reference)})
+    reset = ("environmentSeed,sceneGrid[initialStateId]" if "simplerScenes" in reference["environment"]
+             else "environmentSeed+initialStateId")
+    return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
 
 def reference_horizon(reference, task):
@@ -86,15 +88,18 @@ def validate_observation(observation, descriptions):
             raise ValueError("non-finite observation: " + name)
 
 
-def reset_seed(sample):
-    """The frozen WidowX reset recipe: environmentSeed + initialStateId."""
+def reset_seed(sample, reference=None):
+    """Use a separate scene index and RNG seed for a fixed scene grid."""
+    if reference and "simplerScenes" in reference["environment"]:
+        return sample["environmentSeed"]
     return sample["environmentSeed"] + int(sample["initialStateId"])
 
 
-def check_distinct_resets(samples):
+def check_distinct_resets(samples, reference=None):
     """Different sampleIds must not alias one native reset (e.g. seeds 7+1 and 8+0)."""
     seen = {}
     for sample in samples:
-        key = (sample["taskId"], reset_seed(sample), sample["policySeed"], sample["repetition"])
+        scene = int(sample["initialStateId"]) if reference and "simplerScenes" in reference["environment"] else None
+        key = (sample["taskId"], scene, reset_seed(sample, reference), sample["policySeed"], sample["repetition"])
         if seen.setdefault(key, sample["sampleId"]) != sample["sampleId"]:
             raise ValueError("two planned samples resolve to the same native reset seed")

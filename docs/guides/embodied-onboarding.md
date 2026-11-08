@@ -51,7 +51,7 @@ orbit bench calibrate "$BENCHMARK" --policy "$POLICY" \
   --sample-plan "$LOCAL_CONFIG/samples.json" --budget 20 --json
 ```
 
-SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。它用 `environmentSeed + initialStateId` 生成场景。LIBERO 则用 `initialStateId` 索引已固定的初态文件。[LIBERO 配置示例](libero-suites.md) · [SimplerEnv 配置示例](../../examples/bench-adapters/embodied/GR00T.md)
+SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。预打包任务用 `environmentSeed + initialStateId` 生成场景。固定场景网格用 `initialStateId` 选场景和位姿，`environmentSeed` 单独控制模拟器随机流。LIBERO 用 `initialStateId` 索引已固定的初态文件。[LIBERO 配置示例](libero-suites.md) · [SimplerEnv 配置示例](../../examples/bench-adapters/embodied/SIMPLER.md)
 
 每个新组合先跑 2–5 个冻结样本，通常选同一代表任务的不同初态。20 分钟预算包含排队、模型启动、执行、CPU 验证及默认首样本重评，最长可设 30 分钟。判定时检查真实模型身份、一个批次一次模型加载、独立 CPU 验证、重评一致性和清理完成。原生任务失败可以得到有效的 0 分，仍可通过接入检查。超时和无效结果按校准报告记录。[接入校准](policy-integration-checks.md) · [批量运行](embodied-batches.md)
 

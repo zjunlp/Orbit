@@ -17,6 +17,8 @@ NVIDIA's distinct LIBERO evaluation protocol or claim statistical parity with it
 `profiles/groot-google.json` adds the six official Google Robot tasks with the Fractal checkpoint.
 It uses the same model service, connector and native Gym driver. Its rectangular camera,
 quaternion state and gripper handling are distinct from WidowX and have a separate frozen profile.
+For benchmark-only registration of the full prepackaged catalogs and published scene sweeps,
+see [Native SimplerEnv](SIMPLER.md).
 
 ## Assets and images
 

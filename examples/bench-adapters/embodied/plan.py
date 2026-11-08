@@ -8,7 +8,8 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "sdk"))
 from orbit_embodied import digest
-from orbit_embodied.binding import GENERATED_ENVIRONMENTS, seed_asset
+from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, seed_asset
+from orbit_embodied.simpler import initial_state_count
 from adapter import catalog
 
 
@@ -18,27 +19,38 @@ def main():
     parser.add_argument("--reference-file", type=Path, default=HERE / "reference.json")
     parser.add_argument("--suite", default="libero_spatial")
     parser.add_argument("--task", action="append", required=True)
-    parser.add_argument("--initial-state", action="append", type=int, required=True)
+    states = parser.add_mutually_exclusive_group(required=True)
+    states.add_argument("--initial-state", action="append", type=int)
+    states.add_argument("--all-initial-states", action="store_true",
+                        help="Expand every pose and scene variant in a fixed SimplerEnv grid")
     parser.add_argument("--environment-seed", type=int, default=7)
     parser.add_argument("--repetitions", type=int, default=1)
     args = parser.parse_args()
     reference = json.loads(args.reference_file.read_text())
-    kind = reference.get("environment", {}).get("kind")
+    environment = reference.get("environment", {})
+    kind = environment.get("kind")
     generated = kind in GENERATED_ENVIRONMENTS
+    uint32_seed = kind in ("robocasa365", "robotwin") or "simplerRobot" in environment
     if args.environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
     if generated:
         tasks = {task: {"tags": {"initialStateDigest": seed_asset(reference, task)}}
-                 for task in reference["environment"]["tasks"]}
+                 for task in environment["tasks"]}
     else:
         tasks = {task["id"]: task for task in catalog(args.reference_source, args.suite)}
     items = []
     for task_id in args.task:
         task = tasks[task_id]
-        for initial_state in args.initial_state:
-            if not 0 <= initial_state < (2 ** 31 if generated else 50):
+        count = initial_state_count(environment, task_id)
+        if args.all_initial_states and count is None:
+            parser.error("--all-initial-states requires a fixed SimplerEnv grid")
+        selected = range(count) if args.all_initial_states else args.initial_state
+        limit = count if count is not None else 2 ** 31 if generated else 50
+        for initial_state in selected:
+            if not 0 <= initial_state < limit:
                 raise ValueError("initial-state index exceeds the selected reset recipe")
-            if kind in ("robocasa365", "robotwin") and not 0 <= args.environment_seed + initial_state < 2 ** 32:
+            scene_seed = args.environment_seed if count is not None else args.environment_seed + initial_state
+            if uint32_seed and scene_seed >= 2 ** 32:
                 raise ValueError("scene seed must fit in an unsigned 32-bit integer")
             for repetition in range(args.repetitions):
                 content = {"taskId": task_id, "benchmarkProfile": reference["id"],
@@ -46,8 +58,7 @@ def main():
                            "environmentSeed": args.environment_seed, "policySeed": 0, "repetition": repetition}
                 items.append({"sampleId": digest(content), **content})
     if generated:
-        from orbit_embodied.binding import check_distinct_resets
-        check_distinct_resets(items)
+        check_distinct_resets(items, reference)
     result = {"version": 1, "items": items, "digest": digest(items)}
     print(json.dumps(result, indent=2))
 
