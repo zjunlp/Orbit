@@ -388,11 +388,17 @@ it("checks connector requirements when a policy is registered", () => {
   homes.push(home);
   const registry = new PolicyRegistry(join(home, "policies.json"));
   const base = policy();
+  expect(() => registry.put({ ...base, connector: "policy-ws" })).toThrow(/execution horizon/);
+  const native = { ...base, connector: "policy-ws", replanSteps: 4 } as const;
+  expect(() => registry.put({ ...native, ioAdapter: "libero-native" })).toThrow(
+    /observation fields/,
+  );
   expect(() => registry.put({ ...base, connector: "openvla-ws" })).toThrow(/eight-step/);
   expect(() =>
     registry.put({ ...base, connector: "groot-zmq", replanSteps: 8, ioAdapter: "libero-native" }),
   ).toThrow(/torch random-stream declaration and backbone digest/);
   expect(registry.list()).toEqual([]);
+  expect(registry.put(native).connector).toBe("policy-ws");
   expect(registry.put(base).connector).toBe("openpi-ws");
 });
 

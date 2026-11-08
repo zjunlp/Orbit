@@ -6,6 +6,10 @@ import { UserError } from "../runs/errors.ts";
 /** What each model connector needs declared explicitly; a new connector adds one entry. */
 const CONNECTOR_RULES: Record<PolicyDefinition["connector"], (d: PolicyDefinition) => string[]> = {
   "openpi-ws": () => [],
+  "policy-ws": (d) => [
+    ...(!d.replanSteps ? ["WebSocket policies require an explicit execution horizon"] : []),
+    ...(d.ioAdapter ? ["WebSocket policies use the bound observation fields directly"] : []),
+  ],
   "openvla-ws": (d) => [
     ...(d.replanSteps !== 8 || d.ioAdapter !== "libero-native"
       ? ["OpenVLA-OFT requires the explicit eight-step native LIBERO I/O recipe"]

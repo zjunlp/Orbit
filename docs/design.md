@@ -865,6 +865,8 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   任意 episode 的随机状态等价。
 - **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
   转换，亦接 SimplerEnv WidowX 七个任务与 Google Robot 六个任务）、`openvla-ws`（官方 OFT 推理在模型端，`libero-oft-native` 是独立评测 recipe）。
+  `policy-ws` 把 Binding 选出的观测交给 Policy 服务，由服务负责图像、状态、语言与动作转换，返回 benchmark 控制器使用的动作块。
+  握手核对冻结的动作维数、重规划步数、权重和归一化摘要以及随机流约定。
   Google Robot 固定矩形相机、xyzw 状态、单步重规划及原生 sticky gripper，复用 Gym driver。
   原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
@@ -877,6 +879,9 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/ROBOTWIN.md)
+- **ManiSkill3 与 Meta-World**：两个 RLinf recipe 分别使用原生 SAPIEN WidowX 和 MuJoCo Sawyer 环境。冻结样本种子、观测和控制语义，
+  以原生 `info.success` 判定 episode。Meta-World 用同一个 `environmentSeed + initialStateId` 生成 MT1 目标并重置环境。
+  Policy 服务分别提供 OFT 和 π₀.₅ 推理。
 - **固定批次**：`spec.batchSize` 按方法、计划顺序和相同生效预算拆分，成员、attemptId、episodeId 与清单摘要提交时冻结；模型服务
   每 Run 启动一次，逐 episode 重建环境并清空连接器状态。容器 watchdog 为逐 episode 预算之和。已封存且独立验证通过的 episode
   不被后续服务失败、OOM 或取消覆盖；共享文件由 Run 持有，随最后所属作业删除；重试结果采用时旧尝试存入 `Trial.priorAttempts`。

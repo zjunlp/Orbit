@@ -83,7 +83,7 @@ export const PolicyDefinition = z.strictObject({
   name: ProfileName,
   version: z.string().min(1),
   kind: z.enum(["model", "calibration"]).default("model"),
-  connector: z.enum(["openpi-ws", "groot-zmq", "openvla-ws"]),
+  connector: z.enum(["openpi-ws", "groot-zmq", "openvla-ws", "policy-ws"]),
   ioAdapter: z
     .enum(["gr00t-flat", "libero-native", "robocasa-native", "robotwin-native"])
     .optional(),

@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -16,6 +16,7 @@ from orbit_embodied.binding import check_distinct_resets, seed_asset
 from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.gym import GymBenchmark
 from orbit_embodied.robocasa import RoboCasaBenchmark, prepare_assets
+from orbit_embodied.tabletop import MetaWorldBenchmark
 
 
 REFERENCE = json.loads((Path(__file__).resolve().parents[2] / "bench-adapters/embodied/profiles/groot-widowx.json").read_text())
@@ -71,6 +72,31 @@ class Policy:
 
 
 class GymTests(unittest.TestCase):
+    def test_metaworld_seeds_goal_generation_and_reset_from_the_same_frozen_sample(self):
+        task = "reach-v3"
+        reference = {"id": "metaworld-reference",
+                     "environment": {"kind": "metaworld", "tasks": [task], "horizon": 160,
+                                     "instructions": {task: "reach"}},
+                     "parameters": {"settleSteps": 0},
+                     "benchmarkProfile": {"action": {"shape": [4]},
+                                          "observations": {"front_rgb": {"shape": [48, 64, 3]}}}}
+        sample = {"taskId": task, "initialStateDigest": seed_asset(reference, task),
+                  "initialStateId": "2", "environmentSeed": 7}
+        env = Mock()
+        env.unwrapped.model.cam_pos = np.zeros((3, 3))
+        env.reset.return_value = np.zeros(39), {}
+        env.render.return_value = np.zeros((48, 64, 3), dtype=np.uint8)
+        make = Mock(return_value=env)
+        with patch.dict("sys.modules", {"gymnasium": types.SimpleNamespace(make=make),
+                                         "metaworld": types.ModuleType("metaworld")}):
+            benchmark = MetaWorldBenchmark(reference, task)
+            with self.assertRaisesRegex(ValueError, "unsigned 32-bit"):
+                benchmark.reset({**sample, "environmentSeed": 2 ** 32 - 2})
+            make.assert_not_called()
+            benchmark.reset(sample)
+        self.assertEqual(make.call_args.kwargs["seed"], 9)
+        env.reset.assert_called_once_with(seed=9)
+
     def test_robocasa_gr00t_scores_only_chunk_ends_including_the_final_partial_chunk(self):
         reference = copy.deepcopy(REFERENCE)
         task = reference["environment"]["tasks"][0]

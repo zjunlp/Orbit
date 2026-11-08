@@ -8,7 +8,8 @@ from transformers import AutoTokenizer
 from orbit_embodied.openpi import libero_rgb
 
 
-def predictor(model, image_processor, checkpoint, unnorm_key):
+def predictor(model, image_processor, checkpoint, unnorm_key, *, temperature=1.6,
+              prompt_length=128, flip_camera=True):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, padding_side="left", local_files_only=True)
     stats = model.norm_stats[unnorm_key]["action"]
     low, high = np.asarray(stats["q01"]), np.asarray(stats["q99"])
@@ -19,9 +20,9 @@ def predictor(model, image_processor, checkpoint, unnorm_key):
     @torch.inference_mode()
     def infer(observation):
         front = np.asarray(observation["front_rgb"])
-        if front.dtype != np.uint8 or front.shape != (256, 256, 3):
-            raise ValueError("RLinf expects a 256x256 HWC uint8 agentview image")
-        frame = torch.from_numpy(libero_rgb(front)).permute(2, 0, 1).unsqueeze(0)
+        if front.dtype != np.uint8 or front.ndim != 3 or front.shape[-1] != 3:
+            raise ValueError("RLinf expects an HWC uint8 camera image")
+        frame = torch.from_numpy(libero_rgb(front) if flip_camera else front.copy()).permute(2, 0, 1).unsqueeze(0)
         channels = []
         for resize, crop, normalize in zip(image_processor.tvf_resize_params, image_processor.tvf_crop_params,
                                            image_processor.tvf_normalize_params):
@@ -30,7 +31,7 @@ def predictor(model, image_processor, checkpoint, unnorm_key):
         pixels = torch.cat(channels, dim=1).to(device=device, dtype=torch.bfloat16)
 
         prompt = f"In: What action should the robot take to {observation['instruction'].lower()}?\nOut: "
-        tokens = tokenizer(prompt, padding="max_length", max_length=128, truncation=True, return_tensors="pt")
+        tokens = tokenizer(prompt, padding="max_length", max_length=prompt_length, truncation=True, return_tensors="pt")
         ids = tokens.input_ids.to(device)
         attention = tokens.attention_mask.to(device=device, dtype=torch.bool)
         first = attention.to(torch.int64).argmax(dim=1, keepdim=True)
@@ -54,7 +55,7 @@ def predictor(model, image_processor, checkpoint, unnorm_key):
         action_logits = logits[0, start:start + action_tokens]
         action_logits[:, :vocab_size - bins] = -torch.inf
         action_logits[:, vocab_size:] = -torch.inf
-        probabilities = (action_logits / 1.6).log_softmax(dim=-1).exp()
+        probabilities = (action_logits / temperature).log_softmax(dim=-1).exp()
         sampled = torch.multinomial(probabilities, 1, replacement=True).reshape(8, 7).cpu().numpy()
         indices = np.clip(vocab_size - sampled - 1, 0, len(model.bin_centers) - 1)
         normalized = model.bin_centers[indices]

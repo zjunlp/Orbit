@@ -38,6 +38,11 @@ class LazyPolicy:
             from orbit_embodied.openvla import OpenVLAClient
             self.client = OpenVLAClient("ws://policy:" + str(self.definition["port"]),
                                        timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps)
+        elif self.definition["connector"] == "policy-ws":
+            from orbit_embodied.policy_ws import PolicyClient
+            self.client = PolicyClient("ws://policy:" + str(self.definition["port"]),
+                                       timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps,
+                                       action_size=self.definition["profile"]["action"]["shape"][0])
         else:
             raise ValueError("unsupported policy connector")
         if (self.client.metadata.get("calibration") is True) != (self.definition["kind"] == "calibration"):
@@ -138,16 +143,20 @@ def execute_episode(request, destination, cancelled=None):
     elif kind == "robotwin":
         from orbit_embodied.robotwin import RoboTwinBenchmark
         benchmark = RoboTwinBenchmark(reference, sample["taskId"])
+    elif kind in ("maniskill3", "metaworld"):
+        from orbit_embodied.tabletop import ManiSkillBenchmark, MetaWorldBenchmark
+        native = ManiSkillBenchmark if kind == "maniskill3" else MetaWorldBenchmark
+        benchmark = native(reference, sample["taskId"])
     else:
         from orbit_embodied.libero import LiberoBenchmark
         suite, name = sample["taskId"].split(":", 1)
-        benchmark = LiberoBenchmark(suite, name)
+        benchmark = LiberoBenchmark(suite, name, settle_steps=reference["parameters"]["settleSteps"])
     expected_horizon = reference_horizon(reference, sample["taskId"])
     policy = LazyPolicy(request["policy"])
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
-            or (kind != "robotwin" and parameters["renderSize"] != 256)
+            or (kind not in ("robotwin", "maniskill3", "metaworld") and parameters["renderSize"] != 256)
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],

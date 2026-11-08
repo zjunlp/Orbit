@@ -12,6 +12,7 @@ from websockets.sync.server import serve
 
 from orbit_embodied.driver import EpisodeFailure
 from orbit_embodied.openvla import OpenVLAClient, libero_inputs, native_actions
+from orbit_embodied.policy_ws import PolicyClient
 from orbit_embodied.wire import pack, unpack
 
 
@@ -23,6 +24,14 @@ def observation():
 
 
 class OpenVLATests(unittest.TestCase):
+    def test_policy_ws_requires_the_frozen_native_action_dimensions(self):
+        client = PolicyClient.__new__(PolicyClient)
+        client.action_size, client.replan_steps = 4, 5
+        client.check_metadata({"actionSize": 4, "replanSteps": 5})
+        for metadata in ({"actionSize": 7, "replanSteps": 5}, {"actionSize": 4, "replanSteps": 8}, []):
+            with self.assertRaisesRegex(ValueError, "frozen profile"):
+                client.check_metadata(metadata)
+
     def test_same_checkpoint_with_the_wrong_normalization_key_is_rejected_before_inference(self):
         path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/run.py"
         spec = importlib.util.spec_from_file_location("embodied_run", path)

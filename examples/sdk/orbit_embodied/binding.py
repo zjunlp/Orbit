@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
-GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin")
+GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "metaworld")
 
 
 def digest(value):
@@ -90,9 +90,13 @@ def validate_observation(observation, descriptions):
 
 def reset_seed(sample, reference=None):
     """Use a separate scene index and RNG seed for a fixed scene grid."""
-    if reference and "simplerScenes" in reference["environment"]:
+    environment = reference["environment"] if reference else {}
+    if "simplerScenes" in environment:
         return sample["environmentSeed"]
-    return sample["environmentSeed"] + int(sample["initialStateId"])
+    seed = sample["environmentSeed"] + int(sample["initialStateId"])
+    if environment.get("kind") == "metaworld" and not 0 <= seed < 2 ** 32:
+        raise ValueError("Meta-World scene seed must fit in an unsigned 32-bit integer")
+    return seed
 
 
 def check_distinct_resets(samples, reference=None):
