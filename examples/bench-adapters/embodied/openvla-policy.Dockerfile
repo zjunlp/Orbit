@@ -1,4 +1,4 @@
-FROM python:3.10-slim-bookworm
+FROM python:3.10-slim-bookworm@sha256:5be5aaecb962a41567bc8041f1e9e3432cb085b037fe057f9a562630b2e4b370
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libgomp1 && rm -rf /var/lib/apt/lists/*
 ENV PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=5

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PolicyRegistry } from "../src/bench/policies.ts";
+import { connectorIssues, PolicyRegistry } from "../src/bench/policies.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { checkSamplePlan, contentDigest, resolveBinding } from "../src/bench/samples.ts";
@@ -63,6 +63,12 @@ function plan() {
   return checkSamplePlan({ version: 1, items, digest: contentDigest(items) });
 }
 
+/** Registrable: the shared shape parses and the connector's requirements hold. */
+const registrable = (input: unknown) => {
+  const parsed = PolicyDefinition.safeParse(input);
+  return parsed.success && connectorIssues(parsed.data).length === 0;
+};
+
 function policy() {
   return PolicyDefinition.parse({
     name: "synthetic-policy",
@@ -106,6 +112,7 @@ it("admits explicit GR00T identities and main-GPU sharing without changing saved
     service: { ...original.service, role: undefined, gpus: 0, gpusOf: "main" },
   };
   expect(PolicyDefinition.parse(input).service.gpusOf).toBe("main");
+  expect(registrable(input)).toBe(true);
   for (const changed of [
     { ...input, backboneDigest: undefined },
     { ...input, replanSteps: undefined },
@@ -113,7 +120,7 @@ it("admits explicit GR00T identities and main-GPU sharing without changing saved
     { ...input, service: { ...input.service, role: "policy" } },
     { ...input, service: { ...input.service, gpusOf: "sim" } },
   ])
-    expect(PolicyDefinition.safeParse(changed).success).toBe(false);
+    expect(registrable(changed)).toBe(false);
 });
 
 it("freezes the OpenVLA-OFT recipe without adding fields to existing policy snapshots", () => {
@@ -136,7 +143,8 @@ it("freezes the OpenVLA-OFT recipe without adding fields to existing policy snap
     { ...input, ioAdapter: "gr00t-flat" },
     { ...input, randomness: original.randomness },
   ])
-    expect(PolicyDefinition.safeParse(changed).success).toBe(false);
+    expect(registrable(changed)).toBe(false);
+  expect(registrable(input)).toBe(true);
   expect(PolicyDefinition.parse(original)).toEqual(original);
 });
 
@@ -328,6 +336,19 @@ describe("planned sample and explicit binding contracts", () => {
       ),
     ).toThrow("action semantics");
   });
+});
+
+it("checks connector requirements when a policy is registered", () => {
+  const home = mkdtempSync(join(tmpdir(), "orbit-embodied-test-"));
+  homes.push(home);
+  const registry = new PolicyRegistry(join(home, "policies.json"));
+  const base = policy();
+  expect(() => registry.put({ ...base, connector: "openvla-ws" })).toThrow(/eight-step/);
+  expect(() =>
+    registry.put({ ...base, connector: "groot-zmq", replanSteps: 8, ioAdapter: "libero-native" }),
+  ).toThrow(/torch random-stream declaration and backbone digest/);
+  expect(registry.list()).toEqual([]);
+  expect(registry.put(base).connector).toBe("openpi-ws");
 });
 
 it.each([false, true, "batch-separate", "batch-shared"])(

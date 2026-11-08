@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 
 def digest(value):
     content = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False, ensure_ascii=False)
     return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def file_digest(path):
+    result = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            result.update(chunk)
+    return "sha256:" + result.hexdigest()
 
 
 def check_sample(sample, sample_ref):
@@ -63,3 +72,17 @@ def validate_observation(observation, descriptions):
             raise ValueError("observation shape or dtype mismatch: " + name)
         if not np.isfinite(array).all():
             raise ValueError("non-finite observation: " + name)
+
+
+def reset_seed(sample):
+    """The frozen WidowX reset recipe: environmentSeed + initialStateId."""
+    return sample["environmentSeed"] + int(sample["initialStateId"])
+
+
+def check_distinct_resets(samples):
+    """Different sampleIds must not alias one native reset (e.g. seeds 7+1 and 8+0)."""
+    seen = {}
+    for sample in samples:
+        key = (sample["taskId"], reset_seed(sample), sample["policySeed"], sample["repetition"])
+        if seen.setdefault(key, sample["sampleId"]) != sample["sampleId"]:
+            raise ValueError("two planned samples resolve to the same native reset seed")

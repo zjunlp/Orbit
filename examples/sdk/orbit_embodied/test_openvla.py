@@ -87,7 +87,10 @@ class OpenVLATests(unittest.TestCase):
                     client.reset({"policySeed": 7})
                 client.reset({"policySeed": 0})
                 result = client.act(observation())
-                np.testing.assert_array_equal(result[:, -1], np.ones(8))
+                # The client returns raw model output; the driver applies the named conversion.
+                np.testing.assert_array_equal(result, np.zeros((8, 7)))
+                self.assertEqual(client.conversion, "libero-gripper")
+                np.testing.assert_array_equal(native_actions(result)[:, -1], np.ones(8))
                 np.testing.assert_array_equal(requests[0]["front_rgb"], observation()["front_rgb"])
                 self.assertEqual(requests[0]["instruction"], observation()["instruction"])
             finally:

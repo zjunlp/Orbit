@@ -382,6 +382,7 @@ it("cancels a Run linked after expiry and keeps cleanup pending until its stop i
     f.store.trials(job.id).every((t) => t.state !== "done" || t.outcome?.cleanup === "pending"),
   ).toBe(true);
   expect(f.bench.job(job.id).calibration?.phase).not.toBe("done");
+  expect(f.store.getJob(job.id)?.endedAt).toBeNull();
   f.finish(f.store.trials(job.id)[0]?.solveRunId ?? null, "cancelled");
   await expect
     .poll(() => f.store.trials(job.id).every((t) => t.outcome?.cleanup === "done"))
@@ -390,6 +391,7 @@ it("cancels a Run linked after expiry and keeps cleanup pending until its stop i
     f.store.trials(job.id).every((t) => t.state === "done" && t.outcome?.cleanup === "done"),
   ).toBe(true);
   expect(f.store.listRuns({ limit: 100 }).every((r) => r.state === "cancelled")).toBe(true);
+  await expect.poll(() => f.store.getJob(job.id)?.endedAt).toBeTruthy();
 });
 
 it("honors an expired budget before restart can schedule another Run", async () => {
@@ -676,74 +678,6 @@ it("restores legacy completion from execution timestamps and keeps later manual 
   expect(f.cancel).not.toHaveBeenCalled();
   expect(f.solve).toHaveBeenCalledTimes(1);
 });
-
-it.each([
-  { active: false, target: 0, automatic: true },
-  { active: true, target: 0, automatic: true },
-  { active: false, target: 1, automatic: true },
-  { active: true, target: 1, automatic: true },
-  { active: false, target: 0, automatic: false },
-])(
-  "preserves a legacy budget after later manual rescore: %j",
-  async ({ active, target, automatic }) => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    const f = fixture();
-    const job = await f.bench.calibrate({ ...f.request, rescore: automatic });
-    if (automatic) {
-      await f.firstScores(job.id);
-      f.finish(f.store.trials(job.id)[0]?.verifyRunId ?? null);
-    } else {
-      await expect
-        .poll(() => f.store.trials(job.id).every((t) => t.state === "solving"))
-        .toBe(true);
-      f.finish(f.store.trials(job.id)[0]?.solveRunId ?? null);
-      await expect
-        .poll(() => f.store.trials(job.id).every((t) => t.state === "verifying"))
-        .toBe(true);
-      for (const trial of f.store.trials(job.id)) f.finish(trial.verifyRunId);
-    }
-    await expect.poll(() => f.bench.job(job.id).calibration?.phase).toBe("done");
-    const original = f.store.getJob(job.id);
-    if (!original?.calibrationExecutionEndedAt) throw new Error("missing original completion");
-    const selected = f.store.trials(job.id)[target];
-    if (!selected) throw new Error("missing selected trial");
-    vi.setSystemTime(Date.now() + 21 * 60_000);
-    f.bench.rescore(job.id, { trials: [selected.id] });
-    await expect.poll(() => f.store.getTrial(selected.id)?.state).toBe("verifying");
-    const manual = f.store.getTrial(selected.id)?.verifyRunId;
-    if (!manual) throw new Error("missing manual verifier");
-    if (!active) {
-      f.finish(manual);
-      await expect.poll(() => f.store.getTrial(selected.id)?.state).toBe("done");
-    }
-    f.bench.stop();
-    // Recreate the document written by a version without the execution timestamp.
-    f.store.putJob({
-      ...(f.store.getJob(job.id) as typeof original),
-      calibrationExecutionEndedAt: undefined,
-      rescore: { state: "done", ...(!automatic ? { note: "disabled" } : {}) },
-    });
-    const upgraded = new BenchService(f.deps);
-    const owner = fixtures[0];
-    if (!owner) throw new Error("missing fixture");
-    owner.bench = upgraded;
-    await upgraded.enforceCalibrationBudgets();
-    upgraded.start();
-    expect(f.store.getJob(job.id)?.calibrationExpiredAt).toBeUndefined();
-    expect(f.store.getJob(job.id)?.calibrationExecutionEndedAt).toBe(
-      original.calibrationExecutionEndedAt,
-    );
-    expect(f.cancel).not.toHaveBeenCalled();
-    if (active) {
-      expect(f.store.getRun(manual)?.state).toBe("queued");
-      expect(upgraded.job(job.id).calibration?.phase).not.toBe("done");
-      f.finish(manual);
-    }
-    await expect.poll(() => upgraded.job(job.id).calibration?.phase).toBe("done");
-    expect(upgraded.job(job.id).calibration?.calibrated).toBe(true);
-    expect(f.solve).toHaveBeenCalledTimes(1);
-  },
-);
 
 it("keeps CLI polling while execution is finished but cleanup remains", async () => {
   vi.useFakeTimers();

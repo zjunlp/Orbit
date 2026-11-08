@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from pathlib import Path
 
 import numpy as np
 
-from .binding import check_sample, digest
+from .binding import check_sample, digest, file_digest
 
 
 def write_json(path, value):
@@ -22,14 +21,6 @@ def write_json(path, value):
         stream.flush()
         os.fsync(stream.fileno())
     temporary.replace(path)
-
-
-def file_digest(path):
-    result = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            result.update(chunk)
-    return "sha256:" + result.hexdigest()
 
 
 def seal(directory, result):
@@ -118,6 +109,14 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
             raise ValueError("requested action chunk is missing")
         chunk = np.load(directory / chunk_path, allow_pickle=False)
         timing = json.loads((directory / timing_path).read_text())
+        if "conversion" in timing:
+            from .openpi import CONVERSIONS
+            raw_path = "chunks/" + str(row["chunk"]) + ".raw.npy"
+            if timing["conversion"] not in CONVERSIONS or raw_path not in manifest["files"]:
+                raise ValueError("converted action chunk lacks its raw model output")
+            raw = np.load(directory / raw_path, allow_pickle=False)
+            if not np.array_equal(CONVERSIONS[timing["conversion"]](raw), chunk):
+                raise ValueError("native actions differ from the recorded conversion of the model output")
         index = row["chunkIndex"]
         if not isinstance(index, int) or not 0 <= index < min(len(chunk), contract["replanSteps"]):
             raise ValueError("executed action has an invalid chunk index")
@@ -129,6 +128,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         raise ValueError("invalid native verdict")
     if result["valid"] and (result.get("failure") or not controls or result["steps"] > contract["horizon"]):
         raise ValueError("valid verdict contradicts execution evidence")
+    budget = contract.get("episodeBudgetSec")
+    if result["valid"] and budget is not None and any(row["wallSeconds"] >= budget for row in controls):
+        raise ValueError("valid verdict exceeds the episode deadline")
     if result["valid"]:
         if "initial-state.json" not in manifest["files"]:
             raise ValueError("initial-state evidence is missing")
@@ -141,6 +143,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     success = any(row["nativeSuccess"] for row in controls) if rule == "any" else bool(controls and controls[-1]["nativeSuccess"])
     if result["valid"] and result["success"] != success:
         raise ValueError("native verdict contradicts the declared control-step aggregation")
-    if result["valid"] and not result["success"] and result["steps"] != contract["horizon"]:
-        raise ValueError("a valid failure must reach the declared horizon")
+    # A valid failure ends at the horizon or at a native termination (e.g. Gym truncation).
+    if (result["valid"] and not result["success"] and result["steps"] != contract["horizon"]
+            and not controls[-1]["terminated"]):
+        raise ValueError("a valid failure must reach the declared horizon or a native termination")
     return result

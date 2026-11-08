@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { detectGpuMode } from "../src/executor/docker.ts";
+import { detectGpuMode, gpuModeProbe } from "../src/executor/docker.ts";
 
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()),
@@ -45,5 +45,26 @@ describe("Docker GPU mode", () => {
       throw new Error("Docker info unavailable");
     });
     expect(detectGpuMode()).toBe("gpus");
+  });
+
+  it("asks Docker again after a failed query and keeps the first answer", () => {
+    const home = mkdtempSync(join(tmpdir(), "orbit-cdi-"));
+    homes.push(home);
+    writeFileSync(join(home, "nvidia.yaml"), 'kind: "nvidia.com/gpu"\n');
+    const info = vi.mocked(execFileSync);
+    info.mockImplementation(() => {
+      throw new Error("Cannot connect to the Docker daemon");
+    });
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
+    const mode = gpuModeProbe(60_000);
+    expect(mode()).toBe("gpus");
+    expect(mode()).toBe("gpus");
+    expect(info).toHaveBeenCalledTimes(1);
+    info.mockReturnValue(JSON.stringify([home]));
+    now.mockReturnValue(60_000);
+    expect(mode()).toBe("cdi");
+    now.mockReturnValue(10 * 60_000);
+    expect(mode()).toBe("cdi");
+    expect(info).toHaveBeenCalledTimes(2);
   });
 });

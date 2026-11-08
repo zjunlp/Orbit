@@ -125,6 +125,43 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(self.verify()["steps"], 3)
         self.assertFalse(result["valid"])
 
+    def test_converted_actions_keep_raw_output_and_are_audited(self):
+        class Converting(SyntheticPolicy):
+            conversion = "libero-gripper"
+
+        result = self.run_sample(SyntheticBenchmark(success_at=2), Converting())
+        raw = np.load(self.output / "chunks/0.raw.npy")
+        executed = np.load(self.output / "chunks/0.npy")
+        np.testing.assert_array_equal(raw[:, :-1], executed[:, :-1])
+        np.testing.assert_array_equal(executed[:, -1], -np.sign(2 * raw[:, -1] - 1))
+        self.assertTrue(self.verify()["success"])
+        np.save(self.output / "chunks/0.raw.npy", raw + 1, allow_pickle=False)
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "conversion"):
+            self.verify()
+
+    def test_final_step_past_the_episode_deadline_is_invalid(self):
+        import time
+
+        class SlowLastStep(SyntheticBenchmark):
+            def step(self, action):
+                native = super().step(action)
+                if self.count == self.success_at:
+                    time.sleep(0.3)
+                return native
+
+        result = run_episode(SlowLastStep(success_at=2), SyntheticPolicy(), self.sample, self.binding,
+                             self.output, "synthetic-trial.attempt", {"fixture": True},
+                             deadline=time.monotonic() + 0.2)
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["failure"], "call_watchdog")
+        self.assertFalse(self.verify()["valid"])
+        # Resealing the late step as a valid success is rejected by the verifier.
+        result.update(valid=True, success=True, failure=None)
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "deadline"):
+            self.verify()
+
     def test_rejected_raw_output_keeps_preceding_controls_and_call_identity(self):
         class RejectingPolicy(SyntheticPolicy):
             def act(self, observation):

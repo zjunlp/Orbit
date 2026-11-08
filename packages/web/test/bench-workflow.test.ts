@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { compareJobs } from "../../orbit/src/bench/summary.ts";
-import { BenchJob, Trial } from "../../orbit/src/contracts/index.ts";
+import { type BenchCompare, BenchJob, Trial } from "../../orbit/src/contracts/index.ts";
 import {
+  changedRows,
   comparisonChange,
   conditionDifferences,
   jobConditions,
@@ -118,5 +119,22 @@ describe("GUI evaluation workflow", () => {
     expect(comparisonChange(0, 1, false)).toBe("regressed");
     expect(comparisonChange(0, 0, true)).toBe("unchanged");
     expect(comparisonChange(null, 0, true)).toBe("unavailable");
+    expect(comparisonChange(0, 1, true, false)).toBe("unavailable");
+  });
+  it("lists tasks the daemon could not pair as unavailable, not improved", () => {
+    const c = {
+      columns: [],
+      metrics: [],
+      rows: [{ task: "a", counts: {}, values: { score: { base: 0, cand: 1 } } }],
+      stats: { score: { pairedTasks: 0, pairedTaskIds: [], columns: {} } },
+    } as unknown as BenchCompare;
+    const metric = { name: "score", higherIsBetter: true };
+    expect(changedRows(c, metric, "base", "cand", "improved")).toEqual([]);
+    expect(changedRows(c, metric, "base", "cand", "unavailable")).toHaveLength(1);
+    const legacy = {
+      ...c,
+      stats: { score: { pairedTasks: 1, columns: {} } },
+    } as unknown as BenchCompare;
+    expect(changedRows(legacy, metric, "base", "cand", "improved")).toHaveLength(1);
   });
 });

@@ -46,6 +46,7 @@ import {
   type Run,
   type RunDeletion,
   type RunSpecInput,
+  RunState,
   type ScoreResult,
   type ServiceSpec,
   sampleIdentity,
@@ -121,6 +122,7 @@ export class BenchService {
   private readonly busy = new Set<string>();
   private readonly again = new Set<string>();
   private readonly batchBusy = new Set<string>();
+  private readonly liveAtStart = new Map<string, Run[]>();
   private readonly calibrationTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private stopped = false;
   /** Task listings of registered benchmarks for the catalog, refreshed in the background. */
@@ -158,9 +160,19 @@ export class BenchService {
     this.calibrationTimers.clear();
   }
 
-  /** Restore stop intent before RunService starts scheduling recovered queued work. */
+  /** Restore cancellation and budget stop intent before RunService schedules recovered work. */
   async enforceCalibrationBudgets(): Promise<void> {
+    // Solves still live from the previous daemon, by job: the only Runs a restart may need to claim.
+    this.liveAtStart.clear();
+    const live = RunState.options.filter((state) => !isTerminal(state));
+    for (const run of this.deps.runs.storeList({ states: live, limit: 100_000 })) {
+      const job = run.spec.tags.job;
+      if (job && run.spec.tags.phase === "solve" && run.spec.group === benchGroup(job))
+        this.liveAtStart.set(job, [...(this.liveAtStart.get(job) ?? []), run]);
+    }
     for (const stored of this.deps.store.listJobs(10_000)) {
+      if (stored.state === "cancelled" && this.liveAtStart.has(stored.id))
+        await this.stopRuns(stored, this.deps.store.trials(stored.id));
       const job = this.settlePolicyExecution(stored);
       const deadline = this.calibrationDeadline(job);
       if (deadline !== null && Date.now() >= deadline) await this.expireCalibration(job.id);
@@ -354,6 +366,7 @@ export class BenchService {
     };
     let n = 0;
     const ids: string[] = [];
+    const created: Trial[] = [];
     this.deps.store.tx(() => {
       this.deps.store.putJob(job);
       const slots = spec.samplePlan
@@ -388,11 +401,12 @@ export class BenchService {
         };
         this.deps.store.putTrial(t);
         ids.push(t.id);
+        created.push(t);
       }
       if (spec.batchSize) {
-        const planned = this.deps.store.trials(job.id);
-        assignSolveBatches(job, planned);
-        for (const trial of planned) this.deps.store.putTrial(trial);
+        // Plan order, not ID order: zero-padded IDs stop sorting numerically past 99,999 trials.
+        assignSolveBatches(job, created);
+        for (const trial of created) this.deps.store.putTrial(trial);
       }
     });
     this.armCalibrationBudget(job);
@@ -551,7 +565,7 @@ export class BenchService {
   private settlePolicyExecution(job: BenchJob): BenchJob {
     if (job.spec.calibration?.mode !== "policy") return job;
     const trials = this.deps.store.trials(job.id);
-    const runs = this.calibrationRuns(job, trials);
+    const runs = this.ownedRuns(job, trials);
     const ended = calibrationExecutionEnd(job, trials, runs);
     if (!ended) return job;
     let changed = false;
@@ -574,7 +588,8 @@ export class BenchService {
     return job;
   }
 
-  private calibrationRuns(job: BenchJob, trials: Trial[]): Map<string, Run | null> {
+  /** Linked Runs plus every Run tagged for the job, including ones persisted before linkage. */
+  private ownedRuns(job: BenchJob, trials: Trial[]): Map<string, Run | null> {
     const runs = new Map(
       trials.flatMap(trialRunIds).map((id) => [id, this.deps.runs.get(id)] as const),
     );
@@ -585,8 +600,7 @@ export class BenchService {
   }
 
   private calibration(job: BenchJob, trials: Trial[]) {
-    const runs =
-      job.spec.calibration?.mode === "policy" ? this.calibrationRuns(job, trials) : undefined;
+    const runs = job.spec.calibration?.mode === "policy" ? this.ownedRuns(job, trials) : undefined;
     return calibrationReport(job, trials, runs);
   }
 
@@ -936,23 +950,13 @@ export class BenchService {
     const policyCheck = job.spec.calibration?.mode === "policy";
     if (job.state !== "running" && !(policyCheck && !job.calibrationExecutionEndedAt)) return job;
     job.state = "cancelled";
-    job.endedAt = nowIso();
+    // A policy check ends only once its Runs are cleaned up (settlePolicyExecution).
+    if (!policyCheck) job.endedAt = nowIso();
     this.deps.store.putJob(job);
     if (policyCheck) this.clearCalibrationTimer(id);
     const all = this.deps.store.trials(id);
     const trials = all.filter((t) => t.state !== "done");
-    const runIds = policyCheck
-      ? [...this.calibrationRuns(job, all).values()]
-          .filter((run): run is Run => run !== null && !isTerminal(run.state))
-          .map((run) => run.id)
-      : trials
-          // Completed ordinary batch evidence is still verified after cancellation.
-          .filter((t) => !(t.batch && t.state === "verifying"))
-          .map((t) =>
-            t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null,
-          )
-          .filter((id): id is string => id !== null);
-    for (const runId of new Set(runIds)) await this.deps.runs.cancel(runId).catch(() => undefined);
+    await this.stopRuns(job, all);
     this.advanceAll(trials.map((t) => t.id));
     if (policyCheck && !trials.length) this.afterCalibration(id);
     return job;
@@ -1149,6 +1153,52 @@ export class BenchService {
   }
 
   /** A job cancelled while a run was being submitted: cancel that run too. */
+  /**
+   * Runs a cancelled job must stop: policy checks stop everything they own; ordinary jobs stop
+   * their active solve/verify Runs and solves submitted but not yet linked to a Trial. Completed
+   * ordinary batch evidence is still verified after cancellation.
+   */
+  private stopRunIds(job: BenchJob, all: Trial[]): string[] {
+    const owned = this.ownedRuns(job, all);
+    const live = (run: Run | null | undefined): run is Run =>
+      Boolean(run && !isTerminal(run.state) && run.stopRequested !== "cancel");
+    if (job.spec.calibration?.mode === "policy")
+      return [...owned.values()].filter(live).map((run) => run.id);
+    const linked = new Set(all.flatMap(trialRunIds));
+    const active = all
+      .filter((t) => t.state !== "done" && !(t.batch && t.state === "verifying"))
+      .map((t) =>
+        t.state === "solving" ? t.solveRunId : t.state === "verifying" ? t.verifyRunId : null,
+      )
+      .filter((id): id is string => id !== null);
+    const unlinked = [...owned.values()]
+      .filter((run) => live(run) && !linked.has(run.id) && run.spec.tags.phase === "solve")
+      .map((run) => (run as Run).id);
+    return [...new Set([...active, ...unlinked])];
+  }
+
+  private async stopRuns(job: BenchJob, all: Trial[]): Promise<void> {
+    for (const runId of this.stopRunIds(job, all))
+      await this.deps.runs.cancel(runId).catch(() => undefined);
+  }
+
+  /**
+   * A solve Run that was live at startup, submitted for this pending Trial (or its batch) before
+   * the previous daemon wrote the linkage. Read from the startup snapshot, not a scan per step.
+   */
+  private claimedSolve(job: BenchJob, t: Trial): Run | null {
+    const own = new Set(trialRunIds(t));
+    const run = (this.liveAtStart.get(job.id) ?? []).find(
+      (r) =>
+        !own.has(r.id) &&
+        (t.batch
+          ? r.spec.tags.execution_batch === t.batch.plan.id &&
+            r.spec.params.batchDigest === t.batch.plan.digest
+          : r.spec.tags.trial === t.id),
+    );
+    return run ? (this.deps.runs.get(run.id) ?? run) : null;
+  }
+
   private async cancelIfJobCancelled(jobId: string, t: Trial, runId: string): Promise<void> {
     if (
       t.batch &&
@@ -1169,14 +1219,14 @@ export class BenchService {
     return runAgentFailure(dirs.agent, dirs.log, (text) => redactor.apply(text)).catch(() => null);
   }
 
-  private skipped(t: Trial, evaluation: Outcome["evaluation"], issue: string): void {
+  private skipped(t: Trial, evaluation: Outcome["evaluation"], issue: string, run?: Run): void {
     this.finish(t, {
       execution: "skipped",
       evaluation,
       score: null,
       maxScore: 1,
       issues: [...t.issues, issue],
-      cleanup: "done",
+      cleanup: run ? cleanupOf(run) : "done",
       review: null,
     });
   }
@@ -1206,8 +1256,24 @@ export class BenchService {
   }
 
   private async stepPending(job: BenchJob, t: Trial): Promise<void> {
-    if (job.state === "cancelled") return this.skipped(t, "unknown", "job cancelled");
+    if (job.state === "cancelled") {
+      const claimed = this.claimedSolve(job, t);
+      if (!claimed) return this.skipped(t, "unknown", "job cancelled");
+      if (!isTerminal(claimed.state) && claimed.stopRequested !== "cancel")
+        await this.deps.runs.cancel(claimed.id).catch(() => undefined);
+      t.solveRunId = claimed.id;
+      return this.skipped(t, "unknown", "job cancelled", this.deps.runs.get(claimed.id) ?? claimed);
+    }
     if (t.batch) return this.stepBatchPending(job, t);
+    const claimed = this.claimedSolve(job, t);
+    if (claimed) {
+      // Submitted before a restart, linkage not yet written: adopt it instead of solving twice.
+      t.solveRunId = claimed.id;
+      t.state = "solving";
+      this.deps.store.putTrial(t);
+      this.again.add(t.id);
+      return;
+    }
     try {
       const { spec, issues } = await this.solveSpec(job, t);
       t.issues.push(...issues);

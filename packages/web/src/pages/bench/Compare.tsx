@@ -15,7 +15,7 @@ import { setQuery, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
 import { Conditions } from "./Conditions.tsx";
 import { jobLabel } from "./common.tsx";
-import { comparisonChange, withBaseline } from "./conditions.ts";
+import { changedRows, withBaseline } from "./conditions.ts";
 import "./workflow.css";
 export function BenchComparePage() {
   const loc = useLocation();
@@ -101,15 +101,7 @@ function CompareView({ c: original }: { c: Compare }) {
   const target =
     c.columns.find((x) => x.key === query.get("target") && x.key !== base)?.key ??
     c.columns[1]?.key;
-  const shown = c.rows.filter(
-    (row) =>
-      change === "all" ||
-      comparisonChange(
-        base ? row.values[metric.name]?.[base] : null,
-        target ? row.values[metric.name]?.[target] : null,
-        metric.higherIsBetter,
-      ) === change,
-  );
+  const shown = changedRows(c, metric, base, target, change);
   const better = (a: number, b: number) => (metric.higherIsBetter ? a > b : a < b);
   return (
     <>

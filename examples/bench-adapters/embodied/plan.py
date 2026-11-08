@@ -40,6 +40,9 @@ def main():
                            "initialStateId": str(initial_state), "initialStateDigest": task["tags"]["initialStateDigest"],
                            "environmentSeed": args.environment_seed, "policySeed": 0, "repetition": repetition}
                 items.append({"sampleId": digest(content), **content})
+    if generated:
+        from orbit_embodied.binding import check_distinct_resets
+        check_distinct_resets(items)
     result = {"version": 1, "items": items, "digest": digest(items)}
     print(json.dumps(result, indent=2))
 

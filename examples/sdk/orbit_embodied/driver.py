@@ -42,16 +42,19 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     directory.mkdir(parents=True, exist_ok=False)
     write_json(directory / "resolved-binding.json", binding)
     sample_ref = sample["sampleId"]
+    start = time.monotonic()
+    # Seconds from start; the verifier rejects valid results whose control steps end past it.
+    budget = None if deadline is None else deadline - start
     contract = {
         "version": 2 if "execution" in identity else 1, "sampleRef": sample_ref, "episodeId": episode_id,
         "sample": sample, "sampleDigest": digest(sample), "bindingDigest": binding["digest"],
         "horizon": benchmark.horizon, "replanSteps": policy.replan_steps, "identity": identity,
+        **({"episodeBudgetSec": budget} if budget is not None else {}),
     }
     write_json(directory / "contract.json", contract)
     result = {"version": 1, "sampleRef": sample_ref, "episodeId": episode_id,
               "success": False, "valid": False, "steps": 0, "issues": []}
     stage = "reset_failed"
-    start = time.monotonic()
     recording = False
     completed = False
     sealed = False
@@ -120,8 +123,16 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     if requested.dtype.kind not in "buif":
                         write_json(chunks / (str(call) + ".rejected.json"), {"dtype": str(requested.dtype), "shape": list(requested.shape), "preview": repr(requested)[:500]})
                         raise ValueError("policy returned non-numeric actions")
+                    timing = {"sourceObservation": step, "inferSeconds": elapsed}
+                    conversion = getattr(policy, "conversion", None)
+                    if conversion is not None:
+                        from .openpi import CONVERSIONS
+                        # Keep the model's own output so a rescore can audit the native conversion.
+                        np.save(chunks / (str(call) + ".raw.npy"), requested, allow_pickle=False)
+                        requested = CONVERSIONS[conversion](requested)
+                        timing["conversion"] = conversion
                     np.save(chunks / (str(call) + ".npy"), requested, allow_pickle=False)
-                    write_json(chunks / (str(call) + ".json"), {"sourceObservation": step, "inferSeconds": elapsed})
+                    write_json(chunks / (str(call) + ".json"), timing)
                     if requested.ndim != 2 or requested.shape[1] != benchmark.action_size or len(requested) < policy.replan_steps or not np.isfinite(requested).all():
                         raise ValueError("policy action chunk has invalid shape, length or non-finite values")
                     chunk, chunk_index = requested[:policy.replan_steps], 0
@@ -140,6 +151,8 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                 log.write(json.dumps(row, allow_nan=False) + "\n")
                 log.flush()
                 result["steps"] = step + 1
+                if budget is not None and row["wallSeconds"] >= budget:
+                    raise EpisodeFailure("call_watchdog", "episode watchdog expired during an environment step")
                 chunk_index += 1
                 observation = native.observation
                 if native.terminated:

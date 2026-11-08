@@ -46,6 +46,21 @@ class AdapterPlanningTests(unittest.TestCase):
         spec["tags"].update(embodied_evidence="3", execution_batch=plan["id"], batch_attempt=plan["attemptId"])
         return request
 
+    def test_versioned_evidence_cannot_skip_the_solve_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            staging = adapter.stage({"trial": {"staging": str(root / "stage")}})
+            spec = importlib.util.spec_from_file_location("staged_run", staging / "run.py")
+            run = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(run)
+            episode = root / "solve/episode"
+            write_json(episode / "contract.json", {"identity": {"implementationDigest": "sha256:" + "0" * 64}})
+            expected = {"sample": {"sampleId": "synthetic"}, "evidenceVersion": 2,
+                        "verifierDigest": archive_implementation(staging, root / "probe")}
+            write_json(root / "expected.json", expected)
+            with self.assertRaisesRegex(ValueError, "lacks its implementation archive"):
+                run.main(["verify", str(episode), str(root / "out/verified.json"), str(root / "expected.json")])
+
     def test_fixed_batch_has_one_run_and_independent_episode_verification(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

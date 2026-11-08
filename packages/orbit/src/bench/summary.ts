@@ -12,7 +12,7 @@ import type {
   ReportEntry,
   Trial,
 } from "../contracts/index.ts";
-import { sampleIdentity, sampleKey, sampleOrder } from "../contracts/index.ts";
+import { planRank, sampleIdentity, sampleKey, sampleOrder } from "../contracts/index.ts";
 import {
   aggregate,
   metricValue,
@@ -21,6 +21,7 @@ import {
   resolveMetrics,
   taskMeans,
 } from "../contracts/metrics.ts";
+import { splitBatches } from "./batches.ts";
 import { contentDigest } from "./samples.ts";
 
 export const isValid = (t: Trial) => t.outcome?.evaluation === "valid";
@@ -73,6 +74,12 @@ function evaluationConditions(job: PlanConditions, tasks: string[]) {
           batchSize: job.spec.batchSize,
           orderedSamples: job.spec.samplePlan?.digest,
           batchBudgets: job.spec.samplePlan?.items.map((item) => executionBudget(job, item.taskId)),
+          // The partition itself: one shared model service vs. separate launches changes the random stream.
+          batchSizes: splitBatches(
+            job,
+            job.spec.samplePlan?.items ?? [],
+            (item) => item.taskId,
+          ).map((group) => group.length),
         }
       : {}),
     budgets: [...tasks].sort().map((task) => executionBudget(job, task)),
@@ -219,6 +226,7 @@ export function buildReport(
 ): BenchReport {
   const metric = primaryMetric(resolveMetrics(job.metrics)).name;
   const rule = job.official ?? null;
+  const rank = planRank(job.spec.samplePlan);
   return {
     jobId: job.id,
     revision,
@@ -231,7 +239,7 @@ export function buildReport(
     methods: job.spec.methods.map(({ name }) => {
       const ts = trials
         .filter((t) => t.method === name)
-        .sort((a, b) => a.task.localeCompare(b.task) || sampleOrder(a, b));
+        .sort((a, b) => a.task.localeCompare(b.task) || sampleOrder(a, b, rank));
       const entries = ts.map((t) => entry(t, metric));
       const count = (e: ReportEntry["evaluation"]) =>
         entries.filter((x) => x.evaluation === e).length;

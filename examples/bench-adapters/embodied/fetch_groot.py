@@ -11,6 +11,16 @@ import urllib.parse
 import urllib.request
 
 
+class HubRedirect(urllib.request.HTTPRedirectHandler):
+    """Forward the Hub token only to huggingface.co, not to the storage host a download redirects to."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and urllib.parse.urlsplit(newurl).hostname != "huggingface.co":
+            new.remove_header("Authorization")
+        return new
+
+
 METADATA = {"config.json", "embodiment_id.json", "model.safetensors.index.json", "processor_config.json",
             "statistics.json", "tokenizer.json", "tokenizer_config.json", "preprocessor_config.json",
             "video_preprocessor_config.json", "vocab.json", "merges.txt", "chat_template.json", "generation_config.json"}
@@ -58,8 +68,8 @@ def fetch(job, *, direct=False):
                 headers = {"Range": "bytes=" + str(offset) + "-"} if offset else {}
                 if url.startswith("https://huggingface.co/") and os.environ.get("HF_TOKEN"):
                     headers["Authorization"] = "Bearer " + os.environ["HF_TOKEN"]
-                opener = urllib.request.build_opener(urllib.request.ProxyHandler({})) if direct else urllib.request.build_opener()
-                with opener.open(urllib.request.Request(url, headers=headers), timeout=120) as response:
+                handlers = [HubRedirect()] + ([urllib.request.ProxyHandler({})] if direct else [])
+                with urllib.request.build_opener(*handlers).open(urllib.request.Request(url, headers=headers), timeout=120) as response:
                     append = offset > 0 and response.status == 206
                     if append and response.headers.get("Content-Range", "").split("/", 1)[0] != "bytes " + str(offset) + "-" + str(size - 1):
                         raise ValueError("download resume returned an unexpected byte range")

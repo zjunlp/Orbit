@@ -26,6 +26,11 @@ export type GpuMode = "cdi" | "gpus";
 
 /** Prefer CDI only when Docker enables a spec directory containing NVIDIA devices. */
 export function detectGpuMode(dirs?: string[]): GpuMode {
+  return queryGpuMode(dirs) ?? "gpus";
+}
+
+/** Like `detectGpuMode`, but null when Docker could not be asked (not running, slow, too old). */
+function queryGpuMode(dirs?: string[]): GpuMode | null {
   if (!dirs) {
     try {
       const enabled: unknown = JSON.parse(
@@ -37,7 +42,7 @@ export function detectGpuMode(dirs?: string[]): GpuMode {
       );
       dirs = Array.isArray(enabled) && enabled.every((d) => typeof d === "string") ? enabled : [];
     } catch {
-      return "gpus";
+      return null;
     }
   }
   for (const d of dirs) {
@@ -55,6 +60,22 @@ export function detectGpuMode(dirs?: string[]): GpuMode {
     }
   }
   return "gpus";
+}
+
+/**
+ * The GPU mode, detected on first use and kept once Docker answered. A failed query (e.g. the
+ * daemon started before Docker) falls back to `--gpus` and is asked again at most once a minute.
+ */
+export function gpuModeProbe(retryMs = 60_000): () => GpuMode {
+  let known: GpuMode | null = null;
+  let askedAt = Number.NEGATIVE_INFINITY;
+  return () => {
+    if (known) return known;
+    if (Date.now() - askedAt < retryMs) return "gpus";
+    askedAt = Date.now();
+    known = queryGpuMode();
+    return known ?? "gpus";
+  };
 }
 
 export interface ContainerSpec {

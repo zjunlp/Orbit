@@ -249,11 +249,13 @@ it("rolls back a failed migration and keeps an independently readable pre-migrat
   const legacy = legacyDatabase(file, f.job, f.trial);
   legacy.exec("CREATE TABLE trial_runs_legacy (collision TEXT)");
   expect(() => new Store(file)).toThrow(/already another table/);
+  // A supervisor retrying the start replaces the backup instead of adding full copies.
+  expect(() => new Store(file)).toThrow(/already another table/);
   expect(legacy.prepare("PRAGMA user_version").get()?.user_version).toBe(6);
   expect(legacy.prepare("SELECT * FROM trial_runs").all()).toHaveLength(2);
   legacy.close();
   const backups = readdirSync(`${file}.backups`);
-  expect(backups).toHaveLength(1);
+  expect(backups).toEqual(["v6.sqlite"]);
   const backup = new DatabaseSync(join(`${file}.backups`, backups[0] as string), {
     readOnly: true,
   });

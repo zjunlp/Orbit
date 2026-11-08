@@ -45,6 +45,10 @@ class LazyPolicy:
             raise ValueError("policy random-stream declaration does not match this reference")
         self.client.reset(sample)
 
+    @property
+    def conversion(self):
+        return getattr(self.client, "conversion", None)
+
     def act(self, observation):
         return self.client.act(observation)
 
@@ -64,6 +68,9 @@ def main(argv):
         if measured != verifier_digest:
             raise ValueError("verifier implementation changed after planning")
         contract = json.loads((Path(directory) / "contract.json").read_text())
+        # Every evidence version >= 2 was written with an archive; it cannot opt out of the check.
+        if expected["evidenceVersion"] >= 2 and not contract["identity"].get("implementationArchive"):
+            raise ValueError("solve evidence lacks its implementation archive")
         if contract["identity"].get("implementationArchive"):
             root = Path(directory).parents[1] if expected.get("batch") else Path(directory).parent
             verify_implementation(root / "implementation", contract["identity"]["implementationDigest"])

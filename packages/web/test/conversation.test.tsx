@@ -142,3 +142,12 @@ it("finds neighbouring and failed trials in task, method, seed order", () => {
   expect(failedTrial(trials[3] as never)).toBe(true);
   expect(neighbours(trials, trials[2] as never).nextFailure).toMatchObject({ id: "d" });
 });
+
+it("orders planned samples by their plan position, not by digest", () => {
+  const t = (id: string, sampleRef: string) =>
+    ({ id, task: "t", method: "m", sampleRef, state: "done", outcome: null }) as never;
+  const trials = [t("first", "sha256:ff"), t("second", "sha256:00")];
+  const plan = { items: [{ sampleId: "sha256:ff" }, { sampleId: "sha256:00" }] };
+  expect((neighbours(trials, trials[0] as never, plan).next as { id: string }).id).toBe("second");
+  expect((neighbours(trials, trials[0] as never).prev as { id: string }).id).toBe("second");
+});

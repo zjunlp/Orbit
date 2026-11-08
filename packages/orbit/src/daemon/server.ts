@@ -95,6 +95,8 @@ export async function startDaemon(
   try {
     tightenPrivateState(paths);
     store = new Store(paths.db);
+    if (store.migrationBackup)
+      console.error(`orbit: database upgraded; pre-migration backup at ${store.migrationBackup}`);
     tightenPrivateState(paths);
     return await startLockedDaemon(paths, opts, store, release);
   } catch (e) {
