@@ -30,7 +30,7 @@
 
 ## Main gaps
 - ASI / TB-Science scores not yet compared with official Harbor runs (only oracle-level); codex lacks Harbor's `unified_exec`; no verified GPU graphics-capability checks, allowlist networks, multi-step Harbor tasks or predeclared Harbor MCP tool sets. R4 not run on two real machines; no bundle cache eviction. LongDS's native process runner has no failure checkpoint; real Claude execution/continuation remains unchecked.
-- Per-user daemons on one machine (busy 7717 → free port) can lease the same free GPU at once; fix when needed with a shared per-GPU lock. Remaining §9 work: C6 independent-process numerical repeatability and full-suite statistical equivalence, environment pooling/reset (P7), trajectory importers beyond EFE; EFE standard GPU tasks (shared sim/monitor cards) are translated but not yet run for real; licensed-data volumes (BEHAVIOR, ManiGuard) unsupported.
+- Per-user daemons on one machine (busy 7717 → free port) can lease the same free GPU at once; fix when needed with a shared per-GPU lock. Remaining §9 work: C6 independent-process numerical repeatability and full-suite statistical equivalence, environment pooling/reset (P7), trajectory importers beyond EFE and RoboTwin; EFE standard GPU tasks (shared sim/monitor cards) are translated but not yet run for real; licensed-data volumes (BEHAVIOR, ManiGuard) unsupported.
 - Additional bench metrics: tests and fake adapters only; group notifications may fire between solve and verify. Untried: some auth kinds, real IM webhooks (the Feishu app was checked on a phone). No MCP server or dsh/pi session capture/in-container harnesses; no overcommit.
 
 ## Next priorities

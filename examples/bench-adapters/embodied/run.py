@@ -97,6 +97,12 @@ def main(argv):
                    "timing": {"readAndArchiveSeconds": reading_seconds,
                               "verifySeconds": time.monotonic() - started - reading_seconds,
                               "totalSeconds": time.monotonic() - started}})
+        if result["valid"] and expected["reference"].get("environment", {}).get("kind") == "robotwin":
+            from orbit_embodied.robotwin_trajectory import write_trajectory
+            try:
+                write_trajectory(directory, Path(destination).with_name("orbit-trajectory.json"), result, expected)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                print("RoboTwin trajectory unavailable: " + str(exc), file=sys.stderr)
         return
     request = json.loads(Path(argv[1]).read_text())
     root = Path(argv[2]) if argv[0] == "batch" else Path(argv[2]).parent

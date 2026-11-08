@@ -284,6 +284,8 @@ def score(req):
             files.append({"label": "Driver implementation", "phase": "solve", "path": "implementation/manifest.json", "kind": "json"})
         if (Path(req["solve"]["output"]) / prefix / "video.mp4").is_file():
             files.append({"label": "Episode video", "phase": "solve", "path": prefix + "/video.mp4"})
+        if (Path(req["verify"]["output"]) / "orbit-trajectory.json").is_file():
+            files.append({"label": "Episode timeline", "phase": "verify", "path": "orbit-trajectory.json", "kind": "episode"})
         if req["trial"].get("batch"):
             files.append({"label": "Fixed solve batch", "phase": "solve", "path": "batch-plan.json", "kind": "json"})
         return valid(int(result["success"]), issues=result["issues"], review={"files": files})

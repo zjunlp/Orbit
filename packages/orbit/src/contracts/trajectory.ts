@@ -30,6 +30,8 @@ export const EpisodeTrajectory = z
     version: z.literal(1),
     kind: z.literal("episode"),
     goal: z.string().max(100_000),
+    mediaPhase: z.literal("solve").optional(),
+    frameBeforeAction: z.boolean().optional(),
     actionNames: z.array(z.string().max(100)).max(256),
     proprioNames: z.array(z.string().max(100)).max(256),
     cameras: z
@@ -80,7 +82,12 @@ export const EpisodeTrajectory = z
     chunks: z
       .array(
         z
-          .object({ start: Time, end: Time, label: z.string().max(100).optional() })
+          .object({
+            start: Time,
+            end: Time,
+            label: z.string().max(100).optional(),
+            inferSeconds: Time.optional(),
+          })
           .refine((chunk) => chunk.end >= chunk.start, "chunk end precedes start"),
       )
       .max(100_000),

@@ -367,7 +367,8 @@ function TabBody(props: {
         />
       );
     }
-    if (resolved.kind === "episode" && run) return <EpisodeFile run={run} file={f} />;
+    if (resolved.kind === "episode" && run)
+      return <EpisodeFile key={`${run.id}/${f.path}`} run={run} file={f} solve={solve} />;
     if (resolved.kind === "conversation" && run)
       return <ConversationFile key={`${run.id}/${f.path}`} run={run} file={f} />;
     return run ? <ReviewFileView key={tab} run={run} f={f} /> : notStarted(f.phase);

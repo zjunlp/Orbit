@@ -1,5 +1,6 @@
 """Native RoboTwin 2.0 episodes with the upstream expert feasibility check."""
 
+from contextlib import ExitStack
 from functools import lru_cache
 import importlib
 from pathlib import Path
@@ -11,6 +12,14 @@ import numpy as np
 from .assets import tree_digest
 from .binding import reference_horizon, seed_asset
 from .driver import SampleRejected, StepResult
+
+
+CAMERA_VIDEOS = {
+    "head_camera": "video.mp4",
+    "left_camera": "left-camera.mp4",
+    "right_camera": "right-camera.mp4",
+}
+VIDEO_FPS = 10
 
 
 @lru_cache(maxsize=1)
@@ -66,7 +75,8 @@ class RoboTwinBenchmark:
             raise ValueError("task is not in the frozen RoboTwin catalog")
         self.horizon = reference_horizon(reference, task)
         self.env = None
-        self.video = None
+        self.video_stack = ExitStack()
+        self.videos = {}
 
     def _native_args(self):
         config = self.reference["environment"]
@@ -163,15 +173,21 @@ class RoboTwinBenchmark:
 
     def start_video(self, directory):
         import imageio
-        self.video = imageio.get_writer(str(directory / "video.mp4"), fps=10)
+
+        with ExitStack() as stack:
+            self.videos = {
+                camera: stack.enter_context(imageio.get_writer(str(directory / name), fps=VIDEO_FPS))
+                for camera, name in CAMERA_VIDEOS.items()
+            }
+            self.video_stack = stack.pop_all()
 
     def record_frame(self, observation):
-        self.video.append_data(observation["head_camera"])
+        for camera, writer in self.videos.items():
+            writer.append_data(observation[camera])
 
     def finish_video(self):
-        if self.video is not None:
-            self.video.close()
-            self.video = None
+        self.video_stack.close()
+        self.videos.clear()
 
     def close(self):
         if self.env is not None:

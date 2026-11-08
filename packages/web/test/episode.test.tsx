@@ -73,6 +73,12 @@ describe("saved embodied episode", () => {
         t.chunks[0].end = -1;
       },
       (t: ReturnType<typeof fixture>) => {
+        t.chunks[0].inferSeconds = -1;
+      },
+      (t: ReturnType<typeof fixture>) => {
+        t.mediaPhase = "other";
+      },
+      (t: ReturnType<typeof fixture>) => {
         t.samples[0].late = "false";
       },
     ];
@@ -133,6 +139,25 @@ describe("saved embodied episode", () => {
     expect(html).toContain("Environment only");
     expect(html).toContain("Inspect the robot");
     expect(html).not.toContain("Unrelated");
+  });
+  it("shows recorded inference time and resolves the camera against the Solve run", () => {
+    const raw = fixture();
+    raw.mediaPhase = "solve";
+    raw.frameBeforeAction = true;
+    raw.chunks[0].inferSeconds = 0.28;
+    const trace = parseEpisode(JSON.stringify(raw));
+    expect(EpisodeTrajectory.parse(trace)).toEqual(trace);
+    const html = renderToStaticMarkup(
+      <EpisodeViewer
+        trace={trace}
+        runId="verify-fixture"
+        mediaRunId="solve-fixture"
+        files={new Set(["camera/front0.png"])}
+      />,
+    );
+    expect(html).toContain("inference 0.28s");
+    expect(html).toContain("frame before the action");
+    expect(html).toContain('src="/api/v1/runs/solve-fixture/files/camera/front0.png"');
   });
   it("keeps the timeline available when camera artifacts are absent", () => {
     const html = renderToStaticMarkup(

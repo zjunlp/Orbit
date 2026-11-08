@@ -11,7 +11,7 @@ import "./episode.css";
 const MAX_BYTES = 2 * 1024 * 1024;
 const seconds = (value: number) => Number(value.toFixed(4)).toString();
 
-export function EpisodeFile({ run, file }: { run: Run; file: ReviewFile }) {
+export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; solve?: Run }) {
   const session = useAsync(() => api.session(run.id), [run.id, run.state]);
   const artifacts = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
   const entry = artifacts.data?.files.find((item) => item.path === file.path);
@@ -24,9 +24,16 @@ export function EpisodeFile({ run, file }: { run: Run; file: ReviewFile }) {
     if (text.length > MAX_BYTES) throw new Error("Episode index exceeds the preview limit.");
     return parseEpisode(text);
   }, [run.id, file.path, entry?.bytes, entry?.mtime]);
+  const mediaRun = source.data?.mediaPhase === "solve" ? solve : run;
+  const separateMedia = !!mediaRun && mediaRun.id !== run.id;
+  const media = useAsync(
+    () => (separateMedia ? api.artifacts(mediaRun.id) : Promise.resolve(undefined)),
+    [separateMedia, mediaRun?.id, mediaRun?.state],
+  );
+  const mediaEntries = separateMedia ? media.data : artifacts.data;
   const files = useMemo(
-    () => new Set(artifacts.data?.files.map((item) => item.path) ?? []),
-    [artifacts.data],
+    () => new Set(mediaEntries?.files.map((item) => item.path) ?? []),
+    [mediaEntries],
   );
   const error =
     artifacts.error ??
@@ -44,16 +51,24 @@ export function EpisodeFile({ run, file }: { run: Run; file: ReviewFile }) {
       </div>
       {error ? (
         <Empty title="Episode unavailable">{error}</Empty>
-      ) : !source.data ? (
+      ) : !source.data || (separateMedia && !media.data && !media.error) ? (
         <Loading />
       ) : (
-        <EpisodeViewer
-          key={`${run.id}/${file.path}`}
-          trace={source.data}
-          runId={run.id}
-          files={files}
-          messages={session.data?.agent?.messages ?? []}
-        />
+        <>
+          {source.data.cameras.length > 0 && (!mediaRun || (separateMedia && media.error)) && (
+            <Empty title="Episode media unavailable">
+              {media.error ?? "This trial has no saved Solve run."}
+            </Empty>
+          )}
+          <EpisodeViewer
+            key={`${run.id}/${file.path}`}
+            trace={source.data}
+            runId={run.id}
+            mediaRunId={mediaRun?.id ?? null}
+            files={files}
+            messages={session.data?.agent?.messages ?? []}
+          />
+        </>
       )}
     </div>
   );
@@ -174,11 +189,13 @@ export function VideoPreview({
 export function EpisodeViewer({
   trace,
   runId,
+  mediaRunId = runId,
   files,
   messages = [],
 }: {
   trace: EpisodeTrajectory;
   runId: string;
+  mediaRunId?: string | null;
   files: Set<string>;
   messages?: SessionMessage[];
 }) {
@@ -186,6 +203,9 @@ export function EpisodeViewer({
     MAX_VIDEO_BYTES / Math.max(1, trace.cameras.filter((camera) => camera.video).length),
   );
   const [index, setIndex] = useState(0);
+  const [channel, setChannel] = useState(
+    trace.frameBeforeAction ? (trace.actionNames[0] ?? "") : "",
+  );
   const sample = trace.samples[index] ?? trace.samples[0];
   const [playing, setPlaying] = useState(false);
   const last = trace.samples.length - 1;
@@ -204,6 +224,7 @@ export function EpisodeViewer({
   const series = useMemo(
     () => [
       ...trace.proprioNames.map((name, channel) => ({
+        name,
         label: `State · ${name}`,
         color: PALETTE[channel % PALETTE.length] ?? "#58a6ff",
         points: trace.samples.map(
@@ -211,6 +232,7 @@ export function EpisodeViewer({
         ),
       })),
       ...trace.actionNames.map((name, channel) => ({
+        name,
         label: `Action · ${name}`,
         color: PALETTE[(channel + trace.proprioNames.length) % PALETTE.length] ?? "#f778ba",
         points: trace.samples.map(
@@ -220,6 +242,7 @@ export function EpisodeViewer({
     ],
     [trace],
   );
+  const shownSeries = channel ? series.filter((item) => item.name === channel) : series;
   if (!sample) return <Empty title="No episode samples" />;
   const chunks = trace.chunks.filter(
     (chunk) => chunk.start <= sample.time && chunk.end >= sample.time,
@@ -240,6 +263,12 @@ export function EpisodeViewer({
           </span>
         )}
       </div>
+      {trace.frameBeforeAction && (
+        <p className="faint">
+          Playback time follows the video frame rate. Each step shows the frame before the action
+          and the joint state and reward after the action.
+        </p>
+      )}
       <div className="episode-controls">
         <button
           type="button"
@@ -281,16 +310,17 @@ export function EpisodeViewer({
         ))}
       </div>
       <div className="episode-cameras">
-        {trace.cameras.map((camera) => (
-          <Camera
-            key={camera.name}
-            camera={camera}
-            time={sample.time}
-            runId={runId}
-            files={files}
-            videoLimit={videoLimit}
-          />
-        ))}
+        {mediaRunId &&
+          trace.cameras.map((camera) => (
+            <Camera
+              key={camera.name}
+              camera={camera}
+              time={sample.time}
+              runId={mediaRunId}
+              files={files}
+              videoLimit={videoLimit}
+            />
+          ))}
       </div>
       <section aria-label="Action chunk boundaries" className="episode-chunks">
         <b>Action chunks</b>
@@ -305,8 +335,9 @@ export function EpisodeViewer({
                 setIndex(sampleAt(trace, chunk.start));
               }}
             >
-              {chunk.label ?? `Chunk at ${seconds(chunk.start)}s`} · {seconds(chunk.start)}–
+              {chunk.label ? `Chunk ${chunk.label}` : "Chunk"} · {seconds(chunk.start)}–
               {seconds(chunk.end)}s
+              {chunk.inferSeconds !== undefined && ` · inference ${seconds(chunk.inferSeconds)}s`}
             </button>
           ))
         ) : (
@@ -315,9 +346,26 @@ export function EpisodeViewer({
       </section>
       <section aria-label="Action and joint curves">
         <h3>Actions and body state</h3>
-        {series.length ? (
+        {trace.frameBeforeAction && trace.actionNames.length > 0 && (
+          <label>
+            Joint or gripper{" "}
+            <select
+              className="input"
+              value={channel}
+              onChange={(event) => setChannel(event.target.value)}
+            >
+              {trace.actionNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+              <option value="">All channels</option>
+            </select>
+          </label>
+        )}
+        {shownSeries.length ? (
           <Chart
-            series={series}
+            series={shownSeries}
             smoothing={0}
             syncKey={`episode-${runId}`}
             onHover={(_values, at) => {
@@ -328,7 +376,7 @@ export function EpisodeViewer({
           <p className="faint">No numeric channels recorded.</p>
         )}
         <div className="episode-values">
-          {series.map((item) => (
+          {shownSeries.map((item) => (
             <span key={item.label} style={{ color: item.color }}>
               {item.label}: {item.points[index]?.[1]}
             </span>

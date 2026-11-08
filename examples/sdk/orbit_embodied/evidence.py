@@ -29,7 +29,7 @@ def seal(directory, result):
     files, optional_files = {}, {}
     for path in sorted(directory.rglob("*")):
         if path.is_file() and path.name != "evidence-manifest.json" and not path.name.endswith(".partial"):
-            target = optional_files if path.name == "video.mp4" else files
+            target = optional_files if path.parent == directory and path.suffix == ".mp4" else files
             target[path.relative_to(directory).as_posix()] = file_digest(path)
     write_json(directory / "evidence-manifest.json", {
         "version": 1, "sampleRef": result["sampleRef"], "episodeId": result["episodeId"],

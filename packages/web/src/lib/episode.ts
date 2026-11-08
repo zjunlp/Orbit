@@ -24,6 +24,8 @@ export function parseEpisode(text: string): EpisodeTrajectory {
     value.kind !== "episode" ||
     typeof value.goal !== "string" ||
     value.goal.length > 100_000 ||
+    !choice(value.mediaPhase, ["solve"]) ||
+    (value.frameBeforeAction !== undefined && typeof value.frameBeforeAction !== "boolean") ||
     !names(value.actionNames) ||
     !names(value.proprioNames) ||
     !Array.isArray(value.samples) ||
@@ -119,6 +121,7 @@ export function parseEpisode(text: string): EpisodeTrajectory {
       !time(chunk.start) ||
       !time(chunk.end) ||
       chunk.end < chunk.start ||
+      (chunk.inferSeconds !== undefined && !time(chunk.inferSeconds)) ||
       (chunk.label !== undefined && (typeof chunk.label !== "string" || chunk.label.length > 100))
     )
       throw new Error("Invalid action chunk.");

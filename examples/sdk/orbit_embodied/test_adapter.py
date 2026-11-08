@@ -62,6 +62,29 @@ class AdapterPlanningTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "lacks its implementation archive"):
                 run.main(["verify", str(episode), str(root / "out/verified.json"), str(root / "expected.json")])
 
+    def test_verifier_accepts_a_libero_reference_without_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            adapter.verify(request)
+            staging = Path(request["trial"]["staging"])
+            spec = importlib.util.spec_from_file_location("staged_run", staging / "run.py")
+            run = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(run)
+            solve = Path(request["solve"]["output"])
+            episode = solve / "episode"
+            fingerprint = archive_implementation(staging, solve / "implementation")
+            write_json(episode / "contract.json", {"identity": {"implementationDigest": fingerprint,
+                                                                  "implementationArchive": True}})
+            result = {"episodeId": "synthetic-trial.attempt", "valid": True, "success": True}
+            write_json(episode / "native-result.json", result)
+            output = root / "out/verified.json"
+            with patch.object(run, "verify_episode", return_value=result):
+                run.main(["verify", str(episode), str(output), str(staging / "verify-request.json")])
+            self.assertEqual(json.loads(output.read_text()), result)
+            self.assertTrue(output.with_name("verification.json").is_file())
+            self.assertFalse(output.with_name("orbit-trajectory.json").exists())
+
     def test_fixed_batch_has_one_run_and_independent_episode_verification(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
