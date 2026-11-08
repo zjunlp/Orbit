@@ -107,7 +107,7 @@ examples/      bench-adapters/<benchmark>/: external bench adapters (not part of
 | daemon | 除 cli/mcp/client 外全部 |
 | client | contracts, lib, config |
 | cli, mcp | client, contracts, lib, config |
-| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）与 `@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化） |
+| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）、`@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化）与 `@zjunlp/orbit/categories`（类别和领域词表） |
 
 模块内按职责拆分，以上依赖方向不变：`contracts/index.ts` 保留统一导出，schema 分入 runs、resources、auth/notify、
 bench、adapter、cluster、records 和 folders；`RunService` 保留公共 API、调度与共享状态，远端放置/镜像、启动、服务、
@@ -379,6 +379,8 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   `{session}` `{home}`，可选参数写成 `{when:model} … {end}` 组；`transcript` 给出 CLI 自己的会话轨迹 glob 与格式。
 - `command.mcp`（默认 `{kind:"none"}`）声明 MCP 接线：`claude-json` 的 flag 指向 Agent home 的 `orbit-mcp.json`；`codex-toml` 向该 home 的 `config.toml` 增加 server 表。工具声明通过 trial 私有 bundle 随原启动流程写入，保留已有配置、拒绝同名 server；未接线但声明 MCP 能力的定义在 `agent show` 显示 `MCP declared, not wired`。
 - `capabilities`：`oneShot` / `multiTurn` / `mcp` / `gui`，在提交 bench trial 前与 benchmark 的要求比对。
+  Codex 与 Claude Code 声明 `gui`；Codex 的 BrowserGym/MiniWoB 截图与 CLI 工具路径已通过真实开发校准和独立签名核验，
+  不扩展为其他 GUI 后端的实跑声明。GUI 的私有服务需要容器网络与可达的模型连接，拒绝 `hostNetwork` profile。
 - `verified`：该定义在本机真实跑出过预期结果。内置的 codex 与 claude-code 为 true，其余为 false，直到
   `orbit agent test` 验证。
 
@@ -510,6 +512,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
 | solve 失败或超时 | 照常 verify（方法的结果；超时记入 issues） |
 | solve 因内存不足被杀（`usage.oomKilled`，资源申请的问题，不是方法的结果；仍照常 verify 并保留分数） | invalid |
 | solve 内的 Agent 从未产生成功模型回复，且最后一轮以明确的认证、额度、模型不可用或连接错误结束，或未结束但可信 CLI 日志尾部明确停在模型重连/认证刷新拒绝（`sessions.runAgentFailure` 读 Run 的 Agent home 与日志尾；`harness.agentErrorKind` 先看结构化错误码——Codex `codex_error_info` 及其 HTTP 状态码、Claude Code 的 `error`——再看文本；对所有适配器生效）：不提交 verify，记 `verify skipped` 并保留 OOM、服务失败等问题；显式 rescore 时照常评分并保留分数 | invalid |
+| Codex 在 session 创建前因无法读取 Run 私有 `config.toml` 而退出；仅在无 Codex/Claude transcript 时识别日志头前 16 KiB 内完整的原生权限错误，允许已知 PATH 提示与 Orbit after 阶段边界；不从普通工具权限错误推断 | invalid / `infra`（`agent_configuration_failed`），保留 shared verifier 的原始分数 |
 | verify 未启动、超时、内存不足，没有分数，或适配器判为无效（无 reward、scorer 内部错误、judge 不可用、模型不可用且 0 分） | invalid |
 | 其余 | valid |
 
@@ -522,7 +525,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   默认只预览；`--apply` 才执行。每个计划返回 `digest`（对 adopted、reclassified、removedRuns、removedJobs 的规范排序内容计算 SHA-256）；
   apply 可带 `expect`，CLI / Web 都传入已确认预览的 digest。daemon 在任何写入或删除前重新计算，摘要不符则拒绝并提示
   `plan changed since preview; preview again`。只接收全部 trial 已完成、Run 已清理且无后台更新的任务；同 benchmark、methods、options、metrics，
-  按 task × method × seed 对齐。归并先重读符合上述条件的 solve 的会话末轮错误：明确的认证、额度、模型连接故障
+  按 task × method × seed 对齐。归并先重读符合上述条件的 solve 的会话末轮错误及已知的 session 前配置故障；这些启动或模型访问问题
   会把旧的 valid / unknown 标记改为 invalid（包括同一次 solve 的评分历史），原始分数保留，结果的 `reclassified`
   列出这些 trial；不带来源时只做这一复核；预览不写回。读取后重新检查终态及归属。
   有效重试只替换无效位置，拒绝覆盖真正有效的成绩（包括 0 分）或从多份有效成绩里挑选。
@@ -1032,7 +1035,7 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 | P3 两个小而完整的接入 | 已完成：MiniWoB++ 全量 125；EFE MetaWorld+ standard（compose 卷、restart、偏差登记） | empty 125/125；EFE oracle 1 / empty 0 |
 | P4 Policy 路线 | 已完成：`Lease.roles` 按角色分配、service GPU 与 `entrypoint`、vla-eval 适配器（LIBERO 真实任务） | 角色独占卡、整组排队；LIBERO empty 0 分 valid |
 | P5 扩大覆盖（核心能力与 GUI hub 适配器已完成；EFE GPU 原版校准、Arena 未做；见 tasks/20261104-p5-core、p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
-| P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 按实际诊断保留能力限制；OSWorld 等 KVM 后端后置 |
+| P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 经 MiniWoB 截图/CLI 开发校准启用 GUI；OSWorld 等 KVM 后端后置 |
 | P6.5 接入层（§9.14，已完成；见 tasks/20261104-p65-integration） | calibrate / coverage、L2 SDK、L1 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按层级接入成本达标；迁移前后校准一致 |
 | P7 规模优化（对账回收、主机保护与启动限流、能力路由、[catalog](catalog.md) 已完成；暖池/实例账本、slots、导出、两台真机后置，见 §9.6 P7 实现） | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |
@@ -1127,6 +1130,82 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
   Agent 可读的磁盘上。模型只经 Agent 工具调用（ARK 等方案不允许脚本直接调用）；τ² 的用户模拟器需要单独的模型来源，暂未运行。
 
 **不做**：跨类别总榜或单一健康分；在 Web 复制 `docs/catalog.md`；从缺失证据推测成功或补 0；把 Rescore 表述为重跑 Agent。
+
+### 9.16 Web 信息架构：any harness × any bench × 迭代进化（2026-11-06）
+
+依据 [信息架构调研](research/web-ui/information-architecture.md)。Web 围绕三个对象组织：**Agents**（被评测的 harness /
+policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 方法包的版本，迭代的对象）；Evaluations 与 Runs 是它们
+的执行记录。本轮实现与验收记录见 [Web 信息架构任务](tasks/20261106-web-ia.md)。仍复用现有 registry、Job、Trial、Run 与报告，
+不新增状态库或执行路径。
+
+**导航**：侧栏默认展开为“图标 + 文字”，可折叠为图标栏，偏好记在本地；窄屏自动折叠。名称与快捷键在悬停或键盘聚焦时可见。
+
+| 组 | 项（快捷键） | 内容 |
+| --- | --- | --- |
+| — | Overview（`g o`） | 覆盖、Agent、当前执行与方法变化 |
+| Evaluate | Benchmarks（`g b`） | Catalog 一级页 |
+| | Agents（`g a`） | Agent 定义、能力、凭据与证据 |
+| | Methods（`g m`） | 方法版本与评测结果 |
+| | Evaluations（`g e`） | 作业列表、作业、trial、作业对比 |
+| Operate | Runs（`g r`）、Resources（`g s`） | 运行与资源；Runs 对比保留原入口 |
+| 底部 | Settings（`g p`）、快捷键、主题、连接状态 | Settings 保留凭据配置并链接 Agents |
+
+`/` 是 Overview，Runs 列表在 `/runs`；`/bench` 与 `/compare` 保留；旧 Catalog 地址 `/bench?tab=catalog` 转到 `/benchmarks`。
+界面文字为英文。
+
+**Overview**：展示去重 benchmark 数、覆盖类别 `k/7`、领域、校准与真实方法证据；Agent 数、能力接线与凭据；
+运行中的作业、排队原因与待复盘失败；同一评测条件下方法版本的配对变化。卡片链接到对应页面和筛选。
+无数据时给出首次使用步骤：登记 benchmark → 配置凭据 → 校准 → 选兼容组合运行。读取失败显示错误与重试，避免永久加载。
+
+**Benchmarks**：
+
+- `category`（C1–C7，交互方式，单选）、`domains`（领域，多选）、`profiles`（环境与评分条件）分开。
+  EFE 是 C2 + embodied；原生 LIBERO 是 C6 + embodied；HumanEval 是 C1 + software。
+- 受控领域词表在 `contracts/categories.ts` 的 `BENCH_DOMAINS`：`science`、`software`、`machine-learning`、`data-analysis`、
+  `gui-web`、`embodied`、`games`、`conversation`、`knowledge`。词表外的值（如 τ² 的 `airline`、`retail`）保留为细分标签，
+  不计入领域。契约仍接受任意字符串；仓库示例 adapter 均声明至少一个受控领域。未声明显示 “Unlabeled”，不猜。
+- `capabilities.identity`（`id`、`name`、可选 `version`、`variant`）声明 benchmark 身份。Catalog 按 `id` 归并登记；
+  无声明时按 adapter 与数据路径派生稳定 ID，不以登记名猜测。标签优先于 adapter 声明，可通过 Web 或 `orbit bench label` 修改。
+  `PATCH /benchmarks/:name/labels` 只改变展示标签，不改变执行；重新登记默认保留标签，清空后回退声明。
+- benchmarks / variants / registrations / tasks 分别计数；多领域的计数之和可大于 benchmark 总数。
+  聚合 adapter 仍是一个集合身份（如 “CUA-Lite collection”），不把它列出的全部 suite 宣称为已校准独立 benchmark。
+  BrowserGym 的 MiniWoB 身份记录任务源码版本，运行框架作为 variant/conditions；vla-eval 的其他 benchmark 类不会冒充 LIBERO。
+- 左侧分面为 Category、Domain、Evidence（calibrated / real method ran / parity），每项带计数，可移除已选条件。
+  主区为可展开表格或 Category × Domain 矩阵；格内为 benchmark 数与校准通过数，点击筛选，只表达覆盖、不表达成绩。
+  强制刷新只请求一次重列任务，随后轮询缓存进度。
+
+**Agents**：
+
+- 列出所有注册定义（内置与用户定义），另列作业出现过的 external policy entrypoint。
+- 安装方式、本机探测版本、凭据 profile 数与最近测试结果分别显示；能力分为声明、接线、有效 trial 证据三态。
+  未接线的 MCP 不显示为已支持；`agent ls` 同样区分。证据链接到有效 trial 或成功凭据测试，不使用硬编码 verified。
+- Agent × Benchmark 矩阵复用提交时的 `methods` / `requires` / MCP 检查，并检查凭据类型是否为 Agent 接受。
+  历史实跑证据与当前准入分别保留，历史 valid 不掩盖当前 blocked / needs-auth。无 listing 显示 unknown。
+  矩阵是登记级准入，不代替逐任务的镜像、设备、资源和 adapter 运行前检查。
+- API：保留 `GET /agents`；新增 `GET /agents/catalog`（能力、profile、证据、使用情况）与 `GET /bench/compatibility`。
+  本机探测版本不是历史 trial 的实跑版本；尚未记录的历史节点/版本不补造。
+
+**Methods 与迭代进化**：
+
+- 作业提交时保存每个方法的 `revision` 与 `basis`：Agent、解析后的模型、effort、凭据类型、提交节点可见的 CLI 版本、
+  方法包文件内容 digest，或 external entrypoint / 配置。凭据值不进入摘要；Catalog 也按 revision 区分方法包，
+  不再仅按 agent/model/effort 合并。方法包按安装时的解引用行为计算内容与执行位摘要并限制大小。
+  同名不同内容为不同版本；旧作业按已有字段补算，缺少实际模型、CLI 或 external 运行镜像信息时标 “approximate”。
+  摘要不冻结可变镜像标签、安装命令或提交后的方法包，因此不能当作完整运行环境指纹。
+- 可选派生信息为 `BenchJobSpec.lineage[method] = { parent?, note?, informedBy[] }`，由用户或 Agent 显式填写
+  （`orbit bench run --parent … --note … --informed-by …`）。旧作业的 approximate revision 也可作为父版本；不允许把未改变的方法派生为自身。
+  Trial 的 “Derive next method” 只复制当前 trial 对应的方法，并保留原任务选择供调整，避免把其他方法错误归入同一谱系；无效 trial 用原方法重试。
+- `GET /methods?metric=<name>` 返回方法名称下各版本及结果；缺省指标为 benchmark 主指标。结果包含评测条件摘要、任务集摘要、
+  指标声明与已有不可变报告修订。条件包含 benchmark 源版本、运行配置、seed 与评分规则；不同条件不自动给出进步 Δ。
+  dirty 源码的内容无法由 commit 标识，跨作业不自动比较。主指标存在匹配计划的报告时，从冻结 entries 计算汇总与 Δ；
+  其他指标或无报告时用当前 trial，并返回 `reportRevision: null`，不冒充不可变历史。
+  同条件的不同版本按配对任务比较，公共任务的资源覆盖必须一致；显式 parent 优先且不静默替换为其他版本；严格任务子集标 “regression subset”。
+  Web 按条件与任务集分开趋势，支持指标选择、固定报告链接及退步任务入口；缺少报告或证据时明确保留缺项。
+- 重试归并也要求方法 revision 一致，不能把变更过的方法包或 CLI 的结果归入旧版本。
+  闭环为：失败证据 → invalid 修环境重试 / valid 失败派生方法 → 回归子集 → 更大集合确认。改进由人或 Agent 决定。
+
+**不做**：跨 benchmark 总分或总榜；单一 Ready 徽章合并安装、凭据、能力、校准与有效性；按 hub 声称的套件数宣传接入量；
+无证据的谱系；Web 内的科研编排。
 
 ## 10. 路线
 

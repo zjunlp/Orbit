@@ -100,7 +100,7 @@ def collected_model_dir(req):
 
 
 # Integration category (docs/integration-categories.md).
-CAPABILITIES = {"category": "agent-workspace", "profiles": ["ml-experiment"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none"}, "conditions": {"Scoring": "evaluate.py on the final_model the Agent trained"}}
+CAPABILITIES = {"identity": {"id": "posttrainbench", "name": "PostTrainBench"}, "domains": ["machine-learning"], "category": "agent-workspace", "profiles": ["ml-experiment"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none"}, "conditions": {"Scoring": "evaluate.py on the final_model the Agent trained"}}
 
 
 def tasks_dir(req):

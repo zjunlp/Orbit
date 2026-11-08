@@ -130,7 +130,8 @@ def tasks(req):
                 reason += '; /dev/kvm is not readable/writable'
         rows.append({'id': f'suite:{suite}', 'title': f'{suite} (suite availability, not an episode)',
                      'supported': False, 'reason': reason, 'tags': {'suite': suite, 'rowKind': 'suite'}})
-    return {'tasks': rows, 'capabilities': {'category': 'gui', 'profiles': ['browser', 'fixture', 'live', 'judge'], 'kind': 'browser', 'methods': ['external', 'empty', 'cli'], 'requires': ['gui'],
+    return {'tasks': rows, 'capabilities': {'category': 'gui', 'profiles': ['browser', 'fixture', 'live', 'judge'], 'domains': ['gui-web'],
+                                        'identity': {'id': 'cua-lite', 'name': 'CUA-Lite collection', 'version': COMMIT}, 'kind': 'browser', 'methods': ['external', 'empty', 'cli'], 'requires': ['gui'],
         'scoreKind': 'binary',
         'rescore': 'none' if any(c.get(s['image']) for s in WEB_SUITES.values()) else 'evidence',
         'conditions': {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { IconBell, IconBot, IconCheck, IconKey, IconLoader, IconX } from "../components/icons.tsx";
 import { TopBar } from "../components/TopBar.tsx";
-import { CopyButton, Link, Loading, toast } from "../components/ui.tsx";
+import { CopyButton, Link, toast } from "../components/ui.tsx";
 import { type AuthProfile, api, type NotifyTarget } from "../lib/api.ts";
 import { browserNotify } from "../lib/browser-notify.ts";
 import { ago, harnessLabel, runPath } from "../lib/format.ts";
@@ -23,7 +23,6 @@ export function Settings() {
   const doctor = useAsync(() => api.doctor(), []);
   const profiles = useAsync(() => api.authProfiles(), []);
   const targets = useAsync(() => api.notifyTargets(), []);
-  const agents = doctor.data?.checks.filter((c) => c.name === "codex" || c.name === "claude-code");
   const storage = doctor.data?.checks.filter(
     (c) => c.name === "orbit data" || c.name === "docker data",
   );
@@ -35,26 +34,11 @@ export function Settings() {
         <div className="page-pad col" style={{ gap: 16, maxWidth: 1100 }}>
           <section className="card">
             <div className="card-h">
-              <IconBot size={14} /> Agents in containers
-              <span className="sub">host CLIs mounted read-only for runs with --auth</span>
+              <IconBot size={14} /> Agents
             </div>
-            <div className="card-b">
-              {doctor.error && !agents ? (
-                <span className="muted">Could not run checks: {doctor.error}</span>
-              ) : !agents ? (
-                <Loading />
-              ) : (
-                <dl className="kv">
-                  {agents.map((c) => (
-                    <div key={c.name} style={{ display: "contents" }}>
-                      <dt>{harnessLabel(c.name)}</dt>
-                      <dd className="mono" style={{ fontSize: 12 }}>
-                        {c.detail}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+            <div className="card-b muted">
+              Agents, their capabilities, credentials and evidence are on the{" "}
+              <Link href="/agents">Agents</Link> page. Credential profiles are below.
             </div>
           </section>
 

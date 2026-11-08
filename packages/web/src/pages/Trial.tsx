@@ -135,6 +135,18 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
         <Empty title="Trial not found">{trialId}</Empty>
       </>
     );
+  const deriveLegacy = async () => {
+    try {
+      const lines = await api.methods();
+      const revision = lines
+        .flatMap((line) => line.revisions)
+        .find((r) => r.results.some((x) => x.job === job.id && x.method === trial.method));
+      if (!revision) throw new Error("No method revision is available for this trial.");
+      navigate(deriveHref(job.id, revision.revision, trial.id, trial.method));
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
   const o = trial.outcome;
   const method = job.spec.methods.find((m) => m.name === trial.method);
   const evidence = job.capabilities?.rescore === "evidence";
@@ -172,6 +184,33 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
         <Link className="btn sm" href={`/bench/new?from=${encodeURIComponent(job.id)}`}>
           Copy configuration
         </Link>
+        {job.revisions[trial.method] &&
+          !["empty", "oracle"].includes(
+            job.spec.methods.find((m) => m.name === trial.method)?.agent ?? "",
+          ) && (
+            <Link
+              className="btn sm"
+              href={deriveHref(
+                job.id,
+                job.revisions[trial.method]?.revision ?? "",
+                trial.id,
+                trial.method,
+              )}
+              title="Start a new evaluation whose method descends from this one, informed by this trial"
+            >
+              Derive next method
+            </Link>
+          )}
+        {!job.revisions[trial.method] && method && !["empty", "oracle"].includes(method.agent) && (
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() => void deriveLegacy()}
+            title="Derive from the approximate revision reconstructed for this older evaluation"
+          >
+            Derive next method
+          </button>
+        )}
         {job.state !== "running" &&
           trial.state === "done" &&
           job.capabilities?.rescore !== "none" && (
@@ -965,3 +1004,7 @@ function TrialLink({
     </Link>
   );
 }
+
+/** New evaluation prefilled from the job, with this revision as parent and this trial as cause. */
+export const deriveHref = (job: string, revision: string, trial: string, method: string) =>
+  `/bench/new?from=${encodeURIComponent(job)}&parent=${encodeURIComponent(revision)}&informedBy=${encodeURIComponent(trial)}&method=${encodeURIComponent(method)}`;

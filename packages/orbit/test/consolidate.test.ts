@@ -103,6 +103,66 @@ it.each(["valid", "unknown"] as const)(
     expect(f.store.getRun(run.id)).toBeNull();
   },
 );
+it("repairs a shared-verifier startup zero without rerunning or pruning its evidence", async () => {
+  const f = fixture();
+  const run = f.runs.get("target.b-solve");
+  const trial = f.store.getTrial("target.b");
+  if (!run || !trial?.outcome) throw new Error("missing fixture");
+  f.store.putRun(
+    Run.parse({
+      ...run,
+      state: "failed",
+      exitCode: 1,
+      spec: {
+        ...run.spec,
+        backend: "docker",
+        image: "fixture",
+        after: { command: ["true"], timeoutMin: 1 },
+      },
+      after: { state: "succeeded", exitCode: 0, reason: null, startedAt: at, endedAt: at },
+    }),
+  );
+  f.store.putTrial({
+    ...trial,
+    verifyRunId: null,
+    outcome: { ...trial.outcome, execution: "failed" },
+  });
+  const dirs = f.runs.dirs(run.id);
+  mkdirSync(join(dirs.agent, "codex"), { recursive: true });
+  writeFileSync(join(dirs.agent, "codex/config.toml"), "");
+  writeFileSync(
+    dirs.log,
+    "Error loading config.toml: Failed to read config file /orbit/agent/codex/config.toml: Permission denied (os error 13)\n\n[orbit] after phase output:\n",
+  );
+  const before = f.bench.job("target");
+  const plan = await f.bench.consolidate("target", { sources: [], pruneInvalid: false });
+  expect(plan.reclassified).toEqual([
+    { job: "target", trial: trial.id, task: trial.task, kind: "agent_configuration_failed" },
+  ]);
+  expect(plan.removedRuns).toEqual([]);
+  expect(plan.removedJobs).toEqual([]);
+  expect(f.bench.job("target")).toEqual(before);
+  const applied = await f.bench.consolidate("target", {
+    sources: [],
+    pruneInvalid: false,
+    dryRun: false,
+    expect: plan.digest,
+  });
+  expect(applied.removedRuns).toEqual([]);
+  expect(applied.removedJobs).toEqual([]);
+  expect(f.store.getTrial(trial.id)?.outcome).toMatchObject({
+    execution: "failed",
+    evaluation: "invalid",
+    failure: "infra",
+    score: 0,
+    cleanup: "done",
+  });
+  expect(readFileSync(join(dirs.output, "answer"), "utf8")).toBe("retained artifact\n");
+  expect(f.store.trialByRun(run.id)?.id).toBe(trial.id);
+  expect(f.store.getJob("source")).not.toBeNull();
+  expect((await f.bench.consolidate("target", {})).reclassified).toEqual([]);
+});
+
 const at = "2026-10-10T00:00:00.000Z";
 
 it("does not read transport registries when the saved method setup already matches", async () => {

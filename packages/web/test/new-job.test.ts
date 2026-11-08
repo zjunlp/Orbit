@@ -8,12 +8,14 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   buildMethods,
+  copiedMethods,
   type EvaluationFields,
   evaluationSpec,
   importMethods,
   methodDraft,
   registrationChanged,
   taskSubset,
+  withLineage,
 } from "../src/pages/bench/new-job.ts";
 
 const caps: BenchCapabilities = {
@@ -52,7 +54,15 @@ const registration: Benchmark = {
 };
 const source: BenchJob = {
   id: "original",
-  spec: { benchmark: "miniwob", tasks: ["click", "type"], methods: [empty], seeds: 3, options: {} },
+  spec: {
+    benchmark: "miniwob",
+    tasks: ["click", "type"],
+    methods: [empty],
+    seeds: 3,
+    options: {},
+    lineage: {},
+  },
+  revisions: {},
   resources: null,
   folder: "gui",
   metrics: [],
@@ -212,4 +222,50 @@ describe("registered Agent methods", () => {
     expect(capabilityAllows(["codex"], "kimi-cli")).toBe(false);
     expect(capabilityAllows(["cli"], "kimi-cli")).toBe(true);
   });
+});
+
+it("derives only the selected trial method from a multi-method evaluation", () => {
+  const first = { name: "first", agent: "codex", auth: "p" };
+  const second = { name: "second", agent: "claude-code", auth: "c" };
+  const basis = {
+    agent: "codex",
+    model: null,
+    effort: null,
+    authKind: null,
+    cliVersion: null,
+    bundleDigest: null,
+    entrypoint: null,
+    config: null,
+  };
+  const job: BenchJob = {
+    ...source,
+    spec: { ...source.spec, methods: [first, second, empty] },
+    revisions: {
+      first: { revision: "111111111111", basis, approximate: false },
+      second: {
+        revision: "222222222222",
+        basis: { ...basis, agent: "claude-code" },
+        approximate: false,
+      },
+    },
+  };
+  const before = JSON.stringify(job);
+  expect(copiedMethods(job, "second", "222222222222")).toEqual([second]);
+  expect(copiedMethods({ ...job, revisions: {} }, "second", "333333333333")).toEqual([second]);
+  expect(copiedMethods(job, "", "111111111111")).toEqual([first]);
+  expect(copiedMethods(job, "", "")).toEqual([first, second, empty]);
+  expect(() => copiedMethods(job, "second", "111111111111")).toThrow("does not match");
+  expect(() => copiedMethods(job, "missing", "111111111111")).toThrow("single evaluated method");
+  expect(() => copiedMethods(job, "empty", "")).toThrow("single evaluated method");
+  expect(JSON.stringify(job)).toBe(before);
+  const lineage = {
+    parent: "111111111111",
+    note: "Fix tool recovery",
+    informedBy: "original.00001",
+  };
+  expect(() => withLineage(job.spec, lineage)).toThrow("Select one method");
+  expect(withLineage(job.spec, { ...lineage, method: "first" }).lineage).toEqual({
+    first: { ...lineage, informedBy: ["original.00001"] },
+  });
+  expect(() => withLineage(job.spec, { ...lineage, method: "empty" })).toThrow("Select the method");
 });

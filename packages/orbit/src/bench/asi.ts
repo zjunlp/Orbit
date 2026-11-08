@@ -548,6 +548,18 @@ export const asiAdapter: AdapterHandlers = {
       range: [0, 100],
     },
   ],
+  info: () => ({
+    capabilities: {
+      identity: { id: "asi-bench", name: "ASI-Bench" },
+      category: "agent-workspace",
+      profiles: ["ml-experiment"],
+      domains: ["science"],
+      methods: ["oracle", "empty", "codex", "claude-code"],
+      conditions: { Runner: "Native ASI runner and scorer" },
+      scoreKind: "scalar",
+      rescore: "evidence",
+    },
+  }),
   tasks: (req) => listTasks(req.benchmark),
   solve: ({ benchmark, trial }) => ({ spec: asiSolveSpec(benchmark, trial) }),
   verify: ({ benchmark, solve, trial }) => ({

@@ -3,11 +3,13 @@ import { resolve } from "node:path";
 import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
 import {
+  BENCH_DOMAINS,
   type BenchCapabilities,
   type BenchCompare,
   type BenchCoverage,
   type BenchJobDetail,
   type BenchJobList,
+  type BenchLabels,
   type Benchmark,
   BenchmarkInput,
   type BenchReport,
@@ -584,11 +586,22 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     )
     .option("-n, --name <name>", "job name")
     .option("-f, --folder <path>", "file the job and its runs in a folder, e.g. rcb/noskills")
+    .option("--parent <revision>", "the method revision these methods were derived from")
+    .option("--note <text>", "what changed in these methods")
+    .option(
+      "--informed-by <trial>",
+      "a trial whose failure led to these methods (repeatable)",
+      (v, p: string[]) => [...p, v],
+      [],
+    )
     .option("--json", "print JSON")
     .action(
       async (
         name: string,
         o: {
+          parent?: string;
+          note?: string;
+          informedBy: string[];
           method: string[];
           methodsFile?: string;
           task: string[];
@@ -615,6 +628,22 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           methods.push(...(JSON.parse(readFileSync(o.methodsFile, "utf8")) as unknown[]));
         if (methods.length === 0)
           throw new Error("give at least one --method (e.g. --method oracle)");
+        // Lineage applies to the methods under test, not to the calibration baselines.
+        const lineage =
+          o.parent || o.note || o.informedBy.length
+            ? Object.fromEntries(
+                (methods as { name: string; agent: string }[])
+                  .filter((m) => !["oracle", "empty"].includes(m.agent))
+                  .map((m) => [
+                    m.name,
+                    {
+                      ...(o.parent ? { parent: o.parent } : {}),
+                      ...(o.note ? { note: o.note } : {}),
+                      informedBy: o.informedBy,
+                    },
+                  ]),
+              )
+            : undefined;
         const job = await (await client()).benchSubmit(
           {
             name: o.name,
@@ -624,6 +653,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
             ...(samplePlan
               ? { samplePlan, ...(o.batchSize === undefined ? {} : { batchSize: o.batchSize }) }
               : { seeds: o.seeds }),
+            ...(lineage ? { lineage } : {}),
             options: kv(o.option, "--option"),
             timeoutMin: o.timeout,
             checkpoint: o.checkpoint === undefined ? undefined : { maxSizeGB: o.checkpoint },
@@ -636,6 +666,63 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           () =>
             `started ${job.id}: ${job.spec.methods.length} methods × ${job.spec.samplePlan ? `${job.spec.samplePlan.items.length} planned samples` : `${job.spec.tasks.length} tasks × ${job.spec.seeds} seeds`}`,
         );
+      },
+    );
+
+  bench
+    .command("label <benchmark>")
+    .description(
+      "set what benchmark a registration is and its domains (labels do not change how it runs)",
+    )
+    .option("--id <id>", "benchmark identity; registrations with the same id are one benchmark")
+    .option("--title <name>", "display name of the benchmark (default: the id)")
+    .option("--version <version>", "benchmark version")
+    .option("--variant <variant>", "protocol variant")
+    .option(
+      "--domain <domain>",
+      `domain (repeatable): ${BENCH_DOMAINS.join(", ")}; other values are kept as tags`,
+      (v, p: string[]) => [...p, v],
+      [],
+    )
+    .option("--clear", "remove the labels")
+    .option("--json", "print JSON")
+    .action(
+      async (
+        name: string,
+        o: {
+          id?: string;
+          title?: string;
+          version?: string;
+          variant?: string;
+          domain: string[];
+          clear?: boolean;
+          json?: boolean;
+        },
+      ) => {
+        const c = await client();
+        const current =
+          (await c.benchmarks()).find((b) => b.name === name)?.labels ?? ({} as BenchLabels);
+        const labels: BenchLabels = o.clear
+          ? {}
+          : {
+              ...current,
+              ...(o.id
+                ? {
+                    identity: {
+                      id: o.id,
+                      name: o.title ?? o.id,
+                      ...(o.version ? { version: o.version } : {}),
+                      ...(o.variant ? { variant: o.variant } : {}),
+                    },
+                  }
+                : {}),
+              ...(o.domain.length ? { domains: o.domain } : {}),
+            };
+        const b = await c.benchLabel(name, labels);
+        print(o.json, b, () => {
+          const l = b.labels ?? {};
+          return `${b.name}: ${l.identity ? `identity ${l.identity.id}` : "no identity label"}${l.domains?.length ? ` · domains ${l.domains.join(", ")}` : ""}`;
+        });
       },
     );
 

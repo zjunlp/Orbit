@@ -113,7 +113,13 @@ class MyPolicy:
 ```bash
 orbit bench run miniwob -t miniwob.click-test -t miniwob.click-button \
   -m assistant=claude-code,auth=<existing-profile> -n gui-cli
+
+orbit bench run miniwob -t miniwob.click-test \
+  -m sol=codex,auth=<codex-container-profile>,model=gpt-6.1-sol,effort=xhigh -n codex-gui
 ```
+
+Codex 已通过 `coord`（仅截图）开发校准：Agent 使用 `orbit-computer` CLI 完成任务，签名证据经独立 verifier 核验。
+MCP 接线可用，但该次 Codex 校准未使用 MCP；不据此宣称其他 GUI 后端已验证。
 
 CLI 路径使用同一 BrowserGym 镜像：main 获得只读工具，`gui` 服务获得只读任务 HTML 与固定 plan。
 服务只加入 Run 私有的 internal 网络；main 同时可访问模型网络。auth profile 必须使用容器网络，

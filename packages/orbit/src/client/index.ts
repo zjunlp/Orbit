@@ -3,6 +3,7 @@ import { type DaemonInfo, readDaemonInfo } from "../config/daemon-info.ts";
 import type { OrbitPaths } from "../config/paths.ts";
 import type { RunCursor } from "../contracts/index.ts";
 import {
+  AgentCatalog,
   AgentDefinition,
   type AgentDefinitionInput,
   AgentInfo,
@@ -14,12 +15,14 @@ import {
   AuthTestResult,
   BenchCatalog,
   BenchCompare,
+  BenchCompatibility,
   type BenchConsolidateInput,
   BenchConsolidateResult,
   BenchJob,
   BenchJobDetail,
   BenchJobList,
   type BenchJobSpecInput,
+  type BenchLabels,
   Benchmark,
   type BenchmarkInput,
   BenchmarkList,
@@ -42,6 +45,7 @@ import {
   Ledger,
   LogChunk,
   LoginCode,
+  MethodList,
   Metrics,
   NodeList,
   NodeResources,
@@ -250,6 +254,12 @@ export class OrbitClient {
     );
   benchCalibrate = (body: CalibrationRequestInput) =>
     this.call(BenchJob, "/bench/calibrations", { method: "POST", body, timeoutMs: 180_000 });
+  agentCatalog = () => this.call(AgentCatalog, "/agents/catalog");
+  benchCompatibility = () => this.call(BenchCompatibility, "/bench/compatibility");
+  methods = (metric?: string) =>
+    this.call(MethodList, `/methods${metric ? `?metric=${enc(metric)}` : ""}`);
+  benchLabel = (name: string, labels: BenchLabels) =>
+    this.call(Benchmark, `/benchmarks/${enc(name)}/labels`, { method: "PATCH", body: labels });
   benchJobs = (limit = 200) =>
     this.call(BenchJobList, `/bench/jobs?limit=${limit}`).then((r) => r.jobs);
   benchJob = (id: string) => this.call(BenchJobDetail, `/bench/jobs/${enc(id)}`);

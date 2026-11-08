@@ -34,6 +34,8 @@ export function registerSettingsRoutes(api: Hono, deps: AppDeps): void {
     const list = await Promise.all(agents.list().map((d) => agents.info(d)));
     return c.json<AgentList>({ agents: list });
   });
+  // Before /agents/:name: the Agents page (design §9.16).
+  api.get("/agents/catalog", async (c) => c.json(await deps.bench.agentCatalog()));
   api.get("/agents/:name", async (c) => {
     const def = agents.get(c.req.param("name"));
     if (!def) throw new NotFoundError(`Agent not found: ${c.req.param("name")}`);

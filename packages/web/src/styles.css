@@ -170,19 +170,25 @@ textarea {
 }
 
 /* ---- shell ---- */
+/* The rail shows labels by default; collapsed, it is an icon bar with hover tips (design §9.16). */
 .shell {
   display: grid;
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 196px 1fr;
   height: 100%;
+}
+.shell.collapsed {
+  grid-template-columns: 56px 1fr;
 }
 .rail {
   background: var(--bg-sunken);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 10px 0;
-  gap: 4px;
+  align-items: stretch;
+  padding: 10px 8px;
+  gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .brand-logo {
   display: block;
@@ -190,24 +196,53 @@ textarea {
   background: #fff;
 }
 .rail .logo {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 12px;
-  display: grid;
-  place-items: center;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+  margin-bottom: 10px;
+}
+.rail .logo .brand {
+  font-weight: 650;
+  font-size: 15px;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.rail-group {
+  margin: 12px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 .rail a,
 .rail button {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  color: var(--text-3);
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--text-2);
   border: 0;
   background: none;
   cursor: pointer;
   position: relative;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+.rail a svg,
+.rail button svg,
+.rail button .dot {
+  flex: none;
+}
+.rail button .dot {
+  margin: 0 4px;
 }
 .rail a:hover,
 .rail button:hover {
@@ -218,20 +253,53 @@ textarea {
 .rail a.active {
   color: var(--text);
   background: var(--surface-3);
+  font-weight: 500;
 }
 .rail a.active::before {
   content: "";
   position: absolute;
-  left: -9px;
-  top: 9px;
-  bottom: 9px;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--accent);
 }
+.rail .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rail .tip {
-  position: absolute;
-  left: 46px;
+  display: none;
+}
+/* Collapsed: icons only, names on hover. */
+.shell.collapsed .rail {
+  align-items: center;
+  padding: 10px 0;
+}
+.shell.collapsed .rail .label,
+.shell.collapsed .rail-group {
+  display: none;
+}
+.shell.collapsed .rail-group + a {
+  margin-top: 10px;
+}
+.shell.collapsed .rail a,
+.shell.collapsed .rail button {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+}
+.shell.collapsed .rail a.active::before {
+  left: -9px;
+  top: 9px;
+  bottom: 9px;
+}
+.rail-tooltip {
+  position: fixed;
+  left: 64px;
+  transform: translateY(-50%);
   white-space: nowrap;
   background: var(--surface-3);
   color: var(--text);
@@ -239,14 +307,29 @@ textarea {
   border-radius: 5px;
   font-size: 12px;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.1s;
-  z-index: 20;
+  z-index: 100;
   border: 1px solid var(--border);
 }
-.rail a:hover .tip,
-.rail button:hover .tip {
-  opacity: 1;
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 56px 1fr;
+  }
+  .shell .rail {
+    align-items: center;
+    padding: 10px 0;
+  }
+  .shell .rail .label,
+  .shell .rail-group,
+  .shell .rail .rail-toggle {
+    display: none;
+  }
+  .shell .rail a,
+  .shell .rail button {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    justify-content: center;
+  }
 }
 .main {
   display: flex;

@@ -2,7 +2,12 @@ import { accessSync, constants, existsSync, statSync } from "node:fs";
 import type { Hono } from "hono";
 import { loadResources, resolveResources } from "../../bench/resources.ts";
 import type { BenchReport } from "../../contracts/index.ts";
-import { type Benchmark, BenchmarkInput, PolicyDefinition } from "../../contracts/index.ts";
+import {
+  BenchLabels,
+  type Benchmark,
+  BenchmarkInput,
+  PolicyDefinition,
+} from "../../contracts/index.ts";
 import { NotFoundError, UserError } from "../../runs/service.ts";
 import type { AppDeps } from "../app.ts";
 import { num } from "../http.ts";
@@ -46,7 +51,9 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
         throw new UserError((e as Error).message);
       }
     }
-    return c.json(benchmarks.put(input), 201);
+    // Re-registering keeps the labels unless new ones are given.
+    const labels = input.labels ?? benchmarks.get(input.name)?.labels;
+    return c.json(benchmarks.put({ ...input, ...(labels ? { labels } : {}) }), 201);
   });
   api.delete("/benchmarks/:name", (c) => {
     if (!benchmarks.remove(c.req.param("name"))) throw new NotFoundError("benchmark not found");
@@ -55,6 +62,11 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.get("/benchmarks/:name/tasks", async (c) =>
     c.json(await bench.infoOf(bench.benchmark(c.req.param("name")))),
   );
+  api.patch("/benchmarks/:name/labels", async (c) =>
+    c.json(bench.label(c.req.param("name"), BenchLabels.parse(await c.req.json()))),
+  );
+  api.get("/bench/compatibility", (c) => c.json(bench.compatibility()));
+  api.get("/methods", (c) => c.json(bench.methods(c.req.query("metric"))));
   api.get("/bench/catalog", (c) =>
     c.json(bench.catalog((c.req.query("refresh") ?? "").split(",").filter(Boolean))),
   );

@@ -6,12 +6,21 @@ import { setImmediate } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthStore } from "../src/auth/index.ts";
+import { jobRevision } from "../src/bench/hub.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { BenchService, summarize } from "../src/bench/service.ts";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
-import { BenchJob, MetricSpec, Outcome, Run, Trial } from "../src/contracts/index.ts";
+import {
+  AdapterTasksResponse,
+  BenchJob,
+  MetricSpec,
+  Outcome,
+  Run,
+  Trial,
+} from "../src/contracts/index.ts";
 import { type AppDeps, createApp } from "../src/daemon/app.ts";
+import { AgentRegistry } from "../src/harness/registry.ts";
 import { RunService } from "../src/runs/service.ts";
 import { Store } from "../src/store/index.ts";
 
@@ -157,9 +166,9 @@ process.stdin.on("end", () => {
   await expect(
     f.bench.submit({
       benchmark: "fixture",
-      methods: [{ name: "c", agent: "codex", auth: "p" }],
+      methods: [{ name: "c", agent: "opencode", auth: "p" }],
     }),
-  ).rejects.toThrow("needs Agent capabilities gui, which codex does not declare");
+  ).rejects.toThrow("needs Agent capabilities gui, which opencode does not declare");
   expect(f.store.listJobs()).toHaveLength(0);
   const submitted = await f.bench.submit({
     benchmark: "fixture",
@@ -633,6 +642,67 @@ it("verifies a recovered last turn and keeps the verifier's own timeout", async 
   expect(f.submit.mock.calls[0]?.[0].timeoutMin).toBe(7);
 });
 
+it.each([
+  [false, false],
+  [true, false],
+  [true, true],
+] as const)(
+  "classifies Codex startup failure (shared verifier: %s, model responded: %s)",
+  async (inline, responded) => {
+    const f = fixture();
+    const solve = Run.parse({
+      ...f.run,
+      state: "failed",
+      exitCode: 1,
+      spec: {
+        ...f.run.spec,
+        ...(inline
+          ? { backend: "docker", image: "fixture", after: { command: ["true"], timeoutMin: 1 } }
+          : {}),
+      },
+      ...(inline
+        ? { after: { state: "succeeded", exitCode: 0, reason: null, startedAt: at, endedAt: at } }
+        : {}),
+    });
+    f.store.putJob(f.job);
+    f.store.putRun(solve);
+    f.store.putTrial({ ...f.trial, state: "solving", solveRunId: solve.id });
+    const dirs = f.runs.dirs(solve.id);
+    write(join(dirs.agent, "codex/config.toml"), "");
+    write(
+      dirs.log,
+      "Error loading config.toml: Failed to read config file /orbit/agent/codex/config.toml: Permission denied (os error 13)\n\n[orbit] after phase output:\n",
+    );
+    if (responded)
+      write(
+        join(dirs.agent, "codex/sessions/rollout.jsonl"),
+        `${JSON.stringify({
+          type: "response_item",
+          payload: { type: "message", role: "assistant", content: [{ text: "Played the game." }] },
+        })}\n`,
+      );
+    vi.spyOn(AdapterClient.prototype, "score").mockResolvedValue({
+      score: 0,
+      maxScore: 1,
+      invalid: false,
+      issues: [],
+    });
+    f.bench.start();
+    await expect.poll(() => f.store.getTrial(f.trial.id)?.state).toBe("done");
+    const outcome = f.store.getTrial(f.trial.id)?.outcome;
+    expect(outcome).toMatchObject({
+      execution: "failed",
+      evaluation: responded ? "valid" : "invalid",
+      score: inline ? 0 : null,
+      cleanup: "done",
+    });
+    expect(outcome?.failure).toBe(responded ? undefined : "infra");
+    if (!responded)
+      expect(outcome?.issues.join(" ")).toContain("Agent stopped: agent_configuration_failed");
+    expect(f.submit).not.toHaveBeenCalled();
+  },
+);
+
 it.each([false, true])("scores an Agent failure with an after phase: %s", async (inline) => {
   const f = fixture();
   const solve = Run.parse({
@@ -886,4 +956,146 @@ process.stdin.on("end", () => {
   expect(entry).toMatchObject({ listingError: null, methods: [] });
   expect(entry?.listing).toMatchObject({ oracleTasks: 2, coverage: { total: 3 } });
   expect(entry?.calibrations[0]?.job).toBe(job.id);
+});
+
+it("records method revisions and checks declared lineage at submission", async () => {
+  const f = fixture();
+  const executable = join(f.home, "rev-adapter.cjs");
+  write(
+    executable,
+    `#!${process.execPath}
+let input = "";
+process.stdin.on("data", c => input += c);
+process.stdin.on("end", () => {
+  const req = JSON.parse(input), say = value => console.log(JSON.stringify(value));
+  if (req.op === "tasks") return say({ tasks: [{ id: "t", title: null, supported: true, reason: null }],
+    capabilities: { methods: ["external", "empty"], conditions: {}, scoreKind: "binary", rescore: "evidence" } });
+  say({ spec: { backend: "process", command: ["true"] } });
+});
+`,
+  );
+  chmodSync(executable, 0o755);
+  f.registry.put({ name: "fixture", path: f.source, adapter: executable });
+  const ext = {
+    name: "pol",
+    agent: "external" as const,
+    entrypoint: "pol:make",
+    config: { k: "1" },
+  };
+  const a = await f.bench.submit({
+    benchmark: "fixture",
+    methods: [ext, { name: "empty", agent: "empty" }],
+  });
+  const rev = a.revisions.pol?.revision;
+  expect(rev).toMatch(/^[0-9a-f]{12}$/);
+  expect(a.revisions.empty).toBeUndefined();
+  // Same content, other name: same revision; other config: another one.
+  const b = await f.bench.submit({ benchmark: "fixture", methods: [{ ...ext, name: "pol2" }] });
+  expect(b.revisions.pol2?.revision).toBe(rev);
+  const evidence = f.store.trials(a.id)[0];
+  if (!evidence) throw new Error("missing fixture trial");
+  await expect(
+    f.bench.submit({
+      benchmark: "fixture",
+      methods: [ext],
+      lineage: { pol: { parent: rev, note: "Only metadata changed", informedBy: [evidence.id] } },
+    }),
+  ).rejects.toThrow("parent revision matches this method");
+  const rerun = await f.bench.submit({
+    benchmark: "fixture",
+    methods: [ext],
+    lineage: { pol: { note: "Retry the same method", informedBy: [evidence.id] } },
+  });
+  expect(rerun.revisions.pol?.revision).toBe(rev);
+  expect(rerun.spec.lineage.pol?.parent).toBeUndefined();
+  await expect(
+    f.bench.submit({
+      benchmark: "fixture",
+      methods: [{ ...ext, config: { k: "2" } }],
+      lineage: { pol: { parent: "0123456789ab" } },
+    }),
+  ).rejects.toThrow("parent revision 0123456789ab is not in any job");
+  await expect(
+    f.bench.submit({ benchmark: "fixture", methods: [ext], lineage: { other: {} } }),
+  ).rejects.toThrow("lineage names no method of this job: other");
+  const c = await f.bench.submit({
+    benchmark: "fixture",
+    methods: [{ ...ext, config: { k: "2" } }],
+    lineage: { pol: { parent: rev, note: "new k" } },
+  });
+  expect(c.revisions.pol?.revision).not.toBe(rev);
+  expect(c.spec.lineage.pol).toMatchObject({ parent: rev, note: "new k", informedBy: [] });
+  f.bench.label("fixture", { identity: { id: "fx", name: "Fixture" }, domains: ["games", "x"] });
+  expect(f.registry.get("fixture")?.labels?.domains).toEqual(["games", "x"]);
+  const entry = f.bench.catalog().entries[0];
+  expect(entry).toMatchObject({
+    identity: { id: "fx" },
+    identitySource: "label",
+    domains: ["games"],
+    tags: ["x"],
+  });
+});
+
+it("accepts a legacy approximate parent and hashes the effective profile model without credentials", async () => {
+  const f = fixture();
+  vi.spyOn(AdapterClient.prototype, "tasks").mockResolvedValue(
+    AdapterTasksResponse.parse({
+      tasks: [{ id: "t", title: null, supported: true, reason: null }],
+    }),
+  );
+  vi.spyOn(AgentRegistry.prototype, "info").mockImplementation(async (definition) => ({
+    definition,
+    available: true,
+    detail: "explicit test fixture",
+    version: "fixture-cli 1",
+  }));
+  vi.spyOn(AdapterClient.prototype, "solve").mockResolvedValue({
+    spec: { backend: "process", command: ["true"] },
+    issues: [],
+  });
+  f.auth.put({
+    name: "p1",
+    harness: "codex",
+    kind: "api-key",
+    model: "model-one",
+    secret: "test-key-one",
+  });
+  f.auth.put({
+    name: "p2",
+    harness: "codex",
+    kind: "api-key",
+    model: "model-two",
+    secret: "test-key-two",
+  });
+  const submit = (auth: string, model?: string) =>
+    f.bench.submit({
+      benchmark: "fixture",
+      methods: [{ name: "sol", agent: "codex", auth, model }],
+    });
+  const one = await submit("p1");
+  const two = await submit("p2");
+  expect(one.revisions.sol?.basis.model).toBe("model-one");
+  expect(two.revisions.sol?.basis.model).toBe("model-two");
+  expect(one.revisions.sol?.revision).not.toBe(two.revisions.sol?.revision);
+  const explicit = await submit("p2", "model-one");
+  expect(explicit.revisions.sol?.revision).toBe(one.revisions.sol?.revision);
+  expect(JSON.stringify(one.revisions)).not.toContain("test-key");
+  const legacy = {
+    ...one,
+    id: "legacy",
+    revisions: {},
+    spec: {
+      ...one.spec,
+      methods: [{ name: "sol", agent: "codex", auth: "p1", model: "legacy-model" }],
+    },
+  };
+  f.store.putJob(legacy);
+  const parent = jobRevision(legacy, "sol");
+  expect(parent?.approximate).toBe(true);
+  const child = await f.bench.submit({
+    benchmark: "fixture",
+    methods: [{ name: "sol", agent: "codex", auth: "p1", model: "new-model" }],
+    lineage: { sol: { parent: parent?.revision } },
+  });
+  expect(child.spec.lineage.sol?.parent).toBe(parent?.revision);
 });

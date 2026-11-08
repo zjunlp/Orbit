@@ -113,7 +113,8 @@ def tasks(req):
         "tasks": rows,
         "capabilities": {
             "category": "user-session", "profiles": ["text", "single-control"],
-            "domains": list(DOMAINS), "methods": ["oracle", "empty"],
+            "identity": {"id": "tau2-bench", "name": "τ²-bench", "version": COMMIT[:10]},
+            "domains": ["conversation", *DOMAINS], "methods": ["oracle", "empty"],
             "scoreKind": "binary", "rescore": "score",
             "calibration": {"oracle": "max", "empty": "any", "repeat": "exact", "seedsVary": False},
             "conditions": {

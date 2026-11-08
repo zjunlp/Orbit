@@ -1,18 +1,21 @@
 // Typed fetch helpers for the daemon API. Types come from the shared contracts (type-only import,
 // so zod is not bundled); the daemon validates, the Web trusts its own daemon.
 import type {
+  AgentCatalog,
   AgentList,
   Artifacts,
   AuthProfile,
   AuthTestResult,
   BenchCatalog,
   BenchCompare,
+  BenchCompatibility,
   BenchConsolidateInput,
   BenchConsolidateResult,
   BenchJob,
   BenchJobDetail,
   BenchJobList,
   BenchJobSpecInput,
+  BenchLabels,
   Benchmark,
   BenchReport,
   BenchRescoreInput,
@@ -24,6 +27,7 @@ import type {
   FolderStat,
   Ledger,
   LogChunk,
+  MethodList,
   Metrics,
   NotifyTarget,
   Run,
@@ -35,10 +39,13 @@ import type {
 } from "@zjunlp/orbit/contracts";
 
 export type {
+  AgentCatalog,
+  AgentCatalogEntry,
   Artifacts,
   AuthProfile,
   BenchCatalog,
   BenchCompare,
+  BenchCompatibility,
   BenchJob,
   BenchJobDetail,
   BenchJobList,
@@ -48,9 +55,11 @@ export type {
   BenchTaskList,
   CalibrationCheck,
   CalibrationReport,
+  CapabilityState,
   CatalogEntry,
   CatalogMethod,
   CodeSnapshot,
+  CompatibilityCell,
   FolderStat,
   Gpu,
   GpuProcess,
@@ -58,6 +67,9 @@ export type {
   Ledger,
   LogChunk,
   Method,
+  MethodLine,
+  MethodList,
+  MethodRevisionEntry,
   MethodSummary,
   Metrics,
   NodeResources,
@@ -160,6 +172,17 @@ export const api = {
       body: JSON.stringify(spec),
     }),
   benchJobs: () => req<BenchJobList>("/bench/jobs").then((r) => r.jobs),
+  agentCatalog: () => req<AgentCatalog>("/agents/catalog"),
+  benchCompatibility: () => req<BenchCompatibility>("/bench/compatibility"),
+  methods: (metric?: string) =>
+    req<MethodList>(`/methods${metric ? `?metric=${encodeURIComponent(metric)}` : ""}`).then(
+      (r) => r.methods,
+    ),
+  benchLabel: (name: string, labels: BenchLabels) =>
+    req<Benchmark>(`/benchmarks/${enc(name)}/labels`, {
+      method: "PATCH",
+      body: JSON.stringify(labels),
+    }),
   benchCatalog: (refresh: string[] = []) =>
     req<BenchCatalog>(
       `/bench/catalog${refresh.length ? `?refresh=${refresh.map(enc).join(",")}` : ""}`,

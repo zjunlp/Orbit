@@ -1,6 +1,7 @@
 // Pure completed-record fixtures: no daemon, store, files or executor.
 import { describe, expect, it } from "vitest";
 import { planConsolidation, type Transport } from "../src/bench/consolidate.ts";
+import { methodBasis, revisionOf } from "../src/bench/revision.ts";
 import {
   AuthProfile,
   BenchJob,
@@ -277,4 +278,29 @@ it("retains freshly reclassified evidence, then produces a new digest for a late
       flags: { pruneInvalid: true, dryRun: false, expect: plan.digest },
     }),
   ).toThrow("plan changed");
+});
+
+it("does not merge different recorded method revisions even with transport differences enabled", () => {
+  const f = fixture();
+  const method = f.target.job.spec.methods[0];
+  if (!method) throw new Error("missing fixture method");
+  const rev = (bundle: string) =>
+    revisionOf(
+      methodBasis(method, {
+        authKind: "api-key",
+        cliVersion: "1",
+        bundleDigest: bundle,
+      }),
+    );
+  f.target.job.revisions.agent = rev("old");
+  f.donor.job.revisions.agent = rev("new");
+  const plan = () =>
+    planConsolidation({
+      ...f,
+      donors: [f.donor],
+      flags: { sources: [f.donor.job.id], allowTransportDifferences: true },
+    });
+  expect(plan).toThrow("incompatible source job");
+  f.donor.job.revisions.agent = f.target.job.revisions.agent;
+  expect(plan().adopted).toHaveLength(1);
 });

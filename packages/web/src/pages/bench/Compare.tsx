@@ -91,7 +91,10 @@ type Compare = NonNullable<Awaited<ReturnType<typeof api.benchCompare>>>;
 /** One metric of a comparison: task matrix, means, paired Δ to the first column, ranking bars. */
 function CompareView({ c: original }: { c: Compare }) {
   const { query } = useLocation();
-  const c = withBaseline(original, query.get("baseline") ?? "");
+  const linkedBaseline = original.columns.find(
+    (x) => x.jobId === query.get("baselineJob") && x.method === query.get("baselineMethod"),
+  );
+  const c = withBaseline(original, query.get("baseline") ?? linkedBaseline?.key ?? "");
   const [metric, setMetric] = useMetric(c.metrics);
   const st = c.stats[metric.name];
   const paired = st?.pairedTasks ?? 0;
@@ -100,6 +103,12 @@ function CompareView({ c: original }: { c: Compare }) {
   const change = query.get("change") ?? "all";
   const target =
     c.columns.find((x) => x.key === query.get("target") && x.key !== base)?.key ??
+    c.columns.find(
+      (x) =>
+        x.jobId === query.get("targetJob") &&
+        x.method === query.get("targetMethod") &&
+        x.key !== base,
+    )?.key ??
     c.columns[1]?.key;
   const shown = changedRows(c, metric, base, target, change);
   const better = (a: number, b: number) => (metric.higherIsBetter ? a > b : a < b);

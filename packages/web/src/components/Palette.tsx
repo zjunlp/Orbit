@@ -2,7 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { runPath, runTitle } from "../lib/format.ts";
 import { navigate } from "../lib/router.ts";
 import { useRuns } from "../lib/runs-store.ts";
-import { IconChip, IconCompare, IconFlask, IconLayers, IconRuns, IconSettings } from "./icons.tsx";
+import {
+  IconBot,
+  IconBranch,
+  IconChip,
+  IconCompare,
+  IconDashboard,
+  IconFlask,
+  IconLayers,
+  IconLibrary,
+  IconRuns,
+  IconSettings,
+} from "./icons.tsx";
 import { StateIcon } from "./ui.tsx";
 
 interface Item {
@@ -23,28 +34,60 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const items = useMemo(() => {
     const pages: Item[] = [
       {
+        key: "p-home",
+        group: "Pages",
+        label: "Overview",
+        icon: <IconDashboard size={15} />,
+        text: "overview home",
+        go: "/",
+      },
+      {
+        key: "p-benchmarks",
+        group: "Pages",
+        label: "Benchmarks",
+        icon: <IconLibrary size={15} />,
+        text: "benchmarks catalog domains categories",
+        go: "/benchmarks",
+      },
+      {
+        key: "p-agents",
+        group: "Pages",
+        label: "Agents",
+        icon: <IconBot size={15} />,
+        text: "agents harness codex claude",
+        go: "/agents",
+      },
+      {
+        key: "p-methods",
+        group: "Pages",
+        label: "Methods",
+        icon: <IconBranch size={15} />,
+        text: "methods revisions lineage",
+        go: "/methods",
+      },
+      {
+        key: "p-bench",
+        group: "Pages",
+        label: "Evaluations",
+        icon: <IconFlask size={15} />,
+        text: "evaluations bench jobs trials",
+        go: "/bench",
+      },
+      {
         key: "p-runs",
         group: "Pages",
         label: "Runs",
         icon: <IconRuns size={15} />,
         text: "runs",
-        go: "/",
+        go: "/runs",
       },
       {
         key: "p-cmp",
         group: "Pages",
-        label: "Compare",
+        label: "Compare runs",
         icon: <IconCompare size={15} />,
         text: "compare",
         go: "/compare",
-      },
-      {
-        key: "p-bench",
-        group: "Pages",
-        label: "Bench",
-        icon: <IconFlask size={15} />,
-        text: "bench benchmark jobs methods",
-        go: "/bench",
       },
       {
         key: "p-res",

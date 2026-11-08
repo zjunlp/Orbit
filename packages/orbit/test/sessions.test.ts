@@ -157,6 +157,67 @@ describe("sessions of the Agent inside a run", () => {
 });
 
 describe("how the Agent inside a run ended", () => {
+  const startupError =
+    "Error loading config.toml: Failed to read config file /orbit/agent/codex/config.toml: Permission denied (os error 13)";
+
+  it("recognizes a pre-session Codex config permission failure before after-phase output", async () => {
+    const agent = join(root, "fail-codex-startup");
+    const log = join(root, "startup-log.txt");
+    writeFileSync(log, `${startupError}\n`);
+    expect(await runAgentFailure(agent, log)).toBeNull();
+    mkdirSync(join(agent, "codex"), { recursive: true });
+    writeFileSync(join(agent, "codex", "config.toml"), "");
+    expect(await runAgentFailure(agent, log)).toEqual({
+      kind: "agent_configuration_failed",
+      message: startupError,
+    });
+    writeFileSync(
+      log,
+      `WARNING: proceeding, even though we could not create PATH aliases: Permission denied (os error 13)\n${startupError}\n\n[orbit] after phase output:\n${"verifier output\n".repeat(2000)}`,
+    );
+    expect(
+      await runAgentFailure(agent, log, (text) => text.replace("/orbit/agent/codex", "[redacted]")),
+    ).toEqual({
+      kind: "agent_configuration_failed",
+      message: startupError.replace("/orbit/agent/codex", "[redacted]"),
+    });
+  });
+
+  it("does not infer startup failure from ordinary, quoted or incomplete log output", async () => {
+    const agent = join(root, "codex-startup-lookalikes");
+    const log = join(root, "startup-lookalikes.txt");
+    mkdirSync(join(agent, "codex"), { recursive: true });
+    writeFileSync(join(agent, "codex", "config.toml"), "");
+    for (const text of [
+      "Permission denied (os error 13)",
+      `tool output:\n${startupError}`,
+      `${startupError}\nmodel answered successfully`,
+      startupError.replace("/orbit/agent/codex/config.toml", "/workspace/config.toml"),
+      `${"x".repeat(16 * 1024)}\n${startupError}`,
+      `${startupError}\n${" ".repeat(16 * 1024)}`,
+    ]) {
+      writeFileSync(log, text);
+      expect(await runAgentFailure(agent, log)).toBeNull();
+    }
+  });
+
+  it("preserves model work when its transcript exists despite a startup-looking log", async () => {
+    const agent = join(root, "codex-startup-model-work");
+    const log = join(root, "startup-model-work.txt");
+    const dir = join(agent, "codex", "sessions", "2026", "11", "06");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(agent, "codex", "config.toml"), "");
+    writeFileSync(log, `${startupError}\n`);
+    writeFileSync(
+      join(dir, "rollout.jsonl"),
+      jl([
+        { type: "event_msg", payload: { type: "task_started" } },
+        { type: "response_item", payload: { type: "function_call", name: "exec_command" } },
+      ]),
+    );
+    expect(await runAgentFailure(agent, log)).toBeNull();
+  });
+
   it("reports a Codex turn that ended on a credential or quota error, not earlier retries", async () => {
     const agent = join(root, "fail-codex");
     expect(await runAgentFailure(agent)).toBeNull();

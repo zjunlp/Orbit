@@ -1,23 +1,31 @@
 import { Component, useEffect, useState, useSyncExternalStore } from "react";
 import {
+  IconBot,
+  IconBranch,
   IconChip,
-  IconCompare,
+  IconDashboard,
   IconFlask,
   IconKeyboard,
+  IconLibrary,
   IconLogo,
   IconMoon,
   IconRuns,
   IconSettings,
+  IconSidebar,
   IconSun,
 } from "./components/icons.tsx";
 import { Palette } from "./components/Palette.tsx";
 import { Empty, Kbd, Link, Toaster } from "./components/ui.tsx";
 import { authState } from "./lib/api.ts";
 import { useHotkeys } from "./lib/hotkeys.ts";
-import { navigate, safeDecode, useLocation } from "./lib/router.ts";
+import { legacyHref, navigate, safeDecode, useLocation } from "./lib/router.ts";
 import { startRunsStore, useRunsState } from "./lib/runs-store.ts";
+import { AgentsPage } from "./pages/Agents.tsx";
 import { BenchComparePage, BenchJobDetail, BenchJobs, NewBenchJob } from "./pages/Bench.tsx";
+import { BenchmarksPage } from "./pages/Benchmarks.tsx";
 import { Compare } from "./pages/Compare.tsx";
+import { MethodsPage } from "./pages/Methods.tsx";
+import { Overview } from "./pages/Overview.tsx";
 import { Resources } from "./pages/Resources.tsx";
 import { RunDetail } from "./pages/RunDetail.tsx";
 import { Runs } from "./pages/Runs.tsx";
@@ -51,16 +59,46 @@ export function App() {
   const { connected, loaded } = useRunsState();
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
+  const [railTip, setRailTip] = useState<{ text: string; top: number } | null>(null);
+  const showRailTip = (e: React.MouseEvent<HTMLElement> | React.FocusEvent<HTMLElement>) => {
+    if (e.currentTarget.getBoundingClientRect().width > 60 || !(e.target instanceof Element))
+      return;
+    const item = e.target.closest("a, button");
+    const text = item?.querySelector(".tip")?.textContent;
+    if (!item || !text) return;
+    const rect = item.getBoundingClientRect();
+    setRailTip({ text, top: rect.top + rect.height / 2 });
+  };
+  useEffect(() => {
+    const hide = () => setRailTip(null);
+    window.addEventListener("resize", hide);
+    document.addEventListener("scroll", hide, true);
+    return () => {
+      window.removeEventListener("resize", hide);
+      document.removeEventListener("scroll", hide, true);
+    };
+  }, []);
   const [theme, toggleTheme] = useTheme();
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("orbit.rail") === "collapsed",
+  );
+  const toggleRail = () => {
+    localStorage.setItem("orbit.rail", collapsed ? "expanded" : "collapsed");
+    setCollapsed(!collapsed);
+  };
 
   useEffect(() => startRunsStore(), []);
 
   useHotkeys({
     "mod+k": () => setPalette(true),
     "?": () => setHelp((h) => !h),
-    "g r": () => navigate("/"),
+    "g o": () => navigate("/"),
+    "g b": () => navigate("/benchmarks"),
+    "g a": () => navigate("/agents"),
+    "g m": () => navigate("/methods"),
+    "g e": () => navigate("/bench"),
+    "g r": () => navigate("/runs"),
     "g c": () => navigate("/compare"),
-    "g b": () => navigate("/bench"),
     "g s": () => navigate("/resources"),
     "g p": () => navigate("/settings"),
     Escape: () => {
@@ -73,7 +111,9 @@ export function App() {
   const m = /^\/runs\/([^/]+)\/?$/.exec(loc.path);
   const bj = /^\/bench\/([^/]+)\/?$/.exec(loc.path);
   const bt = /^\/bench\/([^/]+)\/trials\/([^/]+)\/?$/.exec(loc.path);
-  if (m) page = <RunDetail key={m[1]} id={safeDecode(m[1] as string)} />;
+  const redirect = legacyHref(loc.path, loc.query, loc.hash);
+  if (redirect) page = <Redirect to={redirect} />;
+  else if (m) page = <RunDetail key={m[1]} id={safeDecode(m[1] as string)} />;
   else if (bt)
     page = (
       <TrialPage
@@ -86,10 +126,14 @@ export function App() {
   else if (loc.path === "/bench/new") page = <NewBenchJob />;
   else if (bj) page = <BenchJobDetail key={bj[1]} id={safeDecode(bj[1] as string)} />;
   else if (loc.path === "/bench" || loc.path === "/bench/") page = <BenchJobs />;
+  else if (loc.path === "/benchmarks") page = <BenchmarksPage />;
+  else if (loc.path === "/agents") page = <AgentsPage />;
+  else if (loc.path === "/methods") page = <MethodsPage />;
+  else if (loc.path === "/runs") page = <Runs />;
   else if (loc.path === "/compare") page = <Compare />;
   else if (loc.path === "/resources") page = <Resources />;
   else if (loc.path === "/settings") page = <Settings />;
-  else page = <Runs />;
+  else page = <Overview />;
 
   const nav = (
     href: string,
@@ -100,11 +144,15 @@ export function App() {
   ) => (
     <Link href={href} className={active ? "active" : ""} aria-label={label}>
       {icon}
+      <span className="label">{label}</span>
       <span className="tip">
         {label} <span className="faint">g {key}</span>
       </span>
     </Link>
   );
+  const path = loc.path;
+  const runsActive = path === "/runs" || path.startsWith("/runs/") || path === "/compare";
+  const evalActive = path === "/bench" || path.startsWith("/bench/");
 
   if (unauthorized)
     return (
@@ -122,26 +170,53 @@ export function App() {
     );
 
   return (
-    <div className="shell">
-      <nav className="rail">
+    <div className={`shell${collapsed ? " collapsed" : ""}`}>
+      <nav
+        className="rail"
+        aria-label="Main"
+        onMouseOver={showRailTip}
+        onFocus={showRailTip}
+        onMouseLeave={() => setRailTip(null)}
+        onBlur={() => setRailTip(null)}
+        onClick={() => setRailTip(null)}
+      >
         <div className="logo" title="Orbit">
-          <IconLogo size={32} />
+          <IconLogo size={28} />
+          <span className="label brand">Orbit</span>
         </div>
-        {nav("/", "Runs", <IconRuns />, loc.path === "/" || loc.path.startsWith("/runs"), "r")}
-        {nav("/compare", "Compare", <IconCompare />, loc.path === "/compare", "c")}
-        {nav("/bench", "Bench", <IconFlask />, loc.path.startsWith("/bench"), "b")}
-        {nav("/resources", "Resources", <IconChip />, loc.path === "/resources", "s")}
-        {nav("/settings", "Settings", <IconSettings />, loc.path === "/settings", "p")}
+        {nav("/", "Overview", <IconDashboard />, path === "/", "o")}
+        <div className="rail-group">Evaluate</div>
+        {nav("/benchmarks", "Benchmarks", <IconLibrary />, path === "/benchmarks", "b")}
+        {nav("/agents", "Agents", <IconBot />, path === "/agents", "a")}
+        {nav("/methods", "Methods", <IconBranch />, path === "/methods", "m")}
+        {nav("/bench", "Evaluations", <IconFlask />, evalActive, "e")}
+        <div className="rail-group">Operate</div>
+        {nav("/runs", "Runs", <IconRuns />, runsActive, "r")}
+        {nav("/resources", "Resources", <IconChip />, path === "/resources", "s")}
         <div className="spacer" />
+        {nav("/settings", "Settings", <IconSettings />, path === "/settings", "p")}
         <button type="button" onClick={() => setHelp(true)} aria-label="Keyboard shortcuts">
           <IconKeyboard />
+          <span className="label">Shortcuts</span>
           <span className="tip">
             Shortcuts <span className="faint">?</span>
           </span>
         </button>
         <button type="button" onClick={toggleTheme} aria-label="Toggle theme">
           {theme === "dark" ? <IconSun /> : <IconMoon />}
+          <span className="label">{theme === "dark" ? "Light theme" : "Dark theme"}</span>
           <span className="tip">{theme === "dark" ? "Light theme" : "Dark theme"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={toggleRail}
+          className="rail-toggle"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+        >
+          <IconSidebar />
+          <span className="label">Collapse</span>
+          <span className="tip">{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
         </button>
         <button type="button" aria-label="Daemon connection" style={{ cursor: "default" }}>
           <span
@@ -156,11 +231,17 @@ export function App() {
               } as React.CSSProperties
             }
           />
+          <span className="label">{connected ? "Connected" : "Disconnected"}</span>
           <span className="tip">
             {connected ? "Live — connected to daemon" : "Disconnected — retrying"}
           </span>
         </button>
       </nav>
+      {railTip && (
+        <span className="rail-tooltip" role="tooltip" style={{ top: railTip.top }}>
+          {railTip.text}
+        </span>
+      )}
       <main className="main">
         <PageBoundary key={loc.path}>{page}</PageBoundary>
       </main>
@@ -195,7 +276,8 @@ class PageBoundary extends Component<{ children: React.ReactNode }, { error: Err
 
 const SHORTCUTS: [string, string][] = [
   ["⌘K / Ctrl K", "Command palette: jump to any run or page"],
-  ["g r · g c · g b · g s · g p", "Go to Runs · Compare · Bench · Resources · Settings"],
+  ["g o · g b · g a · g m · g e", "Go to Overview · Benchmarks · Agents · Methods · Evaluations"],
+  ["g r · g c · g s · g p", "Go to Runs · Compare · Resources · Settings"],
   ["j / k", "Move down / up in lists"],
   ["Enter / o", "Open the selected run"],
   ["x", "Select run (for compare)"],
@@ -237,4 +319,10 @@ function Help({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+/** Old addresses keep working: replace the location instead of rendering a page. */
+function Redirect({ to }: { to: string }) {
+  useEffect(() => navigate(to, { replace: true }), [to]);
+  return null;
 }

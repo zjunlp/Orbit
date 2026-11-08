@@ -1,12 +1,12 @@
 import { resolveMetrics } from "@zjunlp/orbit/metrics";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CiBars, useMetric } from "../../components/BenchMetrics.tsx";
 import { IconCompare } from "../../components/icons.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { ConfirmDialog, Empty, Link, Loading, toast } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
 import { dateTime, duration } from "../../lib/format.ts";
-import { navigate } from "../../lib/router.ts";
+import { navigate, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
 import { Conditions } from "./Conditions.tsx";
 import { ConsolidateDialog } from "./ConsolidateDialog.tsx";
@@ -77,7 +77,7 @@ export function BenchJobDetail({ id }: { id: string }) {
         className="topbar-wrap"
         crumbs={[{ label: "Bench", href: "/bench" }, { label: jobLabel(job) }]}
       >
-        <Link className="btn sm ghost" href={`/?q=bench-${job.id}`}>
+        <Link className="btn sm ghost" href={`/runs?q=bench-${job.id}`}>
           Runs
         </Link>
         <Link className="btn sm" href={`/bench/compare?jobs=${job.id}`}>
@@ -246,15 +246,32 @@ export function BenchJobDetail({ id }: { id: string }) {
  */
 function Reports({ id, version }: { id: string; version: number }) {
   const r = useAsync(() => api.benchReports(id), [id, version]);
+  const loc = useLocation();
+  const selected = Number(loc.query.get("report")) || null;
+  const container = useRef<HTMLDetailsElement>(null);
   const reports = r.data ?? [];
-  if (!reports.length) return null;
+  useEffect(() => {
+    if (selected && r.data) container.current?.scrollIntoView({ block: "start" });
+  }, [selected, r.data]);
+  if (!reports.length && !selected) return null;
+  if (!r.data && selected)
+    return r.error ? (
+      <div className="callout" role="alert">
+        {r.error}
+      </div>
+    ) : (
+      <Loading what="Loading saved report" />
+    );
+  const shown = selected ? reports.filter((x) => x.revision === selected) : reports;
   const last = reports[reports.length - 1];
   return (
-    <details className="card">
+    <details className="card report-card" ref={container} open={selected ? true : undefined}>
       <summary className="card-h">
-        Reports{" "}
+        {selected ? `Saved report r${selected}` : "Reports"}{" "}
         <span className="sub">
-          revision {last?.revision} · {last?.reason} · plan {last?.planDigest.slice(7, 19)}
+          {selected
+            ? "immutable snapshot · evaluation above shows current results"
+            : `revision ${last?.revision} · ${last?.reason} · plan ${last?.planDigest.slice(7, 19)}`}
         </span>
       </summary>
       <div className="card-b">
@@ -269,7 +286,7 @@ function Reports({ id, version }: { id: string; version: number }) {
             </tr>
           </thead>
           <tbody>
-            {[...reports].reverse().map((x) => (
+            {[...shown].reverse().map((x) => (
               <tr key={x.revision}>
                 <td>{x.revision}</td>
                 <td>{dateTime(x.createdAt)}</td>
@@ -292,10 +309,11 @@ function Reports({ id, version }: { id: string; version: number }) {
             ))}
           </tbody>
         </table>
+        {selected && !shown.length && <p role="alert">Report r{selected} was not found.</p>}
         <p className="faint">
           Full entries (sample, attempt, runs):{" "}
           <code>
-            orbit bench report {id} -r {last?.revision}
+            orbit bench report {id} -r {selected ?? last?.revision}
           </code>
         </p>
       </div>

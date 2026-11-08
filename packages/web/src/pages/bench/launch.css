@@ -116,3 +116,19 @@
     width: 100%;
   }
 }
+.bench-lineage {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bench-lineage legend {
+  padding: 0 6px;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.bench-lineage p {
+  margin: 0;
+}

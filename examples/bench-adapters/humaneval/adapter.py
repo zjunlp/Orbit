@@ -28,6 +28,8 @@ TIMEOUT_SEC = 3.0
 
 CAPABILITIES = {
     "category": "fixed-input",
+    "identity": {"id": "humaneval", "name": "HumanEval", "version": "312c5e5"},
+    "domains": ["software"],
     "profiles": ["generate", "exec-test"],
     "methods": ["oracle", "empty", "external"],
     "scoreKind": "binary",

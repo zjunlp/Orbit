@@ -17,7 +17,7 @@ import {
 import { UserError } from "../runs/errors.ts";
 import type { AgentFailure } from "../sessions/index.ts";
 import { batchConditions } from "./batches.ts";
-import { agentFailureIssue, shouldCheckAgentFailure } from "./classify.ts";
+import { agentFailureIssue, agentFailureKind, shouldCheckAgentFailure } from "./classify.ts";
 import { executionBudget, isValid } from "./summary.ts";
 
 /** Group of a job's runs, so the run list and notifications see a job as one group. */
@@ -35,6 +35,7 @@ function benchmarkSettings(b: Benchmark) {
 }
 
 export const sameMethodSetup = (a: BenchJob, b: BenchJob) => {
+  if (!isDeepStrictEqual(a.revisions, b.revisions)) return false;
   if (a.spec.benchmark !== b.spec.benchmark || !isDeepStrictEqual(a.spec.methods, b.spec.methods))
     return false;
   if (!a.benchmarkSnapshot && !b.benchmarkSnapshot) return true;
@@ -66,6 +67,7 @@ export function consolidateOptions(id: string, input: BenchConsolidateInput) {
 }
 
 export function equivalentTransport(a: BenchJob, b: BenchJob, transport: Transport): boolean {
+  if (!isDeepStrictEqual(a.revisions, b.revisions)) return false;
   if (Boolean(a.benchmarkSnapshot) !== Boolean(b.benchmarkSnapshot)) return false;
   const left = a.benchmarkSnapshot ?? transport.benchmarks.get(a.spec.benchmark);
   const right = b.benchmarkSnapshot ?? transport.benchmarks.get(b.spec.benchmark);
@@ -132,7 +134,7 @@ export function planConsolidation(input: {
       for (const outcome of [t.outcome, ...t.history.map((h) => h.outcome)]) {
         if (outcome?.evaluation !== "valid" && outcome?.evaluation !== "unknown") continue;
         outcome.evaluation = "invalid";
-        outcome.failure = "model_unavailable";
+        outcome.failure = agentFailureKind(failure);
         outcome.issues = [...new Set([...outcome.issues, issue])];
         changed = true;
       }

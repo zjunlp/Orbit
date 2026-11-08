@@ -111,6 +111,8 @@ def tasks(req):
         "tasks": rows,
         "capabilities": {
             "category": "tool-workflow", "profiles": ["local-state"],
+            "identity": {"id": "bfcl", "name": "BFCL", "version": VERSION, "variant": "multi-turn"},
+            "domains": ["software"],
             "methods": ["oracle", "empty", "cli"], "requires": ["mcp"],
             "scoreKind": "binary", "rescore": "evidence",
             "calibration": {"empty": "min", "oracle": "max", "repeat": "exact", "seedsVary": False},

@@ -78,7 +78,8 @@ def tasks(req):
         rows.append({"id": f"miniwob.{task}", "title": task, "supported": reason is None,
                      "reason": reason, "tags": {"environment": "browsergym-miniwob"}})
     return {"tasks": rows, "capabilities": {
-        "category": "gui", "profiles": ["browser", "fixture"], "kind": "browser", "methods": ["external", "empty", "cli"], "requires": ["gui"],
+        "category": "gui", "profiles": ["browser", "fixture"], "domains": ["gui-web"],
+        "identity": {"id": "miniwob", "name": "MiniWoB++", "version": MINIWOB_COMMIT, "variant": "browsergym"}, "kind": "browser", "methods": ["external", "empty", "cli"], "requires": ["gui"],
         "scoreKind": "binary", "rescore": "evidence", "conditions": {
             "Environment": f"BrowserGym {BROWSERGYM_VERSION}",
             "Task revision": MINIWOB_COMMIT,
