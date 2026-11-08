@@ -16,6 +16,8 @@ checkpoint selection; see [LIBERO suites](../../../docs/guides/libero-suites.md)
 RoboCasa365 Atomic-Seen uses its original Gymnasium environments and a separate OpenPI service
 with the published RoboCasa π₀.₅ checkpoint. The GR00T N1.5 recipe uses the same native driver
 with RoboCasa 1.0.1 and its own Policy registration. See [RoboCasa365 setup](ROBOCASA365.md).
+RoboTwin 2.0 Clean runs the original Aloha-AgileX `adjust_bottle` task with an independently
+registered community π₀.₅ checkpoint. See [RoboTwin setup](ROBOTWIN.md).
 For new endpoints, see the [onboarding templates](../../../docs/guides/embodied-onboarding.md)
 and [compatibility matrix](../../../docs/guides/embodied-compatibility.md).
 

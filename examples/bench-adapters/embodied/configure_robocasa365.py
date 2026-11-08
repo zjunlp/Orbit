@@ -3,20 +3,10 @@
 import argparse
 import json
 from pathlib import Path
-import subprocess
 
-from adapter import HERE, digest, file_digest, implementation_digest
+from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from configure_groot import image_id
 from orbit_embodied.assets import tree_digest
-
-
-def check_source(root, source, files):
-    commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
-    if commit != source["commit"]:
-        raise ValueError("unexpected source revision for " + source["repository"])
-    for name, expected in files.items():
-        if file_digest(root / name) != expected:
-            raise ValueError("reference source changed: " + name)
 
 
 def groot_reference(reference, model):

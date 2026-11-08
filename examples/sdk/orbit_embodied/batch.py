@@ -4,7 +4,7 @@ from pathlib import Path
 import signal
 
 from .binding import digest
-from .driver import EpisodeCancelled
+from .driver import EpisodeCancelled, SampleRejected
 from .evidence import write_json
 
 
@@ -33,7 +33,7 @@ def run_batch(plan, episodes, output, execute):
             result = execute(request, output / "episodes" / request["episodeId"], lambda: stopped[0])
             states[index] = "completed" if result["valid"] else "invalid"
             write_json(output / "batch-result.json", {"planDigest": plan["digest"], "states": states})
-            if not result["valid"]:
+            if not result["valid"] and result.get("failure") != SampleRejected.failure:
                 raise RuntimeError("batch stopped after invalid episode; no stateful call was retried")
     except EpisodeCancelled:
         stopped[0] = True

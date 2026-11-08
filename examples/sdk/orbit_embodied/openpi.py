@@ -70,6 +70,13 @@ def prepare_robocasa_observation(observation, resize_size=224):
             "observation/state": state, "prompt": observation["annotation.human.task_description"]}
 
 
+def prepare_robotwin_observation(observation):
+    cameras = {"cam_high": "head_camera", "cam_left_wrist": "left_camera", "cam_right_wrist": "right_camera"}
+    return {"images": {name: np.ascontiguousarray(observation[source].transpose(2, 0, 1))
+                       for name, source in cameras.items()},
+            "state": observation["joint_state"], "prompt": observation["instruction"]}
+
+
 class WebSocketPolicy:
     """One bounded request per inference over a binary WebSocket; stateful calls are never retried."""
 

@@ -25,6 +25,8 @@ def main():
     reference = json.loads(args.reference_file.read_text())
     kind = reference.get("environment", {}).get("kind")
     generated = kind in GENERATED_ENVIRONMENTS
+    if args.environment_seed < 0:
+        raise ValueError("environment seed must be nonnegative")
     if generated:
         tasks = {task: {"tags": {"initialStateDigest": seed_asset(reference, task)}}
                  for task in reference["environment"]["tasks"]}
@@ -36,8 +38,8 @@ def main():
         for initial_state in args.initial_state:
             if not 0 <= initial_state < (2 ** 31 if generated else 50):
                 raise ValueError("initial-state index exceeds the selected reset recipe")
-            if kind == "robocasa365" and not 0 <= args.environment_seed + initial_state < 2 ** 32:
-                raise ValueError("RoboCasa365 scene seed must fit in an unsigned 32-bit integer")
+            if kind in ("robocasa365", "robotwin") and not 0 <= args.environment_seed + initial_state < 2 ** 32:
+                raise ValueError("scene seed must fit in an unsigned 32-bit integer")
             for repetition in range(args.repetitions):
                 content = {"taskId": task_id, "benchmarkProfile": reference["id"],
                            "initialStateId": str(initial_state), "initialStateDigest": task["tags"]["initialStateDigest"],

@@ -1,0 +1,152 @@
+{
+  "version": 1,
+  "id": "robotwin-2.0-demo-clean/1",
+  "scoreName": "RoboTwin native eval_success",
+  "scoreErrors": "exclude",
+  "scoreUnit": "sample",
+  "reference": {
+    "evaluation": {
+      "repository": "https://github.com/RoboTwin-Platform/RoboTwin",
+      "commit": "13c3c47ff4312dd62484bcd51be034af55c062d1"
+    },
+    "curobo": {
+      "repository": "https://github.com/NVlabs/curobo",
+      "commit": "d64c4b005459db10c5dd867d8b30a87d5bda9bdb"
+    },
+    "assets": {
+      "repository": "TianxingChen/RoboTwin2.0",
+      "revision": "3dc3b798668feb99ac61cc9086d84cbcc3d79186",
+      "archives": {
+        "embodiments.zip": "sha256:85ffeff55a5066def5931224a85cfa3f8abaa1fbf779bd17789a7fb3f85bc789",
+        "objects.zip": "sha256:6aa56b3cf1e1064f7c809308144da36b00815f8b137fef2d7e4de856f8becf27"
+      }
+    },
+    "files": {
+      "task_config/demo_clean.yml": "sha256:8ee5d0d07daecf7599b8d89b44776b700c7c60da24cd6317e176e6798d8cb11e",
+      "task_config/_camera_config.yml": "sha256:dc80a40552e0fad25d58cf0141302ceba66d22409b5091bed235ad2f10cbce7f",
+      "task_config/_embodiment_config.yml": "sha256:b0a198ff27bf6bf6b73162d2d1adafc7e73fcdf53f39943e67e40fee15bd83fa",
+      "task_config/_eval_step_limit.yml": "sha256:41c62bd26184977bae45aee555edd0cc21de5cddf560c2595921fc23a1e3b551",
+      "envs/_base_task.py": "sha256:448f7152b65cb9102217cf5463aa821d72810ca56f63d5a797ec7bd43e23e101",
+      "envs/_GLOBAL_CONFIGS.py": "sha256:f3640d4d132531e1c4a72f1f27dd6312c95aadcb72ab43c638458cf994b5a4d4",
+      "envs/adjust_bottle.py": "sha256:4f76b35e718a4c5a364dae564d35d68268755818d9062e3ed4ff393d158d0548",
+      "envs/camera/camera.py": "sha256:e4d17e99c8a68f44a12bef248a2164f52206efeaf24168172b778cc1e32832dd",
+      "envs/robot/robot.py": "sha256:3dcd80acc8cab489a4c5edb507cc460dab1724be0226b8d5c4c1b218dee605cb",
+      "envs/robot/planner.py": "sha256:f1012345542483f4cfbac64880a266b7ee0d4a64362d5ec6fd6985ed9c34b564",
+      "script/eval_policy.py": "sha256:8b16c766a9c401163418b425e413ebe7f4127d6b132b9c7c4d6b6f8752d57681",
+      "description/utils/generate_episode_instructions.py": "sha256:ef428fa9066c3025d41e2fabcbf894d1d4313bd12bee0a300d19d3d7d1158f24",
+      "description/task_instruction/adjust_bottle.json": "sha256:fa82a82a7c64498407896ab171bf731eddd679bd2189b827404a8feb3ffb237b",
+      "description/objects_description/001_bottle/base13.json": "sha256:49da9966fd4e19adaaea661f76c9e70bd6d876b81ae027b5fceb8365b9be7544",
+      "description/objects_description/001_bottle/base16.json": "sha256:d9d44cf675f0d6f6253447de31f29ecb0eed829a365adc1af2f9bf54e42015a5"
+    }
+  },
+  "environment": {
+    "kind": "robotwin",
+    "suite": "demo_clean",
+    "tasks": ["adjust_bottle"],
+    "horizons": {
+      "adjust_bottle": 400
+    },
+    "instructionSplit": "unseen",
+    "instructionCount": 100,
+    "reset": "environmentSeed+initialStateId; native expert precheck; frozen instruction stream",
+    "assets": {
+      "dataset": "robotwin-demo-clean-assets",
+      "target": "/opt/robotwin/assets"
+    }
+  },
+  "benchmarkProfile": {
+    "id": "robotwin-aloha-agilex-native/1",
+    "observations": {
+      "head_camera": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [240, 320, 3],
+        "camera": "head_camera",
+        "layout": "HWC",
+        "format": "RGB-native"
+      },
+      "left_camera": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [240, 320, 3],
+        "camera": "left_camera",
+        "layout": "HWC",
+        "format": "RGB-native"
+      },
+      "right_camera": {
+        "semantic": "rgb",
+        "dtype": "uint8",
+        "shape": [240, 320, 3],
+        "camera": "right_camera",
+        "layout": "HWC",
+        "format": "RGB-native"
+      },
+      "joint_state": {
+        "semantic": "aloha-agilex-joint-and-gripper-state",
+        "dtype": "float64",
+        "shape": [14],
+        "frame": "aloha-agilex-joints",
+        "unit": "radians-and-normalized-gripper",
+        "order": [
+          "left_joint_1",
+          "left_joint_2",
+          "left_joint_3",
+          "left_joint_4",
+          "left_joint_5",
+          "left_joint_6",
+          "left_gripper",
+          "right_joint_1",
+          "right_joint_2",
+          "right_joint_3",
+          "right_joint_4",
+          "right_joint_5",
+          "right_joint_6",
+          "right_gripper"
+        ]
+      },
+      "instruction": {
+        "semantic": "language-instruction",
+        "dtype": "string",
+        "shape": []
+      }
+    },
+    "action": {
+      "semantic": "absolute-joint-and-gripper-target",
+      "shape": [14],
+      "controller": "robotwin-qpos-toppra",
+      "frame": "aloha-agilex-joints",
+      "unit": "radians-and-normalized-gripper",
+      "rotation": "joint-angles",
+      "gripper": "normalized-open-fraction",
+      "order": [
+        "left_joint_1",
+        "left_joint_2",
+        "left_joint_3",
+        "left_joint_4",
+        "left_joint_5",
+        "left_joint_6",
+        "left_gripper",
+        "right_joint_1",
+        "right_joint_2",
+        "right_joint_3",
+        "right_joint_4",
+        "right_joint_5",
+        "right_joint_6",
+        "right_gripper"
+      ]
+    }
+  },
+  "observationMap": {
+    "head_camera": "head_camera",
+    "left_camera": "left_camera",
+    "right_camera": "right_camera",
+    "joint_state": "joint_state",
+    "instruction": "instruction"
+  },
+  "parameters": {
+    "settleSteps": 0,
+    "replanSteps": 50,
+    "resizeSize": 224,
+    "successRule": "last"
+  }
+}

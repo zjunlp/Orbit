@@ -21,6 +21,12 @@ class EpisodeFailure(RuntimeError):
         self.rejected_actions = rejected_actions
 
 
+class SampleRejected(RuntimeError):
+    """The benchmark rejected a frozen sample during native feasibility checks."""
+
+    failure = "sample_rejected"
+
+
 class EpisodeCancelled(BaseException):
     """Stop a batch without sealing an incomplete episode as a scored result."""
 
@@ -161,7 +167,10 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
             result.update(success=bool(verdict["success"]), valid=True, native=verdict)
             completed = True
     except Exception as exc:
-        result.update(failure=getattr(exc, "kind", stage))
+        if stage == "reset_failed" and isinstance(exc, SampleRejected):
+            result["failure"] = SampleRejected.failure
+        else:
+            result["failure"] = getattr(exc, "kind", stage)
         result["issues"].append(str(exc))
         (directory / "actions.jsonl").touch(exist_ok=True)
         completed = True

@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import uuid
 
@@ -15,6 +16,15 @@ sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
 from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, seed_asset
+
+
+def check_source(root, source, files):
+    commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+    if commit != source["commit"]:
+        raise ValueError("unexpected source revision for " + source["repository"])
+    for name, expected in files.items():
+        if file_digest(root / name) != expected:
+            raise ValueError("reference source changed: " + name)
 
 
 def implementation_digest():
@@ -132,7 +142,8 @@ def solve_one(req):
             raise ValueError("simGpuMemGB needs a GPU simulator and a finite positive budget")
         resources["gpuMemGB"] = memory
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
-    assets = reference.get("environment", {}).get("assets")
+    environment = reference.get("environment", {})
+    assets = environment.get("assets")
     if assets:
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
@@ -141,6 +152,7 @@ def solve_one(req):
                              "MUJOCO_GL": gl_platform,
                              "PYOPENGL_PLATFORM": gl_platform},
                      "resources": resources,
+                     **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") == "robotwin" else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
                      "tags": {"embodied_evidence": "2"},
                      "mounts": mounts}}

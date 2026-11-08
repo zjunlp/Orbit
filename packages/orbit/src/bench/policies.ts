@@ -30,6 +30,8 @@ export function connectorIssues(definition: PolicyDefinition): string[] {
   const issues = CONNECTOR_RULES[definition.connector](definition);
   if (definition.normalizationKey && definition.connector !== "openvla-ws")
     issues.push("normalizationKey is supported by the OpenVLA connector");
+  if (definition.ioAdapter === "robotwin-native" && definition.connector !== "openpi-ws")
+    issues.push("The native RoboTwin recipe requires the OpenPI connector");
   return issues;
 }
 

@@ -20,9 +20,11 @@ class LazyPolicy:
 
     def reset(self, sample):
         if self.definition["connector"] == "openpi-ws":
-            from orbit_embodied.openpi import OpenPIClient, prepare_libero_observation, prepare_robocasa_observation
-            prepare = (prepare_robocasa_observation if self.definition.get("ioAdapter") == "robocasa-native"
-                       else prepare_libero_observation)
+            from orbit_embodied.openpi import (OpenPIClient, prepare_libero_observation,
+                                               prepare_robocasa_observation, prepare_robotwin_observation)
+            prepare = {"robocasa-native": prepare_robocasa_observation,
+                       "robotwin-native": prepare_robotwin_observation}.get(
+                           self.definition.get("ioAdapter"), prepare_libero_observation)
             self.client = OpenPIClient("ws://policy:" + str(self.definition["port"]),
                                       timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps,
                                       prepare=prepare)
@@ -122,6 +124,9 @@ def execute_episode(request, destination, cancelled=None):
     elif kind == "robocasa365":
         from orbit_embodied.robocasa import RoboCasaBenchmark
         benchmark = RoboCasaBenchmark(reference, sample["taskId"])
+    elif kind == "robotwin":
+        from orbit_embodied.robotwin import RoboTwinBenchmark
+        benchmark = RoboTwinBenchmark(reference, sample["taskId"])
     else:
         from orbit_embodied.libero import LiberoBenchmark
         suite, name = sample["taskId"].split(":", 1)
@@ -131,7 +136,7 @@ def execute_episode(request, destination, cancelled=None):
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
-            or parameters["renderSize"] != 256
+            or (kind != "robotwin" and parameters["renderSize"] != 256)
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],

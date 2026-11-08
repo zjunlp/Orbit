@@ -8,6 +8,7 @@ import unittest
 
 from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.batch import run_batch
+from orbit_embodied.driver import SampleRejected
 from orbit_embodied import test_core as synthetic
 from orbit_embodied.test_core import SyntheticBenchmark, SyntheticPolicy
 
@@ -74,6 +75,40 @@ class BatchTests(unittest.TestCase):
         self.assertFalse(self.verify(1)["valid"])
         summary = json.loads((self.output / "batch-result.json").read_text())
         self.assertEqual(summary["states"], ["completed", "invalid", "not_started"])
+
+    def test_expert_rejection_preserves_sample_and_continues(self):
+        class RejectedBenchmark(SyntheticBenchmark):
+            def reset(self, _sample):
+                raise SampleRejected("synthetic expert rejection")
+
+        def execute(request, directory, cancelled):
+            benchmark = RejectedBenchmark() if request["batch"]["index"] == 1 else None
+            return self.execute(request, directory, cancelled, benchmark=benchmark)
+
+        run_batch(self.plan, self.episodes, self.output, execute)
+        summary = json.loads((self.output / "batch-result.json").read_text())
+        self.assertEqual(summary["states"], ["completed", "invalid", "completed"])
+        self.assertTrue(self.verify(0)["valid"])
+        rejected = self.verify(1)
+        self.assertEqual(rejected["failure"], "sample_rejected")
+        self.assertFalse(rejected["valid"])
+        self.assertEqual(rejected["steps"], 0)
+        self.assertTrue(self.verify(2)["valid"])
+
+    def test_unexpected_reset_error_still_stops_the_batch(self):
+        class BrokenBenchmark(SyntheticBenchmark):
+            def reset(self, _sample):
+                raise RuntimeError("synthetic reset error")
+
+        def execute(request, directory, cancelled):
+            benchmark = BrokenBenchmark() if request["batch"]["index"] == 1 else None
+            return self.execute(request, directory, cancelled, benchmark=benchmark)
+
+        with self.assertRaisesRegex(RuntimeError, "invalid episode"):
+            run_batch(self.plan, self.episodes, self.output, execute)
+        summary = json.loads((self.output / "batch-result.json").read_text())
+        self.assertEqual(summary["states"], ["completed", "invalid", "not_started"])
+        self.assertEqual(self.verify(1)["failure"], "reset_failed")
 
     def test_cancel_stops_current_and_unstarted_episodes_without_sealing_them(self):
         def execute(request, directory, cancelled):

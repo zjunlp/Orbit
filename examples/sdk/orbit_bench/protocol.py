@@ -23,6 +23,7 @@ FAILURE_KINDS = (
     "env_start",
     "env_step",
     "reset_failed",
+    "sample_rejected",
     "policy_start",
     "policy_act",
     "server_unreachable",

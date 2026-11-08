@@ -84,7 +84,9 @@ export const PolicyDefinition = z.strictObject({
   version: z.string().min(1),
   kind: z.enum(["model", "calibration"]).default("model"),
   connector: z.enum(["openpi-ws", "groot-zmq", "openvla-ws"]),
-  ioAdapter: z.enum(["gr00t-flat", "libero-native", "robocasa-native"]).optional(),
+  ioAdapter: z
+    .enum(["gr00t-flat", "libero-native", "robocasa-native", "robotwin-native"])
+    .optional(),
   replanSteps: z.number().int().positive().optional(),
   backboneDigest: ContentDigest.optional(),
   randomness: z

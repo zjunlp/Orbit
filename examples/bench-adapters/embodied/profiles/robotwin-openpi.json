@@ -1,0 +1,30 @@
+{
+  "source": {
+    "repository": "https://github.com/niejunnan25/Openpi-PACE",
+    "commit": "ba9876639cb7a4bf0c7db00ec39eeb9c8efd8b12",
+    "files": {
+      "pyproject.toml": "sha256:1d217d4ced7842cc822716b5f7f2d4de26f1c91896a996b7c847d361eec31005",
+      "src/openpi/training/config.py": "sha256:408150f2618ad53925f40b166ff89dcf9215c3f328024a6acac5f1cd6cc29505",
+      "src/openpi/policies/aloha_policy.py": "sha256:50d7ad972d80142ecb0f03b0780dacfd3af212946f4c9aac31a204b02db4543d",
+      "src/openpi/policies/policy_config.py": "sha256:aaf42ab04a33b6c91d2447926211646c33ebd8ebfa427f026d7b6c4f7c45ec52",
+      "src/openpi/serving/websocket_policy_server.py": "sha256:5805461db930e3936719cdbef7a922004eddc9a12665c2cd9948a1906f27e424",
+      "pace/src/openpi_pace/configs.py": "sha256:4f4678269417c7a9760ed7b2f37f77498af7d4e7791db29fb23e7d69f70257d1"
+    }
+  },
+  "checkpoint": {
+    "repository": "niejunnan25/pi05-robotwin",
+    "revision": "a51103c8812e98b1828e8d511847750483ad96d2",
+    "prefix": "adjust_bottle",
+    "config": "pi05_robotwin_adjust_bottle",
+    "digest": "sha256:4c46ed41b72b8cf7f3915e009477945a4cd599ee990b356fd6969c1750eb9d6c",
+    "normalizationDigest": "sha256:5c0e70438e7d86687d0a02a2ed42280cde098c022d0117fe8a252562e883a7d6"
+  },
+  "nativeProfile": "robotwin-aloha-agilex-native/1",
+  "profileId": "openpi-robotwin-input/1",
+  "replanSteps": 50,
+  "randomness": {
+    "backend": "jax",
+    "initialKey": 0,
+    "scope": "service"
+  }
+}

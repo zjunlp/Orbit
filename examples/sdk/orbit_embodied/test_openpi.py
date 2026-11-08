@@ -7,7 +7,9 @@ import numpy as np
 from openpi_client import msgpack_numpy
 from websockets.sync.server import serve
 
-from orbit_embodied.openpi import OpenPIClient, prepare_libero_observation, prepare_robocasa_observation
+from orbit_embodied.openpi import (
+    OpenPIClient, prepare_libero_observation, prepare_robocasa_observation, prepare_robotwin_observation,
+)
 
 
 def observation():
@@ -46,6 +48,17 @@ class OpenPITests(unittest.TestCase):
             np.testing.assert_array_equal(result["observation/" + key], expected)
         np.testing.assert_array_equal(result["observation/state"], state)
         self.assertEqual(result["prompt"], "open the drawer")
+
+    def test_robotwin_preserves_wrist_order_and_transposes_native_rgb(self):
+        image = np.arange(4 * 5 * 3, dtype=np.uint8).reshape(4, 5, 3)
+        raw = {"head_camera": image, "left_camera": image[::-1], "right_camera": image[:, ::-1],
+               "joint_state": np.arange(14, dtype=np.float64), "instruction": "lift the bottle"}
+        result = prepare_robotwin_observation(raw)
+        for key, camera in (("cam_high", "head_camera"), ("cam_left_wrist", "left_camera"),
+                            ("cam_right_wrist", "right_camera")):
+            np.testing.assert_array_equal(result["images"][key], raw[camera].transpose(2, 0, 1))
+        np.testing.assert_array_equal(result["state"], raw["joint_state"])
+        self.assertEqual(result["prompt"], raw["instruction"])
 
     def test_native_binary_roundtrip_and_no_remote_reseed_claim(self):
         requests = []
