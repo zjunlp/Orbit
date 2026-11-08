@@ -105,28 +105,34 @@ class SuiteTests(unittest.TestCase):
                 self.assertEqual(groot["policy"]["name"], name)
                 self.assertEqual(reference["horizons"][suite], HORIZONS[suite])
 
-    def test_combined_oft_configuration_keeps_suite_assets_and_score_name(self):
+    def test_oft_configuration_keeps_suite_assets_and_score_name(self):
         adapter = load("suite_oft_adapter", "adapter.py")
         with patch.dict(sys.modules, {"adapter": adapter}):
             groot = load("suite_groot", "configure_groot.py")
             with patch.dict(sys.modules, {"configure_groot": groot}):
                 config = load("suite_oft", "configure_openvla.py")
-        suite_titles = {"libero_spatial": "Spatial", "libero_object": "Object", "libero_goal": "Goal", "libero_10": "Long"}
-        for suite in SUITES:
+        for suite in (*SUITES, "libero_90"):
             with self.subTest(suite=suite), tempfile.TemporaryDirectory() as temporary:
+                discrete = suite == "libero_90"
+                model_name = "rlinf-90" if discrete else "combined"
+                key = suite + ("_no_noops_trajall" if discrete else "_no_noops")
                 root = Path(temporary)
                 weights, output = root / "weights", root / "output"
                 weights.mkdir()
                 required = ["config.json", "preprocessor_config.json", "processor_config.json", "tokenizer_config.json",
-                            "tokenizer.json", "tokenizer.model", "special_tokens_map.json", "model.safetensors",
-                            "action_head--300000_checkpoint.pt", "proprio_projector--300000_checkpoint.pt"]
+                            "tokenizer.json", "tokenizer.model", "special_tokens_map.json", "model.safetensors"]
+                if not discrete:
+                    required.extend(["action_head--300000_checkpoint.pt", "proprio_projector--300000_checkpoint.pt"])
                 for name in required:
                     (weights / name).write_text("synthetic inference fixture")
                 (weights / "model.safetensors.index.json").write_text(json.dumps({"weight_map": {"synthetic": "model.safetensors"}}))
-                (weights / "dataset_statistics.json").write_text(json.dumps({s + "_no_noops": {} for s in SUITES}))
+                write_json(weights / "dataset_statistics.json", {key: {}})
+                if discrete:
+                    write_json(weights / "config.json", {"num_images_in_input": 1, "use_proprio": False,
+                                                        "action_dim": 7, "num_action_chunks": 8, "is_lora": False})
                 original = config.file_digest
                 argv = ["configure_openvla.py", "--reference-source", str(root / "model-source"),
-                        "--benchmark-source", str(root / "benchmark-source"), "--weights", str(weights), "--model", "combined",
+                        "--benchmark-source", str(root / "benchmark-source"), "--weights", str(weights), "--model", model_name,
                         "--suite", suite, "--policy-image", "synthetic", "--benchmark-image", "synthetic", "--output-dir", str(output)]
                 model = json.loads((HERE / "profiles/openvla-model.json").read_text())
                 reference = json.loads((HERE / "profiles/openvla-libero.json").read_text())
@@ -142,15 +148,24 @@ class SuiteTests(unittest.TestCase):
                     config.main()
                 policy = json.loads((output / "policy.json").read_text())
                 benchmark = json.loads((output / "benchmark.json").read_text())
-                self.assertEqual(policy["normalizationKey"], suite + "_no_noops")
+                self.assertEqual(policy["normalizationKey"], key)
                 command = policy["service"]["command"]
                 self.assertEqual(command[command.index("--unnorm-key") + 1], policy["normalizationKey"])
                 self.assertEqual(benchmark["name"], benchmark_name(suite, oft=True))
-                self.assertEqual(policy["weights"]["dataset"], "openvla-oft-libero-combined")
+                self.assertEqual(policy["weights"]["dataset"], "openvla-oft-libero-" + model_name)
+                frozen_randomness = json.loads(benchmark["config"]["reference"])["randomness"]
+                if discrete:
+                    self.assertEqual(command[command.index("--decoding") + 1], "rlinf-discrete")
+                    self.assertEqual(set(policy["profile"]["observations"]), {"front_rgb", "instruction"})
+                    self.assertIn("agentview RGB and instruction", frozen_randomness["referencePolicy"])
+                    self.assertIn("discrete action-token sampling at temperature 1.6", frozen_randomness["referencePolicy"])
+                    self.assertIn("Torch seed 0 per service", frozen_randomness["referencePolicy"])
+                else:
+                    self.assertEqual(frozen_randomness, reference["randomness"])
                 with patch.object(adapter, "file_digest", side_effect=audited_digest), \
                         patch.object(adapter, "catalog", return_value=[]):
                     listing = adapter.tasks({"benchmark": benchmark})
-                self.assertEqual(listing["official"]["name"], f"LIBERO {suite_titles[suite]} success (OFT recipe)")
+                self.assertEqual(listing["official"]["name"], f"LIBERO {LABELS[suite].title()} success (OFT recipe)")
                 with patch.object(sys, "argv", argv[:argv.index("--model") + 1] + ["spatial"] + argv[argv.index("--model") + 2:]), \
                         contextlib.redirect_stderr(io.StringIO()):
                     if suite != "libero_spatial":

@@ -101,3 +101,9 @@ orbit bench run libero-oft-native --method oft=policy,policyRef=openvla-oft-libe
 The service declares a seed-0 Torch stream. Each episode resets its simulator and local action
 queue, while a shared batch continues the model service stream. There is no remote reseeding
 claim, full-suite statistical validation or independent GPU-process bitwise-equivalence claim.
+
+## RLinf LIBERO-90
+
+Use `--model rlinf-90` with both the downloader and the registration command, and use `--suite libero_90` for registration. The dataset name is `openvla-oft-libero-rlinf-90`, the policy is `openvla-oft-rlinf-libero-90`, and the benchmark is `libero-oft-90-native`. Plan samples using the generated `reference.json`, `--suite libero_90` and environment seed `0`.
+
+The pinned RLinf checkpoint uses the agentview camera and instruction, eight 7-D actions per call and `libero_90_no_noops_trajall` normalization. The policy image uses its discrete action-token decoder with temperature 1.6. Orbit evaluates it under its native OFT recipe with ten settle steps and a 400-step horizon. The RLinf evaluation config uses a different reset and episode budget, so its published scores refer to a separate recipe. [Checkpoint and inference settings](https://huggingface.co/RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90) · [RLinf configuration](https://github.com/RLinf/RLinf/blob/e8a6c2ca23e0108218fd5c0e072169112cbcc301/examples/embodiment/config/libero_90_grpo_openvlaoft.yaml)

@@ -13,7 +13,7 @@ prepackaged catalog and published scene sweeps. [SimplerEnv setup](SIMPLER.md) Â
 OpenVLA-OFT uses the same native LIBERO implementation with its own inference service and
 eight-step evaluation recipe; see [OPENVLA.md](OPENVLA.md).
 All three model families support Spatial, Object, Goal and Long through explicit suite and
-checkpoint selection. The benchmark-only path also covers LIBERO-90.
+checkpoint selection. LIBERO-90 supports benchmark-only registration and has a sampled RLinf OpenVLA-OFT calibration.
 [LIBERO suites](../../../docs/guides/libero-suites.md).
 RoboCasa365 runs all 50 native tasks across Atomic-Seen, Composite-Seen and Composite-Unseen.
 The OpenPI and GR00T recipes support both scene splits. Earlier Atomic-Seen model checks use

@@ -8,7 +8,7 @@
 | LIBERO Object `libero_object` | 10 | `libero-object-native` / `libero-oft-object-native` | 实测 | 实测 `groot-n17-libero-object` | — | 实测 `openvla-oft-libero-combined-object` |
 | LIBERO Goal `libero_goal` | 10 | `libero-goal-native` / `libero-oft-goal-native` | 实测 | 实测 `groot-n17-libero-goal` | — | 实测 `openvla-oft-libero-combined-goal` |
 | LIBERO Long `libero_10` | 10 | `libero-long-native` / `libero-oft-long-native` | 实测 | 实测 `groot-n17-libero-long` | — | 实测 `openvla-oft-libero-combined-long` |
-| LIBERO-90 `libero_90` | 90 | `libero-90-native` | — | — | — | — |
+| LIBERO-90 `libero_90` | 90 | `libero-90-native` / `libero-oft-90-native` | — | — | — | 实测 `openvla-oft-rlinf-libero-90` |
 | SimplerEnv WidowX（GR00T recipe） | 7 | `simpler-widowx-native` | — | 实测 `groot-n17-widowx` | — | — |
 | SimplerEnv Google Robot（GR00T recipe） | 6 | `simpler-google-native` | — | 实测 `groot-n17-google` | — | — |
 | SimplerEnv Google Robot Prepackaged | 21 | `simpler-google-prepackaged-native` | — | — | — | — |
@@ -27,7 +27,7 @@
 
 ## 评测条件
 
-LIBERO 的前四行有两种登记。π₀.₅ 和 GR00T 用 OpenPI recipe，OFT 用 OFT recipe。LIBERO-90 独立登记原生 OpenPI recipe。两条 recipe 共用 OpenPI 固定版本的 LIBERO 仿真与初态文件。配对比较按冻结的样本和评测条件核对，包含 recipe、镜像、渲染和实际预算。[评测条件](../../packages/orbit/src/bench/summary.ts)
+LIBERO 提供 OpenPI 和 OFT 两类原生登记。已验收的 π₀.₅ 和 GR00T 组合用 OpenPI recipe，OFT 组合用 OFT recipe。两条 recipe 共用 OpenPI 固定版本的 LIBERO 仿真与初态文件。配对比较按冻结的样本和评测条件核对，包含 recipe、镜像、渲染和实际预算。[评测条件](../../packages/orbit/src/bench/summary.ts)
 
 | Recipe | 样本与控制 | 渲染配置 |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ LIBERO 的前四行有两种登记。π₀.₅ 和 GR00T 用 OpenPI recipe，OFT
 | RoboCasa365 GR00T N1.5 | RoboCasa 1.0.1，`pretrain` 或 `target` 场景的独立种子，20 Hz，每 16 步重规划，按动作段末尾的成功信号计分 | EGL，可显式共享主角色 GPU |
 | RoboTwin 2.0 Clean / Randomized | Aloha-AgileX，按上游候选流筛选专家通过种子，按任务使用原生控制上限 | SAPIEN Vulkan 光追，Randomized 使用上游评测贴图 |
 
-LIBERO 的 horizon 按 Spatial、Object、Goal、Long、LIBERO-90 分别为 220、280、300、520、400。各套件的渲染配置以作业快照为准。LIBERO-90 的匹配权重组合尚无接入验收记录。[LIBERO 套件条件](libero-suites.md) · [WidowX recipe](../../examples/bench-adapters/embodied/profiles/groot-widowx.json) · [Google Robot recipe](../../examples/bench-adapters/embodied/profiles/groot-google.json)
+LIBERO 的 horizon 按 Spatial、Object、Goal、Long、LIBERO-90 分别为 220、280、300、520、400。各套件的渲染配置以作业快照为准。[LIBERO 套件条件](libero-suites.md) · [WidowX recipe](../../examples/bench-adapters/embodied/profiles/groot-widowx.json) · [Google Robot recipe](../../examples/bench-adapters/embodied/profiles/groot-google.json)
 
 SimplerEnv 的 Google Robot Visual Matching、Variant Aggregation 和 WidowX Visual Matching 分别有 1,164、1,992 和 96 个固定初态。不同登记可能复用相同任务 ID。RT 降噪异常的机器可使用独立的 `-no-rt-denoiser-native` 登记。[SimplerEnv 配置与采样](../../examples/bench-adapters/embodied/SIMPLER.md)
 
@@ -53,7 +53,7 @@ RoboCasa365 的 `target50` 登记汇总三个任务组。场景划分独立于�
 | --- | --- |
 | LIBERO Spatial | π₀.₅ 真实样本、原生正负例和独立验证。GR00T 固定批次及独立 CPU 验证。OFT 专用和联合 checkpoint 分别通过真实抽样接入。[π₀.₅](../tasks/20261105-embodied-eval.md) · [GR00T 批次](../tasks/20261106-embodied-batches.md) · [OFT 专用](../tasks/20261106-embodied-endpoints.md) · [OFT 联合](../tasks/20261107-libero-suites.md) |
 | LIBERO Object、Goal、Long | 30 个任务通过原生 reset 和控制步检查。9 个新增模型与套件组合分别通过两个冻结 episode 的真实接入检查。[LIBERO 扩展验收](../tasks/20261107-libero-suites.md) |
-| LIBERO-90 | 90 个任务通过原生 reset、settle、相机和控制步检查。一个脚本零动作 episode 通过独立 CPU 计分。[LIBERO-90 验收](../tasks/20261108-libero-90.md) |
+| LIBERO-90 | 90 个任务通过原生 reset、settle、相机和控制步检查。RLinf OpenVLA-OFT 在两个冻结任务上通过共享批次、独立 CPU 验证和重评。[目录验收](../tasks/20261108-libero-90.md) · [模型验收](../tasks/20261108-libero-90-rlinf.md) |
 | SimplerEnv WidowX | 7 个任务通过原生初始化、渲染和控制步检查，Bridge 通过真实抽样与固定批次检查。[原生覆盖](../tasks/20261106-embodied-endpoints.md) · [Bridge 批次](../tasks/20261106-embodied-batches.md) |
 | SimplerEnv Google Robot | 6 个任务通过原生初始化和控制步检查，原生固定动作对照通过，Fractal 通过有界真实抽样、CPU 验证与重评。[Google Robot 验收](../tasks/20261107-groot-google.md) |
 | SimplerEnv 完整目录与固定网格 | 141 个任务与场景设置完成原生 reset、渲染和控制步。默认 OptiX 可在此机器返回空白原始帧，关闭降噪的独立配置通过 RT 复核。[SimplerEnv 验收](../tasks/20261108-simplerenv-task-sets.md) |

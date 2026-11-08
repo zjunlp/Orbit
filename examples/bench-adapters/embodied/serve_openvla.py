@@ -55,6 +55,7 @@ def main():
     parser.add_argument("--checkpoint-digest")
     parser.add_argument("--normalization-digest")
     parser.add_argument("--unnorm-key")
+    parser.add_argument("--decoding", choices=("continuous", "rlinf-discrete"), default="continuous")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--healthcheck", action="store_true")
@@ -89,22 +90,29 @@ def main():
         raise ValueError("official model constants differ from the OFT LIBERO recipe")
     with tempfile.TemporaryDirectory(prefix="orbit-openvla-") as temporary:
         prepare_checkpoint(args.checkpoint, Path(temporary))
+        discrete = args.decoding == "rlinf-discrete"
         cfg = SimpleNamespace(pretrained_checkpoint=temporary, load_in_8bit=False, load_in_4bit=False,
-                              use_film=False, num_images_in_input=2, use_l1_regression=True,
-                              use_diffusion=False, use_proprio=True, center_crop=True,
+                              use_film=False, num_images_in_input=1 if discrete else 2, use_l1_regression=not discrete,
+                              use_diffusion=False, use_proprio=not discrete, center_crop=not discrete,
                               unnorm_key=args.unnorm_key)
         model = official.get_vla(cfg)
         if cfg.unnorm_key not in model.norm_stats:
             raise ValueError("checkpoint lacks the configured normalization key")
-        processor = official.get_processor(cfg)
-        projector = official.get_proprio_projector(cfg, model.llm_dim, proprio_dim=8)
-        action_head = official.get_action_head(cfg, model.llm_dim)
-        set_seed_everywhere(0)
+        if discrete:
+            from rlinf_openvla import predictor
 
-        def infer(observation):
-            inputs = libero_inputs(observation)
-            return np.asarray(official.get_vla_action(cfg, model, processor, inputs, observation["instruction"],
-                                                     action_head=action_head, proprio_projector=projector))
+            image_processor = official.PrismaticImageProcessor.from_pretrained(temporary, local_files_only=True)
+            infer = predictor(model, image_processor, temporary, cfg.unnorm_key)
+        else:
+            processor = official.get_processor(cfg)
+            projector = official.get_proprio_projector(cfg, model.llm_dim, proprio_dim=8)
+            action_head = official.get_action_head(cfg, model.llm_dim)
+
+            def infer(observation):
+                inputs = libero_inputs(observation)
+                return np.asarray(official.get_vla_action(cfg, model, processor, inputs, observation["instruction"],
+                                                         action_head=action_head, proprio_projector=projector))
+        set_seed_everywhere(0)
 
         metadata = {"calibration": False, "ioAdapter": "libero-native", "actionChunkSize": 8, "unnormKey": cfg.unnorm_key,
                     "runtime": {"torch": torch.__version__, "cuda": torch.version.cuda}, "orbit": {

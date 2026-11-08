@@ -19,6 +19,7 @@ COPY --from=openvla /experiments /opt/openvla/experiments
 COPY --from=openvla /LICENSE /opt/openvla/LICENSE
 COPY examples/sdk/orbit_embodied/*.py /opt/orbit-sdk/orbit_embodied/
 COPY examples/bench-adapters/embodied/serve_openvla.py /opt/orbit/serve_openvla.py
+COPY examples/bench-adapters/embodied/rlinf_openvla.py /opt/orbit/rlinf_openvla.py
 COPY examples/bench-adapters/embodied/audit_openvla.py /opt/orbit/audit_openvla.py
 ENV PYTHONPATH=/opt/orbit-sdk:/opt/openvla \
     HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false \

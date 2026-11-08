@@ -11,7 +11,7 @@ task catalog, initial-state assets and horizon.
 | Object | `libero_object` | 10 | 280 | `libero-object-native` | `libero-oft-object-native` |
 | Goal | `libero_goal` | 10 | 300 | `libero-goal-native` | `libero-oft-goal-native` |
 | Long | `libero_10` | 10 | 520 | `libero-long-native` | `libero-oft-long-native` |
-| LIBERO-90 | `libero_90` | 90 | 400 | `libero-90-native` | — |
+| LIBERO-90 | `libero_90` | 90 | 400 | `libero-90-native` | `libero-oft-90-native` |
 
 The existing Spatial registration names remain the defaults. Additional suites get their own
 names, so adding Object does not overwrite the Spatial catalog. The benchmark-only mode
@@ -19,14 +19,15 @@ registers any native suite with a simulator audit.
 
 ## Model checkpoints
 
-Matching-checkpoint validation covers Spatial, Object, Goal and Long. LIBERO-90 has native
-environment coverage and awaits matching-checkpoint validation.
+Matching-checkpoint validation covers Spatial, Object, Goal and Long. The RLinf OpenVLA-OFT
+checkpoint also passed native LIBERO-90 calibration on two frozen samples.
 
 | Model | Weights used across suites | Policy registration |
 | --- | --- | --- |
 | pi05 | The existing official `pi05_libero` checkpoint covers all four suites | `pi05-libero`, or `pi05-libero-shared` with `--share-gpu` |
 | GR00T N1.7 | Official matching `libero_spatial/`, `libero_object/`, `libero_goal/`, `libero_10/` subfolders | `groot-n17-libero`, `groot-n17-libero-object`, `groot-n17-libero-goal`, `groot-n17-libero-long` |
 | OpenVLA-OFT | The existing Spatial checkpoint, or the official joint Spatial/Object/Goal/Long checkpoint | `openvla-oft-libero-spatial`, or `openvla-oft-libero-combined-{spatial,object,goal,long}` |
+| RLinf OpenVLA-OFT | The discrete action-token LIBERO-90 checkpoint | `openvla-oft-rlinf-libero-90` |
 
 Pinned repositories and revisions are in [the GR00T model profile](../../examples/bench-adapters/embodied/profiles/groot-model.json)
 and [the OFT model profile](../../examples/bench-adapters/embodied/profiles/openvla-model.json).

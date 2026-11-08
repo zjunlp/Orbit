@@ -53,6 +53,14 @@
         "libero_goal": "libero_goal_no_noops",
         "libero_10": "libero_10_no_noops"
       }
+    },
+    "rlinf-90": {
+      "repository": "RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90",
+      "revision": "4e0e33ea25bbaca02e27f555c58e59f29a08d524",
+      "decoding": "rlinf-discrete",
+      "unnormKeys": {
+        "libero_90": "libero_90_no_noops_trajall"
+      }
     }
   }
 }

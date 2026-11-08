@@ -12,7 +12,7 @@ from fetch_groot import fetch, read_json
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--model", choices=("spatial", "combined"), default="spatial")
+    parser.add_argument("--model", choices=("spatial", "combined", "rlinf-90"), default="spatial")
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
     if not 1 <= args.workers <= 16:
@@ -27,6 +27,8 @@ def main():
     for file in metadata["siblings"]:
         name = file["rfilename"]
         if "/" in name or name in (".gitattributes", "README.md"):
+            continue
+        if selected.get("decoding") == "rlinf-discrete" and Path(name).suffix not in (".json", ".safetensors", ".py", ".model"):
             continue
         url = "https://huggingface.co/" + repository + "/resolve/" + revision + "/" + urllib.parse.quote(name)
         jobs.append((repository, revision, file, args.output_dir / name, url, None))
