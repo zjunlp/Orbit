@@ -1,0 +1,8 @@
+{
+  "backgroundArchive": "sha256:54ede0fb5b783e0faa2bc98720d3affd6ca3bb9280b225b48c1aafaf31473070",
+  "randomizedConfig": "sha256:a5a371f17188f602ff611154efce5299836a01a5e16d4b0f9b4bdbf6c714eb89",
+  "assetDigests": {
+    "demo_clean": "sha256:c4cf626c688bd7ea4f24ea1293ac2ada2912f5018b4139bfca853a0aa8bc9366",
+    "demo_randomized": "sha256:aac5cba74c367e16658398354248fac1b87b85db7859e1fc5bc8fb657aaea3f9"
+  }
+}

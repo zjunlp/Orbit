@@ -3,17 +3,51 @@
 import argparse
 import json
 from pathlib import Path
+import re
+import subprocess
 
-from adapter import HERE, check_source, digest, implementation_digest
+from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from configure_groot import image_id
 from orbit_embodied.assets import tree_digest
 
 
 def configure_benchmark(args, reference):
-    check_source(args.robotwin_source, reference["reference"]["evaluation"], reference["reference"]["files"])
-    reference["environment"]["assets"]["digest"] = tree_digest(args.assets)
+    source = reference["reference"]
+    environment = reference["environment"]
+    suites = json.loads((HERE / "profiles/robotwin-suites.json").read_text()) if args.suite else None
+    if args.suite == "demo_randomized":
+        source["files"]["task_config/demo_randomized.yml"] = suites["randomizedConfig"]
+        source["assets"]["archives"]["background_texture.zip"] = suites["backgroundArchive"]
+    check_source(args.robotwin_source, source["evaluation"], source["files"])
+    asset_digest = tree_digest(args.assets)
+    if args.suite:
+        if asset_digest != suites["assetDigests"][args.suite]:
+            raise ValueError("RoboTwin suite needs the full assets prepared for " + args.suite)
+        # The upstream list contains exactly the benchmark tasks and their native evaluation limits.
+        # It is a pinned flat YAML mapping, so registration needs no host YAML dependency.
+        limits = (args.robotwin_source / "task_config/_eval_step_limit.yml").read_text()
+        horizons = {}
+        for line in limits.splitlines():
+            entry = re.fullmatch(r"([a-z][a-z0-9_]*): ([1-9][0-9]*)", line)
+            if not entry or entry[1] in horizons:
+                raise ValueError("invalid RoboTwin evaluation limit: " + line)
+            horizons[entry[1]] = int(entry[2])
+        if len(horizons) != 50:
+            raise ValueError("expected the 50 official RoboTwin tasks")
+        subprocess.run(["git", "-C", str(args.robotwin_source), "diff", "--exit-code", "--quiet", "HEAD",
+                        "--", "envs", "description", "task_config"], check=True)
+        for task in horizons:
+            for relative in (f"envs/{task}.py", f"description/task_instruction/{task}.json"):
+                source["files"][relative] = file_digest(args.robotwin_source / relative)
+        suite_name = args.suite.replace("_", "-")
+        reference.update(id=f"robotwin-2.0-{suite_name}/2", scoreUnit="task")
+        environment.update(suite=args.suite, tasks=list(horizons), horizons=horizons)
+        environment["assets"]["dataset"] = f"robotwin-{suite_name}-full-assets"
+    environment["assets"]["digest"] = asset_digest
+    suffix = "-full-native" if args.suite else "-native"
     return {
-        "name": "robotwin-demo-clean-native", "adapter": str(HERE / "adapter.py"),
+        "name": "robotwin-" + environment["suite"].replace("_", "-") + suffix,
+        "adapter": str(HERE / "adapter.py"),
         "path": str(args.robotwin_source.resolve()),
         "config": {"image": image_id(args.benchmark_image), "reference": json.dumps(reference),
                    "profileDigest": digest(reference), "implementationDigest": implementation_digest(),
@@ -61,6 +95,8 @@ def main():
     commands = parser.add_subparsers(dest="endpoint", required=True)
     benchmark = commands.add_parser("benchmark")
     benchmark.add_argument("--robotwin-source", type=Path, required=True)
+    benchmark.add_argument("--suite", choices=("demo_clean", "demo_randomized"),
+                           help="register all tasks for this suite; omit for the legacy adjust_bottle recipe")
     benchmark.add_argument("--assets", type=Path, required=True)
     benchmark.add_argument("--benchmark-image", required=True)
     benchmark.add_argument("--output-dir", type=Path, required=True)

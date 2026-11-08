@@ -19,7 +19,9 @@
 | RoboCasa365 Atomic-Seen | 18 | `robocasa365-atomic-seen-native` / `robocasa365-atomic-seen-gr00t-native` | 实测 `pi05-robocasa365-shared` | — | 实测 `groot-n15-robocasa365-shared` | — |
 | RoboCasa365 Composite-Seen | 16 | `robocasa365-composite-seen-native` / `robocasa365-composite-seen-gr00t-native` | — | — | — | — |
 | RoboCasa365 Composite-Unseen | 16 | `robocasa365-composite-unseen-native` / `robocasa365-composite-unseen-gr00t-native` | — | — | — | — |
-| RoboTwin 2.0 Clean | 1 | `robotwin-demo-clean-native` | 实测 `pi05-robotwin-adjust-bottle-shared` | — | — | — |
+| RoboTwin 2.0 Clean（单任务验收） | 1 | `robotwin-demo-clean-native` | 实测 `pi05-robotwin-adjust-bottle-shared` | — | — | — |
+| RoboTwin 2.0 Clean | 50 | `robotwin-demo-clean-full-native` | — | — | — | — |
+| RoboTwin 2.0 Randomized | 50 | `robotwin-demo-randomized-full-native` | — | — | — | — |
 
 π₀.₅ 的四个已实测 LIBERO 套件共用官方 `pi05_libero` 权重，Policy 登记为 `pi05-libero`，共享 GPU 配置登记为 `pi05-libero-shared`。RoboCasa365 使用自己的公开 π₀.₅ 权重。GR00T 的 LIBERO 权重按 suite 子目录选择，WidowX 用 Bridge，Google Robot 用 Fractal，三条路径共用固定 backbone 缓存。OFT 的 Spatial 专用权重和四套件联合权重分别有实测记录。联合权重按 suite 选择 `<suite>_no_noops`，Long 对应 `libero_10_no_noops`。[LIBERO 套件选择](libero-suites.md) · [RoboCasa365 配置](../../examples/bench-adapters/embodied/ROBOCASA365.md) · [GR00T 配置](../../examples/bench-adapters/embodied/GR00T.md) · [OFT 模型配置](../../examples/bench-adapters/embodied/profiles/openvla-model.json)
 
@@ -37,7 +39,7 @@ LIBERO 的前四行有两种登记。π₀.₅ 和 GR00T 用 OpenPI recipe，OFT
 | SimplerEnv 固定场景网格 | 按场景索引展开上游脚本的初态网格、场景变体和 horizon | Vulkan，使用原生脚本指定的着色器 |
 | RoboCasa365 OpenPI | RoboCasa 1.0.0，`pretrain` 或 `target` 场景的独立种子，20 Hz，每 5 步重规划，原生成功时停止 | EGL，可显式共享主角色 GPU |
 | RoboCasa365 GR00T N1.5 | RoboCasa 1.0.1，`pretrain` 或 `target` 场景的独立种子，20 Hz，每 16 步重规划，按动作段末尾的成功信号计分 | EGL，可显式共享主角色 GPU |
-| RoboTwin 2.0 Clean | Aloha-AgileX，专家检查后的固定种子，50 个绝对关节动作一段，原生成功时停止，最多 400 步 | SAPIEN Vulkan 光追，可显式共享主角色 GPU |
+| RoboTwin 2.0 Clean / Randomized | Aloha-AgileX，按上游候选流筛选专家通过种子，按任务使用原生控制上限 | SAPIEN Vulkan 光追，Randomized 使用上游评测贴图 |
 
 LIBERO 的 horizon 按 Spatial、Object、Goal、Long、LIBERO-90 分别为 220、280、300、520、400。各套件的渲染配置以作业快照为准。LIBERO-90 的匹配权重组合尚无接入验收记录。[LIBERO 套件条件](libero-suites.md) · [WidowX recipe](../../examples/bench-adapters/embodied/profiles/groot-widowx.json) · [Google Robot recipe](../../examples/bench-adapters/embodied/profiles/groot-google.json)
 
@@ -60,4 +62,5 @@ RoboCasa365 的 `target50` 登记汇总三个任务组。场景划分独立于�
 | RoboCasa365 完整目录 | 50 个任务在两个运行时和两种场景划分下共通过 200 个原生 EGL 重置、渲染与控制检查。两个 Composite 组分别选了一个任务，在四种配置下与原生环境直接对照。[RoboCasa365 扩展验收](../tasks/20261108-robocasa365-task-sets.md) |
 | 参考对照 | π₀.₅ Spatial 的确定性处理、固定动作和共享编译模型控制通过，独立 GPU 进程逐位比较失败。GR00T 的 Spatial 与 WidowX 做过抽样参考边界检查。OFT 做过确定性 I/O helper 对照。[π₀.₅ 对照](../tasks/20261105-embodied-eval.md) · [GR00T 与 OFT 对照](../tasks/20261106-embodied-endpoints.md) |
 | RoboTwin 2.0 Clean | `adjust_bottle` 的两个专家通过场景完成原生重置与固定动作对照。社区 π₀.₅ 通过两样本固定批次、独立 CPU 验证、选定样本重评和汇总核对。[接入配置](../../examples/bench-adapters/embodied/ROBOTWIN.md) · [验收记录](../tasks/20261107-robotwin.md) |
+| RoboTwin 2.0 两套完整目录 | Clean 和 Randomized 各 50 个任务完成原生控制、三相机观测和判定检查。专家种子计划在两个模式下均有实测，逐任务验收范围见任务记录。[RoboTwin 套件验收](../tasks/20261108-robotwin-suites.md) |
 | 完整套件统计等价 | `not_run`。现有记录覆盖原生任务目录检查、真实抽样和指定条件下的参考对照。 |

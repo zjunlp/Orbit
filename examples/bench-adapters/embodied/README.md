@@ -18,8 +18,9 @@ checkpoint selection. The benchmark-only path also covers LIBERO-90.
 RoboCasa365 runs all 50 native tasks across Atomic-Seen, Composite-Seen and Composite-Unseen.
 The OpenPI and GR00T recipes support both scene splits. Earlier Atomic-Seen model checks use
 the published RoboCasa π₀.₅ and GR00T N1.5 checkpoints. [RoboCasa365 setup](ROBOCASA365.md)
-RoboTwin 2.0 Clean runs the original Aloha-AgileX `adjust_bottle` task with an independently
-registered community π₀.₅ checkpoint. See [RoboTwin setup](ROBOTWIN.md).
+RoboTwin 2.0 registers all 50 Aloha-AgileX tasks in Clean and Randomized and freezes native
+expert-accepted seeds. The separate `adjust_bottle` registration has a sampled community π₀.₅
+checkpoint. [RoboTwin setup](ROBOTWIN.md)
 For new endpoints, see the [onboarding templates](../../../docs/guides/embodied-onboarding.md)
 and [compatibility matrix](../../../docs/guides/embodied-compatibility.md).
 

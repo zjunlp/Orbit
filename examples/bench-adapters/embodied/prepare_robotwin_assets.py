@@ -1,4 +1,4 @@
-"""Assemble the assets needed by the pinned RoboTwin demo_clean task."""
+"""Assemble the assets needed by a pinned RoboTwin evaluation suite."""
 
 import argparse
 import hashlib
@@ -38,6 +38,8 @@ def extract(archive, expected, prefix, output, extra=()):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--archives", type=Path, required=True)
+    parser.add_argument("--suite", choices=("demo_clean", "demo_randomized"),
+                        help="prepare all assets for this suite; omit for the legacy adjust_bottle recipe")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     reference = json.loads((HERE / "profiles/robotwin-demo-clean.json").read_text())
@@ -51,9 +53,14 @@ def main():
     with tempfile.TemporaryDirectory(dir=output.parent) as stage:
         assets = Path(stage) / "assets"
         extract(args.archives / "embodiments.zip", archives["embodiments.zip"], embodiment, assets)
-        # The pinned simulator loads these indices at import even in demo_clean.
-        extract(args.archives / "objects.zip", archives["objects.zip"], "objects/001_bottle", assets,
+        # The pinned simulator loads these indices at import even in the single-task recipe.
+        extract(args.archives / "objects.zip", archives["objects.zip"],
+                "objects" if args.suite else "objects/001_bottle", assets,
                 extra=("objects/objaverse/list.json", "objects/same.json"))
+        if args.suite == "demo_randomized":
+            suites = json.loads((HERE / "profiles/robotwin-suites.json").read_text())
+            extract(args.archives / "background_texture.zip", suites["backgroundArchive"],
+                    "background_texture/unseen", assets)
         for side in ("left", "right"):
             template = assets / embodiment / f"curobo_{side}_tmp.yml"
             content = template.read_text().replace("${ASSETS_PATH}", str(simulator_root))

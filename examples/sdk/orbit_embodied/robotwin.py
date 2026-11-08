@@ -4,6 +4,7 @@ from functools import lru_cache
 import importlib
 from pathlib import Path
 import random
+from traceback import walk_tb
 
 import numpy as np
 
@@ -41,6 +42,20 @@ def native_args(root, task, suite):
     }
 
 
+def setup_native_scene(env, seed, args):
+    setup = {**args, "now_ep_num": 0, "seed": seed, "is_test": True}
+    if not args["domain_randomization"]["cluttered_table"]:
+        env.setup_demo(**setup)
+        return
+    # The upstream method adds table bias in place. Pass fresh native bounds on every reset.
+    add_clutter = env.get_cluttered_table
+    env.get_cluttered_table = lambda: add_clutter(xlim=[-0.59, 0.59], ylim=[-0.34, 0.34])
+    try:
+        env.setup_demo(**setup)
+    finally:
+        del env.get_cluttered_table
+
+
 class RoboTwinBenchmark:
     action_size = 14
     settle_steps = 0
@@ -53,6 +68,49 @@ class RoboTwinBenchmark:
         self.env = None
         self.video = None
 
+    def _native_args(self):
+        config = self.reference["environment"]
+        assets = config["assets"]
+        check_assets(assets["target"], assets["digest"])
+        return native_args(Path(assets["target"]).parent, self.task, config["suite"])
+
+    def _expert_scene(self, seed, args):
+        native = importlib.import_module("envs." + self.task)
+        from envs.utils.create_actor import UnStableError
+
+        env = getattr(native, self.task)()
+        try:
+            setup_native_scene(env, seed, args)
+            episode = env.play_once()
+        except UnStableError as exc:
+            raise SampleRejected(str(exc)) from exc
+        except AssertionError as exc:
+            # The pinned expert constructs a move even when grasp planning finds no pose.
+            if str(exc) != "target_pose cannot be None for move action.":
+                raise
+            frames = [(frame.f_globals.get("__name__"), frame.f_code.co_name)
+                      for frame, _ in walk_tb(exc.__traceback__)]
+            if frames[-2:] != [("envs._base_task", "grasp_actor"), ("envs.utils.action", "__init__")]:
+                raise
+            raise SampleRejected("native RoboTwin expert found no reachable grasp pose") from exc
+        finally:
+            env.close_env()
+        if not (env.plan_success and env.check_success()):
+            raise SampleRejected("frozen RoboTwin seed did not pass the native expert check")
+        return env, episode["info"]
+
+    def expert_accepts(self, seed, candidate_index):
+        args = self._native_args()
+        try:
+            self._expert_scene(seed, args)
+        except SampleRejected:
+            return False
+        finally:
+            if (candidate_index + 1) % args["clear_cache_freq"] == 0:
+                from sapien.render import clear_cache
+                clear_cache()
+        return True
+
     def reset(self, sample):
         if sample["taskId"] != self.task or sample["initialStateDigest"] != seed_asset(self.reference, self.task):
             raise ValueError("RoboTwin reset recipe differs from the frozen sample")
@@ -60,26 +118,11 @@ class RoboTwinBenchmark:
         if not 0 <= self.seed < 2 ** 32:
             raise ValueError("RoboTwin seed must fit in an unsigned 32-bit integer")
         config = self.reference["environment"]
-        assets = config["assets"]
-        check_assets(assets["target"], assets["digest"])
-        args = native_args(Path(assets["target"]).parent, self.task, config["suite"])
-        native = importlib.import_module("envs." + self.task)
-        from envs.utils.create_actor import UnStableError
+        args = self._native_args()
         from generate_episode_instructions import generate_episode_descriptions
 
-        self.env = getattr(native, self.task)()
-        try:
-            self.env.setup_demo(now_ep_num=0, seed=self.seed, is_test=True, **args)
-            info = self.env.play_once()["info"]
-        except UnStableError as exc:
-            self.close()
-            raise SampleRejected(str(exc)) from exc
-        self.env.close_env()
-        if not (self.env.plan_success and self.env.check_success()):
-            self.env = None
-            raise SampleRejected("frozen RoboTwin seed did not pass the native expert check")
-
-        self.env.setup_demo(now_ep_num=0, seed=self.seed, is_test=True, **args)
+        self.env, info = self._expert_scene(self.seed, args)
+        setup_native_scene(self.env, self.seed, args)
         if self.env.step_lim != self.horizon:
             raise ValueError("native RoboTwin control limit differs from the frozen recipe")
         random_state = random.getstate()
