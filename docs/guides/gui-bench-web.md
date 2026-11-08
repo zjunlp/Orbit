@@ -32,6 +32,8 @@ BrowserGym 的 **Recheck evidence** 只验证保存的奖励、轨迹和哈希�
 
 ## Embodied episodes
 
+独立的 MP4、WebM 和 Ogg 视频产物可在 Trial 的文件页播放，预览上限为 64 MiB。超限文件可下载。
+
 adapter 可在 `review.files` 声明 `kind: "episode"`、`fallback: "json"`。索引为
 `EpisodeTrajectory` 版本 1（`packages/orbit/src/contracts/trajectory.ts`）：`kind`、`goal`、
 `actionNames`、`proprioNames`、`cameras`、`samples` 和 `chunks`。媒体路径相对同一 Run 输出根目录；

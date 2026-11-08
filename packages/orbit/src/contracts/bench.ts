@@ -513,6 +513,7 @@ export type Evaluation = z.infer<typeof Evaluation>;
 export const REVIEW_KINDS = [
   "markdown",
   "image",
+  "video",
   "text",
   "json",
   "table",

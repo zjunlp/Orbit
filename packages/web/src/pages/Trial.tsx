@@ -42,7 +42,7 @@ import { useAsync } from "../lib/use.ts";
 import { ArtifactsTab, Csv } from "./run/Artifacts.tsx";
 import { SessionTab } from "./run/Session.tsx";
 import { ConversationFile } from "./trial/Conversation.tsx";
-import { EpisodeFile } from "./trial/Episode.tsx";
+import { EpisodeFile, VideoPreview } from "./trial/Episode.tsx";
 import { TrajectoryFile } from "./trial/Trajectory.tsx";
 
 interface TabDef {
@@ -771,7 +771,9 @@ function ReviewFileView({ run, f }: { run: Run; f: ReviewFile }) {
   const entry = a.data?.files.find((x) => x.path === f.path);
   const text = useText(
     run.id,
-    kind !== "image" && entry && entry.bytes <= MAX_PREVIEW ? f.path : undefined,
+    kind !== "image" && kind !== "video" && entry && entry.bytes <= MAX_PREVIEW
+      ? f.path
+      : undefined,
   );
   const files = useMemo(() => new Set((a.data?.files ?? []).map((x) => x.path)), [a.data]);
   const extras = extraFields(f, ["label", "phase", "path", "kind", "fallback"]);
@@ -803,6 +805,8 @@ function ReviewFileView({ run, f }: { run: Run; f: ReviewFile }) {
     );
   else if (kind === "image")
     body = <img className="review-img" src={fileUrl(run.id, f.path)} alt={f.label} />;
+  else if (kind === "video")
+    body = <VideoPreview key={`${run.id}/${f.path}`} runId={run.id} path={f.path} name={f.label} />;
   else if (entry.bytes > MAX_PREVIEW)
     body = <Empty title="Too large to preview">{bytes(entry.bytes)} — use Download.</Empty>;
   else if (text.error) body = <Empty title="Could not load the file">{text.error}</Empty>;

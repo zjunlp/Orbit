@@ -2,11 +2,13 @@
 // closed set rendered with Orbit's own styles; a kind this Web UI does not know falls back to the
 // declared `fallback`, then to the file extension, then to plain text, and says so.
 import type { ReviewFile } from "./api.ts";
+import { videoType } from "./episode-video.ts";
 
 /** Must match `REVIEW_KINDS` in the contracts (checked by a test). */
 export const KNOWN_KINDS = [
   "markdown",
   "image",
+  "video",
   "text",
   "json",
   "table",
@@ -35,7 +37,7 @@ export function resolveKind(f: Pick<ReviewFile, "kind" | "fallback" | "path">): 
   const unknown = f.kind ? `unknown kind "${f.kind}"` : null;
   if (isKnown(f.fallback))
     return { kind: f.fallback, note: unknown && `${unknown}, shown as ${f.fallback}` };
-  const ext = BY_EXT.find(([re]) => re.test(f.path))?.[1];
+  const ext = videoType(f.path) ? "video" : BY_EXT.find(([re]) => re.test(f.path))?.[1];
   if (ext) return { kind: ext, note: unknown && `${unknown}, shown as ${ext} (file extension)` };
   return { kind: "text", note: unknown && `${unknown}, shown as text` };
 }

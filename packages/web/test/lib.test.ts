@@ -129,6 +129,10 @@ describe("review kinds", () => {
       note: 'unknown kind "weird", shown as text',
     });
     expect(resolveKind({ path: "results.csv" })).toEqual({ kind: "table", note: null });
+    expect(resolveKind({ path: "episodes/trial/video.MP4" })).toEqual({
+      kind: "video",
+      note: null,
+    });
     expect(extraFields({ a: 1, files: [], newField: { x: 1 } }, ["a", "files"])).toEqual([
       ["newField", { x: 1 }],
     ]);

@@ -102,18 +102,18 @@ function Camera({
   );
 }
 
-function VideoPreview({
+export function VideoPreview({
   runId,
   path,
   seek,
   name,
-  limit,
+  limit = MAX_VIDEO_BYTES,
 }: {
   runId: string;
   path: string;
-  seek: number;
+  seek?: number;
   name: string;
-  limit: number;
+  limit?: number;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const [url, setUrl] = useState<string>();
@@ -140,7 +140,8 @@ function VideoPreview({
     };
   }, [runId, path, limit]);
   useEffect(() => {
-    if (video.current && video.current.readyState >= 1) video.current.currentTime = seek;
+    if (seek !== undefined && video.current && video.current.readyState >= 1)
+      video.current.currentTime = seek;
   }, [seek]);
   if (error)
     return (
@@ -151,18 +152,20 @@ function VideoPreview({
         </p>
       </Empty>
     );
-  if (!url) return <Loading what="Loading saved video (64 MiB episode budget)" />;
+  if (!url) return <Loading what="Loading saved video" />;
   return (
     <video
       ref={video}
+      className={seek === undefined ? "review-video" : undefined}
       src={url}
-      preload="auto"
-      muted
+      controls={seek === undefined}
+      preload={seek === undefined ? "metadata" : "auto"}
+      muted={seek !== undefined}
       playsInline
       aria-label={name}
       onError={() => setError("This browser could not decode the saved video.")}
       onLoadedMetadata={() => {
-        if (video.current) video.current.currentTime = seek;
+        if (seek !== undefined && video.current) video.current.currentTime = seek;
       }}
     />
   );

@@ -2101,6 +2101,11 @@ a.card.phase:hover {
   border: 1px solid var(--border);
   border-radius: 6px;
 }
+.review-video {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
 
 .merge-dialog {
   width: min(720px, 92vw);
