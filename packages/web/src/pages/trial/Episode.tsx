@@ -203,9 +203,9 @@ export function EpisodeViewer({
     MAX_VIDEO_BYTES / Math.max(1, trace.cameras.filter((camera) => camera.video).length),
   );
   const [index, setIndex] = useState(0);
-  const [channel, setChannel] = useState(
-    trace.frameBeforeAction ? (trace.actionNames[0] ?? "") : "",
-  );
+  const pairedChannels =
+    trace.frameBeforeAction && trace.actionNames.every((name) => trace.proprioNames.includes(name));
+  const [channel, setChannel] = useState(pairedChannels ? (trace.actionNames[0] ?? "") : "");
   const sample = trace.samples[index] ?? trace.samples[0];
   const [playing, setPlaying] = useState(false);
   const last = trace.samples.length - 1;
@@ -266,7 +266,7 @@ export function EpisodeViewer({
       {trace.frameBeforeAction && (
         <p className="faint">
           Playback time follows the video frame rate. Each step shows the frame before the action
-          and the joint state and reward after the action.
+          and the robot state and reward after the action.
         </p>
       )}
       <div className="episode-controls">
@@ -346,7 +346,7 @@ export function EpisodeViewer({
       </section>
       <section aria-label="Action and joint curves">
         <h3>Actions and body state</h3>
-        {trace.frameBeforeAction && trace.actionNames.length > 0 && (
+        {pairedChannels && trace.actionNames.length > 0 && (
           <label>
             Joint or gripper{" "}
             <select

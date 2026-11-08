@@ -10,6 +10,7 @@ from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.binding import reference_horizon
 from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
+from orbit_embodied.libero_suites import HORIZONS
 
 
 class LazyPolicy:
@@ -97,12 +98,16 @@ def main(argv):
                    "timing": {"readAndArchiveSeconds": reading_seconds,
                               "verifySeconds": time.monotonic() - started - reading_seconds,
                               "totalSeconds": time.monotonic() - started}})
-        if result["valid"] and expected["reference"].get("environment", {}).get("kind") == "robotwin":
-            from orbit_embodied.robotwin_trajectory import write_trajectory
+        kind = expected["reference"].get("environment", {}).get("kind")
+        if kind is None and expected["sample"]["taskId"].partition(":")[0] in HORIZONS:
+            kind = "libero"
+        if result["valid"] and kind in ("robotwin", "libero"):
+            from orbit_embodied.episode_trajectory import write_trajectory
             try:
-                write_trajectory(directory, Path(destination).with_name("orbit-trajectory.json"), result, expected)
+                write_trajectory(directory, Path(destination).with_name("orbit-trajectory.json"), result, expected,
+                                 kind=kind)
             except (OSError, ValueError, KeyError, TypeError) as exc:
-                print("RoboTwin trajectory unavailable: " + str(exc), file=sys.stderr)
+                print("Native trajectory unavailable: " + str(exc), file=sys.stderr)
         return
     request = json.loads(Path(argv[1]).read_text())
     root = Path(argv[2]) if argv[0] == "batch" else Path(argv[2]).parent

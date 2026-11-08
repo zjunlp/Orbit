@@ -1003,7 +1003,7 @@ P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE Meta
 sample 的 `sessionMessageIndexes`（引用同一 Run 会话）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
 Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目录归还 daemon 用户，再运行 adapter hooks，保证会话可读与凭据清理；不改变模拟器评分。
 
-原生 RoboTwin 的 verifier 从已验证的动作日志、初始状态和批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
+原生 RoboTwin 和 LIBERO 的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
 `mediaPhase: "solve"` 将相机路径限定在同一 Trial 的 Solve 产物中。`frameBeforeAction` 标记每步画面取自动作前，状态和奖励取自动作后。
 动作批次可带 `inferSeconds`。录像以控制步取样，时间轴按录像帧率排列，推理时长使用实际测量值。
 

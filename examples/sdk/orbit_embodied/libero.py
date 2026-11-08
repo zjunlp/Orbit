@@ -10,6 +10,9 @@ from .evidence import file_digest
 from .libero_suites import HORIZONS
 
 
+VIDEO_FPS = 10
+
+
 class LiberoBenchmark:
     action_size = 7
     settle_steps = 10
@@ -30,7 +33,7 @@ class LiberoBenchmark:
 
     def start_video(self, directory):
         import imageio
-        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=10)
+        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=VIDEO_FPS)
 
     def record_frame(self, observation):
         self.video.append_data(np.ascontiguousarray(observation["front_rgb"][::-1, ::-1]))

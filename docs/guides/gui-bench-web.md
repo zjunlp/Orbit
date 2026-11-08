@@ -36,7 +36,7 @@ BrowserGym 的 **Recheck evidence** 只验证保存的奖励、轨迹和哈希�
 
 adapter 可在 `review.files` 声明 `kind: "episode"`、`fallback: "json"`。索引为
 `EpisodeTrajectory` 版本 1（`packages/orbit/src/contracts/trajectory.ts`）：`kind`、`goal`、
-`actionNames`、`proprioNames`、`cameras`、`samples` 和 `chunks`。媒体路径相对同一 Run 输出根目录；
+`actionNames`、`proprioNames`、`cameras`、`samples` 和 `chunks`。媒体路径相对索引所属 Run 的输出根目录。具身 verifier 可以通过 `mediaPhase: "solve"` 引用同一 Trial 的 Solve 产物。
 索引预览上限 2 MiB，高频原始数组和视频仍保留为产物，不进入数据库。
 
 - `samples` 按严格递增的秒时间戳排列，包含动作/本体状态数组、reward、terminated/truncated，以及可选 late/stall。
@@ -47,6 +47,7 @@ adapter 可在 `review.files` 声明 `kind: "episode"`、`fallback: "json"`。�
 
 RoboTwin Trial 的 **Episode timeline** 可以拖动到任意控制步，按关节或夹爪查看目标动作和实际状态，并跳转到动作批次查看推理耗时。
 画面取自动作前，关节状态和奖励取自动作后，时间轴按录像帧率排列。新运行保存头部与左右腕部三路录像，历史运行可点 **Recheck evidence** 从已保存的轨迹生成时间轴，回看当时录下的相机。
+LIBERO 复用 **Episode timeline**，展示已录制的外部视角、末端执行器位姿、夹爪状态、动作和奖励。时间轴从第一条策略动作开始，达到控制步上限的试验会标记为 **Truncated**。
 
 EFE MetaWorld+ standard/2.1 的 Harbor trial 会在评分后自动生成 `orbit-trajectory.json`：原生 journal 调用边界、已执行动作曲线、最终 reward 和 render 视频。
 **Agent at this time** 显示按调用时间关联的会话；完整度标注会话完整、只有环境或记录截断。原版 sidecar 没有保存 proprioception 时不显示身体状态曲线。

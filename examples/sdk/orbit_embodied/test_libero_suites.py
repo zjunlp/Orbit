@@ -11,6 +11,8 @@ import unittest
 from unittest.mock import patch
 
 from orbit_embodied import digest
+from orbit_embodied.episode_trajectory import write_trajectory
+from orbit_embodied.evidence import write_json
 from orbit_embodied.libero_suites import HORIZONS, SUITES, LABELS, benchmark_name
 from orbit_embodied.test_provision import configured_resources
 
@@ -25,6 +27,26 @@ def load(name, filename):
 
 
 class SuiteTests(unittest.TestCase):
+    def test_libero_trajectory_excludes_settle_steps_and_marks_the_horizon(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            episode = Path(temporary)
+            control = {"phase": "control", "step": 0, "chunk": 0, "action": [0] * 7, "reward": 0,
+                       "terminated": False, "state": {"eef_position": [1, 2, 3],
+                                                     "eef_quaternion": [0, 0, 0, 1],
+                                                     "gripper_position": [0.01, 0.02]}}
+            rows = [{"phase": "settle", "step": 0}, control, {**control, "step": 1}]
+            (episode / "actions.jsonl").write_text("\n".join(map(json.dumps, rows)))
+            write_json(episode / "chunks/0.json", {"inferSeconds": 0.2})
+            output = episode / "orbit-trajectory.json"
+            write_trajectory(episode, output, {"success": False, "issues": []},
+                             {"sample": {"taskId": "libero_90:synthetic"}}, kind="libero")
+            trace = json.loads(output.read_text())
+            self.assertEqual([row["time"] for row in trace["samples"]], [0, 0.1])
+            self.assertEqual(trace["samples"][0]["proprio"], [1, 2, 3, 0, 0, 0, 1, 0.01, 0.02])
+            self.assertTrue(trace["samples"][-1]["truncated"])
+            self.assertFalse(trace["samples"][-1]["terminated"])
+            self.assertEqual(trace["chunks"][0]["inferSeconds"], 0.2)
+
     def test_libero_90_registration_requires_only_a_simulator_audit(self):
         adapter = load("suite_native_adapter", "adapter.py")
         with patch.dict(sys.modules, {"adapter": adapter}):
