@@ -89,10 +89,12 @@ WidowX needs a working SAPIEN Vulkan renderer. The image supplies generic NVIDIA
 manifests and requests graphics/compute/utility capabilities; no host driver paths are embedded.
 
 WidowX reset uses `environmentSeed + initialStateId` as a generated environment seed, not an
-index into a LIBERO initial-state file. Its horizon is 300 control steps at 5 Hz, replanning every
+index into a LIBERO initial-state file; plans and batches reject two samples that resolve to the
+same reset. Its horizon is 300 control steps at 5 Hz, replanning every
 4 steps. Success is any native `info.success`; native termination ends immediately, while a success
-signal without termination ends at the action chunk boundary. This follows the pinned wrapper.
-Evidence records both policy and native actions.
+signal without termination ends at the action chunk boundary; a native truncation before the
+horizon is a valid failure. This follows the pinned wrapper. Evidence records both policy and
+native actions.
 Each solve Run starts a fresh model with Torch seed 0 after loading. With `--batch-size`, the
 model remains loaded across the fixed group; each episode resets its environment and connector,
 while the declared service random stream continues in order. Calls have deadlines and are never
@@ -107,7 +109,9 @@ This is sampled model-path validation; native-semantic calibration and full-suit
 The connector requires dense action time indices `0..horizon-1` before inference. Raw predicted
 actions must be numeric and finite before any gripper conversion, including rows outside the
 executed prefix. Rejected numeric arrays remain in `chunks/<call>.rejected.npy` with pickle disabled;
-the companion JSON identifies the source observation and rejection reason. Unsupported values
+the companion JSON identifies the source observation and rejection reason. For the LIBERO I/O
+adapter, accepted chunks keep the raw model output in `chunks/<call>.raw.npy` beside the converted
+actions, and verification recomputes the named gripper conversion. Unsupported values
 receive a bounded text preview. Such calls produce an invalid `policy_act` result without executing
 the rejected chunk; earlier completed controls remain available for review and verification.
 

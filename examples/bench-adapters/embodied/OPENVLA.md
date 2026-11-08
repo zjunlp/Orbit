@@ -10,7 +10,8 @@ The supplied checkpoint supports **LIBERO Spatial**. Its independent policy prof
 the same raw LIBERO observations and native actions as the existing policies. Camera rotation,
 quaternion conversion, official JPEG/Lanczos resize, 90% center crop, proprioception normalization
 and continuous L1 action head run in the model service. The client validates the entire raw
-`(8, 7)` output before converting the gripper to LIBERO's sign convention. Calls have bounded
+`(8, 7)` output before the driver converts the gripper to LIBERO's sign convention; evidence keeps
+the raw output and verification recomputes the conversion. Calls have bounded
 deadlines and are never retried automatically.
 
 ## Sources, weights and image

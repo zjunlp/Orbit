@@ -834,75 +834,48 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - 能力匹配：bench 声明 `requires`（`multiTurn`、`policyProtocol`、`gui`、`obs: rgb|depth|proprio`、`action: joint|ee|chunk`），提交前与
   Agent / Policy 声明比对，不匹配直接拒绝。
 
-### 9.4a 独立 Policy 与原生 C6（D1 闭环与样例协议对照已验证）
+### 9.4a 独立 Policy 与原生 C6
 
-- `orbit policy add / ls / rm`、`orbit bench add-file`、`bench run --sample-plan` 走现有 HTTP 控制面。直接 LIBERO 路径使用
-  `examples/bench-adapters/embodied` 与容器内 `examples/sdk/orbit_embodied`，不调用或导入 vla-eval；旧路径继续使用原登记。
-- `BenchCapabilities.embodied` 声明评测 profile、原始观测/动作语义和显式映射。提交时校验模型端 profile、单位、frame、相机和
-  动作描述，生成不可变 `ResolvedBinding`，随作业保存；缺字段或语义不符即拒绝，不按同名、维度或排序猜测对应。
-- `BenchJob.spec.samplePlan` 接收已展开并带摘要的有序计划。sampleId 由任务、profile、初态文件摘要与索引、环境 seed、模型
-  seed 和重复编号的规范内容生成。旧 Trial / 适配请求 / ReportEntry 仍要求 seed；新分支要求 sampleRef 且禁止 seed，
-  联合契约拒绝混用。Trial.id 沿用原格式，episodeId 标识实际尝试。旧任务和报告不重写，新报告使用 `orbit-report/2`。
-- 报告、合并、校准与界面使用真实样本身份。新旧作业禁止直接归并；计划和方法条件不符时拒绝合并。C6 配对统计还要求相同
-  有效样本及评测条件，不仅匹配任务名。计划摘要和配对判断共用冻结条件：适配器配置、环境变量名及非秘密值、源码、协议、
-  options 和实际生效的逐任务资源/timeout；登记时间和资源文件位置不参与。配对按共同任务检查条件，模型本身仍是比较变量。
-  归并已有任务时复用同一预算解析，逐个核对待采用样本的冻结资源和生效 timeout，传输别名不豁免预算检查；追加新任务携带来源预算。
-  旧矩阵、seed n→初态 n−1 规则和旧报告摘要保持原行为。
-- 首个目标固定 OpenPI LIBERO 与 pi05_libero。SDK 分离 Benchmark Adapter、PolicyClient、Connector、driver 和证据写入，
-  显式保留旋转、resize、状态拼接、settle、horizon 与 replan_steps。原生判定与 Orbit 有效性分开，媒体失败不改变可信分数。
-  默认每 Trial 独立 solve / verify；固定批次共享 solve，逐 Trial verify。重评只读该次 solve 证据，无模型或仿真。SDK 核心只依赖标准库与 NumPy，额外传输/媒体依赖单列。
-  solve 和 verify 各保存自身的适配器、driver、SDK 源码包及摘要；重评记录新评分器身份，保留求解证据和原实现。
-  验证器重算 sampleId，并逐项核对作业冻结的 sample、binding、policy、reference 和求解实现摘要。新证据记录原始 Run/trial，
-  由 Run 标签声明版本以拒绝证据降级；归并保留 execution_trial，多次归并不改变其来源。旧证据按已保存的 trial/source_trial
-  兼容验证，缺少可核对的来源即失败；不会改写旧证据来补造身份。验证结果同时绑定当前逻辑 trial、原始 solve Run 和验证请求摘要。
-  reference 在列举、执行规划、验证和评分阶段使用同一解析规则；省略时读取内置文件，仍必须匹配登记的 profileDigest，内容漂移即拒绝。
-- OpenPI 原生服务没有远端 RNG reset。D1 每 Trial 使用新服务并记录 JAX key 0 的 service 作用域，不宣称等价于参考 runner
-  连续运行到任意 episode 的随机状态。源码审核、合成端点检查、真实正例与原生对照分别记录，不能互相代替。
-  已完成真实 π₀.₅ checkpoint 的 CPU 与 GPU 正例开发验证、原生环境负例、单样本重评与清理。官方 runner 的确定性处理、
-  固定动作和原生 horizon 样例对照通过；共享编译模型、独立 key-0 流的真实协议控制下，实时输入、完整动作预测及物理轨迹精确一致。
-  独立 GPU 进程逐位比较未通过：重复官方路径对相同首个输入也产生不同预测，具体底层原因未定位。完整 suite 统计等价和后续 episode
-  随机流仍未验证，控制组通过不覆盖失败结论。工具为 `parity_plan.py / parity.py / parity_policy.py`，不作为生产模型池或默认保真度声明。
-- 第二组端点复用同一 Run 路径：`groot-zmq` 调用官方 GR00T 服务，模型端显式 `ioAdapter` 在原生 LIBERO 与 GR00T 输入间转换，
-  不改写 LIBERO benchmark profile；同一连接器也接收原生 SimplerEnv WidowX 七个任务的扁平字段。动作顺序、执行片段长度、Torch seed 0
-  及 backbone 内容摘要显式冻结，新增可选字段不补入旧 Policy 快照。GR00T 动作时间索引必须从 0 连续递增；原始动作在任何夹爪转换前
-  检查数值类型及有限性，拒绝的数值数组以禁止 pickle 的文件和诊断元数据保存，评测归为 `policy_act` 无效结果。Gym adapter 使用固定源码的环境封装，记录原生动作、保留原生终止，
-  对没有原生终止的成功信号在片段边界结束；证据验证按 profile 选择 last/any 成功聚合。`gpusOf: main` 允许模型服务显式共享模拟器已租用的 GPU，禁止同时
-  声明独立 role/GPU；没有新资源账本或调度器。配置、资产下载及验证边界见[接入说明](../examples/bench-adapters/embodied/GR00T.md)。
-- OpenVLA-OFT 的 `openvla-ws` 独立服务接收原生 LIBERO 观测，调用固定源码的官方图像、状态归一化与 L1 head 推理函数；
-  客户端在夹爪转换前验证完整原始动作。模型端使用独立 Python/Torch/Transformers 环境，checkpoint 和归一化摘要在启动时核对，
-  官方 loader 的配置同步只发生在临时视图。复用原生 LIBERO adapter、语义 binding、批次与验证器；`libero-oft-native` 是同一
-  benchmark 的显式评测 recipe（8 步动作块、环境种子 0），已有 OpenPI recipe 保持原配置。相同任务名不豁免不同 recipe 的比较条件；
-  沿用 OpenPI 固定的仿真运行时，不宣称与 OFT 官方完整环境或套件统计等价，见[使用与边界](../examples/bench-adapters/embodied/OPENVLA.md)。
-- D2a 固定批次使用 `BenchJob.spec.batchSize`（默认不启用）；按方法、计划顺序及相同资源覆盖拆分，成员与 attemptId、episodeId、
-  完整清单摘要在提交时冻结。`solve` 适配请求的可选 `batch` 带完整有序 Trial 上下文，运行中不追加成员。模型服务每 Run 启动一次；
-  逐项重建并 reset 环境、清空动作片段及连接器状态，模型随机流按已声明的 service 作用域连续推进，不声称远端 RNG 已复位。
-  容器总 watchdog 为逐 episode 预算之和；SDK 在控制边界检查单 episode 期限，模型调用仍有独立超时，状态性调用不重试。
-- 批次将原子封存的必要证据写入 `episodes/<episodeId>`，完成判定先于可选媒体。终止后按样本核验，后续服务失败、OOM 或取消
-  不覆盖已封存且独立验证通过的结果；Run 原始执行状态与资源测量保留。取消影响整个共享 Run，CLI/Web 明示范围；未完成项
-  保留 unknown/invalid。重启可按冻结 batch 标签接管已提交但尚未关联的 Run。重评一个 Trial 不改变其他项；报告记录共享 Run、
-  batch 摘要及 episode/attempt 定位。归并核对完整随机流前缀，保护已有效的完成项；共享文件由 Run 持有，仅随最后所属作业删除，
-  采用重试结果时把旧 solve、verify、outcome 与评分历史存入 `Trial.priorAttempts`，保留原始失败证据及引用；
-  资源统计对 Run 去重并注明整批测量。子集执行不是服务随机流批次的同条件重试。
-- SQLite 第 7 次迁移将 `trial_runs` 改为多引用。已有库升级前由 daemon 用 `VACUUM INTO` 创建包含已提交 WAL 的一致性备份，
-  在 `<db>.backups/v<版本>.sqlite` 保存 0600 文件（重试同版本迁移时替换，不累积），独立打开检查完整性和版本；备份失败不迁移，迁移在单个事务中完成，失败回滚并停止启动。
-  固定批次及恢复说明见[批量运行](guides/embodied-batches.md)。跨 Run 模型池、共享 verify 和通用语义直连仍后置。
-- **接入验收预算**：端点协议正确性、benchmark 原生语义与模型完整套件成绩分别验证。新增 benchmark 先检查完整目录与资产清单，
-  挑选代表任务做初始化、少量控制步及固定观测/动作、原生判定和正负例校准；全任务可启动性另记覆盖率，未验证的任务不宣称已验证。
-  新增模型优先复用已校准 benchmark 检查 Policy/connector。需要宣称支持的新增组合
-  仍须少量真实模型端到端检查，不能只凭形状匹配宣称兼容。资源就绪后的常规接入验收以 2–5 个 episode、批次与独立重评等定向检查为主，
-  目标预算 10–30 分钟；达到预算仍未完成的检查如实标注，不转为通过。`bench calibrate --policy --sample-plan --budget` 已承接模型接入检查，
-  默认总预算 20 分钟、最多 30 分钟，覆盖排队、模型启动、求解、逐 episode CPU 验证和首次单样本重评；使用既有 Job/Trial/Run 状态，
-  预算到期持久记录并取消未完成工作，清理确认可延后；重启在恢复排队执行前补发过期停止意图。CLI 断开不解除预算。
-  停止与清理核对同时覆盖 Trial 当前/历史关联和 job 标签所属的已持久化 Run，避免提交完成但尚未写回关联时漏取消；
-  全部所属 Run 终止、清理完成并释放租约后才结束验收，清理事件会继续推进等待中的报告。
-  `calibrationExecutionEndedAt` 单独冻结评分工作的完成时间（含自动重评规划与执行），预算只覆盖到这里；清理等待不追加超时失败。
-  自动完成入口重新核对全部 Trial 和所属 Run 已结束，避免重复回调把尚在规划的重评提前标成完成。
-  `endedAt` 在清理确认后写入；报告通过 `budget.executionEndedAt`、CLI/Web 提示区分工作已结束和清理仍在进行。
-  报告显式标为 policy 接入，catalog 单独列出，不提升 benchmark 原生语义校准或 fidelity；原 empty/oracle 校准保持原行为。
-  该入口只接受真实模型、2–5 个冻结样本及固定批次，禁止用归并拼成验收通过。使用方式见[轻量接入检查](guides/policy-integration-checks.md)。
-  验证证据按实现、协议/profile、benchmark 源码及资产、镜像等身份限定复用范围；变更模型权重需重验模型路径，变更驱动语义需重验对应原生对照。
-  完整统计对照作为单独、有预先声明范围和计算预算的研究任务，按需开展，不作为每个模型与 benchmark 组合的默认接入门槛。
-  抽样接入与语义校准不等于完整统计等价，报告保留这一差别。
+验证结果见任务记录（[Independent C6](tasks/20261105-embodied-eval.md)、[C6 endpoints](tasks/20261106-embodied-endpoints.md)、
+[C6 batches](tasks/20261106-embodied-batches.md)、[Policy checks](tasks/20261106-policy-calibration.md)），本节只记录设计决定。
+
+- **入口**：`orbit policy add / ls / rm`、`bench add-file`、`bench run --sample-plan [--batch-size]`、`bench calibrate --policy`
+  都走现有 HTTP 控制面。原生路径为 `examples/bench-adapters/embodied` 加容器内 `examples/sdk/orbit_embodied`，不依赖 vla-eval；
+  旧 vla-eval 登记保持原行为。
+- **语义绑定**：`BenchCapabilities.embodied` 声明评测 profile、观测/动作语义与显式映射。提交时逐项核对单位、frame、相机与动作
+  描述，生成不可变 `ResolvedBinding`；不按同名、维度或顺序猜测对应。
+- **Policy 登记**：`PolicyDefinition` 是共享形状（固定镜像、readiness、checkpoint/归一化摘要、命名权重 dataset、随机流声明）；
+  各 connector 的必需字段（OFT 的 8 步 LIBERO recipe、GR00T 的执行长度/动作顺序/backbone 摘要）在 `bench/policies.ts` 登记时检查。
+  提交时保存权威快照。`gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
+- **样本身份**：`spec.samplePlan` 是带摘要的有序计划；sampleId 由任务、profile、初态资产摘要与索引、环境 seed、模型 seed 和重复
+  编号生成。新分支用 sampleRef、禁止 seed，联合契约拒绝混用；旧 seed 作业、报告与 n→n−1 规则不变，新报告为 `orbit-report/2`，
+  报告与 Trial 导航按计划顺序列出样本。WidowX 的重置种子为 `environmentSeed + initialStateId`，计划和批次拒绝别名到同一重置的样本。
+- **比较条件**：计划摘要与配对共用冻结条件：适配器配置、非秘密环境值、源码、协议、options、逐任务生效资源/timeout，以及固定
+  批次的划分。批次划分与条件使用同一生效预算规则（`splitBatches`），共享模型服务与分别启动不会被当作同条件。配对要求相同
+  有效样本；Web 对比把后端未配对的任务列为 “No paired result”。新旧作业不直接归并，归并逐样本核对冻结预算。
+- **SDK 与证据**：Benchmark adapter、PolicyClient、connector、driver、证据写入分离；SDK 核心只依赖标准库与 NumPy。原生判定与
+  Orbit 有效性分开，可选媒体失败不改变分数。证据原子封存，含 contract、binding、初态、逐步动作、请求的动作块、源码包摘要；
+  有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
+  步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
+  重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
+- **随机性**：OpenPI/GR00T/OFT 服务没有远端 RNG reset，按 service 作用域声明（JAX key 0 / Torch seed 0），不宣称与参考 runner
+  任意 episode 的随机状态等价。
+- **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
+  转换，亦接 SimplerEnv WidowX 七个任务）、`openvla-ws`（官方 OFT 推理在模型端，`libero-oft-native` 是独立评测 recipe）。
+  原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
+- **固定批次**：`spec.batchSize` 按方法、计划顺序和相同生效预算拆分，成员、attemptId、episodeId 与清单摘要提交时冻结；模型服务
+  每 Run 启动一次，逐 episode 重建环境并清空连接器状态。容器 watchdog 为逐 episode 预算之和。已封存且独立验证通过的 episode
+  不被后续服务失败、OOM 或取消覆盖；共享文件由 Run 持有，随最后所属作业删除；重试结果采用时旧尝试存入 `Trial.priorAttempts`。
+- **取消与重启**：取消停止关联 Run 以及已持久化但尚未关联的 solve。重启时在 RunService 调度前，按启动时仍存活的 solve 快照
+  补发已取消作业的停止意图；待处理 Trial 认领自己（或所属批次）的未关联 solve，而不是重复求解，清理确认前保持 cleanup pending。
+- **存储**：SQLite 第 7 次迁移让 `trial_runs` 支持多引用。迁移前 `VACUUM INTO` 生成含已提交 WAL 的备份
+  `<db>.backups/v<版本>.sqlite`（0600，重试时替换），独立校验完整性与版本后在单事务内迁移，失败回滚并停止启动。
+- **接入验收**：端点协议、benchmark 原生语义与模型完整套件成绩分别验证，互不替代。新 benchmark 先核对目录与资产，挑代表任务
+  做初始化、控制步、原生判定与正负例；新模型优先复用已校准 benchmark。`bench calibrate --policy --sample-plan --budget` 只接受
+  真实模型、2–5 个冻结样本与固定批次，默认 20 分钟、最多 30 分钟，覆盖排队、启动、求解、逐 episode CPU 验证与首次重评。
+  预算到期持久记录并取消（含未关联的所属 Run），`calibrationExecutionEndedAt` 冻结评分工作完成时间，预算只到这里；`endedAt`
+  在全部所属 Run 清理、租约释放后写入。报告标为 policy 接入，不提升 benchmark fidelity。完整统计对照是单独的研究任务。
+- **后置**：跨 Run 模型池、共享 verify、通用语义直连、独立进程逐位可复现与完整 suite 统计等价。
 
 ### 9.5 Agent 与环境的桥
 

@@ -109,7 +109,8 @@ fixed group of up to eight compatible episodes. Each episode retains its own Tri
 and CPU verifier. Cancelling the shared Run stops unfinished episodes and preserves independently
 verifiable completed results. See [batch execution and recovery](../../../docs/guides/embodied-batches.md).
 
-Saved evidence includes requested action chunks, executed controls with source observation and
+Saved evidence includes requested action chunks (plus the raw model output when a named
+conversion applies), executed controls with source observation and
 chunk indexes, native verdict, required state, timing, the contract and resolved binding. Optional
 compressed video is separate from scoring evidence; raw camera tensors are not retained by
 default. A score of zero from reaching the horizon is valid, while model/environment failures

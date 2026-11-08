@@ -11,10 +11,12 @@ orbit bench run libero-native --method pi05=policy,policyRef=pi05-libero \
 
 `--batch-size` accepts 2–256; the selected benchmark also declares its own maximum (the native
 adapter accepts 128). Without the option, existing single-episode behavior is preserved. The
-daemon groups consecutive samples of one method with identical resource and timeout overrides,
-preserving sample-plan order. Each group gets one solve Run, one model service and one resource
+daemon groups consecutive samples of one method with the same effective resources and timeout
+(the job `--timeout` takes precedence over per-task timeouts), preserving sample-plan order. The
+grouping is part of the comparison conditions. Each group gets one solve Run, one model service and one resource
 lease. Every episode remains an individual Trial with its own evidence directory and CPU verify Run.
 `--timeout` is the per-episode budget; the shared Run's watchdog is the sum of its episode budgets.
+An episode whose environment step ends past its own budget is invalid, including the last step.
 
 The model's declared random stream continues across the fixed group. Environment and connector
 state reset for each episode; service RNG reset is not implied. Batch size, complete ordered sample
@@ -25,7 +27,10 @@ original prefix and protects valid completed episodes; it does not choose histor
 Adopting a compatible retry retains earlier solve/verify references, outcomes and scoring history
 in the Trial's `priorAttempts`. Their shared files remain available until the owning job is deleted.
 
-Cancelling a shared solve Run or its job stops all unfinished episodes in that group. Completed
+Cancelling a shared solve Run or its job stops all unfinished episodes in that group, including a
+solve that was submitted but not yet linked when the daemon stopped: after a restart the daemon
+stops it before scheduling queued work, and its Trials keep cleanup pending until it is confirmed.
+Completed
 results are sealed before optional video work and still get independently verified after collection.
 A later model-service failure or Run OOM does not invalidate earlier verified episodes. Incomplete
 evidence receives its own unknown/invalid outcome; the original shared Run's execution state stays
