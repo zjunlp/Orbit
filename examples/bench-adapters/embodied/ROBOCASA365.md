@@ -1,10 +1,25 @@
-# Native RoboCasa365 Atomic-Seen
+# Native RoboCasa365
 
-RoboCasa365 v1.0 provides 18 Atomic-Seen tasks on the PandaOmron mobile manipulator. Orbit opens
-the original Gymnasium environment for each sample and uses its controller and success flag.
+Orbit exposes the 50 official multitask evaluation tasks on the PandaOmron mobile manipulator.
+It opens the original Gymnasium environment for each sample and uses its controller and success flag.
 The published π₀.₅ policy runs as a separate OpenPI WebSocket service. The reference fixes three
 RGB cameras, 16 state values and the native 12-element action layout.
 [Task list](https://robocasa.ai/docs/build/html/datasets/datasets_overview.html) · [Published policy recipe](https://github.com/robocasa-benchmark/leaderboard/blob/main/submissions_md/pi05_2026-04-02.md)
+
+| Task set | Tasks | OpenPI registration | GR00T N1.5 registration |
+| --- | ---: | --- | --- |
+| `atomic_seen` | 18 | `robocasa365-atomic-seen-native` | `robocasa365-atomic-seen-gr00t-native` |
+| `composite_seen` | 16 | `robocasa365-composite-seen-native` | `robocasa365-composite-seen-gr00t-native` |
+| `composite_unseen` | 16 | `robocasa365-composite-unseen-native` | `robocasa365-composite-unseen-gr00t-native` |
+| `target50` | 50 | `robocasa365-target50-native` | `robocasa365-target50-gr00t-native` |
+
+Pass `--task-set` to select the upstream task group. The default is `atomic_seen`. `target50`
+combines the three disjoint groups into one registration and reports a mean over tasks. Use the
+separate registrations for per-group results. The `--split` option selects the scene and object
+distribution independently of the task group. The default `pretrain` matches the published
+multitask setup. `--split target` selects held-out kitchens and objects and adds `-target` before
+`-native` in the registration name. Each registration freezes the task IDs, per-task horizons,
+scene split and asset digest in the sample-plan reference.
 
 ## Prepare the runtimes and assets
 
@@ -50,6 +65,25 @@ dataset statistics fallback in its in-memory config and uses the normalization s
 
 ## Register and calibrate
 
+To register only the benchmark, pass `--benchmark-only` with the simulator and its assets.
+For example, register all 50 tasks on held-out scenes using the OpenPI evaluation recipe.
+
+```bash
+python3 -B examples/bench-adapters/embodied/configure_robocasa365.py \
+  --benchmark-only --recipe openpi --task-set target50 --split target \
+  --robocasa-source "$ROBOCASA_SOURCE" --robosuite-source "$ROBOSUITE_SOURCE" \
+  --assets "$ROBOCASA_ASSETS" --benchmark-image orbit/robocasa365-simulator:reference \
+  --output-dir "$ROBOCASA_TARGET_CONFIG"
+orbit data add robocasa365-assets "$ROBOCASA_ASSETS"
+orbit bench add-file "$ROBOCASA_TARGET_CONFIG/benchmark.json"
+orbit bench tasks robocasa365-target50-target-native --json
+```
+
+For the GR00T benchmark recipe, select `--recipe gr00t`, the pinned RoboCasa 1.0.1 source and
+the `simulator-gr00t` image described below. An independently registered compatible policy can
+be used with the generated benchmark. The paired example below selects the default Atomic-Seen
+task set and `pretrain` scenes.
+
 ```bash
 python3 -B examples/bench-adapters/embodied/configure_robocasa365.py \
   --robocasa-source "$ROBOCASA_SOURCE" --robosuite-source "$ROBOSUITE_SOURCE" \
@@ -91,18 +125,21 @@ part of the recorded run conditions.
   success rates and counts invalid episodes as failures. Orbit also reports its valid-only view.
   [Batch execution](../../../docs/guides/embodied-batches.md) · [Integration checks](../../../docs/guides/policy-integration-checks.md)
 
-The development checks cover all 18 native resets and control steps, direct comparisons on two
-tasks, and a two-episode real policy batch with independent verification and rescore.
-[Validation record](../../../docs/tasks/20261107-robocasa365.md)
+The original Atomic-Seen calibration included native resets and controls for all 18 tasks, direct
+comparisons on two tasks, and a two-episode real policy batch with independent verification and
+rescore. [Atomic-Seen validation](../../../docs/tasks/20261107-robocasa365.md) ·
+[Multitask validation](../../../docs/tasks/20261108-robocasa365-task-sets.md)
 
 ## GR00T N1.5
 
-The RoboCasa team's GR00T N1.5 recipe uses RoboCasa 1.0.1 on the same 18 Atomic-Seen tasks
-and `pretrain` split. It uses the 1.0.1 registry horizons directly and executes 16 actions
+The RoboCasa team's GR00T N1.5 multitask recipe uses RoboCasa 1.0.1 and `pretrain` scenes.
+The 1.0.1 registry already includes the increased evaluation horizons. This recipe uses those
+horizons directly and executes 16 actions
 per prediction. The episode verdict is true if native success is reported at any chunk end,
 including the final partial chunk. Orbit saves every native control step and applies the
 chunk-end rule again during evidence verification. The frozen samples use an independent scene
-seed per episode. The upstream scorer averages per-task rates with available results. Orbit
+seed per episode. The reference runner advances multiple Gymnasium environments across episodes.
+The upstream scorer averages per-task rates with available results. Orbit
 excludes invalid episodes from that view. [Official submission](https://github.com/robocasa-benchmark/leaderboard/blob/main/submissions_md/gr00t_n1.5_2026_05_19.md)
 
 Use `ROBOCASA101_SOURCE` and `GROOT_N15_SOURCE` at the commits listed in the
