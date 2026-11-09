@@ -2,28 +2,30 @@
 
 范围是 Orbit 的 C6 原生 benchmark 与独立 Policy。表中「实测」表示该权重与 recipe 已运行真实抽样 episode，并完成独立验证。任务数表示已登记的目录大小。破折号表示该套件与模型的组合暂无真实模型抽样记录。新增组合使用同一套接入模板记录。[接入模板](embodied-onboarding.md)
 
-| 环境与套件 | 任务数 | Benchmark 登记 | π₀.₅ | GR00T N1.7 | GR00T N1.5 | OpenVLA-OFT | SmolVLA | MolmoAct2 |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- |
-| LIBERO Spatial `libero_spatial` | 10 | `libero-native` / `libero-oft-native` / `libero-smolvla-native` | 实测 | 实测 `groot-n17-libero` | — | 实测 `openvla-oft-libero-spatial`、`openvla-oft-libero-combined-spatial` | 实测 `smolvla-libero` | — |
-| LIBERO Object `libero_object` | 10 | `libero-object-native` / `libero-oft-object-native` | 实测 | 实测 `groot-n17-libero-object` | — | 实测 `openvla-oft-libero-combined-object` | — | — |
-| LIBERO Goal `libero_goal` | 10 | `libero-goal-native` / `libero-oft-goal-native` / `libero-goal-molmoact2-native` | 实测 | 实测 `groot-n17-libero-goal` | — | 实测 `openvla-oft-libero-combined-goal` | — | 实测 `molmoact2-libero` |
-| LIBERO Long `libero_10` | 10 | `libero-long-native` / `libero-oft-long-native` | 实测 | 实测 `groot-n17-libero-long` | — | 实测 `openvla-oft-libero-combined-long` | — | — |
-| LIBERO-90 `libero_90` | 90 | `libero-90-native` / `libero-oft-90-native` | — | — | — | 实测 `openvla-oft-rlinf-libero-90` | — | — |
-| SimplerEnv WidowX（GR00T recipe） | 7 | `simpler-widowx-native` | — | 实测 `groot-n17-widowx` | — | — | — | — |
-| SimplerEnv Google Robot（GR00T recipe） | 6 | `simpler-google-native` | — | 实测 `groot-n17-google` | — | — | — | — |
-| SimplerEnv Google Robot Prepackaged | 21 | `simpler-google-prepackaged-native` | — | — | — | — | — | — |
-| SimplerEnv WidowX Prepackaged | 7 | `simpler-widowx-prepackaged-native` | — | — | — | — | — | — |
-| SimplerEnv Google Robot Visual Matching | 11 | `simpler-google-visual-matching-native` | — | — | — | — | — | — |
-| SimplerEnv Google Robot Variant Aggregation | 11 | `simpler-google-variant-aggregation-native` | — | — | — | — | — | — |
-| SimplerEnv WidowX Visual Matching | 4 | `simpler-widowx-visual-matching-native` | — | — | — | — | — | — |
-| RoboCasa365 Atomic-Seen | 18 | `robocasa365-atomic-seen-native` / `robocasa365-atomic-seen-gr00t-native` | 实测 `pi05-robocasa365-shared` | — | 实测 `groot-n15-robocasa365-shared` | — | — | — |
-| RoboCasa365 Composite-Seen | 16 | `robocasa365-composite-seen-native` / `robocasa365-composite-seen-gr00t-native` | — | — | — | — | — | — |
-| RoboCasa365 Composite-Unseen | 16 | `robocasa365-composite-unseen-native` / `robocasa365-composite-unseen-gr00t-native` | — | — | — | — | — | — |
-| RoboTwin 2.0 Clean（单任务验收） | 1 | `robotwin-demo-clean-native` | 实测 `pi05-robotwin-adjust-bottle-shared` | — | — | — | — | — |
-| RoboTwin 2.0 Clean | 50 | `robotwin-demo-clean-full-native` | — | — | — | — | — | — |
-| RoboTwin 2.0 Randomized | 50 | `robotwin-demo-randomized-full-native` | — | — | — | — | — | — |
-| ManiSkill3 Plate-25（RLinf） | 1 | `maniskill3-plate25-native` | — | — | — | 实测 `openvla-oft-rlinf-maniskill3` | — | — |
-| Meta-World MT50（RLinf） | 50 | `metaworld-mt50-native` | 实测 `pi05-rlinf-metaworld` | — | — | — | — | — |
+| 环境与套件 | 任务数 | Benchmark 登记 | π₀.₅ | GR00T N1.7 | GR00T N1.5 | OpenVLA-OFT | SmolVLA | MolmoAct2 | X-VLA |
+| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- |
+| LIBERO Spatial `libero_spatial` | 10 | `libero-native` / `libero-oft-native` / `libero-smolvla-native` | 实测 | 实测 `groot-n17-libero` | — | 实测 `openvla-oft-libero-spatial`、`openvla-oft-libero-combined-spatial` | 实测 `smolvla-libero` | — | — |
+| LIBERO Object `libero_object` | 10 | `libero-object-native` / `libero-oft-object-native` | 实测 | 实测 `groot-n17-libero-object` | — | 实测 `openvla-oft-libero-combined-object` | — | — | — |
+| LIBERO Goal `libero_goal` | 10 | `libero-goal-native` / `libero-oft-goal-native` / `libero-goal-molmoact2-native` | 实测 | 实测 `groot-n17-libero-goal` | — | 实测 `openvla-oft-libero-combined-goal` | — | 实测 `molmoact2-libero` | — |
+| LIBERO Long `libero_10` | 10 | `libero-long-native` / `libero-oft-long-native` | 实测 | 实测 `groot-n17-libero-long` | — | 实测 `openvla-oft-libero-combined-long` | — | — | — |
+| LIBERO-90 `libero_90` | 90 | `libero-90-native` / `libero-oft-90-native` | — | — | — | 实测 `openvla-oft-rlinf-libero-90` | — | — | — |
+| SimplerEnv WidowX（GR00T recipe） | 7 | `simpler-widowx-native` | — | 实测 `groot-n17-widowx` | — | — | — | — | — |
+| SimplerEnv Google Robot（GR00T recipe） | 6 | `simpler-google-native` | — | 实测 `groot-n17-google` | — | — | — | — | — |
+| SimplerEnv Google Robot Prepackaged | 21 | `simpler-google-prepackaged-native` | — | — | — | — | — | — | — |
+| SimplerEnv WidowX Prepackaged | 7 | `simpler-widowx-prepackaged-native` | — | — | — | — | — | — | — |
+| SimplerEnv Google Robot Visual Matching | 11 | `simpler-google-visual-matching-native` | — | — | — | — | — | — | — |
+| SimplerEnv Google Robot Variant Aggregation | 11 | `simpler-google-variant-aggregation-native` | — | — | — | — | — | — | — |
+| SimplerEnv WidowX Visual Matching | 4 | `simpler-widowx-visual-matching-native` | — | — | — | — | — | — | — |
+| RoboCasa365 Atomic-Seen | 18 | `robocasa365-atomic-seen-native` / `robocasa365-atomic-seen-gr00t-native` | 实测 `pi05-robocasa365-shared` | — | 实测 `groot-n15-robocasa365-shared` | — | — | — | — |
+| RoboCasa365 Composite-Seen | 16 | `robocasa365-composite-seen-native` / `robocasa365-composite-seen-gr00t-native` | — | — | — | — | — | — | — |
+| RoboCasa365 Composite-Unseen | 16 | `robocasa365-composite-unseen-native` / `robocasa365-composite-unseen-gr00t-native` | — | — | — | — | — | — | — |
+| RoboTwin 2.0 Clean（单任务验收） | 1 | `robotwin-demo-clean-native` | 实测 `pi05-robotwin-adjust-bottle-shared` | — | — | — | — | — | — |
+| RoboTwin 2.0 Clean | 50 | `robotwin-demo-clean-full-native` | — | — | — | — | — | — | — |
+| RoboTwin 2.0 Randomized | 50 | `robotwin-demo-randomized-full-native` | — | — | — | — | — | — | — |
+| ManiSkill3 Plate-25（RLinf） | 1 | `maniskill3-plate25-native` | — | — | — | 实测 `openvla-oft-rlinf-maniskill3` | — | — | — |
+| Meta-World MT50（RLinf） | 50 | `metaworld-mt50-native` | 实测 `pi05-rlinf-metaworld` | — | — | — | — | — | — |
+| RoboTwin 2.0 Clean（末端位姿） | 50 | `robotwin-demo-clean-cartesian-native` | — | — | — | — | — | — | 实测 `xvla-robotwin2` |
+| CALVIN ABC→D | 1（1,000 条序列） | `calvin-abc-d-native` | 实测 `pi05-rlinf-calvin-abc-d` | — | — | — | — | — | — |
 
 π₀.₅ 的四个已实测 LIBERO 套件共用官方 `pi05_libero` 权重，Policy 登记为 `pi05-libero`，共享 GPU 配置登记为 `pi05-libero-shared`。RoboCasa365 使用自己的公开 π₀.₅ 权重。GR00T 的 LIBERO 权重按 suite 子目录选择，WidowX 用 Bridge，Google Robot 用 Fractal，三条路径共用固定 backbone 缓存。OFT 的 Spatial 专用权重和四套件联合权重分别有实测记录。联合权重按 suite 选择 `<suite>_no_noops`，Long 对应 `libero_10_no_noops`。[LIBERO 套件选择](libero-suites.md) · [RoboCasa365 配置](../../examples/bench-adapters/embodied/ROBOCASA365.md) · [GR00T 配置](../../examples/bench-adapters/embodied/GR00T.md) · [OFT 模型配置](../../examples/bench-adapters/embodied/profiles/openvla-model.json)
 
@@ -42,8 +44,10 @@ LIBERO 提供 OpenPI 和 OFT 两类原生登记。已验收的 π₀.₅ 和 GR0
 | RoboCasa365 OpenPI | RoboCasa 1.0.0，`pretrain` 或 `target` 场景的独立种子，20 Hz，每 5 步重规划，原生成功时停止 | EGL，可显式共享主角色 GPU |
 | RoboCasa365 GR00T N1.5 | RoboCasa 1.0.1，`pretrain` 或 `target` 场景的独立种子，20 Hz，每 16 步重规划，按动作段末尾的成功信号计分 | EGL，可显式共享主角色 GPU |
 | RoboTwin 2.0 Clean / Randomized | Aloha-AgileX，按上游候选流筛选专家通过种子，按任务使用原生控制上限 | SAPIEN Vulkan 光追，Randomized 使用上游评测贴图 |
+| RoboTwin 2.0 Clean 末端位姿 | Aloha-AgileX 双臂末端控制，最多 10 个 30 步动作块，并遵守原生任务上限 | SAPIEN Vulkan 光追 |
 | ManiSkill3 Plate-25 | WidowX，640×480 前相机，7 维目标增量，每 8 步重规划，最多 80 步 | SAPIEN Vulkan 与 GPU PhysX |
 | Meta-World MT50 | Sawyer，480×480 相机和 4 维末端状态，15 步 settle，每 5 步重规划，最多 160 步 | MuJoCo EGL |
+| CALVIN ABC→D | 场景 D 五指令序列，每条指令最多 480 步，在指令完成时立即重规划 | PyBullet EGL |
 
 LIBERO 的 horizon 按 Spatial、Object、Goal、Long、LIBERO-90 分别为 220、280、300、520、400。各套件的渲染配置以作业快照为准。[LIBERO 套件条件](libero-suites.md) · [WidowX recipe](../../examples/bench-adapters/embodied/profiles/groot-widowx.json) · [Google Robot recipe](../../examples/bench-adapters/embodied/profiles/groot-google.json)
 
@@ -71,4 +75,6 @@ RoboCasa365 的 `target50` 登记汇总三个任务组。场景划分独立于�
 | MolmoAct2 × LIBERO Goal | 同一原生任务的两个冻结初态通过共享批次、独立 CPU 验证和选定样本重评。[接入验收](../tasks/20261108-embodied-native-expansion.md) |
 | ManiSkill3 Plate-25 | 原生场景通过断网 GPU 重置、渲染及控制检查。RLinf OFT 的两个冻结初态通过共享批次、独立 CPU 验证及重评。[接入验收](../tasks/20261108-embodied-native-expansion.md) |
 | Meta-World MT50 | 50 个任务通过原生重置、渲染及控制步检查。RLinf π₀.₅ 在两个冻结任务上通过真实批次、独立 CPU 验证及重评。[接入验收](../tasks/20261108-embodied-native-expansion.md) |
+| X-VLA × RoboTwin 2.0 Clean | 两个专家通过场景完成真实批次、独立 CPU 验证和重评。[接入验收](../tasks/20261108-embodied-calvin-xvla.md) |
+| CALVIN ABC→D | 冻结目录包含 1,000 条原生指令序列。两个样本通过真实 π₀.₅ 批次、逐段计分、独立 CPU 验证和重评。[接入验收](../tasks/20261108-embodied-calvin-xvla.md) |
 | 完整套件统计等价 | `not_run`。现有记录覆盖原生任务目录检查、真实抽样和指定条件下的参考对照。 |
