@@ -160,3 +160,8 @@ Generate a sample plan with the new `reference.json` and the Clean seed search a
 orbit bench calibrate robotwin-demo-clean-cartesian-native --policy xvla-robotwin2 \
   --sample-plan "$ROBOTWIN_CONFIG/samples.json" --budget 20 --json
 ```
+
+For Randomized, pass `--suite demo_randomized` and the complete Randomized assets to
+`configure_xvla.py`. Register the assets as `robotwin-demo-randomized-full-assets` and use the
+Randomized expert seed search for `robotwin-demo-randomized-cartesian-native`.
+The same X-VLA policy registration can bind to either suite.

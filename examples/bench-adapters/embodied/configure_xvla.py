@@ -1,4 +1,4 @@
-"""Generate the RoboTwin Clean Cartesian benchmark and X-VLA policy registrations."""
+"""Generate a RoboTwin Cartesian benchmark and the X-VLA policy registration."""
 
 import argparse
 import json
@@ -19,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--robotwin-source", type=Path, required=True)
     parser.add_argument("--xvla-source", type=Path, required=True)
+    parser.add_argument("--suite", choices=("demo_clean", "demo_randomized"), default="demo_clean")
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--weights", type=Path, required=True)
     parser.add_argument("--benchmark-image", required=True)
@@ -30,7 +31,7 @@ def main():
     if subprocess.check_output(source + ["rev-parse", "HEAD"], text=True).strip() != XVLA_REVISION:
         raise ValueError("expected the pinned X-VLA reference checkout")
     subprocess.run(source + ["diff", "--quiet", "HEAD", "--", *files], check=True)
-    args.suite = "demo_clean"
+    suite = args.suite.replace("_", "-")
     reference = json.loads((HERE / "profiles/robotwin-demo-clean.json").read_text())
     benchmark = configure_benchmark(args, reference)
     environment = reference["environment"]
@@ -54,10 +55,11 @@ def main():
     observations = {name: field for name, field in profile["observations"].items() if name != "joint_state"}
     reference["policyProfile"] = {**profile, "id": "xvla-robotwin-input/1", "observations": observations}
     reference["observationMap"] = {name: name for name in observations}
-    reference["id"] = "robotwin-2.0-demo-clean-cartesian/2"
+    reference["id"] = f"robotwin-2.0-{suite}-cartesian/2"
     reference["parameters"]["replanSteps"] = CHUNK_SIZE
+    scenario = "Clean" if args.suite == "demo_clean" else "Randomized"
     reference["randomness"] = {
-        "referenceEnvironment": "Native RoboTwin Clean with frozen expert-accepted seeds and task-name instructions.",
+        "referenceEnvironment": f"Native RoboTwin {scenario} with frozen expert-accepted seeds and task-name instructions.",
         "referencePolicy": "X-VLA domain 6 with Torch seed 0 per service.",
         "comparison": "The released client executes up to ten 30-action chunks.",
     }
@@ -65,7 +67,7 @@ def main():
         "repository": "https://github.com/2toinf/X-VLA", "commit": XVLA_REVISION,
         "files": {name: file_digest(args.xvla_source / name) for name in files},
     }
-    benchmark["name"] = "robotwin-demo-clean-cartesian-native"
+    benchmark["name"] = f"robotwin-{suite}-cartesian-native"
     benchmark["config"].update(reference=json.dumps(reference), profileDigest=digest(reference))
     checkpoint, normalization = tree_digest(args.weights), normalization_digest(args.weights)
     name = "xvla-robotwin2"
