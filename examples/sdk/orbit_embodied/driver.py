@@ -44,7 +44,7 @@ class StepResult:
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity,
-                *, cancelled=None, deadline=None, seal_before_media=False):
+                *, prepare=None, cancelled=None, deadline=None, seal_before_media=False):
     check_sample(sample, sample["sampleId"])
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
@@ -91,6 +91,9 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     try:
         with (directory / "actions.jsonl").open("w", encoding="utf-8") as log:
             check_control()
+            if prepare is not None:
+                prepare()
+                check_control()
             observation = benchmark.reset(sample)
             write_json(directory / "initial-state.json", {"sampleRef": sample_ref,
                        "state": benchmark.state(observation),

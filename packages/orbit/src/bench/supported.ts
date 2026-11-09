@@ -540,6 +540,25 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     suites: ["Spatial", "Object", "Goal", "Long", "LIBERO-90"],
   },
   {
+    id: "libero-plus",
+    name: "LIBERO-Plus",
+    description:
+      "Measure manipulation robustness across 10,030 variants and seven perturbation categories.",
+    taxonomyGroups: [group("LIBERO robustness", native)],
+    integrations: [
+      nativeRoute(
+        "Four native suites, with one official initial state per perturbation variant.",
+        "examples/bench-adapters/embodied/LIBERO-PLUS.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "The full reset catalog was checked. Native samples span all seven perturbations, and two OFT episodes passed.",
+      nativeDocs,
+    ),
+    suites: ["Spatial", "Object", "Goal", "Long"],
+  },
+  {
     id: "simpler-env",
     name: "SimplerEnv",
     description:
@@ -665,6 +684,7 @@ const SUPPORTED = definitions.map((entry) =>
 const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
+  "libero-plus-panda-raw/1": "libero-plus",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
   "robocasa365-panda-omron-native/1": "robocasa365",

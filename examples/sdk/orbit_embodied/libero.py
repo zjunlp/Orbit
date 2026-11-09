@@ -8,6 +8,7 @@ import numpy as np
 from .driver import StepResult
 from .evidence import file_digest
 from .libero_suites import HORIZONS
+from .libero_plus import NATIVE_ROOT, classifications, initial_state_path
 
 
 VIDEO_FPS = 10
@@ -56,25 +57,32 @@ class LiberoBenchmark:
         return {name: np.asarray(observation[name]).tolist()
                 for name in ("eef_position", "eef_quaternion", "gripper_position")}
 
+    def initial_state_file(self, root):
+        return root / self.task.problem_folder / self.task.init_states_file
+
+    def initial_state(self, sample, initial_states):
+        index = int(sample["initialStateId"])
+        if not 0 <= index < len(initial_states):
+            raise ValueError("initial-state index is outside the official asset")
+        return initial_states[index]
+
     def reset(self, sample):
         from libero.libero import get_libero_path
         from libero.libero.envs import OffScreenRenderEnv
 
         if sample["taskId"] != self.suite_name + ":" + self.task.name:
             raise ValueError("sample task does not match the selected LIBERO task")
-        initial_file = Path(get_libero_path("init_states")) / self.task.problem_folder / self.task.init_states_file
+        initial_file = self.initial_state_file(Path(get_libero_path("init_states")))
         if file_digest(initial_file) != sample["initialStateDigest"]:
             raise ValueError("initial-state asset differs from the frozen plan")
         initial_states = self.suite.get_task_init_states(self.task_index)
-        index = int(sample["initialStateId"])
-        if not 0 <= index < len(initial_states):
-            raise ValueError("initial-state index is outside the official asset")
+        initial_state = self.initial_state(sample, initial_states)
         np.random.seed(sample["environmentSeed"])
         bddl = Path(get_libero_path("bddl_files")) / self.task.problem_folder / self.task.bddl_file
         self.env = OffScreenRenderEnv(bddl_file_name=str(bddl), camera_heights=256, camera_widths=256)
         self.env.seed(sample["environmentSeed"])
         self.env.reset()
-        raw = self.env.set_init_state(initial_states[index])
+        raw = self.env.set_init_state(initial_state)
         self.reset_actions = []
         for step in range(self.settle_steps):
             action = [0.0] * 6 + [-1.0]
@@ -97,3 +105,22 @@ class LiberoBenchmark:
     def close(self):
         if self.env is not None:
             self.env.close()
+
+
+class LiberoPlusBenchmark(LiberoBenchmark):
+    def initial_state_file(self, root):
+        if root.resolve() != (Path(NATIVE_ROOT) / "init_files").resolve():
+            raise ValueError("LIBERO-Plus must run against its own native simulator checkout")
+        return initial_state_path(root, self.suite_name, self.task.name)
+
+    def initial_state(self, sample, initial_states):
+        if sample["initialStateId"] != "0":
+            raise ValueError("LIBERO-Plus uses exactly one trial per perturbation")
+        return super().initial_state(sample, initial_states)
+
+    def result(self):
+        row = classifications(Path(NATIVE_ROOT), self.suite_name)[self.task_index]
+        if row["name"] != self.task.name:
+            raise ValueError("LIBERO-Plus classification differs from the native task")
+        return {**super().result(), "source": "LIBERO-Plus OffScreenRenderEnv.step.done",
+                "perturbation": row["category"], "difficulty": row["difficulty_level"]}

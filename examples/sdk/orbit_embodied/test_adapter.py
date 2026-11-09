@@ -47,6 +47,45 @@ class AdapterPlanningTests(unittest.TestCase):
         spec["tags"].update(embodied_evidence="3", execution_batch=plan["id"], batch_attempt=plan["attemptId"])
         return request
 
+    def test_solve_checks_the_mounted_simulator_assets_once_before_execution(self):
+        for operation in ("solve", "batch"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                staging = adapter.stage({"trial": {"staging": str(root / "stage")}})
+                spec = importlib.util.spec_from_file_location("staged_run", staging / "run.py")
+                run = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(run)
+                assets = root / "assets"
+                assets.mkdir()
+                asset = assets / "texture"
+                asset.write_bytes(b"frozen texture")
+                checksum = run.tree_digest(assets)
+                episode = {"reference": {"environment": {"kind": "libero-plus", "assets": {
+                    "target": str(assets), "digest": checksum,
+                }}}, "implementationDigest": "driver"}
+                payload = episode if operation == "solve" else {"plan": {}, "episodes": [episode, episode]}
+                request = root / "request.json"
+                write_json(request, payload)
+                def prepare_only(request, destination, *, prepare):
+                    prepare()
+
+                def batch_prepare_only(plan, episodes, output, execute):
+                    for episode in episodes:
+                        execute(episode, output)
+
+                with patch.dict(run.SIMULATOR_ASSET_ROOTS, {"libero-plus": str(assets)}), \
+                        patch.object(run, "archive_implementation", return_value="driver"), \
+                        patch.object(run, "tree_digest", wraps=run.tree_digest) as measure, \
+                        patch.object(run, "execute_episode", side_effect=prepare_only), \
+                        patch("orbit_embodied.batch.run_batch", side_effect=batch_prepare_only):
+                    argv = [operation, str(request), str(root / "output")]
+                    run.main(argv)
+                    measure.assert_called_once_with(str(assets))
+                    asset.write_bytes(b"changed texture")
+                    with self.assertRaisesRegex(ValueError, "mounted simulator asset digest mismatch"):
+                        run.main(argv)
+                    self.assertEqual(measure.call_count, 2)
+
     def test_versioned_evidence_cannot_skip_the_solve_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

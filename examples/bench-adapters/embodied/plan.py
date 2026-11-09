@@ -9,6 +9,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "sdk"))
 from orbit_embodied import digest
 from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, seed_asset
+from orbit_embodied.libero_plus import catalog as libero_plus_catalog
 from orbit_embodied.simpler import initial_state_count
 from adapter import catalog
 
@@ -43,11 +44,22 @@ def main():
         tasks = {task: {"tags": {"initialStateDigest": seed_asset(reference, task)}}
                  for task in environment["tasks"]}
     else:
-        tasks = {task["id"]: task for task in catalog(args.reference_source, args.suite)}
+        if kind == "libero-plus":
+            if args.suite != environment["suite"]:
+                parser.error("--suite must match the registered LIBERO-Plus suite")
+            listing = libero_plus_catalog(args.reference_source, args.suite)
+        else:
+            listing = catalog(args.reference_source, args.suite)
+        tasks = {task["id"]: task for task in listing if task["supported"]}
     items = []
     for task_id in tasks if args.all_tasks else args.task:
         task = tasks[task_id]
-        count = len(environment["catalog"]["sequences"]) if kind == "calvin" else initial_state_count(environment, task_id)
+        if kind == "calvin":
+            count = len(environment["catalog"]["sequences"])
+        elif kind == "libero-plus":
+            count = int(task["tags"]["initialStateCount"])
+        else:
+            count = initial_state_count(environment, task_id)
         if args.all_initial_states and count is None:
             parser.error("--all-initial-states requires a fixed native catalog")
         selected = range(count) if args.all_initial_states else args.initial_state

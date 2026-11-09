@@ -152,6 +152,22 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(self.verify()["valid"])
         self.assertTrue(np.isnan(np.load(self.output / "chunks/0.npy", allow_pickle=False)).all())
 
+    def test_asset_preflight_failure_is_sealed_as_reset_failure(self):
+        class UnstartedBenchmark(SyntheticBenchmark):
+            def reset(self, sample):
+                raise AssertionError("asset preflight should fail first")
+
+        def prepare():
+            raise ValueError("mounted simulator asset digest mismatch")
+
+        result = run_episode(UnstartedBenchmark(), SyntheticPolicy(), self.sample, self.binding,
+                             self.output, "synthetic-trial.attempt", {"fixture": True}, prepare=prepare)
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["failure"], "reset_failed")
+        self.assertEqual(result["steps"], 0)
+        self.assertEqual(result["issues"], ["mounted simulator asset digest mismatch"])
+        self.assertEqual(self.verify(), result)
+
     def test_completed_actions_survive_later_environment_failure(self):
         result = self.run_sample(SyntheticBenchmark(fail_at=3), SyntheticPolicy())
         self.assertEqual(result["failure"], "env_step")
