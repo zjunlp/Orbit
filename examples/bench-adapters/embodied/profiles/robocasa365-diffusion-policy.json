@@ -1,0 +1,28 @@
+{
+  "source": {
+    "repository": "https://github.com/robocasa-benchmark/diffusion_policy.git",
+    "commit": "da6996f475572a3e37da16fef27b375732a612b4",
+    "files": {
+      "eval_robocasa.py": "sha256:45e3acf12acb85bfee25ec9ebf755f969a526e40f52669fa8cc10d60c2f807ad",
+      "diffusion_policy/env_runner/robomimic_image_runner.py": "sha256:d3cb68ba936ae8716c694fcef8869c17de39b87840f126fc690bcaf48367b31a",
+      "diffusion_policy/gym_util/multistep_wrapper.py": "sha256:2923e73c13ff9f782451ab61bed43a802670bbf29419471f82878c690f26a342",
+      "diffusion_policy/env/robomimic/robomimic_image_wrapper.py": "sha256:792bd8757cfbce8b9c8bee6fa691f9e2a8e3d5357c90d58d2365a571d0de1dc2",
+      "diffusion_policy/policy/diffusion_transformer_hybrid_image_policy.py": "sha256:98b03467d779c68d007ea1633925c1fbf2551b9e3c1f18e14f373dee224ff958"
+    }
+  },
+  "robomimic": {
+    "repository": "https://github.com/ARISE-Initiative/robomimic.git",
+    "commit": "271a76c2d55c8b0f94d3d589f26fcae0d47f64a1",
+    "files": {
+      "robomimic/utils/lang_utils.py": "sha256:d8c5723b664dcc27202480c685bfafdcd1358d7b5c21bbc30d1695e7fdbef51a",
+      "robomimic/utils/obs_utils.py": "sha256:028830612574609e5b7e4a0b0fbd7397008fd130fea0f22e3a4f8e687406486f",
+      "robomimic/models/base_nets.py": "sha256:3d244c4b42f1bb5442eb63c00319461432c9e035a2221b6e145256e107fe955d",
+      "robomimic/models/obs_core.py": "sha256:cf0c8e2f215729a56a8bf8642ea914014ed45593922c8001fd433b100784ef7d"
+    }
+  },
+  "checkpointFile": "epoch-0500.ckpt",
+  "checkpointDigest": "sha256:e19011f1db25ca75d5047b5b0ab749592d48005e7222c542faadc0c6df88424c",
+  "normalizationDigest": "sha256:34087cdd427849b464a22d6677804d499fd9cf4e674bc50e9e158dbad6c60a5d",
+  "backboneDigest": "sha256:0ae12eaa16a198d655a3620bd2e084423b22b85deacb04a5339c800c43dad25d",
+  "randomness": { "backend": "torch", "initialSeed": 0, "scope": "service" }
+}

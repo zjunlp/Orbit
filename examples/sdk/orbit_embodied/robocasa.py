@@ -1,13 +1,13 @@
-"""RoboCasa365 native PandaOmron episodes using the pinned OpenPI evaluation recipe."""
+"""RoboCasa365 native PandaOmron episodes and their evaluation protocols."""
 
 from functools import lru_cache
-import math
 import os
 import shutil
 
 import numpy as np
 
 from .assets import tree_digest
+from .binding import robocasa_horizon
 from .driver import StepResult
 from .gym import GymBenchmark
 
@@ -35,8 +35,7 @@ class RoboCasaBenchmark(GymBenchmark):
         import gymnasium
         from robocasa.utils.dataset_registry_utils import get_task_horizon
 
-        scale = config.get("horizonScale", 1.5)
-        if math.ceil(get_task_horizon(self.task.split("/", 1)[1]) * scale) != self.horizon:
+        if robocasa_horizon(get_task_horizon(self.task.split("/", 1)[1]), config) != self.horizon:
             raise ValueError("RoboCasa task horizon differs from the frozen reference")
         np.random.seed(seed)
         self.env = gymnasium.make(self.task, split=config["split"], seed=seed)
@@ -67,12 +66,16 @@ class RoboCasaBenchmark(GymBenchmark):
         finally:
             del native.reset
 
-    def step(self, action):
+    def step_native_env(self, action):
         from robocasa.utils.env_utils import convert_action
 
-        raw, reward, done, _, info = self.env.step(convert_action(action))
-        native_success = bool(info["success"])
+        result = self.env.step(convert_action(action))
         self.steps += 1
+        return result
+
+    def step(self, action):
+        raw, reward, done, _, info = self.step_native_env(action)
+        native_success = bool(info["success"])
         parameters = self.reference["parameters"]
         if parameters.get("successRule") == "chunk-last-any":
             terminated = bool(done or self.steps == self.horizon)
@@ -82,3 +85,39 @@ class RoboCasaBenchmark(GymBenchmark):
             self.success = terminated = native_success
         return StepResult(self.observation(raw), float(reward), terminated,
                           native_success, native_action=self.native_action)
+
+
+class RoboCasaDiffusionBenchmark(RoboCasaBenchmark):
+    def reset(self, sample):
+        self.previous_observation = {}
+        self.previous_success = False
+        return super().reset(sample)
+
+    def observation(self, raw):
+        current = super().observation(raw)
+        history = {}
+        for name, value in current.items():
+            if isinstance(value, str):
+                history[name] = self.previous_observation.setdefault(name, value)
+            else:
+                history[name] = np.stack((self.previous_observation.get(name, value), value))
+                self.previous_observation[name] = history[name][-1].copy()
+        return history
+
+    def step(self, action):
+        raw, reward, done, _, info = self.step_native_env(action)
+        native_success = bool(info["success"])
+        self.success |= native_success
+        # The upstream runner reads info["success"][0] from the last two control steps.
+        chunk_end = self.steps % self.reference["parameters"]["replanSteps"] == 0
+        terminated = bool(done or self.steps == self.horizon or (chunk_end and self.previous_success))
+        self.previous_success = native_success
+        return StepResult(self.observation(raw), float(reward), terminated, native_success,
+                          native_action=self.native_action, native_done=bool(done))
+
+    @staticmethod
+    def state(observation):
+        return {name: value[-1].tolist() for name, value in observation.items() if name.startswith("state.")}
+
+    def record_frame(self, observation):
+        self.video.append_data(observation["video.robot0_agentview_right"][-1])

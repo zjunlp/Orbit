@@ -179,7 +179,7 @@ def solve_one(req):
                      "resources": resources,
                      **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") == "robotwin" else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
-                     "tags": {"embodied_evidence": "2"},
+                     "tags": {"embodied_evidence": "4" if environment.get("protocol") == "diffusion-policy" else "2"},
                      "mounts": mounts}}
 
 
@@ -213,7 +213,9 @@ def solve(req):
     (destination / "batch-request.json").write_text(json.dumps({"plan": plan, "episodes": payloads}, allow_nan=False))
     reply["spec"]["command"] = ["/orbit-embodied/run.py", "batch", "/orbit-embodied/batch-request.json", "/orbit/output"]
     reply["spec"]["timeoutMin"] = sum(payload["timeoutMin"] for payload in payloads)
-    reply["spec"]["tags"]["embodied_evidence"] = "3"
+    tags = reply["spec"]["tags"]
+    if tags["embodied_evidence"] == "2":
+        tags["embodied_evidence"] = "3"
     return reply
 
 
@@ -248,7 +250,9 @@ def verification_expectation(req):
     if not execution_trial or not trial.get("binding") or not trial["method"].get("policySnapshot"):
         raise ValueError("missing frozen verification context")
     version = int(tags.get("embodied_evidence", "1"))
-    if version not in (1, 2, 3) or bool(batch) != (version == 3):
+    legacy = version in (1, 2, 3) and bool(batch) == (version == 3)
+    native_done = version == 4 and reference.get("environment", {}).get("protocol") == "diffusion-policy"
+    if not (legacy or native_done):
         raise ValueError("unsupported embodied evidence version")
     return {"version": 1, "trialId": trial["id"], "sample": trial["sample"],
             "binding": trial["binding"], "policy": trial["method"]["policySnapshot"],

@@ -96,10 +96,14 @@ def main(argv):
         result = json.loads((Path(directory) / "native-result.json").read_text())
         reading_seconds = time.monotonic() - started
         write_json(destination, verify_episode(directory, sample_ref, result["episodeId"], expected))
+        environment = expected["reference"].get("environment", {})
+        stopping = {}
+        if environment.get("protocol") == "diffusion-policy":
+            stopping["diffusionStoppingVerified"] = result["valid"] and expected["evidenceVersion"] == 4
         write_json(Path(destination).with_name("verification.json"), {"sampleRef": sample_ref,
                    "episodeId": result["episodeId"], "implementationDigest": verifier_digest,
                    "solveRunId": expected["solveRunId"], "trialId": expected["trialId"],
-                   "expectationDigest": digest(expected),
+                   "expectationDigest": digest(expected), **stopping,
                    "timing": {"readAndArchiveSeconds": reading_seconds,
                               "verifySeconds": time.monotonic() - started - reading_seconds,
                               "totalSeconds": time.monotonic() - started}})
@@ -139,8 +143,9 @@ def execute_episode(request, destination, cancelled=None):
         native = SimplerPolicyTerminationBenchmark if reference["environment"].get("policyTermination") else GymBenchmark
         benchmark = native(reference, sample["taskId"])
     elif kind == "robocasa365":
-        from orbit_embodied.robocasa import RoboCasaBenchmark
-        benchmark = RoboCasaBenchmark(reference, sample["taskId"])
+        from orbit_embodied.robocasa import RoboCasaBenchmark, RoboCasaDiffusionBenchmark
+        native = RoboCasaDiffusionBenchmark if reference["environment"].get("protocol") == "diffusion-policy" else RoboCasaBenchmark
+        benchmark = native(reference, sample["taskId"])
     elif kind == "robotwin":
         from orbit_embodied.robotwin import RoboTwinBenchmark, RoboTwinCartesianBenchmark
         native = RoboTwinCartesianBenchmark if reference["environment"].get("controller") == "ee" else RoboTwinBenchmark

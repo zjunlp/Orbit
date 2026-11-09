@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
@@ -42,6 +43,11 @@ def reference_horizon(reference, task):
     if "horizons" in environment:
         return environment["horizons"][task]
     return environment.get("horizon", reference.get("horizons", {}).get(task.split(":")[0]))
+
+
+def robocasa_horizon(horizon, environment):
+    scaled = horizon * environment.get("horizonScale", 1.5)
+    return int(scaled) if environment.get("protocol") == "diffusion-policy" else math.ceil(scaled)
 
 
 def resolve_binding(benchmark, policy, observation_map):

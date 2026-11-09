@@ -72,6 +72,25 @@ def verify_simpler_termination(controls, initial, horizon):
         raise ValueError("SimplerEnv episode ended before the horizon without termination")
 
 
+def verify_diffusion_stopping(controls, horizon, replan_steps):
+    previous_success = False
+    for index, row in enumerate(controls):
+        chunk, offset = divmod(index, replan_steps)
+        if row["chunk"] != chunk or row["chunkIndex"] != offset:
+            raise ValueError("Diffusion Policy control evidence differs from the fixed chunk schedule")
+        native_done = row.get("nativeDone")
+        if not isinstance(native_done, bool):
+            raise ValueError("Diffusion Policy control evidence lacks the native done signal")
+        reward = row["reward"]
+        if type(reward) not in (int, float) or reward not in (0, 1) or row["nativeSuccess"] is not (reward > 0):
+            raise ValueError("Diffusion Policy success differs from the native sparse reward")
+        step = index + 1
+        stopped = native_done or step == horizon or (offset + 1 == replan_steps and previous_success)
+        if row["terminated"] is not stopped or stopped != (step == len(controls)):
+            raise ValueError("Diffusion Policy stopping point differs from the native protocol")
+        previous_success = row["nativeSuccess"]
+
+
 def verify_episode(directory, sample_ref, episode_id, expected=None):
     directory = Path(directory).resolve()
     manifest = json.loads((directory / "evidence-manifest.json").read_text())
@@ -110,7 +129,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
             raise ValueError("episode attempt belongs to another execution trial")
         execution = {"runId": expected["solveRunId"], "trialId": expected["executionTrialId"]}
         if expected["evidenceVersion"] >= 2 or "execution" in identity:
-            if contract.get("version") != 2 or identity.get("execution") != execution:
+            version = 3 if expected["evidenceVersion"] == 4 else 2
+            if contract.get("version") != version or identity.get("execution") != execution:
                 raise ValueError("evidence belongs to another solve Run or execution trial")
     if digest({k: v for k, v in binding.items() if k != "digest"}) != binding["digest"]:
         raise ValueError("resolved binding digest mismatch")
@@ -192,6 +212,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         verify_calvin_sequence(reference, contract["sample"], controls, result)
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
+    if (result["valid"] and contract.get("version") == 3
+            and reference.get("environment", {}).get("protocol") == "diffusion-policy"):
+        verify_diffusion_stopping(controls, contract["horizon"], contract["replanSteps"])
     # A valid failure ends at the horizon or at a native termination (e.g. Gym truncation).
     if (result["valid"] and not result["success"] and result["steps"] != contract["horizon"]
             and not controls[-1]["terminated"]):

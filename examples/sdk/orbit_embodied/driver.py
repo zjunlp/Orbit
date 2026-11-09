@@ -40,6 +40,7 @@ class StepResult:
     simulation_time: Optional[float] = None
     native_action: Optional[list] = None
     replan: bool = False
+    native_done: Optional[bool] = None
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity,
@@ -52,8 +53,12 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     start = time.monotonic()
     # Seconds from start; the verifier rejects valid results whose control steps end past it.
     budget = None if deadline is None else deadline - start
+    reference = identity.get("reference", {})
+    version = 2 if "execution" in identity else 1
+    if reference.get("environment", {}).get("protocol") == "diffusion-policy":
+        version = 3
     contract = {
-        "version": 2 if "execution" in identity else 1, "sampleRef": sample_ref, "episodeId": episode_id,
+        "version": version, "sampleRef": sample_ref, "episodeId": episode_id,
         "sample": sample, "sampleDigest": digest(sample), "bindingDigest": binding["digest"],
         "horizon": benchmark.horizon, "replanSteps": policy.replan_steps, "identity": identity,
         **({"episodeBudgetSec": budget} if budget is not None else {}),
@@ -155,6 +160,8 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                        "state": benchmark.state(native.observation)}
                 if native.native_action is not None:
                     row["nativeAction"] = native.native_action
+                if native.native_done is not None:
+                    row["nativeDone"] = native.native_done
                 log.write(json.dumps(row, allow_nan=False) + "\n")
                 log.flush()
                 result["steps"] = step + 1

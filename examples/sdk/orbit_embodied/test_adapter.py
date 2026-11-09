@@ -107,6 +107,23 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertEqual(verify["resources"]["gpus"], 0)
             self.assertNotIn("services", verify)
 
+    def test_diffusion_solve_requires_native_done_evidence_with_or_without_batch(self):
+        for batched in (False, True):
+            with self.subTest(batched=batched), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                request = self.batch_request(root) if batched else self.request(root)
+                config = request["benchmark"]["config"]
+                reference = json.loads(config["reference"])
+                reference["environment"] = {"protocol": "diffusion-policy"}
+                config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+                with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                    solve = adapter.solve(request)["spec"]
+                self.assertEqual(solve["tags"]["embodied_evidence"], "4")
+                request["solve"]["run"]["spec"]["tags"]["embodied_evidence"] = "4"
+                expected = adapter.verification_expectation(request)
+                self.assertEqual(expected["evidenceVersion"], 4)
+                self.assertEqual("batch" in expected, batched)
+
     def test_batch_verification_rejects_other_episode_or_attempt(self):
         with tempfile.TemporaryDirectory() as temporary:
             request = self.batch_request(Path(temporary))
