@@ -21,6 +21,7 @@ the published RoboCasa π₀.₅ and GR00T N1.5 checkpoints. [RoboCasa365 setup]
 RoboTwin 2.0 registers all 50 Aloha-AgileX tasks in Clean and Randomized and freezes native
 expert-accepted seeds. The separate `adjust_bottle` registration has a sampled community π₀.₅
 checkpoint. [RoboTwin setup](ROBOTWIN.md)
+X-VLA uses the native RoboTwin Clean scene and its Cartesian controller in a separate registration.
 SmolVLA and MolmoAct2 reuse native LIBERO. ManiSkill3 Plate-25 and Meta-World MT50 use native
 Gymnasium environments and separate OFT and π₀.₅ services. [Setup for all four recipes](NATIVE-EXPANSION.md)
 For new endpoints, see the [onboarding templates](../../../docs/guides/embodied-onboarding.md)

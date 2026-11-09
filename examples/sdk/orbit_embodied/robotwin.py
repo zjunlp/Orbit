@@ -67,6 +67,7 @@ def setup_native_scene(env, seed, args):
 
 class RoboTwinBenchmark:
     action_size = 14
+    action_type = "qpos"
     settle_steps = 0
 
     def __init__(self, reference, task):
@@ -129,21 +130,29 @@ class RoboTwinBenchmark:
             raise ValueError("RoboTwin seed must fit in an unsigned 32-bit integer")
         config = self.reference["environment"]
         args = self._native_args()
-        from generate_episode_instructions import generate_episode_descriptions
-
         self.env, info = self._expert_scene(self.seed, args)
         setup_native_scene(self.env, self.seed, args)
-        if self.env.step_lim != self.horizon:
+        native_limits = config.get("nativeHorizons", {})
+        if self.env.step_lim != native_limits.get(self.task, self.horizon):
             raise ValueError("native RoboTwin control limit differs from the frozen recipe")
+        self.instruction = self._instruction(info)
+        self.env.set_instruction(instruction=self.instruction)
+        return self.observation(self.env.get_obs())
+
+    def _instruction(self, info):
+        config = self.reference["environment"]
+        if config.get("instructionMode") == "task-name":
+            return self.task.replace("_", " ")
+
+        from generate_episode_instructions import generate_episode_descriptions
+
         random_state = random.getstate()
         try:
             random.seed(self.seed)
             descriptions = generate_episode_descriptions(self.task, [info], config["instructionCount"])
-            self.instruction = str(np.random.choice(descriptions[0][config["instructionSplit"]]))
+            return str(np.random.choice(descriptions[0][config["instructionSplit"]]))
         finally:
             random.setstate(random_state)
-        self.env.set_instruction(instruction=self.instruction)
-        return self.observation(self.env.get_obs())
 
     def observation(self, raw):
         return {
@@ -158,7 +167,7 @@ class RoboTwinBenchmark:
 
     def step(self, action):
         previous = self.env.take_action_cnt
-        self.env.take_action(action, action_type="qpos")
+        self.env.take_action(action, action_type=self.action_type)
         if self.env.take_action_cnt != previous + 1:
             raise ValueError("native RoboTwin controller did not execute the requested action")
         success = bool(self.env.eval_success)
@@ -193,3 +202,34 @@ class RoboTwinBenchmark:
         if self.env is not None:
             self.env.close_env()
             self.env = None
+
+
+class RoboTwinCartesianBenchmark(RoboTwinBenchmark):
+    action_size = 16
+    action_type = "ee"
+
+    def reset(self, sample):
+        self.target = None
+        observation = super().reset(sample)
+        self.env.actor_pose = True
+        return observation
+
+    def observation(self, raw):
+        native = super().observation(raw)
+        pose = raw["endpose"]
+        # The X-VLA reference conditions on the last commanded poses and live grippers.
+        left, right = self.target if self.target is not None else (pose["left_endpose"], pose["right_endpose"])
+        native["ee_state"] = np.r_[left, pose["left_gripper"], right, pose["right_gripper"]].astype(np.float64)
+        return native
+
+    def step(self, action):
+        self.target = (action[:7], action[8:15])
+        step = super().step(action)
+        step.terminated = step.terminated or not self.env.actor_pose
+        return step
+
+    def result(self):
+        verdict = super().result()
+        if not self.env.actor_pose and not verdict["success"]:
+            verdict["termination"] = "actor_pose"
+        return verdict

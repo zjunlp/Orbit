@@ -141,8 +141,9 @@ def execute_episode(request, destination, cancelled=None):
         from orbit_embodied.robocasa import RoboCasaBenchmark
         benchmark = RoboCasaBenchmark(reference, sample["taskId"])
     elif kind == "robotwin":
-        from orbit_embodied.robotwin import RoboTwinBenchmark
-        benchmark = RoboTwinBenchmark(reference, sample["taskId"])
+        from orbit_embodied.robotwin import RoboTwinBenchmark, RoboTwinCartesianBenchmark
+        native = RoboTwinCartesianBenchmark if reference["environment"].get("controller") == "ee" else RoboTwinBenchmark
+        benchmark = native(reference, sample["taskId"])
     elif kind in ("maniskill3", "metaworld"):
         from orbit_embodied.tabletop import ManiSkillBenchmark, MetaWorldBenchmark
         native = ManiSkillBenchmark if kind == "maniskill3" else MetaWorldBenchmark

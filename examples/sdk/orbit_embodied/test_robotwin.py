@@ -23,6 +23,19 @@ def reference():
 
 
 class RobotwinTests(unittest.TestCase):
+    def test_task_name_instructions_bypass_episode_descriptions(self):
+        profile = reference()
+        benchmark = RoboTwinBenchmark(profile, "adjust_bottle")
+        benchmark.seed = 1
+        generator = ModuleType("generate_episode_instructions")
+        generator.generate_episode_descriptions = Mock(return_value=[{"unseen": ["Episode instruction"]}])
+        with patch.dict(sys.modules, {generator.__name__: generator}):
+            profile["environment"]["instructionMode"] = "task-name"
+            self.assertEqual(benchmark._instruction({}), "adjust bottle")
+            generator.generate_episode_descriptions.assert_not_called()
+            del profile["environment"]["instructionMode"]
+            self.assertEqual(benchmark._instruction({}), "Episode instruction")
+
     def test_randomized_setups_use_fresh_clutter_bounds(self):
         class NativeEnvironment:
             def __init__(self):

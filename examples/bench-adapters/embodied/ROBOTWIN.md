@@ -121,3 +121,42 @@ policy. Omit `--share-gpu` to use separate GPU roles and the policy name without
   rates of accepted, valid samples. The native board uses 100 accepted samples per task for
   each configuration.
   [Single-task validation](../../../docs/tasks/20261107-robotwin.md) · [Suite validation](../../../docs/tasks/20261108-robotwin-suites.md)
+
+## X-VLA Cartesian evaluation
+
+The [published X-VLA checkpoint](https://huggingface.co/2toINF/X-VLA-RoboTwin2/tree/a157c580cfe6f9f445614490f3bec1b2f9ef9f18)
+uses the native Clean simulator and the Cartesian end-effector controller. The separate
+`robotwin-demo-clean-cartesian-native` registration keeps the expert seed plan, camera images
+and task oracle. It uses the reference client's task-name instruction, such as `adjust bottle`.
+It follows the reference's limit of ten 30-action chunks and the native
+per-task control limit. The service uses domain 6, three cameras, the last commanded poses
+and live grippers. [X-VLA reference](https://github.com/2toinf/X-VLA/tree/6c4ecfb8be458ae7c0c96094e4b0add4174f4fe2/evaluation/robotwin-2.0)
+
+Use the full Clean asset tree, the pinned X-VLA source checkout and the
+[LeRobot policy base](NATIVE-EXPANSION.md#build-images-and-prepare-weights).
+
+```bash
+adapter=examples/bench-adapters/embodied
+docker build --label orbit.task=robotwin --target simulator \
+  --build-arg POLICY_BASE=orbit/embodied-lerobot-policy:0.5.1 \
+  -f "$adapter/xvla-policy.Dockerfile" -t orbit/embodied-robotwin-cartesian:reference .
+docker build --label orbit.task=robotwin --target policy \
+  --build-arg POLICY_BASE=orbit/embodied-lerobot-policy:0.5.1 \
+  -f "$adapter/xvla-policy.Dockerfile" -t orbit/embodied-xvla-policy:reference .
+
+python3 -B "$adapter/configure_xvla.py" --robotwin-source "$ROBOTWIN_SOURCE" --xvla-source "$XVLA_SOURCE" \
+  --assets "$ROBOTWIN_ASSETS" --weights "$XVLA_WEIGHTS" \
+  --benchmark-image orbit/embodied-robotwin-cartesian:reference --policy-image orbit/embodied-xvla-policy:reference \
+  --output-dir "$ROBOTWIN_CONFIG"
+orbit data add robotwin-demo-clean-full-assets "$ROBOTWIN_ASSETS"
+orbit data add xvla-robotwin2 "$XVLA_WEIGHTS"
+orbit policy add "$ROBOTWIN_CONFIG/policy.json"
+orbit bench add-file "$ROBOTWIN_CONFIG/benchmark.json"
+```
+
+Generate a sample plan with the new `reference.json` and the Clean seed search above.
+
+```bash
+orbit bench calibrate robotwin-demo-clean-cartesian-native --policy xvla-robotwin2 \
+  --sample-plan "$ROBOTWIN_CONFIG/samples.json" --budget 20 --json
+```
