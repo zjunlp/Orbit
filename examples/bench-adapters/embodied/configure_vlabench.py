@@ -1,8 +1,9 @@
-"""Generate the native VLABench track registrations."""
+"""Generate the VLABench track registrations and, optionally, the OpenWAM policy."""
 
 import argparse
 import json
 from pathlib import Path
+import subprocess
 
 from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from configure_groot import image_id
@@ -12,10 +13,16 @@ from orbit_embodied.vlabench import ASSETS_ROOT, CAMERAS, OPEN_TRACK, RENDER_SIZ
 
 SOURCE = {"repository": "https://github.com/OpenMOSS/VLABench",
           "commit": "cf588fe60c0c7282174fe979f5913170cfe69017"}
+OPENWAM_SOURCE = "090c4d41668fcb238d77d3d5a2da9183088b119c"
 SOURCE_FILES = ("VLABench/configs/task_config.json", "VLABench/configs/__init__.py",
                 "VLABench/configs/robot_config.json", "VLABench/configs/scene_config.json",
                 "VLABench/evaluation/evaluator/base.py", "VLABench/envs/dm_env.py")
 DATASET = "vlabench-assets"
+POLICY_NAME = "openwam-alpha-sim-vlabench"
+CHECKPOINT = "checkpoint_step_6000.safetensors"
+NORMALIZATION = "normalization_stats.npy"
+TOKENIZER = "tokenizer/google/umt5-xxl/spiece.model"
+RANDOMNESS = {"backend": "stateless", "scope": "stateless"}
 
 
 def profiles():
@@ -35,9 +42,35 @@ def profiles():
               "rotation": "euler-xyz", "gripper": "two-finger-positions-in-metres",
               "order": ["x", "y", "z", "roll", "pitch", "yaw", "left_finger", "right_finger"]}
     benchmark = {"id": "vlabench-franka-ee/1", "observations": observations, "action": action}
-    policy = {**benchmark, "id": "vlabench-policy-input/1",
+    policy = {**benchmark, "id": "openwam-vlabench-input/1",
               "observations": {name: spec for name, spec in observations.items() if name != "left_rgb"}}
     return benchmark, policy
+
+
+def policy_definition(weights, image, profile):
+    for name in (CHECKPOINT, "config.yaml", NORMALIZATION, TOKENIZER):
+        if not (weights / name).is_file():
+            raise ValueError("OpenWAM checkpoint is incomplete: " + name)
+    if any(weights.rglob("*.partial*")):
+        raise ValueError("OpenWAM checkpoint has partial downloads")
+    image = image_id(image)
+    revision = subprocess.check_output(["docker", "image", "inspect", "--format",
+                                        '{{index .Config.Labels "org.opencontainers.image.revision"}}',
+                                        image], text=True).strip()
+    if revision != OPENWAM_SOURCE:
+        raise ValueError("OpenWAM image must be built from the pinned upstream revision")
+    checkpoint, normalization = tree_digest(weights), file_digest(weights / NORMALIZATION)
+    return {"name": POLICY_NAME, "version": "1", "connector": "policy-ws", "replanSteps": 1,
+            "port": 8000, "callTimeoutSec": 300, "randomness": RANDOMNESS, "profile": profile,
+            "checkpointDigest": checkpoint, "normalizationDigest": normalization,
+            "weights": {"dataset": POLICY_NAME, "target": "/weights"},
+            "service": {"name": "policy", "image": image, "gpusOf": "main", "gpus": 0,
+                        "gpuMemGB": 48, "memGB": 64, "cpus": 6,
+                        "command": ["--checkpoint", "/weights", "--checkpoint-digest", checkpoint,
+                                    "--normalization-digest", normalization],
+                        "healthcheck": {"command": ["/opt/venv/bin/python", "/opt/orbit/serve_openwam.py", "--healthcheck"],
+                                        "intervalSec": 5, "timeoutSec": 5, "startPeriodSec": 300, "retries": 90},
+                        }}
 
 
 def main():
@@ -46,7 +79,11 @@ def main():
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--benchmark-image", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--weights", type=Path)
+    parser.add_argument("--policy-image")
     args = parser.parse_args()
+    if bool(args.weights) != bool(args.policy_image):
+        parser.error("--weights and --policy-image must be used together")
     root = args.source.resolve()
     files = {name: file_digest(root / name) for name in SOURCE_FILES}
     check_source(root, SOURCE, files)
@@ -88,6 +125,9 @@ def main():
             (output / filename).write_text(json.dumps(value, indent=2) + "\n")
         scope = str(sum(counts.values())) + " fixed episodes" if counts else "seeded episodes"
         print(f"{name}: {len(tasks)} tasks, {scope}")
+    if args.weights:
+        policy = policy_definition(args.weights, args.policy_image, policy_profile)
+        (args.output_dir / "policy.json").write_text(json.dumps(policy, indent=2) + "\n")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-# Native VLABench
+# Native VLABench and OpenWAM
 
-VLABench is a native MuJoCo / dm_control benchmark. Orbit registers the simulator tracks independently of the policy service. The native policy evaluator uses a Franka arm.
+VLABench is a native MuJoCo / dm_control benchmark. Orbit registers the simulator tracks independently of OpenWAM, whose weights and inference runtime are registered as a policy. The native policy evaluator uses a Franka arm.
 
 | Track | Released tasks | Fixed scenes |
 | --- | ---: | ---: |
@@ -21,30 +21,39 @@ Use VLABench at `cf588fe60c0c7282174fe979f5913170cfe69017` and [rrt-algorithms](
 
 A complete public mirror is available for servers that cannot reach the Drive downloads. Its tar SHA-256 is `d0ed07d35e49cc39e16cbe1982bda326942816b41fdaf776187534f1fdf3e5ff`. Use the mirror's `assets/obj` and `assets/scenes` directories. [VLABench asset mirror](https://huggingface.co/datasets/SeonghoonYu/VLABench_assets/tree/e5793eb9af41483c990534f542a572d0f0f81501)
 
-Build the existing `native-gym.Dockerfile` base as described in [SIMPLER.md](SIMPLER.md) and set `$NATIVE_GYM_BASE` to its image. Set `$VLABENCH_SOURCE`, `$RRT_SOURCE`, and `$LOCAL_CONFIG` to your local directories.
+Build the existing `native-gym.Dockerfile` base as described in [SIMPLER.md](SIMPLER.md) and set `$NATIVE_GYM_BASE` to its image. Set `$VLABENCH_SOURCE`, `$RRT_SOURCE`, and `$LOCAL_CONFIG` to your local directories. To provision OpenWAM too, set `$OPENWAM_SOURCE` to revision `090c4d41668fcb238d77d3d5a2da9183088b119c` and `$OPENWAM_WEIGHTS` to the downloaded VLABench inference checkpoint directory. [OpenWAM reference recipe](https://github.com/OpenWAM-Official/OpenWAM/tree/090c4d41668fcb238d77d3d5a2da9183088b119c/benchmarks/vlabench) · [OpenWAM VLABench weights](https://huggingface.co/OpenWAM/OpenWAM-Alpha-Sim-VLABench/tree/480d3bc77b298434e69400a884a416d7196e677c)
 
 ```bash
 docker build --build-arg BENCHMARK_BASE="$NATIVE_GYM_BASE" \
   --build-context vlabench="$VLABENCH_SOURCE" --build-context rrt="$RRT_SOURCE" \
   -f examples/bench-adapters/embodied/vlabench.Dockerfile -t orbit/vlabench:reference .
 
+docker build --target openwam --build-arg VCS_REF="$(git -C "$OPENWAM_SOURCE" rev-parse HEAD)" \
+  -f "$OPENWAM_SOURCE/docker/Dockerfile" \
+  -t orbit/openwam-upstream:reference "$OPENWAM_SOURCE"
+docker build --build-arg OPENWAM_BASE=orbit/openwam-upstream:reference \
+  -f examples/bench-adapters/embodied/openwam-policy.Dockerfile -t orbit/openwam-policy:reference .
+
 python3 examples/bench-adapters/embodied/configure_vlabench.py --source "$VLABENCH_SOURCE" \
-  --assets "$VLABENCH_ASSETS" --benchmark-image orbit/vlabench:reference --output-dir "$LOCAL_CONFIG"
+  --assets "$VLABENCH_ASSETS" --benchmark-image orbit/vlabench:reference \
+  --weights "$OPENWAM_WEIGHTS" --policy-image orbit/openwam-policy:reference --output-dir "$LOCAL_CONFIG"
 
 orbit data add vlabench-assets "$VLABENCH_ASSETS"
+orbit data add openwam-alpha-sim-vlabench "$OPENWAM_WEIGHTS"
+orbit policy add "$LOCAL_CONFIG/policy.json"
 for track in "$LOCAL_CONFIG"/track-*; do
   orbit bench add-file "$track/benchmark.json"
 done
 ```
 
-Set `$POLICY_NAME` to a registered policy that matches the VLABench semantic profile.
+Omit both policy flags to generate the benchmark registrations separately. OpenWAM uses the reference RGB camera order, base-relative EEF10 proprioception, and the native checkpoint's normalization. The policy converts its physical EEF10 output back to a world-frame target and two finger positions, and VLABench applies its own Franka IK. OpenWAM's action buffer resets between episodes, including episodes in one Orbit solve batch.
 
 ```bash
 python3 examples/bench-adapters/embodied/plan.py --reference-source "$VLABENCH_SOURCE" \
   --reference-file "$LOCAL_CONFIG/track-1/reference.json" --all-tasks --all-initial-states \
   > "$LOCAL_CONFIG/track-1/samples.json"
 orbit bench run vlabench-track-1-native \
-  --method "model=policy,policyRef=$POLICY_NAME" \
+  --method openwam=policy,policyRef=openwam-alpha-sim-vlabench \
   --sample-plan "$LOCAL_CONFIG/track-1/samples.json"
 ```
 
@@ -52,4 +61,4 @@ For a smaller check, use `--task select_fruit --initial-state 0`. Use explicit `
 
 ## Verification
 
-Orbit registered all six tracks and expanded all 2,460 fixed episode configurations. The 96 cross-task IDs matched the live native registry. Thirteen reset, render, and control checks across the six tracks passed, including the two clustering tasks and the weight experiment.
+Orbit registered all six tracks and expanded all 2,460 fixed episode configurations. The 96 cross-task IDs matched the live native registry. Thirteen reset, render, and control checks across the six tracks passed, including the two clustering tasks and the weight experiment. The released OpenWAM checkpoint completed a Track 1 `select_fruit` episode in 139 control steps. The native success, intention and progress scores were all 1, and Orbit verified the saved episode in a separate CPU run.

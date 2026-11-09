@@ -61,7 +61,7 @@ SimplerEnv 的 Google Robot Visual Matching、Variant Aggregation 和 WidowX Vis
 
 RoboCasa365 的 `target50` 登记汇总三个任务组。场景划分独立于任务组，`target` 场景登记带 `-target-native` 后缀。[RoboCasa365 配置](../../examples/bench-adapters/embodied/ROBOCASA365.md)
 
-VLABench 的五条固定轨道共 2,460 个场景，开放跨任务轨道按 96 个原生任务 ID 及用户选择的种子运行。LIBERO-Plus 的 Spatial、Object、Goal、Long 分别有 2,402、2,518、2,591、2,519 个扰动变体，每个变体采用一个原生初始状态，兼容相应套件的 OpenVLA-OFT recipe。[VLABench](../../examples/bench-adapters/embodied/VLABENCH.md) · [LIBERO-Plus](../../examples/bench-adapters/embodied/LIBERO-PLUS.md)
+VLABench 的五条固定轨道共 2,460 个场景，开放跨任务轨道按 96 个原生任务 ID 及用户选择的种子运行。OpenWAM 的公开 VLABench 权重通过独立 Policy 登记。LIBERO-Plus 的 Spatial、Object、Goal、Long 分别有 2,402、2,518、2,591、2,519 个扰动变体，每个变体采用一个原生初始状态，兼容相应套件的 OpenVLA-OFT recipe。[VLABench 与 OpenWAM](../../examples/bench-adapters/embodied/VLABENCH.md) · [LIBERO-Plus](../../examples/bench-adapters/embodied/LIBERO-PLUS.md)
 
 ## 验证依据
 
