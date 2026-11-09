@@ -884,6 +884,9 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   固定任务目录、Lifelong 的阶段及累计套件独立于模型登记，复用每任务的原生步数和判定。
 - **原版 RoboCasa**：v0.2 Atomic-24 固定旧版物体资产和 B 划分，在 PandaOmron 上执行 7 维操作臂动作。
   原生控制器接收补齐后的 12 维动作，按任务注册表设置步数上限，原生成功时提前停止。重评核对动作补零和停止点。[接入说明](../examples/bench-adapters/embodied/ROBOCASA-V02.md)
+- **RLBench**：MT100 的种子场景与 RVT-18 的测试初态独立登记。RVT 保留四路相机、世界坐标点云、原生位姿规划和碰撞标志。
+  CoppeliaSim 使用 Xvfb 和 Mesa GLX，每个 episode 启动独立进程以保持相机输出一致。RVT 规划失败保留原生异常类型，计为有效失败。[接入说明](../examples/bench-adapters/embodied/RLBENCH.md)
+  原版 RoboCasa 和 RLBench 从固定提交导出构建输入，登记时校验构建清单及入口。
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/ROBOTWIN.md)

@@ -12,9 +12,10 @@ import numpy as np
 
 from orbit_embodied import digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.assets import tree_digest
-from orbit_embodied.binding import check_distinct_resets, seed_asset
+from orbit_embodied.binding import check_distinct_resets, file_digest, reset_seed, seed_asset
 from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.gym import GymBenchmark
+from orbit_embodied.rlbench import RLBenchBenchmark, demo_directory
 from orbit_embodied.robocasa import RoboCasaBenchmark, prepare_assets
 from orbit_embodied.tabletop import MetaWorldBenchmark
 
@@ -96,6 +97,58 @@ class GymTests(unittest.TestCase):
             benchmark.reset(sample)
         self.assertEqual(make.call_args.kwargs["seed"], 9)
         env.reset.assert_called_once_with(seed=9)
+
+    def test_rlbench_rvt_planning_failure_keeps_native_diagnostics(self):
+        class ConfigurationPathError(Exception):
+            pass
+
+        class IKError(Exception):
+            pass
+
+        class InvalidActionError(Exception):
+            pass
+
+        reference = {"environment": {"kind": "rlbench", "protocol": "rvt-test", "horizon": 25,
+                                     "tasks": ["open_drawer"], "cameras": []},
+                     "parameters": {"controlHz": 20}}
+        benchmark = RLBenchBenchmark(reference, "open_drawer")
+        benchmark.previous_observation = {"instruction": "open the drawer"}
+        benchmark.task_env = types.SimpleNamespace(step=Mock(side_effect=ConfigurationPathError))
+        modules = {
+            "pyrep.errors": types.SimpleNamespace(ConfigurationPathError=ConfigurationPathError, IKError=IKError),
+            "rlbench.backend.exceptions": types.SimpleNamespace(InvalidActionError=InvalidActionError),
+        }
+        with patch.dict("sys.modules", modules):
+            result = benchmark.step(np.zeros(9))
+            self.assertTrue(result.terminated)
+            self.assertFalse(result.success)
+            self.assertEqual(result.reward, 0)
+            self.assertEqual(benchmark.result()["planningError"], "ConfigurationPathError")
+            benchmark.rvt = False
+            with self.assertRaises(ConfigurationPathError):
+                benchmark.step(np.zeros(8))
+
+    def test_rlbench_rvt_rejects_out_of_range_and_changed_demo(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task = "open_drawer"
+            episode = demo_directory(temporary, task, 0)
+            episode.mkdir(parents=True)
+            data = episode / "low_dim_obs.pkl"
+            data.write_bytes(b"frozen")
+            environment = {"kind": "rlbench", "protocol": "rvt-test", "horizon": 25, "initialStateCount": 25,
+                           "tasks": [task], "cameras": [], "assets": {"target": temporary},
+                           "demoFiles": {task: [{"low_dim_obs.pkl": file_digest(data)}]}}
+            reference = {"environment": environment, "parameters": {"controlHz": 20}}
+            self.assertEqual(reset_seed({"initialStateId": "24", "environmentSeed": 0}, reference), 24)
+            for index, seed in ((25, 0), (-1, 0), (0, 1)):
+                with self.subTest(index=index, seed=seed):
+                    with self.assertRaisesRegex(ValueError, "frozen native initial states"):
+                        reset_seed({"initialStateId": str(index), "environmentSeed": seed}, reference)
+            data.write_bytes(b"changed")
+            with patch("orbit_embodied.rlbench.pickle.load") as load_demo:
+                with self.assertRaisesRegex(ValueError, "differs from the frozen demo"):
+                    RLBenchBenchmark(reference, task).load_demo(0)
+                load_demo.assert_not_called()
 
     def test_robocasa_gr00t_scores_only_chunk_ends_including_the_final_partial_chunk(self):
         reference = copy.deepcopy(REFERENCE)

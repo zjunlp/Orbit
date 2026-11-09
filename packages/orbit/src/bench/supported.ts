@@ -686,6 +686,25 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     suites: ["Plate-25 (RLinf)", "Native tabletop profiles"],
   },
   {
+    id: "rlbench",
+    name: "RLBench",
+    description:
+      "Evaluate Panda manipulation in CoppeliaSim with seeded tasks and fixed test demonstrations.",
+    taxonomyGroups: [group("Native manipulation tasks", native)],
+    integrations: [
+      nativeRoute(
+        "MT100 with seeded variations and a separate RVT 18-task test suite with frozen initial states.",
+        "examples/bench-adapters/embodied/RLBENCH.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "MT100 and RVT both ran with native CPU rendering. A fixed RVT replay matched the upstream environment.",
+      "docs/tasks/20261109-rlbench.md",
+    ),
+    suites: ["MT100", "RVT test (18 tasks)"],
+  },
+  {
     id: "metaworld",
     name: "Meta-World",
     description: "Evaluate Sawyer manipulation across the native MT50 task set.",
@@ -737,6 +756,8 @@ const nativeProfiles: Record<string, string> = {
   "robotwin-aloha-agilex-native/1": "robotwin",
   "robotwin-aloha-agilex-cartesian/1": "robotwin",
   "maniskill3-native/1": "maniskill3",
+  "rlbench-panda-joint-velocity/1": "rlbench",
+  "rlbench-panda-rvt-pose/1": "rlbench",
   "metaworld-native/1": "metaworld",
   "calvin-native/1": "calvin",
 };

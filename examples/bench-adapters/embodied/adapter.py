@@ -63,7 +63,8 @@ def settings(req):
     image = config.get("image", "")
     if not pinned(image):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
-    if config.get("renderer", "osmesa") not in ("osmesa", "egl", "vulkan"):
+    renderers = ("xvfb-glx",) if reference.get("environment", {}).get("kind") == "rlbench" else ("osmesa", "egl", "vulkan")
+    if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
 
@@ -104,7 +105,7 @@ def tasks(req):
                 count = vlabench_state_count(environment, task["id"])
                 if count is not None:
                     task["tags"]["initialStateCount"] = str(count)
-        if kind == "robocasa-v02" and "initialStateCount" in environment:
+        if kind in ("robocasa-v02", "rlbench") and "initialStateCount" in environment:
             for task in listing:
                 task["tags"]["initialStateCount"] = str(environment["initialStateCount"])
     elif kind == "libero-plus":
@@ -130,7 +131,11 @@ def tasks(req):
                     "range": [0, 1]} for category in PERTURBATIONS]
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
-            "capabilities": {"category": "embodied-policy", "embodied": {"profile": reference["id"], "semanticProfile": reference["benchmarkProfile"], "observationMap": reference["observationMap"], "batch": {"maxEpisodes": 128}}, "profiles": ["sim", "sync", "step"],
+            "capabilities": {"category": "embodied-policy", "embodied": {
+                                 "profile": reference["id"], "semanticProfile": reference["benchmarkProfile"],
+                                 "observationMap": reference["observationMap"],
+                                 **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
+                             }, "profiles": ["sim", "sync", "step"],
                              "domains": ["embodied"], "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
@@ -167,7 +172,7 @@ def solve_one(req):
     sample = trial["sample"]
     if "simplerScenes" in environment:
         scene_at(environment, sample["taskId"], int(sample["initialStateId"]))
-    if environment.get("kind") in ("vlabench", "robocasa-v02"):
+    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench"):
         if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
@@ -203,8 +208,8 @@ def solve_one(req):
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python:/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
-                             "MUJOCO_GL": gl_platform,
-                             "PYOPENGL_PLATFORM": gl_platform},
+                             **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
+                                if gl_platform != "xvfb-glx" else {})},
                      "resources": resources,
                      **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") == "robotwin" else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
@@ -222,6 +227,8 @@ def solve(req):
     if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
         raise ValueError("batch membership or leader mismatch")
     reference = reference_profile(req["benchmark"]["config"])
+    if reference.get("environment", {}).get("kind") == "rlbench":
+        raise ValueError("RLBench requires a fresh simulator process per episode")
     if reference.get("environment", {}).get("kind") in GENERATED_ENVIRONMENTS:
         check_distinct_resets([trial["sample"] for trial in trials], reference)
     payloads, reply = [], None

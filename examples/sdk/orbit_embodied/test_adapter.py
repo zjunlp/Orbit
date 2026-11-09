@@ -30,11 +30,19 @@ class AdapterPlanningTests(unittest.TestCase):
         with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
             import native_runtime
 
+        mt100 = native_runtime.runtime_manifest("rlbench-mt100", native_runtime.rlbench_sources(False))
+        rvt = native_runtime.runtime_manifest("rlbench-rvt18", native_runtime.rlbench_sources(True))
         casa = native_runtime.runtime_manifest("robocasa-v02", native_runtime.robocasa_sources())
         image_id = "sha256:" + "a" * 64
         for expected, actual, entrypoint in (
+            (mt100, mt100, mt100["entrypoint"]),
+            (rvt, rvt, rvt["entrypoint"]),
             (casa, casa, casa["entrypoint"]),
+            (mt100, casa, casa["entrypoint"]),
+            (mt100, rvt, rvt["entrypoint"]),
             (casa, None, casa["entrypoint"]),
+            (rvt, rvt, ["python"]),
+            (mt100, {**mt100, "coppeliasim": "wrong"}, mt100["entrypoint"]),
         ):
             labels = {native_runtime.MANIFEST_LABEL: json.dumps(actual)} if actual else {}
             config = {"Labels": labels, "Entrypoint": entrypoint}

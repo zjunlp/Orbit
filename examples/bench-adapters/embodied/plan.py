@@ -36,7 +36,7 @@ def main():
     kind = environment.get("kind")
     environment_seed = args.environment_seed
     if environment_seed is None:
-        environment_seed = {"calvin": 0, "vlabench": 42}.get(kind, 7)
+        environment_seed = 0 if environment.get("protocol") == "rvt-test" else {"calvin": 0, "vlabench": 42}.get(kind, 7)
     generated = kind in GENERATED_ENVIRONMENTS
     uint32_seed = kind in ("robocasa365", "robotwin") or "simplerRobot" in environment
     if environment_seed < 0:
@@ -61,7 +61,7 @@ def main():
             count = int(task["tags"]["initialStateCount"])
         elif kind == "vlabench":
             count = vlabench_state_count(environment, task_id)
-        elif kind == "robocasa-v02":
+        elif kind in ("robocasa-v02", "rlbench"):
             count = environment.get("initialStateCount")
         else:
             count = initial_state_count(environment, task_id)

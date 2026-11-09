@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
-                          "metaworld", "calvin", "vlabench", "robocasa-v02")
+                          "metaworld", "calvin", "vlabench", "robocasa-v02", "rlbench")
 
 
 def digest(value):
@@ -37,6 +37,8 @@ def seed_asset(reference, task):
              else "environmentSeed+initialStateId")
     if "vlabenchEpisodeCounts" in reference["environment"]:
         reset = "officialTrack[taskId][initialStateId],environmentSeed+initialStateId"
+    if reference["environment"].get("protocol") == "rvt-test":
+        reset = "testDemo[taskId][initialStateId]"
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
 
@@ -109,10 +111,11 @@ def reset_seed(sample, reference=None):
         return sample["environmentSeed"]
     index = int(sample["initialStateId"])
     seed = sample["environmentSeed"] + index
-    if environment.get("kind") == "robocasa-v02":
+    if environment.get("kind") in ("robocasa-v02", "rlbench"):
         count = environment.get("initialStateCount")
         if (sample["environmentSeed"] < 0 or index < 0 or not 0 <= seed < 2 ** 32
-                or (count is not None and index >= count)):
+                or (count is not None and index >= count)
+                or (environment.get("protocol") == "rvt-test" and sample["environmentSeed"] != 0)):
             raise ValueError("sample is outside the frozen native initial states or unsigned seed range")
     if environment.get("kind") == "vlabench":
         count = environment.get("vlabenchEpisodeCounts", {}).get(sample["taskId"])

@@ -29,6 +29,8 @@
 | ManiSkill3 Plate-25（RLinf） | 1 | `maniskill3-plate25-native` | — | — | — | 实测 `openvla-oft-rlinf-maniskill3` | — | — | — | — |
 | ManiSkill3 原生桌面套件 | 20，含两个待资产验证的任务 | `maniskill3-tabletop-<profile>-native` | — | — | — | — | — | — | — | — |
 | Meta-World MT50（RLinf） | 50 | `metaworld-mt50-native` | 实测 `pi05-rlinf-metaworld` | — | — | — | — | — | — | — |
+| RLBench MT100 | 100 | `rlbench-mt100-native` | — | — | — | — | — | — | — | — |
+| RLBench RVT-18 Test | 18，共 450 个固定初态 | `rlbench-rvt18-native` | — | — | — | — | — | — | — | — |
 | RoboTwin 2.0 Clean（末端位姿） | 50 | `robotwin-demo-clean-cartesian-native` | — | — | — | — | — | — | 实测 `xvla-robotwin2` | — |
 | RoboTwin 2.0 Randomized（末端位姿） | 50 | `robotwin-demo-randomized-cartesian-native` | — | — | — | — | — | — | 实测 `xvla-robotwin2` | — |
 | CALVIN ABC→D | 1（1,000 条序列） | `calvin-abc-d-native` | 实测 `pi05-rlinf-calvin-abc-d` | — | — | — | — | — | — | — |

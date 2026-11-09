@@ -179,6 +179,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "robocasa-v02":
         from orbit_embodied.robocasa_v02 import RoboCasaV02Benchmark
         benchmark = RoboCasaV02Benchmark(reference, sample["taskId"])
+    elif kind == "rlbench":
+        from orbit_embodied.rlbench import RLBenchBenchmark
+        benchmark = RLBenchBenchmark(reference, sample["taskId"])
     elif kind == "robotwin":
         from orbit_embodied.robotwin import RoboTwinBenchmark, RoboTwinCartesianBenchmark
         native = RoboTwinCartesianBenchmark if reference["environment"].get("controller") == "ee" else RoboTwinBenchmark
@@ -202,7 +205,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
         benchmark = native(suite, name, settle_steps=reference["parameters"]["settleSteps"])
     expected_horizon = reference_horizon(reference, sample["taskId"])
-    expected_render_size = {"vlabench": 480, "robocasa-v02": 128}.get(kind, 256)
+    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128}.get(kind, 256)
     policy = LazyPolicy(request["policy"])
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
