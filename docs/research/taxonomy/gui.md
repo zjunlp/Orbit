@@ -1,5 +1,9 @@
 # Orbit GUI / computer-use 类别接入报告
 
+> 历史调研说明（2026-11-09）：本文的类别、编号与界面建议保留调研时点语义，不再定义当前产品分类。
+> 公开分类采用 [design §9.17 六维 v1](../../design.md#917-benchmark-六维分类-v12026-11-09)，每个维度有独立受控取值；
+> C1–C7 仅保留为历史接入原型或兼容信息。来源、原始观察及验证限制保持不变；当前状态见 [status](../../status.md)。
+
 核查对象：`{orbit,BrowserGym,AgentLab,cua,cua-lite,OSWorld-V2,MobileWorld,gym-anything}`。核查方式：只读源码、配置、任务样例与版本信息；没有启动容器、VM、AVD，没有调用被测模型或 judge，没有重新执行校准。本文只创建本报告，不修改上述仓库。
 
 **结论与建议：采用一个在线 GUI 交互大类 `gui-interaction`，配 browser / desktop / mobile 平台子配置；live-web 是叠加的环境可变性子配置。另将静态 GUI grounding 放入 `visual-grounding`，离线轨迹下一动作预测放入离线预测类。** 不按 BrowserGym、CUA-Lite、Cua Bench 等 harness 名字建大类，也不按网页、桌面、手机界面的外观划分执行协议。分类依据是“被测对象收到什么、何时返回什么、能改变什么状态、评分依赖什么”。此为本文设计建议，尚未实现。

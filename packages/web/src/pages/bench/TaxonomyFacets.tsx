@@ -1,5 +1,5 @@
 import { TAXONOMY_FIELDS, TAXONOMY_GROUPS, type TaxonomyField } from "@zjunlp/orbit/taxonomy";
-import { useState } from "react";
+import { useId } from "react";
 import {
   IconBox,
   IconBrain,
@@ -10,6 +10,7 @@ import {
   IconTerminal,
   IconX,
 } from "../../components/icons.tsx";
+import { setQuery, useLocation } from "../../lib/router.ts";
 import {
   matchesTaxonomy,
   type TaxonomyFilters,
@@ -29,39 +30,56 @@ export function TaxonomyFacets({
   filters: TaxonomyFilters;
   toggle: (field: TaxonomyField, value: string) => void;
 }) {
-  const [activeDimension, setActiveDimension] = useState<string | null>(null);
+  const id = useId();
+  const activeDimension = useLocation().query.get("dimension");
+  const setActiveDimension = (dimension: string | null) => setQuery({ dimension });
   const dimension = TAXONOMY_GROUPS.find((g) => g.id === activeDimension);
   return (
     <>
-      <section className="dimension-bar" aria-label="Six classification dimensions">
-        {TAXONOMY_GROUPS.map((group, i) => {
-          const n = group.fields.reduce((sum, f) => sum + (filters[f]?.length ?? 0), 0);
-          const Icon = DIMENSION_ICONS[i] ?? IconLayers;
-          return (
-            <button
-              type="button"
-              key={group.id}
-              className={`dimension-button${activeDimension === group.id ? " expanded" : ""}${n ? " selected" : ""}`}
-              aria-expanded={activeDimension === group.id}
-              aria-controls="dimension-options"
-              onClick={() => setActiveDimension(activeDimension === group.id ? null : group.id)}
-            >
-              <span className="dimension-number">
-                0{i + 1}
-                <Icon size={15} />
-              </span>
-              <span className="dimension-name">
-                {group.label}
-                <IconChevronDown size={13} />
-              </span>
-              <span className="dimension-summary">{n ? `${n} selected` : group.question}</span>
-            </button>
-          );
-        })}
+      <section className="dimension-categories" aria-label="Six classification dimensions">
+        <div className="dimension-heading">
+          <h2>Browse by category</h2>
+          <p>Explore six dimensions. Combine filters to find the right benchmark.</p>
+        </div>
+        <div className="dimension-bar">
+          {TAXONOMY_GROUPS.map((group, i) => {
+            const n = group.fields.reduce((sum, f) => sum + (filters[f]?.length ?? 0), 0);
+            const Icon = DIMENSION_ICONS[i] ?? IconLayers;
+            return (
+              <button
+                type="button"
+                key={group.id}
+                className={`dimension-button${activeDimension === group.id ? " expanded" : ""}${n ? " selected" : ""}`}
+                aria-expanded={activeDimension === group.id}
+                id={`${id}-${group.id}`}
+                aria-labelledby={`${id}-${group.id}-name`}
+                aria-describedby={`${id}-${group.id}-summary ${id}-${group.id}-status`}
+                aria-controls={activeDimension === group.id ? `${id}-options` : undefined}
+                onClick={() => setActiveDimension(activeDimension === group.id ? null : group.id)}
+              >
+                <span className="dimension-icon">
+                  <Icon size={24} />
+                </span>
+                <span className="dimension-name" id={`${id}-${group.id}-name`}>
+                  {group.label}
+                </span>
+                <span className="dimension-summary" id={`${id}-${group.id}-summary`}>
+                  {group.question}
+                </span>
+                <span className="dimension-action">
+                  <span className="dimension-status" id={`${id}-${group.id}-status`}>
+                    {n ? `${n} selected` : "Choose filters"}
+                  </span>
+                  <IconChevronDown size={17} />
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </section>
       {dimension && (
         <section
-          id="dimension-options"
+          id={`${id}-options`}
           className="dimension-panel"
           aria-label={`${dimension.label} filters`}
         >
@@ -74,7 +92,10 @@ export function TaxonomyFacets({
               type="button"
               className="btn ghost icon"
               aria-label="Close filters"
-              onClick={() => setActiveDimension(null)}
+              onClick={() => {
+                document.getElementById(`${id}-${dimension.id}`)?.focus();
+                setActiveDimension(null);
+              }}
             >
               <IconX size={16} />
             </button>

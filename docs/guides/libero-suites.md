@@ -66,7 +66,7 @@ orbit bench tasks libero-90-native --json
 ```
 
 Use `plan.py --suite libero_90` with task IDs from this registration. Its 400-step horizon
-comes from the pinned OpenPI evaluator. The native C6 evaluation uses frozen initial states
+comes from the pinned OpenPI evaluator. The native policy evaluation uses frozen initial states
 and the LIBERO success signal.
 
 Use `SUITE=libero_object`, `libero_goal` or `libero_10` in these model setup examples:

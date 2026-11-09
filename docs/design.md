@@ -687,8 +687,8 @@ Web `/bench/new` 支持环境/任务选择、方法配置或导入、复制已�
   `home/ben/task/final_model` 验证和评分，其他方法使用 `task/final_model`；仅 `native=empty` 挂载完整 checkout
   和 dotenv 并设置 `AGENT_ENV`，其他方法只挂载 `src/`，避免通过 `/repo/.env` 暴露凭据。
 - **接入验收（任意新 benchmark）**：oracle 满分（没有参考解时省略）、空答案零分、抽样与原版结果一致。
-- **BFCL multi-turn 示例**（[adapter](../examples/bench-adapters/bfcl-multiturn/)）：直接登记 C3 `tool-workflow` /
-  `local-state`，一 trial 一完整会话。独立离线 verify 从保存的调用文本重建原版 Python 工具环境，调用固定版本的
+- **BFCL multi-turn 示例**（[adapter](../examples/bench-adapters/bfcl-multiturn/)）：直接登记工具工作流，兼容字段为
+  `category: tool-workflow` 与 `profiles: [local-state]`，一 trial 一完整会话。独立离线 verify 从保存的调用文本重建原版 Python 工具环境，调用固定版本的
   状态/响应 checker；不采用 solve 写出的分数、返回值或状态。包与数据固定，参考序列自检失败及环境异常为 invalid，
   不能按工具开放顺序执行的上游参考任务显式 unsupported；沿用现有 Run、SDK 与 JSON review，无新增执行路径。
 - **GUI 第一阶段**（[BrowserGym/MiniWoB](../examples/bench-adapters/browsergym/README.md)）：外部 Python adapter/runtime，
@@ -776,7 +776,7 @@ Benchmark 语义     任务、初始状态、成功判定、官方指标与聚�
 ```
 
 原则：语义尽量交给原生实现（不重新解释同一个仿真器）；资源与状态只在 Orbit；每个 hub 先以 `native` 方式包装跑通、对齐，
-再按需增加工具桥与轨迹转换。Orbit 不自研 Agent 循环；C6 可在容器内使用薄的同步 driver 调用官方环境，
+再按需增加工具桥与轨迹转换。Orbit 不自研 Agent 循环；原生具身评测可在容器内使用薄的同步 driver 调用官方环境，
 daemon 不参与逐步控制，任务、控制器和成功判定仍由 benchmark 提供（§1、§9.4a）。
 
 ### 9.1a 评测身份
@@ -788,7 +788,7 @@ daemon 不参与逐步控制，任务、控制器和成功判定仍由 benchmark
 | 执行尝试 | 某个样本的一次执行；重试产生新尝试，保留前次证据 |
 | slot | 并行容量，不是统计样本 |
 
-默认一个 Trial 对应一个逻辑样本、一个 solve Run。原生 C6 adapter 声明固定批次能力后，可通过 `--batch-size` 让多个
+默认一个 Trial 对应一个逻辑样本、一个 solve Run。原生具身 adapter 声明固定批次能力后，可通过 `--batch-size` 让多个
 Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和重评。`trial_runs` 按 Run、Trial、阶段关联，保存 episode
 及尝试身份；事件通过 `trialsByRun` 推进全部关联项。批次只有不可变计划，执行状态仍由既有 Run 和 Trial 管理。
 轨迹事件带 sample / attempt / source / step 身份；计划数、完成数、有效数注明计数单位。
@@ -838,10 +838,10 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - 能力匹配：bench 声明 `requires`（`multiTurn`、`policyProtocol`、`gui`、`obs: rgb|depth|proprio`、`action: joint|ee|chunk`），提交前与
   Agent / Policy 声明比对，不匹配直接拒绝。
 
-### 9.4a 独立 Policy 与原生 C6
+### 9.4a 独立 Policy 与原生具身评测
 
-验证结果见任务记录（[Independent C6](tasks/20261105-embodied-eval.md)、[C6 endpoints](tasks/20261106-embodied-endpoints.md)、
-[C6 batches](tasks/20261106-embodied-batches.md)、[Policy checks](tasks/20261106-policy-calibration.md)），本节只记录设计决定。
+验证结果见任务记录（[Independent policies](tasks/20261105-embodied-eval.md)、[Policy endpoints](tasks/20261106-embodied-endpoints.md)、
+[Policy batches](tasks/20261106-embodied-batches.md)、[Policy checks](tasks/20261106-policy-calibration.md)），本节只记录设计决定。
 
 - **入口**：`orbit policy add / ls / rm`、`bench add-file`、`bench run --sample-plan [--batch-size]`、`bench calibrate --policy`
   都走现有 HTTP 控制面。原生路径为 `examples/bench-adapters/embodied` 加容器内 `examples/sdk/orbit_embodied`，不依赖 vla-eval；
@@ -992,7 +992,7 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
   给出官方值、样本数、missing 与 partial；`bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
   在 job 结束、取消、重新评分或归并后、且结果与上一修订不同时写入，旧 job 首次读取时补一份 `backfill`；计划 digest 由
   benchmark、tasks、seeds、methods、options 计算。API `GET /bench/jobs/:id/reports`，CLI `orbit bench report`，Web job 页 Reports。
-  C6 已支持固定共享 solve 批次及逐 episode 尝试定位；通用 attempt/retry 的显式计数与自动重试规则仍后置。
+  原生具身评测已支持固定共享 solve 批次及逐 episode 尝试定位；通用 attempt/retry 的显式计数与自动重试规则仍后置。
 - **报告修订**：计划集合（样本清单 + digest）固定，追加任务或 seed 产生新集合版本；报告不可原地覆盖，每版记录采用的
   attempt/result 清单、错误与缺项的分母规则、聚合器版本；补跑产生新修订，旧报告与原始失败保留。只有遵循上游的结果选择、
   重试与缺项规则，才继续称为官方口径。
@@ -1125,7 +1125,7 @@ Harbor 补全：共享 GPU 组、`gpu_types`、main `shm_size`、服务 `entrypo
 **仍未统一、需要正视的**：轨迹（Agent 会话与环境记录合成一份，§9.8，P6 主线第 4 项）；具身 bench 尚无真实
 coding agent / VLA 正向校准；覆盖数字在 `coverage` 落地前不对外宣称。
 
-### 9.15 Web：Catalog 与 C3/C4 对话视图（2026-11-05）
+### 9.15 Web：Catalog 与工具和模拟用户对话视图（2026-11-05）
 
 依据 [Web UI 调研](research/web-ui/landscape.md)。原则：结果与证据一起出现；总览是紧凑分组表、逐层展开；对话是主视图、树与原始
 JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"四件事分开显示，不合成一个健康分。
@@ -1143,7 +1143,7 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
   `L*`（避免与接入层级 L0–L2 混淆）：校准通过由报告算出；样例对齐与真实对照由 adapter 在 `capabilities.parity` 声明证据，
   未声明显示"未验证"。另有 §9.18 的 `supported[]` 产品目录，与本地登记证据分开。
 
-**C3/C4 对话轨迹**：新增 review kind `conversation`，契约 `ConversationTrajectory`（`contracts/trajectory.ts`）：
+**工具与模拟用户对话轨迹**：新增 review kind `conversation`，契约 `ConversationTrajectory`（`contracts/trajectory.ts`）：
 
 - 参与者（agent / user / system / tool 环境，带显示名）；按原始用户轮次分组的事件：消息、工具调用（`callId`、调用者、名称、参数、
   结果或错误、`rejected` 表示 scaffold 拒绝的非法调用）；轮次的 `check`（passed / failed / unchecked）与可选 before / after /
@@ -1155,7 +1155,7 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
   内容默认展开；检查器有 Checker、状态 diff（只看变化字段）、期望 vs 实际、Raw；顶部 verdict 横幅可跳到失败轮次。键位：`h/l` 轮次、
   `/` 搜索、`e` 跳到失败证据。参考调用与实际调用的差异只作诊断，不当作判分规则。
 - Trial 页通用：上一 / 下一 trial、下一个失败（按 task / method / seed 排序；`[` `]` `}`）。
-- **C3 的 CLI Agent 路径**：BFCL 用 adapter 自带的 stdio MCP 服务（`get_user_message` / `list_functions` / `call_function`）
+- **工具工作流的 CLI Agent 路径**：BFCL 用 adapter 自带的 stdio MCP 服务（`get_user_message` / `list_functions` / `call_function`）
   让 Agent 在一次会话里逐轮完成对话；调用按 fixed driver 的 evidence 格式记录，verify 独立重放，Agent 与服务的输出都不作评分依据。
   这是 Orbit 脚手架，不是榜单的原生 FC 提示，conditions 中声明"不可与榜单直接比较"。任务文件由服务读取后删除，后续轮次不留在
   Agent 可读的磁盘上。模型只经 Agent 工具调用（ARK 等方案不允许脚本直接调用）；τ² 的用户模拟器需要单独的模型来源，暂未运行。
@@ -1184,10 +1184,13 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
 `/` 是 Overview，Runs 列表在 `/runs`；`/bench` 与 `/compare` 保留；旧 Catalog 地址 `/bench?tab=catalog` 转到 `/benchmarks`。
 界面文字为英文。
 
-**Overview**：展示去重 benchmark 数、覆盖类别 `k/7`、领域、校准与真实方法证据；Agent 数、能力接线与凭据；
-运行中的作业、排队原因与待复盘失败；同一评测条件下方法版本的配对变化。卡片链接到对应页面和筛选。
-无数据时给出首次使用步骤：登记 benchmark → 配置凭据 → 校准 → 选兼容组合运行。读取失败显示错误与重试，避免永久加载。
-`k/7` 是原接入类别计数，不表示能力覆盖；六维改版的展示与统计约束见 §9.17。
+**Overview**：顶部展示产品库 benchmark 家族数（按产品 ID 去重）、已登记 Agent 数和 Method revision 数；
+“On this node”另列本地登记数、最近一次校准通过的登记数、具有真实方法记录的登记数，不能把产品目录当作本机可运行证据。
+六维发现入口（§9.17）按子字段展示代表取值及命中的产品家族数；同一 profile 判断取值，按产品 ID 去重，取值间允许重叠。
+点击取值进入 `/benchmarks?dimension=<group>&<field>=<value>`，展开对应维度并筛选；未知与明确空集合仍区分为
+“Not annotated”与“None”。保留运行中的作业、排队原因、待复盘失败和同一评测条件下方法版本的配对变化。
+即使本地没有登记，仍可浏览已适配产品；本地首次使用步骤为登记 benchmark → 配置凭据 → 校准 → 选兼容组合运行。
+读取失败显示错误与重试，避免永久加载。旧 C1–C7 编号与七类覆盖比例不再出现在首页。
 
 **Benchmarks**：
 
@@ -1257,7 +1260,8 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
 分类服务于发现任务、理解评测条件与检查覆盖，不建立新的执行路径，不从标签推导 Agent 的实际能力或成绩可比性。
 
 六组分别回答：**属于什么领域、要完成什么任务、想检验什么、通过什么输入和动作交互、处于什么环境和交互条件、依据什么评分**。
-前三组为主要筛选，后三组按子字段展示。每个具体任务可在有依据时多选；复合组不压成一个混合标签数组。
+它们是六个独立维度，不是六个互斥类别；每个维度有自己的受控取值。页面以六张维度卡展示取值入口，
+复合维度按子字段展开。每个具体任务可在有依据时多选；复合组不压成一个混合标签数组。
 运行时词条 ID、英文标签与匹配函数统一在 `contracts/taxonomy.ts`，由 `@zjunlp/orbit/taxonomy` 导出；
 `BenchTaxonomy` zod 契约在 `contracts/bench.ts`，拒绝词表外的字段和值。
 
@@ -1335,7 +1339,7 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
 
 代码可作为文本，表格、数组与状态可作为结构化数据；PDF、CSV、JSON 是格式细节，不扩展模态词表。
 动作描述评测协议允许被测方使用的接口，不根据已安装工具或一次轨迹中的动作推断完整协议。
-MCP 是传输与接线方式；经 MCP 点击网页仍是 GUI 操作。物理动作单位、坐标系、频率与映射沿用 C6 语义契约，
+MCP 是传输与接线方式；经 MCP 点击网页仍是 GUI 操作。物理动作单位、坐标系、频率与映射沿用 §9.4a 原生 Policy 语义契约，
 不由分类重新定义。
 
 **环境与交互条件（15 个值）**：环境、世界来源、反馈和其他参与者分开。
@@ -1407,9 +1411,11 @@ Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包�
   `--clear` 清除全部 labels。HumanEval 与原生 embodied adapter 已声明可核实的协议事实，未指定的评测目标保持未知；
   其他适配器逐步补充，未标注不等于不具备该条件。
 
-**Benchmarks 页面**：以领域、任务类型、评测目标为主要分面；接口与模态、环境与交互条件、评分方式按子字段展开。
-默认以 §9.18 产品目录展示已适配 benchmark 家族；本地登记视图保留证据、覆盖、运行入口与条件详情。未知值明确显示；
-C1–C7 与 Harbor 等接入信息放在详情或兼容筛选中，不作为唯一总目录，也不以“7/7”表达评测生态完整覆盖。
+**Benchmarks 页面**：六张维度卡分别提供领域、任务类型、评测目标、接口与模态、环境与交互条件、评分方式的取值筛选；
+后三组按子字段组织，计数属于具体取值命中的 benchmark 家族，不表示某个维度已完成校准或已被能力覆盖。
+默认以 §9.18 产品目录展示已适配 benchmark 家族；本地登记视图保留证据、覆盖、运行入口与条件详情。未知值明确显示。
+C1–C7 仅用于历史接入原型和兼容信息，不再作为产品分类；Harbor 等保留为接入方式。不得以“7/7”表达评测生态完整覆盖。
+本轮首页与维度卡调整见 [任务记录](tasks/20261109-benchmark-category-cards.md)。
 
 ### 9.18 已适配 benchmark 产品目录（2026-11-09）
 

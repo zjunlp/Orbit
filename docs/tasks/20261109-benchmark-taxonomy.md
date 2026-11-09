@@ -40,4 +40,5 @@ preserving benchmark identity, existing execution protocols and evidence boundar
 - Other adapters can add annotations incrementally from documented protocol facts; unspecified fields
   and old records retain unknown values rather than inferred labels.
 - No per-task historical taxonomy snapshot or new execution protocol is introduced. Calibration and
-  method evidence remain registration-scoped; Overview retains legacy category coverage.
+  method evidence remain registration-scoped. Overview retained legacy category coverage at this
+  task's completion; its replacement is tracked in [the homepage and dimension-card follow-up](20261109-benchmark-category-cards.md).

@@ -1,6 +1,6 @@
 # 原生具身评测兼容矩阵
 
-范围是 Orbit 的 C6 原生 benchmark 与独立 Policy。表中「实测」表示该权重与 recipe 已运行真实抽样 episode，并完成独立验证。任务数表示已登记的目录大小。破折号表示该套件与模型的组合暂无真实模型抽样记录。新增组合使用同一套接入模板记录。[接入模板](embodied-onboarding.md)
+范围是 Orbit 的原生具身 benchmark 与独立 Policy。表中「实测」表示该权重与 recipe 已运行真实抽样 episode，并完成独立验证。任务数表示已登记的目录大小。破折号表示该套件与模型的组合暂无真实模型抽样记录。新增组合使用同一套接入模板记录。[接入模板](embodied-onboarding.md)
 
 | 环境与套件 | 任务数 | Benchmark 登记 | π₀.₅ | GR00T N1.7 | GR00T N1.5 | OpenVLA-OFT | SmolVLA | MolmoAct2 | X-VLA |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- |
