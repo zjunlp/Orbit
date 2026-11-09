@@ -50,3 +50,10 @@ The initial-state index selects a complete sequence from the frozen catalog.
 `--all-initial-states` expands the catalog for a regular evaluation. Verification and rescore
 check the recorded sequence, instruction boundaries, completion count and per-instruction
 control limit on CPU. The simulator and policy use the shared GPU reservation.
+
+To register the benchmark with your own policy service, pass `--benchmark-only` in place of
+`--weights` and `--policy-image`. Register a policy with the CALVIN observation and action
+semantics separately. D→D, ABC→D and ABCD→D describe the checkpoint's training scenes.
+All three can use the same frozen scene D evaluation. Use a distinct policy name and checkpoint
+digest for each training split. The bundled RLinf policy recipe uses the published ABC→D checkpoint.
+[RLinf split definitions](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/calvin.html)

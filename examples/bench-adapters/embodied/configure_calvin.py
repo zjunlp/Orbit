@@ -24,11 +24,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference-source", type=Path, required=True)
     parser.add_argument("--sequence-catalog", type=Path, required=True)
-    parser.add_argument("--weights", type=Path, required=True)
+    parser.add_argument("--benchmark-only", action="store_true")
+    parser.add_argument("--weights", type=Path)
     parser.add_argument("--benchmark-image", required=True)
-    parser.add_argument("--policy-image", required=True)
+    parser.add_argument("--policy-image")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
+    if args.benchmark_only:
+        if args.weights or args.policy_image:
+            parser.error("policy arguments cannot be used with --benchmark-only")
+    elif not (args.weights and args.policy_image):
+        parser.error("policy registration requires --weights and --policy-image")
     root = args.reference_source.resolve()
     git = ["git", "-C", str(root)]
     if subprocess.check_output(git + ["rev-parse", "HEAD"], text=True).strip() != RLINF_REVISION:
@@ -70,10 +76,25 @@ def main():
                        "referencePolicy": "Torch seed 0 per policy service."},
         "scoreName": "CALVIN mean completed subtasks",
     }
+    benchmark = {"name": TASK + "-native", "path": str(root), "adapter": str(HERE / "adapter.py"), "config": {
+                     "image": image_id(args.benchmark_image), "python": "/usr/local/bin/python",
+                     "reference": json.dumps(reference, separators=(",", ":")), "profileDigest": digest(reference),
+                     "implementationDigest": implementation_digest(), "simGpus": "1", "simGpuMemGB": "4",
+                     "renderer": "egl",
+                 }}
+    outputs = {"benchmark": benchmark, "reference": reference}
+    if not args.benchmark_only:
+        outputs["policy"] = policy_for(args, reference)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    for name, value in outputs.items():
+        (args.output_dir / (name + ".json")).write_text(json.dumps(value, separators=(",", ":")) + "\n")
+
+
+def policy_for(args, reference):
     checkpoint = tree_digest(args.weights)
     normalization = file_digest(args.weights / CALVIN_NORMALIZATION_DIR / "norm_stats.json")
     name = "pi05-rlinf-calvin-abc-d"
-    policy = {"name": name, "version": "1", "connector": "policy-ws", "replanSteps": 5,
+    return {"name": name, "version": "1", "connector": "policy-ws", "replanSteps": 5,
               "profile": reference["policyProfile"], "checkpointDigest": checkpoint,
               "normalizationDigest": normalization, "randomness": {"backend": "torch", "initialSeed": 0, "scope": "service"},
               "weights": {"dataset": name, "target": "/weights"}, "service": {
@@ -84,15 +105,6 @@ def main():
                   "healthcheck": {"command": ["/.venv/bin/python", "/opt/orbit/serve_metaworld.py", "--healthcheck"],
                                   "intervalSec": 5, "timeoutSec": 5, "startPeriodSec": 300, "retries": 90},
               }}
-    benchmark = {"name": TASK + "-native", "path": str(root), "adapter": str(HERE / "adapter.py"), "config": {
-                     "image": image_id(args.benchmark_image), "python": "/usr/local/bin/python",
-                     "reference": json.dumps(reference, separators=(",", ":")), "profileDigest": digest(reference),
-                     "implementationDigest": implementation_digest(), "simGpus": "1", "simGpuMemGB": "4",
-                     "renderer": "egl",
-                 }}
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    for name, value in (("benchmark", benchmark), ("policy", policy), ("reference", reference)):
-        (args.output_dir / (name + ".json")).write_text(json.dumps(value, separators=(",", ":")) + "\n")
 
 
 if __name__ == "__main__":
