@@ -61,6 +61,8 @@ def main():
             count = int(task["tags"]["initialStateCount"])
         elif kind == "vlabench":
             count = vlabench_state_count(environment, task_id)
+        elif kind == "robocasa-v02":
+            count = environment.get("initialStateCount")
         else:
             count = initial_state_count(environment, task_id)
         if args.all_initial_states and count is None:

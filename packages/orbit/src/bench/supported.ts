@@ -604,6 +604,24 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     suites: ["Google Robot", "WidowX", "Prepackaged", "Visual matching", "Variant aggregation"],
   },
   {
+    id: "robocasa-v02",
+    name: "RoboCasa v0.2",
+    description: "Evaluate the original RoboCasa atomic kitchen manipulation tasks.",
+    taxonomyGroups: [group("Original kitchen manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "24 atomic tasks with held-out object instances, fixed kitchen layouts and PandaOmron arm control.",
+        "examples/bench-adapters/embodied/ROBOCASA-V02.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All 24 tasks passed native CPU checks. A fixed-action replay matched the v0.2 environment.",
+      "docs/tasks/20261109-robocasa-v02.md",
+    ),
+    suites: ["Atomic-24"],
+  },
+  {
     id: "robocasa365",
     name: "RoboCasa365",
     description:
@@ -714,6 +732,7 @@ const nativeProfiles: Record<string, string> = {
   "vlabench-franka-ee/1": "vlabench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
+  "robocasa-v02-panda-arm/1": "robocasa-v02",
   "robocasa365-panda-omron-native/1": "robocasa365",
   "robotwin-aloha-agilex-native/1": "robotwin",
   "robotwin-aloha-agilex-cartesian/1": "robotwin",

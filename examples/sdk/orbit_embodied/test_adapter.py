@@ -26,6 +26,27 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_native_runtime_images_require_matching_manifest_and_entrypoint(self):
+        with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
+            import native_runtime
+
+        casa = native_runtime.runtime_manifest("robocasa-v02", native_runtime.robocasa_sources())
+        image_id = "sha256:" + "a" * 64
+        for expected, actual, entrypoint in (
+            (casa, casa, casa["entrypoint"]),
+            (casa, None, casa["entrypoint"]),
+        ):
+            labels = {native_runtime.MANIFEST_LABEL: json.dumps(actual)} if actual else {}
+            config = {"Labels": labels, "Entrypoint": entrypoint}
+            output = json.dumps([{"Id": image_id, "Config": config}])
+            with self.subTest(kind=expected["kind"], actual=actual, entrypoint=entrypoint):
+                with patch.object(native_runtime.subprocess, "check_output", return_value=output):
+                    if expected == actual and entrypoint == expected["entrypoint"]:
+                        self.assertEqual(native_runtime.require_image("tag", expected), image_id)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "expected the pinned"):
+                            native_runtime.require_image("tag", expected)
+
     def batch_request(self, root):
         request = self.request(root)
         first = request["trial"]

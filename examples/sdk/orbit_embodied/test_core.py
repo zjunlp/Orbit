@@ -119,6 +119,43 @@ class CoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "recorded subtask completions"):
             self.verify()
 
+    def test_robocasa_v02_rejects_changed_native_commands_and_stopping(self):
+        class FixedBase(SyntheticBenchmark):
+            def step(self, action):
+                result = super().step(action)
+                result.native_action = action.tolist() + [0] * 5
+                result.terminated |= self.count == self.horizon
+                return result
+
+        reference = {"environment": {"kind": "robocasa-v02", "horizon": 7},
+                     "parameters": {"settleSteps": 0, "replanSteps": 5}}
+        for success_at in (None, 3):
+            self.output = Path(self.temporary.name) / ("episode-" + str(success_at))
+            result = self.run_sample(FixedBase(success_at=success_at), SyntheticPolicy(), {"reference": reference})
+            self.assertEqual(self.verify()["success"], success_at is not None)
+            path = self.output / "actions.jsonl"
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            for changes, message in (
+                ({"nativeAction": rows[0]["nativeAction"][:-1] + [1]}, "fixed-base conversion"),
+                ({"nativeAction": None}, "fixed-base conversion"),
+                ({"terminated": True}, "first native success or the task horizon"),
+                ({"nativeSuccess": True, "reward": 1}, "first native success or the task horizon"),
+            ):
+                with self.subTest(success_at=success_at, changes=changes):
+                    altered = [{**rows[0], **changes}, *rows[1:]]
+                    if changes == {"nativeAction": None}:
+                        del altered[0]["nativeAction"]
+                    path.write_text("".join(json.dumps(row) + "\n" for row in altered))
+                    seal(self.output, result)
+                    with self.assertRaisesRegex(ValueError, message):
+                        self.verify()
+            if success_at is None:
+                early = [*rows[:2], {**rows[2], "terminated": True}]
+                path.write_text("".join(json.dumps(row) + "\n" for row in early))
+                seal(self.output, {**result, "steps": len(early)})
+                with self.assertRaisesRegex(ValueError, "first native success or the task horizon"):
+                    self.verify()
+
     def test_requires_explicit_complete_semantically_equal_mapping(self):
         with self.assertRaisesRegex(ValueError, "exactly"):
             resolve_binding(self.benchmark_profile, self.policy_profile, {})

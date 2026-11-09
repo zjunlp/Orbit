@@ -72,6 +72,18 @@ def verify_simpler_termination(controls, initial, horizon):
         raise ValueError("SimplerEnv episode ended before the horizon without termination")
 
 
+def verify_robocasa_v02(controls, horizon):
+    for step, row in enumerate(controls, start=1):
+        action = row["action"]
+        if len(action) != 7 or row.get("nativeAction") != action + [0] * 5:
+            raise ValueError("RoboCasa v0.2 native action differs from the fixed-base conversion")
+        success = row["nativeSuccess"]
+        stopped = success is True or step == horizon
+        if (type(success) is not bool or row["reward"] != int(success)
+                or row["terminated"] is not stopped or stopped != (step == len(controls))):
+            raise ValueError("RoboCasa v0.2 must stop at the first native success or the task horizon")
+
+
 def verify_diffusion_stopping(controls, horizon, replan_steps):
     previous_success = False
     for index, row in enumerate(controls):
@@ -210,6 +222,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         raise ValueError("native verdict contradicts the declared control-step aggregation")
     if result["valid"] and reference.get("environment", {}).get("kind") == "calvin":
         verify_calvin_sequence(reference, contract["sample"], controls, result)
+    if result["valid"] and reference.get("environment", {}).get("kind") == "robocasa-v02":
+        verify_robocasa_v02(controls, contract["horizon"])
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     if (result["valid"] and contract.get("version") == 3

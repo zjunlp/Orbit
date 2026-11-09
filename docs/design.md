@@ -882,6 +882,8 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   原生奖励任一步为正即计成功，动作段结束时按上游单环境规则决定是否提前停止。
   新证据单独保存原生 `done`，验证器据此重算停止点。旧证据可重评，验证记录会标明停止点未经复核。
   固定任务目录、Lifelong 的阶段及累计套件独立于模型登记，复用每任务的原生步数和判定。
+- **原版 RoboCasa**：v0.2 Atomic-24 固定旧版物体资产和 B 划分，在 PandaOmron 上执行 7 维操作臂动作。
+  原生控制器接收补齐后的 12 维动作，按任务注册表设置步数上限，原生成功时提前停止。重评核对动作补零和停止点。[接入说明](../examples/bench-adapters/embodied/ROBOCASA-V02.md)
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/ROBOTWIN.md)

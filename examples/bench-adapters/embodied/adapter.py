@@ -104,6 +104,9 @@ def tasks(req):
                 count = vlabench_state_count(environment, task["id"])
                 if count is not None:
                     task["tags"]["initialStateCount"] = str(count)
+        if kind == "robocasa-v02" and "initialStateCount" in environment:
+            for task in listing:
+                task["tags"]["initialStateCount"] = str(environment["initialStateCount"])
     elif kind == "libero-plus":
         if suite != environment["suite"]:
             raise ValueError("LIBERO-Plus suite differs from the frozen registration")
@@ -164,9 +167,9 @@ def solve_one(req):
     sample = trial["sample"]
     if "simplerScenes" in environment:
         scene_at(environment, sample["taskId"], int(sample["initialStateId"]))
-    if environment.get("kind") == "vlabench":
+    if environment.get("kind") in ("vlabench", "robocasa-v02"):
         if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
-            raise ValueError("VLABench sample differs from the frozen catalog")
+            raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
     if environment.get("kind") == "libero-plus":
         if sample["taskId"].partition(":")[0] != environment["suite"] or sample["initialStateId"] != "0":
@@ -186,7 +189,8 @@ def solve_one(req):
                "implementationDigest": config["implementationDigest"]}
     (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": 8}
+    memory_gb = 20 if environment.get("kind") == "robocasa-v02" else 8
+    resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
     if "simGpuMemGB" in config:
         memory = float(config["simGpuMemGB"])
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:

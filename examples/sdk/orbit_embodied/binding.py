@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
-                          "metaworld", "calvin", "vlabench")
+                          "metaworld", "calvin", "vlabench", "robocasa-v02")
 
 
 def digest(value):
@@ -107,9 +107,14 @@ def reset_seed(sample, reference=None):
         return index
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
-    seed = sample["environmentSeed"] + int(sample["initialStateId"])
+    index = int(sample["initialStateId"])
+    seed = sample["environmentSeed"] + index
+    if environment.get("kind") == "robocasa-v02":
+        count = environment.get("initialStateCount")
+        if (sample["environmentSeed"] < 0 or index < 0 or not 0 <= seed < 2 ** 32
+                or (count is not None and index >= count)):
+            raise ValueError("sample is outside the frozen native initial states or unsigned seed range")
     if environment.get("kind") == "vlabench":
-        index = int(sample["initialStateId"])
         count = environment.get("vlabenchEpisodeCounts", {}).get(sample["taskId"])
         if not 0 <= seed < 2 ** 32 or (count is not None and
                                       (sample["environmentSeed"] != 42 or not 0 <= index < count)):

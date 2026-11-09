@@ -17,6 +17,7 @@
 | SimplerEnv Google Robot Variant Aggregation | 11 | `simpler-google-variant-aggregation-native` | — | — | — | — | — | — | — | — |
 | SimplerEnv WidowX Visual Matching | 4 | `simpler-widowx-visual-matching-native` | — | — | — | — | — | — | — | — |
 | SimplerEnv 策略终止协议 | 三套固定网格共用原目录 | `simpler-<profile>-stop-native` | — | — | — | — | — | — | — | — |
+| 原版 RoboCasa v0.2 Atomic | 24，每任务 50 个种子 | `robocasa-v02-atomic-native` | — | — | — | — | — | — | — | — |
 | RoboCasa365 Atomic-Seen | 18 | `robocasa365-atomic-seen-native` / `robocasa365-atomic-seen-gr00t-native` / `robocasa365-atomic-seen-diffusion-policy-native` | 实测 `pi05-robocasa365-shared` | — | 实测 `groot-n15-robocasa365-shared` | — | — | — | — | 实测 `diffusion-policy-robocasa365-shared` |
 | RoboCasa365 Composite-Seen | 16 | `robocasa365-composite-seen-native` / `robocasa365-composite-seen-gr00t-native` | — | — | 实测（`target50` 抽样） | — | — | — | — | — |
 | RoboCasa365 Composite-Unseen | 16 | `robocasa365-composite-unseen-native` / `robocasa365-composite-unseen-gr00t-native` | — | — | 实测（`target50` 抽样） | — | — | — | — | — |
