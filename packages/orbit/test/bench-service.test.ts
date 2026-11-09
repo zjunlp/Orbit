@@ -1036,6 +1036,36 @@ process.stdin.on("end", () => {
   });
 });
 
+it("persists taxonomy through the labels API and clears it without changing execution settings", async () => {
+  const f = fixture();
+  const app = createApp({ token: "fixture", runs: f.runs, bench: f.bench } as AppDeps);
+  const labels = {
+    identity: { id: "fx", name: "Fixture" },
+    taxonomy: {
+      domains: ["science"],
+      taskTypes: ["analysis"],
+      targets: null,
+      participants: [],
+    },
+  };
+  const request = (body: object) =>
+    app.request("/api/v1/benchmarks/fixture/labels", {
+      method: "PATCH",
+      headers: { authorization: "Bearer fixture", "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const before = f.registry.get("fixture");
+  expect((await request(labels)).status).toBe(200);
+  const persisted = new BenchmarkRegistry(f.paths.benchmarks).get("fixture");
+  expect(persisted?.labels).toEqual(labels);
+  expect(persisted?.config).toEqual(before?.config);
+  expect(persisted?.adapter).toEqual(before?.adapter);
+  expect((await request({ taxonomy: { interfaces: ["harbor"] } })).status).toBe(400);
+  expect(f.registry.get("fixture")?.labels).toEqual(labels);
+  expect((await request({ identity: labels.identity })).status).toBe(200);
+  expect(f.registry.get("fixture")?.labels).toEqual({ identity: labels.identity });
+});
+
 it("accepts a legacy approximate parent and hashes the effective profile model without credentials", async () => {
   const f = fixture();
   vi.spyOn(AdapterClient.prototype, "tasks").mockResolvedValue(

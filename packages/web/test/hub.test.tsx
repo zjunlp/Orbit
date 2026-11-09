@@ -21,6 +21,10 @@ const entry = (name: string, id: string, category: string, domains: string[], ca
     identity: { id, name: id },
     identitySource: "adapter",
     domains,
+    taxonomy: {
+      domains: domains.map((d) => (d === "embodied" ? "robotics" : d)),
+      taskTypes: [category === "embodied-policy" ? "manipulation" : "analysis"],
+    },
     tags: [],
     capabilities: { category },
     listing: {},
@@ -29,7 +33,7 @@ const entry = (name: string, id: string, category: string, domains: string[], ca
     methods: [],
   }) as unknown as CatalogEntry;
 
-it("counts distinct benchmarks and lays them out by category and domain", () => {
+it("counts distinct benchmarks and lays them out by domain and task type", () => {
   const es = [
     entry("asi-a", "asi-bench", "agent-workspace", ["science"]),
     entry("asi-b", "asi-bench", "agent-workspace", ["science"]),
@@ -39,11 +43,11 @@ it("counts distinct benchmarks and lays them out by category and domain", () => 
   ];
   expect(distinct(es)).toBe(4);
   const html = renderToStaticMarkup(<CoverageMatrix entries={es} />);
-  expect(html).toContain("C2 Agent workspace");
-  expect(html).toContain("Unlabeled");
+  expect(html).toContain("Analysis &amp; diagnosis");
+  expect(html).toContain("None");
   // Two ASI registrations are one benchmark in the science cell.
-  expect(html).toMatch(/1 benchmark\(s\), 0 passed sample calibration/);
-  expect(html).toMatch(/1 benchmark\(s\), 1 passed sample calibration/);
+  expect(html).toContain("1 benchmark(s) with matching tasks");
+  expect(html).not.toContain("passed sample calibration");
 });
 
 it("tells declared, wired and shown capabilities apart", () => {

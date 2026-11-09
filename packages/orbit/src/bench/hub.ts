@@ -24,7 +24,7 @@ import {
 } from "../contracts/index.ts";
 import { pairedDiff, primaryMetric, resolveMetrics, taskMeans } from "../contracts/metrics.ts";
 import { asiMethodProblem } from "./asi.ts";
-import { methodBasis, revisionOf, stableDigest } from "./revision.ts";
+import { executionCapabilities, methodBasis, revisionOf, stableDigest } from "./revision.ts";
 import { planDigest } from "./summary.ts";
 
 export type JobWithSummary = BenchJob & { summary: MethodSummary[] };
@@ -270,7 +270,7 @@ export function comparisonCondition(j: BenchJob): string {
           passEnv: b.passEnv,
         }
       : null,
-    capabilities: j.capabilities ?? null,
+    capabilities: executionCapabilities(j.capabilities) ?? null,
     options: j.spec.options,
     seeds: j.spec.seeds,
     timeoutMin: j.spec.timeoutMin,

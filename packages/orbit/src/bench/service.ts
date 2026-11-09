@@ -751,7 +751,7 @@ export class BenchService {
     };
   }
 
-  /** Set a registration's identity and domains (labels do not change how it runs). */
+  /** Set discovery labels and taxonomy defaults without changing execution. */
   label(name: string, labels: BenchLabels): Benchmark {
     const b = this.benchmark(name);
     const next = { ...b, labels: BenchLabels.parse(labels) };

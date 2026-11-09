@@ -15,6 +15,7 @@ import {
 } from "./embodied.ts";
 import { Folder } from "./folders.ts";
 import { CheckpointPolicy } from "./runs.ts";
+import { TAXONOMY_VALUES } from "./taxonomy.ts";
 
 /** Adapters shipped with Orbit (`orbit __adapter <name>`). */
 export const BUILTIN_ADAPTERS = ["harbor", "asi", "manifest"] as const;
@@ -32,9 +33,26 @@ export const BenchIdentity = z.object({
 });
 export type BenchIdentity = z.infer<typeof BenchIdentity>;
 
+/** Undefined inherits; null is explicitly unknown; an empty array is a known empty set. */
+export const BenchTaxonomy = z.strictObject({
+  domains: z.array(z.enum(TAXONOMY_VALUES.domains)).max(12).nullable().optional(),
+  taskTypes: z.array(z.enum(TAXONOMY_VALUES.taskTypes)).max(14).nullable().optional(),
+  targets: z.array(z.enum(TAXONOMY_VALUES.targets)).max(14).nullable().optional(),
+  modalities: z.array(z.enum(TAXONOMY_VALUES.modalities)).max(5).nullable().optional(),
+  interfaces: z.array(z.enum(TAXONOMY_VALUES.interfaces)).max(6).nullable().optional(),
+  platforms: z.array(z.enum(TAXONOMY_VALUES.platforms)).max(6).nullable().optional(),
+  world: z.array(z.enum(TAXONOMY_VALUES.world)).max(2).nullable().optional(),
+  feedback: z.array(z.enum(TAXONOMY_VALUES.feedback)).max(3).nullable().optional(),
+  participants: z.array(z.enum(TAXONOMY_VALUES.participants)).max(4).nullable().optional(),
+  scoringEvidence: z.array(z.enum(TAXONOMY_VALUES.scoringEvidence)).max(4).nullable().optional(),
+  scoringMethods: z.array(z.enum(TAXONOMY_VALUES.scoringMethods)).max(5).nullable().optional(),
+});
+export type BenchTaxonomy = z.infer<typeof BenchTaxonomy>;
+
 /** A registration's own labels, over what its adapter declares (`orbit bench label`). */
 export const BenchLabels = z.object({
   identity: BenchIdentity.optional(),
+  taxonomy: BenchTaxonomy.optional(),
   domains: z
     .array(z.string().regex(/^[a-z][a-z0-9-]{0,30}$/))
     .max(6)
@@ -78,6 +96,8 @@ export type Benchmark = z.infer<typeof Benchmark>;
 export const BenchTask = z.object({
   id: z.string(),
   title: z.string().nullable(),
+  /** Task declarations override the registration's taxonomy defaults field by field. */
+  taxonomy: BenchTaxonomy.optional(),
   /** Unsupported tasks are listed but never run (e.g. docker-compose environments). */
   supported: z.boolean(),
   reason: z.string().nullable(),
@@ -240,6 +260,8 @@ export const BenchCapabilities = z
     profiles: z.array(z.string().max(40)).max(12).default([]),
     /** What the benchmark is (source, version); registrations with the same id are one benchmark. */
     identity: BenchIdentity.optional(),
+    /** Discovery metadata; it does not grant capabilities or change execution conditions. */
+    taxonomy: BenchTaxonomy.optional(),
     /**
      * Subject domains (`BENCH_DOMAINS`, e.g. `embodied`), independent of the category; other values
      * are kept as tags.
@@ -1041,6 +1063,17 @@ export const CatalogEntry = z.object({
   /** Vocabulary domains (`BENCH_DOMAINS`) and the other declared tags, from labels else adapter. */
   domains: z.array(z.string()),
   tags: z.array(z.string()),
+  /** Display union only; conjunctive filtering must use taxonomyGroups. */
+  taxonomy: BenchTaxonomy.optional(),
+  /** One group per identical resolved task descriptor; null counts are registration-only facts. */
+  taxonomyGroups: z
+    .array(
+      z.object({
+        taxonomy: BenchTaxonomy,
+        taskCount: z.number().int().nonnegative().nullable(),
+      }),
+    )
+    .optional(),
   /** The last listing failed (an earlier one may still be shown). */
   listingError: z.string().nullable(),
   /** A listing is being refreshed now. */

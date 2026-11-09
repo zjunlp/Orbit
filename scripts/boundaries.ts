@@ -99,16 +99,19 @@ export function checkWebFile(srcDir: string, file: string, text: string): Violat
   for (const m of text.matchAll(PKG_IMPORT_RE)) {
     const line = text.slice(0, m.index).split("\n").length;
     if (
-      ["@zjunlp/orbit/naming", "@zjunlp/orbit/metrics", "@zjunlp/orbit/categories"].includes(
-        m[3] ?? "",
-      )
+      [
+        "@zjunlp/orbit/naming",
+        "@zjunlp/orbit/metrics",
+        "@zjunlp/orbit/categories",
+        "@zjunlp/orbit/taxonomy",
+      ].includes(m[3] ?? "")
     )
       continue;
     if (m[3] !== "@zjunlp/orbit/contracts")
       out.push({
         file,
         line,
-        message: `web may only import @zjunlp/orbit/contracts (types), /naming, /metrics or /categories: ${m[3]}`,
+        message: `web may only import @zjunlp/orbit/contracts (types), /naming, /metrics, /categories or /taxonomy: ${m[3]}`,
       });
     else if (!m[2])
       out.push({ file, line, message: "web must import contracts with `import type`" });

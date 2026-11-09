@@ -14,6 +14,7 @@ import {
   BenchmarkInput,
   type BenchReport,
   type BenchTask,
+  BenchTaxonomy,
   type BenchUsage,
   benchCategory,
   benchCoverage,
@@ -685,6 +686,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
       [],
     )
     .option("--clear", "remove the labels")
+    .option("--taxonomy <json>", "replace six-axis taxonomy defaults with a JSON object")
+    .option("--taxonomy-file <path>", "read six-axis taxonomy defaults from a JSON file")
     .option("--json", "print JSON")
     .action(
       async (
@@ -695,10 +698,22 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           version?: string;
           variant?: string;
           domain: string[];
+          taxonomy?: string;
+          taxonomyFile?: string;
           clear?: boolean;
           json?: boolean;
         },
       ) => {
+        if (o.taxonomy !== undefined && o.taxonomyFile !== undefined)
+          throw new Error("use only one of --taxonomy and --taxonomy-file");
+        if (o.clear && (o.taxonomy !== undefined || o.taxonomyFile !== undefined))
+          throw new Error("--clear cannot be combined with taxonomy options");
+        const taxonomy =
+          o.taxonomy !== undefined || o.taxonomyFile !== undefined
+            ? BenchTaxonomy.parse(
+                JSON.parse(o.taxonomy ?? readFileSync(resolve(o.taxonomyFile as string), "utf8")),
+              )
+            : undefined;
         const c = await client();
         const current =
           (await c.benchmarks()).find((b) => b.name === name)?.labels ?? ({} as BenchLabels);
@@ -717,11 +732,12 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
                   }
                 : {}),
               ...(o.domain.length ? { domains: o.domain } : {}),
+              ...(taxonomy !== undefined ? { taxonomy } : {}),
             };
         const b = await c.benchLabel(name, labels);
         print(o.json, b, () => {
           const l = b.labels ?? {};
-          return `${b.name}: ${l.identity ? `identity ${l.identity.id}` : "no identity label"}${l.domains?.length ? ` · domains ${l.domains.join(", ")}` : ""}`;
+          return `${b.name}: ${l.identity ? `identity ${l.identity.id}` : "no identity label"}${l.domains?.length ? ` · domains ${l.domains.join(", ")}` : ""}${l.taxonomy ? ` · taxonomy ${Object.keys(l.taxonomy).length} fields` : ""}`;
         });
       },
     );

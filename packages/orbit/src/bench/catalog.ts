@@ -9,6 +9,8 @@ import {
   type BenchIdentity,
   type BenchJob,
   type Benchmark,
+  type BenchTask,
+  type BenchTaxonomy,
   benchCoverage,
   type CalibrationReport,
   type CatalogEntry,
@@ -17,6 +19,8 @@ import {
   type Method,
   type MethodSummary,
   splitDomains,
+  TAXONOMY_VALUES,
+  type TaxonomyField,
 } from "../contracts/index.ts";
 import { methodBasis, revisionOf, stableDigest } from "./revision.ts";
 import { contentDigest } from "./samples.ts";
@@ -75,6 +79,75 @@ export function benchDomains(b: Benchmark, caps: BenchCapabilities | null) {
   return splitDomains(b.labels?.domains ?? caps?.domains ?? []);
 }
 
+const LEGACY_DOMAINS: Record<string, NonNullable<BenchTaxonomy["domains"]>[number]> = {
+  software: "software",
+  "machine-learning": "machine-learning",
+  science: "science",
+  embodied: "robotics",
+  games: "games",
+};
+
+function legacyTaxonomy(domains: string[] | undefined, explicit = false): BenchTaxonomy {
+  if (!domains) return {};
+  const values = domains.flatMap((d) => {
+    const value = Object.hasOwn(LEGACY_DOMAINS, d) ? LEGACY_DOMAINS[d] : undefined;
+    return value ? [value] : [];
+  });
+  return values.length || (explicit && !domains.length) ? { domains: values } : {};
+}
+
+/** Specific fields replace defaults; null and [] deliberately prevent inheritance. */
+export function resolveTaxonomy(...layers: (BenchTaxonomy | undefined)[]): BenchTaxonomy {
+  const values = Object.assign(
+    {},
+    ...layers.map((layer) =>
+      Object.fromEntries(Object.entries(layer ?? {}).filter(([, value]) => value !== undefined)),
+    ),
+  );
+  return Object.fromEntries(
+    (Object.keys(TAXONOMY_VALUES) as TaxonomyField[])
+      .filter((key) => values[key] !== undefined)
+      .map((key) => [key, values[key] === null ? null : [...new Set<string>(values[key])].sort()]),
+  ) as BenchTaxonomy;
+}
+
+/** Preserve conjunctions at task scope, while compressing identical descriptors for the catalog. */
+export function catalogTaxonomy(
+  benchmark: Benchmark,
+  capabilities: BenchCapabilities | null,
+  tasks: BenchTask[] | null,
+): Pick<CatalogEntry, "taxonomy" | "taxonomyGroups"> {
+  const defaults = resolveTaxonomy(
+    legacyTaxonomy(capabilities?.domains),
+    capabilities?.taxonomy,
+    legacyTaxonomy(benchmark.labels?.domains, true),
+    benchmark.labels?.taxonomy,
+  );
+  if (tasks === null)
+    return { taxonomy: defaults, taxonomyGroups: [{ taxonomy: defaults, taskCount: null }] };
+  const groups = new Map<string, { taxonomy: BenchTaxonomy; taskCount: number }>();
+  for (const task of tasks) {
+    const taxonomy = resolveTaxonomy(
+      defaults,
+      legacyTaxonomy(task.tags.domain ? [task.tags.domain] : undefined),
+      task.taxonomy,
+    );
+    const key = JSON.stringify(taxonomy);
+    const group = groups.get(key);
+    if (group) group.taskCount++;
+    else groups.set(key, { taxonomy, taskCount: 1 });
+  }
+  const taxonomyGroups = [...groups.values()];
+  const union: Record<string, string[] | null> = {};
+  for (const field of Object.keys(TAXONOMY_VALUES) as TaxonomyField[]) {
+    const values = taxonomyGroups.map((g) => g.taxonomy[field]);
+    const known = values.filter((v): v is NonNullable<typeof v> => Array.isArray(v));
+    if (known.length) union[field] = [...new Set(known.flat())].sort();
+    else if (values.some((v) => v === null)) union[field] = null;
+  }
+  return { taxonomy: union as BenchTaxonomy, taxonomyGroups };
+}
+
 /**
  * One catalog entry. `jobs` are this benchmark's jobs, newest first, each with its summary;
  * `calibrations` the reports of its calibration jobs, newest first.
@@ -126,6 +199,7 @@ export function catalogEntry(
     identitySource: source,
     domains,
     tags,
+    ...catalogTaxonomy(benchmark, capabilities, listing.data?.tasks ?? null),
     listingError: listing.error,
     refreshing: listing.refreshing,
     calibrations: benchmarkChecks.slice(0, 5),

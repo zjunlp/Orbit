@@ -107,7 +107,7 @@ examples/      bench-adapters/<benchmark>/: external bench adapters (not part of
 | daemon | 除 cli/mcp/client 外全部 |
 | client | contracts, lib, config |
 | cli, mcp | client, contracts, lib, config |
-| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）、`@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化）与 `@zjunlp/orbit/categories`（类别和领域词表） |
+| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）、`@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化）、`@zjunlp/orbit/categories`（旧类别和领域词表）与 `@zjunlp/orbit/taxonomy`（六维词表与匹配） |
 
 模块内按职责拆分，以上依赖方向不变：`contracts/index.ts` 保留统一导出，schema 分入 runs、resources、auth/notify、
 bench、adapter、cluster、records 和 folders；`RunService` 保留公共 API、调度与共享状态，远端放置/镜像、启动、服务、
@@ -573,7 +573,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
-- `capabilities` 描述接入大类与 profile（`category` / `profiles` / `domains`，见 integration-categories.md；旧的 `kind` 仅作 GUI 平台兼容）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。
+- `capabilities` 描述接入大类与 profile（`category` / `profiles` / `domains`，见 integration-categories.md；旧的 `kind` 仅作 GUI 平台兼容）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。六维分类与接入兼容字段的边界见 §9.17；分类标签不替代准入检查。
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - `contracts/trajectory.ts`：`GuiStepContext`（step 的 `actionId` / `at`，用于把 Agent 会话中的工具调用与 GUI step 精确对齐，不按时钟猜）与
   `EpisodeTrajectory`（版本 1、`kind: "episode"`：多相机帧/视频、动作与本体感知曲线、奖励；只含保存的媒体和数值，不含可执行动作）。
@@ -1073,6 +1073,9 @@ catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kin
 > 交互契约分 7 个大类（`BenchCapabilities.category` + 受控 `profiles` + `domains`），benchmark 以原始来源直接登记，hub 只作
 > 实现手段；L0/L1/L2 保留为实现成本维度。校准期望按类别给默认值、benchmark 可覆盖（`calibration`）。
 
+> **2026-11-09 范围调整**：C1–C7 保留为接入原型与兼容元数据。面向用户的分类采用 §9.17 六维 v1；
+> 下文的接入成本、校准与执行职责继续适用，不把七类覆盖当作能力或领域的完整覆盖。
+
 **判断**：§9.1–§9.7 的核心不变——成功判据沿用上游（分数可与官方对比），Orbit 统一执行、资源、有效性、聚合、
 可信证据与对比视图。问题在接入层：除 Harbor 格式外，每个 hub 都是手写 adapter（几百到上千行），重复实现镜像固定、
 readiness、证据哈希与签名、verify 复核、失败映射与评分回读；接入是否完成靠人工校准判断，大型 hub 的覆盖说不清
@@ -1183,23 +1186,30 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
 **Overview**：展示去重 benchmark 数、覆盖类别 `k/7`、领域、校准与真实方法证据；Agent 数、能力接线与凭据；
 运行中的作业、排队原因与待复盘失败；同一评测条件下方法版本的配对变化。卡片链接到对应页面和筛选。
 无数据时给出首次使用步骤：登记 benchmark → 配置凭据 → 校准 → 选兼容组合运行。读取失败显示错误与重试，避免永久加载。
+`k/7` 是原接入类别计数，不表示能力覆盖；六维改版的展示与统计约束见 §9.17。
 
 **Benchmarks**：
 
-- `category`（C1–C7，交互方式，单选）、`domains`（领域，多选）、`profiles`（环境与评分条件）分开。
-  EFE 是 C2 + embodied；原生 LIBERO 是 C6 + embodied；HumanEval 是 C1 + software。
-- 受控领域词表在 `contracts/categories.ts` 的 `BENCH_DOMAINS`：`science`、`software`、`machine-learning`、`data-analysis`、
-  `gui-web`、`embodied`、`games`、`conversation`、`knowledge`。词表外的值（如 τ² 的 `airline`、`retail`）保留为细分标签，
-  不计入领域。契约仍接受任意字符串；仓库示例 adapter 均声明至少一个受控领域。未声明显示 “Unlabeled”，不猜。
+- 六维入口与受控词表见 §9.17；页面支持多选分面、可移除筛选和 URL 保存状态。卡片/列表显示主要分类与登记证据，
+  可切换到领域 × 任务类型矩阵；矩阵和联合筛选使用同一任务描述，不能用集合并集制造交叉命中。
+  本轮已实现，整体验收见 [分类任务](tasks/20261109-benchmark-taxonomy.md)。
+- 详情按六组展示分类，可选择具体任务描述组；未标注与明确空集合分别显示 “Not annotated” 与 “None”。
+  旧 `category` / `domains` / `profiles` 留作兼容元数据，旧 category/domain URL 筛选继续可用。
 - `capabilities.identity`（`id`、`name`、可选 `version`、`variant`）声明 benchmark 身份。Catalog 按 `id` 归并登记；
   无声明时按 adapter 与数据路径派生稳定 ID，不以登记名猜测。标签优先于 adapter 声明，可通过 Web 或 `orbit bench label` 修改。
   `PATCH /benchmarks/:name/labels` 只改变展示标签，不改变执行；重新登记默认保留标签，清空后回退声明。
 - benchmarks / variants / registrations / tasks 分别计数；多领域的计数之和可大于 benchmark 总数。
   聚合 adapter 仍是一个集合身份（如 “CUA-Lite collection”），不把它列出的全部 suite 宣称为已校准独立 benchmark。
   BrowserGym 的 MiniWoB 身份记录任务源码版本，运行框架作为 variant/conditions；vla-eval 的其他 benchmark 类不会冒充 LIBERO。
-- 左侧分面为 Category、Domain、Evidence（calibrated / real method ran / parity），每项带计数，可移除已选条件。
-  主区为可展开表格或 Category × Domain 矩阵；格内为 benchmark 数与校准通过数，点击筛选，只表达覆盖、不表达成绩。
+- 原生对话框编辑登记级六维默认值，具体 task 声明仍优先。CLI 通过 `bench label --taxonomy` 或
+  `--taxonomy-file` 设置相同默认值；两种输入互斥。身份、分类与运行条件分开，不能通过改标签改变执行。
+- Evidence 筛选与统计仍按登记记录显示抽样校准、真实方法与 parity；页面注明其登记和样本范围，
+  不声称当前筛选命中的每道题都经过验证。覆盖视图只表达覆盖，不表达成绩。
   强制刷新只请求一次重列任务，随后轮询缓存进度。
+
+交互参考 [Linear filters](https://linear.app/docs/filters) 的可组合筛选、
+[Hugging Face datasets](https://huggingface.co/datasets) 的目录分面，以及
+[Geist colors](https://vercel.com/geist/colors) 的中性色层次；沿用 Orbit 的本地数据与现有组件，不引入这些服务。
 
 **Agents**：
 
@@ -1233,6 +1243,167 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
 
 **不做**：跨 benchmark 总分或总榜；单一 Ready 徽章合并安装、凭据、能力、校准与有效性；按 hub 声称的套件数宣传接入量；
 无证据的谱系；Web 内的科研编排。
+
+### 9.17 Benchmark 六维分类 v1（2026-11-09）
+
+状态：**词表、共享契约与 Benchmarks 页面已实现并通过本轮验收**。实施与验收见
+[分类任务](tasks/20261109-benchmark-taxonomy.md)。本节是六维词表的唯一完整定义；其他文档引用本节。
+分类服务于发现任务、理解评测条件与检查覆盖，不建立新的执行路径，不从标签推导 Agent 的实际能力或成绩可比性。
+
+六组分别回答：**属于什么领域、要完成什么任务、想检验什么、通过什么输入和动作交互、处于什么环境和交互条件、依据什么评分**。
+前三组为主要筛选，后三组按子字段展示。每个具体任务可在有依据时多选；复合组不压成一个混合标签数组。
+运行时词条 ID、英文标签与匹配函数统一在 `contracts/taxonomy.ts`，由 `@zjunlp/orbit/taxonomy` 导出；
+`BenchTaxonomy` zod 契约在 `contracts/bench.ts`，拒绝词表外的字段和值。
+
+**领域（12，`domains`）**：任务内容所需的知识或业务背景，不是工具、文件格式或交互界面。
+
+| 词条 | 范围 |
+| --- | --- |
+| 通用知识与日常事务 | 通用事实、常识与日常生活事务；不是未知领域的默认值 |
+| 软件工程 | 软件开发、维护、系统与运维工作 |
+| 机器学习 | 模型、数据学习方法及其训练评估 |
+| 数学与形式系统 | 数学、逻辑、形式证明与形式化规划 |
+| 自然科学 | 物理、化学、生物、地球等自然科学 |
+| 医疗健康 | 临床、医疗服务、健康与生物医学应用 |
+| 金融经济 | 金融、会计、经济与市场分析 |
+| 法律与公共事务 | 法律、政策、公共管理与社会公共事务 |
+| 商业与办公 | 企业业务、客户服务、行政与办公工作 |
+| 媒体与创作 | 文字、图像、音视频等内容与创意工作 |
+| 机器人与物理系统 | 机器人、控制、设备及物理系统 |
+| 游戏 | 具有规则与目标的游戏或对局 |
+
+领域可以交叉；医疗研究可同时涉及自然科学与医疗健康。`GUI`、对话、数据分析不是领域；工具名、
+文件格式、具体行业或学科细分保留为补充标签，不增加 v1 顶层词条。
+
+**任务类型（14，`taskTypes`）**：被要求完成的可观察工作，不列举完成它可能需要的全部认知能力。
+
+| 词条 | 范围 |
+| --- | --- |
+| 问答 | 回答问题或选择答案 |
+| 检索 | 查找、定位与汇集信息 |
+| 内容生成 | 生成文字、图像、音视频等内容 |
+| 信息加工 | 提取、转换、整理、标注与格式处理 |
+| 分析诊断 | 分析数据或现象、解释原因、识别问题 |
+| 实现 | 实现代码、算法、系统功能或可执行方案 |
+| 修复 | 修复已有代码、配置、产物或系统中的问题 |
+| 训练适配 | 训练、微调或适配模型与策略 |
+| 优化 | 改善明确的质量、性能、成本或目标函数 |
+| 业务办理 | 按约束完成业务、服务或行政流程 |
+| 实验与复现 | 设计或执行实验、验证与复现研究结果 |
+| 导航 | 在页面、应用或空间中到达目标位置 |
+| 操纵 | 操作物体、设备或环境以达到目标状态 |
+| 对局 | 在规则环境中参与游戏或对抗、合作对局 |
+
+只标任务实际要求：修复软件不必附加“内容生成”；写代码作为科学分析手段时，不自动把全部任务标为“实现”。
+一个任务确实要求多个交付目标时可以多选。
+
+**评测目标（14，`targets`）**：benchmark 声明要检验的能力或质量，须能指向任务设计、官方说明或评分依据。
+
+| 词条 | 范围 |
+| --- | --- |
+| 知识运用 | 调用与应用相关知识 |
+| 推理 | 推导、归纳、计算与解释 |
+| 规划 | 分解目标、选择顺序与制定行动方案 |
+| 工具使用 | 选择、组合与正确调用工具 |
+| 记忆 | 保留、检索和使用先前信息 |
+| 感知与定位 | 理解观测并定位对象或目标 |
+| 交互与协同 | 澄清、沟通、协调与共同完成目标 |
+| 控制 | 将观测与目标转为有效控制行为 |
+| 学习与适应 | 从反馈或新条件中学习与调整 |
+| 指令遵循 | 遵守任务要求、约束和输出规范 |
+| 可靠性与鲁棒性 | 重复执行及扰动条件下的稳定表现 |
+| 泛化 | 对未见任务、对象、环境或分布的迁移表现 |
+| 安全 | 满足明确安全目标或抵御指定风险 |
+| 效率 | 时间、计算、调用次数或成本等资源效率 |
+
+“需要某能力”不等于“该 benchmark 专门测该能力”：长任务不自动标记记忆或规划，有截图不自动证明测了感知定位。
+`requires`、Agent 声明能力和 Policy 语义绑定回答能否运行；本组回答评什么。有效 trial 是执行证据，不是能力已达标的证明。
+评测目标未核实时保留未知，不以“推理”等泛化标签补齐。
+
+**接口与模态（11 个值）**：观测输入的模态与被测方允许的动作分开；本轮没有单独的输出模态字段。
+
+| 子字段 | 词表 |
+| --- | --- |
+| 观测模态（5，`modalities`） | 文本、图像、视频、音频、结构化数据与状态 |
+| 动作（6，`interfaces`） | 回复或提交答案、文件编辑、终端或代码执行、语义工具调用、GUI 操作、物理或仿真控制 |
+
+代码可作为文本，表格、数组与状态可作为结构化数据；PDF、CSV、JSON 是格式细节，不扩展模态词表。
+动作描述评测协议允许被测方使用的接口，不根据已安装工具或一次轨迹中的动作推断完整协议。
+MCP 是传输与接线方式；经 MCP 点击网页仍是 GUI 操作。物理动作单位、坐标系、频率与映射沿用 C6 语义契约，
+不由分类重新定义。
+
+**环境与交互条件（15 个值）**：环境、世界来源、反馈和其他参与者分开。
+
+| 子字段 | 词表 |
+| --- | --- |
+| 环境（6，`platforms`） | 程序或服务环境、浏览器、桌面、移动应用、物理仿真、真实设备 |
+| 世界（2，`world`） | 受控、外部实时 |
+| 反馈（3，`feedback`） | 无交互反馈、同步分步、实时连续 |
+| 其他参与者（4，`participants`） | 模拟用户、真人用户、协作伙伴、竞争对手 |
+
+世界描述任务依赖的状态来源；调用远端模型不使受控任务成为外部实时。受控不意味着确定性或无网络。
+固定多轮历史仍可能没有交互反馈；只有后续输入依赖被测方行为时才算交互。参与者按角色声明，
+不把评分器、基础设施服务或方法内部子代理自动算作额外被测主体。复位、跨会话状态、控制频率、
+用户是否也能操作环境等继续记录在原协议和条件中，不增加 v1 词条。
+
+**评分方式（9 个值）**：评分证据与判定方法分开，多项组成的评分保留其组合。
+
+| 子字段 | 词表 |
+| --- | --- |
+| 评分证据（4，`scoringEvidence`） | 答案响应、交付物、最终状态、过程轨迹 |
+| 判定方法（5，`scoringMethods`） | 规则参考检查、执行测试、模型裁判、人工评审、模型概率统计 |
+
+原生仿真成功条件通常是对最终状态或过程轨迹作规则参考检查；不另增“具身评分”或“环境 reward”类别。
+执行了一个评分脚本不等于执行测试：脚本可能调用模型裁判或读取终态。二元/标量是结果形状，
+`pass@k`、均值、Elo 等是指标或聚合规则，成对比较是评分协议；继续沿用 `MetricSpec`、`OfficialRule` 与原 scorer 条件。
+
+**Harbor 与启动格式**：Harbor、manifest、SDK 和 BrowserGym 等保留在适配器、格式或运行框架信息中，
+不成为六维词条。Harbor 指定任务包装、环境和启动/验证入口；不能从 `tests/test.sh`、`reward.txt`、
+Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包装改变被测对象、题目或成功判据，
+如 EFE 的 coding-agent 任务，则包装后的问题具有独立 benchmark 身份。
+
+| 示例 | 分类重点 |
+| --- | --- |
+| HumanEval 一次生成 | 软件工程；实现；回复或提交答案；无交互反馈；交付代码由执行测试判定 |
+| Harbor 软件修复任务 | 软件工程；修复；文件编辑与终端或代码执行；具体评分仍看 verifier |
+| Harbor 科学任务 | 自然科学等任务领域；分析诊断或实验与复现；不因使用终端改成软件工程 |
+| Harbor + EFE | 机器人与物理系统；按任务交付或在线控制协议标动作与反馈；与原生 Policy 边界分开 |
+| 原生 LIBERO | 机器人与物理系统；操纵；图像/结构化数据与状态、物理或仿真控制；评分依据原生状态/轨迹 |
+| GUI 或模拟用户任务 | 领域按具体业务；GUI 操作与模拟用户可以共存，不被主类别排斥 |
+
+以上是归类示例，不证明某适配器已支持全部接口或某 benchmark 已完成校准。
+
+**元数据与筛选规则**：
+
+- 分类单位是具体 task/variant。benchmark 身份的汇总只表达包含哪些任务，不把所有子集标签并集作为每题默认值。
+  统一适用的登记/variant 声明可作为默认；task 按字段替换，不能通过自动并集保留错误的父级标签。
+- `BenchCapabilities.taxonomy`、`BenchLabels.taxonomy`、`BenchTask.taxonomy` 均可选。生效顺序为 adapter 旧 domains
+  → adapter taxonomy → 登记旧 domains → 登记 taxonomy → task 的旧 `tags.domain` → task taxonomy；后项按字段覆盖前项。
+  字段缺省继承、`null` 明确未知并阻断继承、`[]` 明确空集合，均不扩展受控词表。
+- `CatalogEntry.taxonomy` 仅是展示并集；`taxonomyGroups[{taxonomy, taskCount}]` 合并描述相同的任务，供联合筛选使用。
+  尚无 listing 时用登记默认值并令 `taskCount: null`；它只表示已声明条件，不证明任务数量或任务覆盖。
+- 同一子字段多选为 OR、不同子字段为 AND，必须由同一个 task/variant 同时满足，然后再按 benchmark 身份归并。
+  science + 终端的子集与 software + GUI 的子集不能合成 science + GUI 命中。缺少足够细的描述时，
+  不把集合分别覆盖的维度宣称为联合覆盖；未知不算已覆盖。
+- 本轮校准、真实方法、parity 等仍是登记级证据，保留原任务与协议范围；命中分类不代表筛选任务都经过验证。
+  某子集的证据不提升整个集合或另一子集，任务级分类筛选不改写登记级证据统计。
+  领域、任务和目标计数是非互斥覆盖数，不相加为 benchmark 总量，不生成跨 benchmark 总分。
+- 未声明、明确未知与明确不存在分开；未标注不补猜。词表外内容保留为补充标签，不参与受控词表的覆盖计数。
+  v1 不增加难度或凭任务名推导的能力标签。
+- benchmark 来源与版本沿用现有身份。作业保留已有 benchmark/capabilities 快照，当前标签修改不重写历史报告；
+  本轮未新增逐 task 的完整历史 taxonomy 快照或独立分类修订。分类元数据不进入方法可比性与重试兼容指纹。
+  方法的模型、harness、权重与工具配置属于 Method；Run 记录执行设施，均不由分类代替。
+- C1–C7、旧 `domains` / `profiles` 与旧作业保持兼容，作为工程元数据或旧记录展示。只迁移有明确语义对应的值，
+  当前精确回退仅为 `software`、`machine-learning`、`science`、`games` 同值和 `embodied` → `robotics`；
+  `knowledge`、`gui-web`、`data-analysis` 等保留原标签，不猜新字段。不从 C2 猜软件领域、从 C5 猜感知能力、
+  从 C6 猜推理能力。分类不改变现有准入、Policy binding、校准或评分行为。
+- `orbit bench label --taxonomy '<JSON>'` 或 `--taxonomy-file <file>` 替换登记的 taxonomy 部分，保留已有 identity 与旧 domains；
+  `--clear` 清除全部 labels。HumanEval 与原生 embodied adapter 已声明可核实的协议事实，未指定的评测目标保持未知；
+  其他适配器逐步补充，未标注不等于不具备该条件。
+
+**Benchmarks 页面**：以领域、任务类型、评测目标为主要分面；接口与模态、环境与交互条件、评分方式按子字段展开。
+仍按 benchmark 身份归并登记，保留证据、覆盖、运行入口与条件详情。未知值明确显示；C1–C7 与 Harbor 等接入信息
+放在详情或兼容筛选中，不作为唯一总目录，也不以“7/7”表达评测生态完整覆盖。
 
 ## 10. 路线
 

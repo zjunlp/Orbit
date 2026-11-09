@@ -18,6 +18,7 @@ import { UserError } from "../runs/errors.ts";
 import type { AgentFailure } from "../sessions/index.ts";
 import { batchConditions } from "./batches.ts";
 import { agentFailureIssue, agentFailureKind, shouldCheckAgentFailure } from "./classify.ts";
+import { executionCapabilities } from "./revision.ts";
 import { executionBudget, isValid } from "./summary.ts";
 
 /** Group of a job's runs, so the run list and notifications see a job as one group. */
@@ -47,7 +48,10 @@ export const sameMethodSetup = (a: BenchJob, b: BenchJob) => {
         benchmarkSettings(b.benchmarkSnapshot),
       ) &&
       isDeepStrictEqual(a.source, b.source) &&
-      isDeepStrictEqual(a.capabilities, b.capabilities),
+      isDeepStrictEqual(
+        executionCapabilities(a.capabilities),
+        executionCapabilities(b.capabilities),
+      ),
   );
 };
 
@@ -72,7 +76,10 @@ export function equivalentTransport(a: BenchJob, b: BenchJob, transport: Transpo
   const left = a.benchmarkSnapshot ?? transport.benchmarks.get(a.spec.benchmark);
   const right = b.benchmarkSnapshot ?? transport.benchmarks.get(b.spec.benchmark);
   if (!left || !right || !isDeepStrictEqual(a.source, b.source)) return false;
-  if (!isDeepStrictEqual(a.capabilities, b.capabilities)) return false;
+  if (
+    !isDeepStrictEqual(executionCapabilities(a.capabilities), executionCapabilities(b.capabilities))
+  )
+    return false;
   const env = (v: Record<string, string>) =>
     Object.fromEntries(Object.entries(v).filter(([k]) => !/^(https?|all|no)_proxy$/i.test(k)));
   const benchmark = (v: Benchmark) => ({ ...benchmarkSettings(v), env: env(v.env) });

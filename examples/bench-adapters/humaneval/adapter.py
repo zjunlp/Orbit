@@ -30,6 +30,13 @@ CAPABILITIES = {
     "category": "fixed-input",
     "identity": {"id": "humaneval", "name": "HumanEval", "version": "312c5e5"},
     "domains": ["software"],
+    "taxonomy": {
+        "domains": ["software"], "taskTypes": ["implementation"],
+        "modalities": ["text"], "interfaces": ["response"],
+        "platforms": ["software-system"], "world": ["controlled"],
+        "feedback": ["none"], "participants": [],
+        "scoringEvidence": ["artifact"], "scoringMethods": ["execution-test"],
+    },
     "profiles": ["generate", "exec-test"],
     "methods": ["oracle", "empty", "external"],
     "scoreKind": "binary",

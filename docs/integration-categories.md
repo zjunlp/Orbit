@@ -1,4 +1,8 @@
-# Benchmark 大类与接入规范
+# Benchmark 接入原型与兼容规范
+
+适用范围：本文保留 C1–C7 的工程接入契约、校准依据与既有实现记录。面向用户的分类以
+[design §9.17 六维 v1](design.md#917-benchmark-六维分类-v12026-11-09) 为准；C1–C7 不再作为唯一总目录。
+六维改版沿用这里的执行与证据约束，不把领域、任务或评测目标标签变成新的执行路径。
 
 状态：**已确认并开始实施**（2026-11-05；EFE 归 C2 + 具身 profile，原生具身归 C6）。实施进度见 §7。依据为四份调研报告：[外部生态](research/taxonomy/landscape.md)、
 [具身](research/taxonomy/embodied.md)、[GUI](research/taxonomy/gui.md)、[代码/科研/问答](research/taxonomy/code.md)。
@@ -6,7 +10,7 @@
 
 ## 0. 一句话
 
-**按"被评测对象怎样与任务交互"分 7 个大类；环境、评分方式、是否联网作为大类下的 profile。** 每个具体 benchmark
+**旧接入规范按"被评测对象怎样与任务交互"分 7 个原型；环境、评分方式、是否联网记录为 profile。** 每个具体 benchmark
 用自己的身份（原始任务来源 + 版本）直接登记到它的大类下；Harbor、BrowserGym、vla-eval 这类 hub 或库只是实现手段，
 不再是 benchmark 身份的上一层。只有当某个 hub **重新定义了考题**（例如 EFE 把机器人任务改成 coding agent 的考题）时，
 它本身才是一个 benchmark。
@@ -24,7 +28,7 @@
 4. **评分来源**（profile）：答案匹配、测试、状态检查、环境 reward、LLM judge、人工/成对比较。
 5. **领域、模态**：只作检索标签和分组统计。
 
-反例说明为什么不能按领域分：同一个 LIBERO，原生版本测的是 VLA policy（每步给动作），EFE 版本测的是 coding agent
+反例说明为什么仅按领域不能决定接入协议：同一个 LIBERO，原生版本测的是 VLA policy（每步给动作），EFE 版本测的是 coding agent
 （写控制程序或调用仿真 API）；同一个 BFCL，静态题是一次输出，执行版是工具循环；同一个浏览器，WebArena 是冻结网站，
 Online-Mind2Web 是真实网页加 judge。
 
@@ -66,7 +70,7 @@ Online-Mind2Web 是真实网页加 judge。
 | **④ 证据与轨迹** | 输入 hash、实际请求、完整响应、解析、参考答案引用、scorer 输出 | Agent 会话、diff、交付物 hash、测试日志、rubric 叶节点；EFE 加仿真动作与视频（注明 live / 回放） | 工具发现结果、调用 id、参数、返回、副作用、前后状态差 | 双方消息与工具、共享状态、结束原因；语音保留音频与时间对齐 | 截图与动作一一对应、动作前后观测、URL/窗口、reward；可信 service 签名 | 高频观测/动作/时间/reward、多相机视频、状态快照、policy 延迟；原生数组保留，Web 用 episode 时间线 | 事件顺序、玩家 id、可见性、动作合法性、每玩家 reward；回放可全知但不得泄漏给 agent |
 | **⑤ 校准** | 已知正确/错误答案、解析边界；不要求 empty 全为 0 | 参考解、故意坏的交付、缺交付；研究类验证真复现；再用一个真实方法与原 runner 对齐 | 已知正确调用序列、缺工具、schema 错误、外部失败 | 固定用户模型与提示；协同成功、合理拒绝、异常退出；多次重复报告 `pass^k` | 脚本化成功/失败路径、坐标映射、复位、终态 evaluator；live 世界测可达性与 judge 一致性 | 已知 checkpoint 或专家演示回放、动作单位与方向、复位确定性；**静止 policy 不保证得 0** | 规则边界、非法动作、角色互换、固定脚本对手 |
 
-**每个直接登记的 benchmark 必须给出的最小声明**（与实现方式 L0/L1/L2 无关）：
+**既有接入规范的最小声明**（与实现方式 L0/L1/L2 无关；六维描述不替代这些协议事实）：
 
 ```text
 identity     原始任务来源 + 版本 + 任务/实例 digest；包装改变了考题时，包装本身是 identity
@@ -82,6 +86,9 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
 
 ## 4. 现有接入按新规范的归类
 
+本节是 2026-11-05 制定接入规范时的快照，差距项不代表当前状态；最新实现与覆盖见
+[status](status.md) 和 [具身兼容指南](guides/embodied-compatibility.md)。
+
 | 现有接入 | 大类 + profile | 与新规范的差距 |
 | --- | --- | --- |
 | EFE（2,260 个模式目录） | C2 + `embodied-program`（privileged，1,034）/ `embodied-live`（standard 1,142、realtime 84） | profile 需从 task 元数据自动生成；校准期望按 oracle 覆盖（full 1,313 / partial 141 / none 806）分别给 |
@@ -92,7 +99,7 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
 | ResearchClawBench、LongDS | C2 + `research-report`（LongDS 每轮答案按 judge） | judge 未评项必须为无效，不能补 0 |
 | 尚未覆盖 | C1 judge 类问答、C7 多人对局；C6 的原生 benchmark 只有 LIBERO 一个 | — |
 
-## 5. 对 Orbit 的改动（确认后实施）
+## 5. 2026-11-05 接入实施方案
 
 1. **契约**：`BenchCapabilities` 增加 `category`（C1–C7）与 `profiles`（受控取值），取代现在只有
    `browser / desktop / mobile / other` 的 `kind`（旧记录映射到 C5 或 unknown）。Web 与 catalog 按大类组织。
@@ -109,6 +116,8 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
    C1 一个问答或代码生成集、C3 一个 MCP 类、C4 τ²-bench、C7 TextArena 的一个单人游戏。
 
 ## 6. 已确认的决策（2026-11-05）
+
+以下为七类接入方案的历史决策；2026-11-09 确定的六维用户分类见 design §9.17。
 
 1. 采用 7 个大类。
 2. EFE 归 C2（coding agent）+ `embodied-program` / `embodied-live`，另带 `domains: [embodied]` 标签，Web 可按领域

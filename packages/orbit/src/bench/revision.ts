@@ -3,12 +3,20 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import type { Method, MethodBasis, MethodRevision } from "../contracts/index.ts";
+import type { BenchCapabilities, Method, MethodBasis, MethodRevision } from "../contracts/index.ts";
 import { contentDigest } from "./samples.ts";
 
 /** Bundles are small (instructions, skills); stop rather than hash a whole checkout by mistake. */
 const MAX_FILES = 2000;
 const MAX_BYTES = 64 * 1024 * 1024;
+
+/** Discovery labels never change comparability or retry compatibility. */
+export function executionCapabilities(capabilities: BenchCapabilities | null | undefined) {
+  if (!capabilities) return capabilities;
+  const value = { ...capabilities };
+  delete value.taxonomy;
+  return value;
+}
 
 /** Digest the files installed into the Agent home, following bundle links like the installer. */
 export function bundleDigest(dir: string): string {
