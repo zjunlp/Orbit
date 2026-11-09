@@ -6,7 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
-GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "metaworld", "calvin")
+GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
+                          "metaworld", "calvin")
 
 
 def digest(value):

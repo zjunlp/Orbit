@@ -1,0 +1,125 @@
+{
+  "panda": {
+    "robot": "panda",
+    "layout": "panda",
+    "actionSize": 8,
+    "tasks": {
+      "LiftPegUpright-v1": [50, "Stand the peg upright on the table."],
+      "PlaceSphere-v1": [50, "Place the sphere in the receptacle."],
+      "PokeCube-v1": [50, "Use the peg to move the cube to the goal."],
+      "PullCube-v1": [50, "Pull the cube into the goal region."],
+      "PullCubeTool-v1": [100, "Pull the cube toward the robot using the tool."],
+      "PushCube-v1": [50, "Push the cube into the goal region."],
+      "RollBall-v1": [80, "Roll the ball into the goal region."]
+    }
+  },
+  "panda-pick-cube": {
+    "robot": "panda",
+    "layout": "panda",
+    "actionSize": 8,
+    "goalPosition": "extra.goal_pos",
+    "tasks": {
+      "PickCube-v1": [50, "Pick up the cube and move it to the goal."]
+    }
+  },
+  "panda-wrist": {
+    "robot": "panda_wristcam",
+    "layout": "panda-wrist",
+    "wristCamera": true,
+    "actionSize": 8,
+    "tasks": {
+      "PegInsertionSide-v1": [100, "Insert the peg into the hole from the side."],
+      "PlugCharger-v1": [200, "Plug the charger into the socket."],
+      "StackCube-v1": [50, "Stack the red cube on the green cube."],
+      "StackPyramid-v1": [
+        250,
+        "Place the red cube next to the green cube and stack the blue cube on top of both."
+      ]
+    }
+  },
+  "panda-stick": {
+    "robot": "panda_stick",
+    "layout": "panda-stick",
+    "actionSize": 7,
+    "tasks": {
+      "PushT-v1": [100, "Push the T-shaped block into the goal pose."]
+    }
+  },
+  "dual-panda": {
+    "robot": ["panda_wristcam", "panda_wristcam"],
+    "layout": "dual-panda",
+    "actionSize": 16,
+    "tasks": {
+      "TwoRobotStackCube-v1": [
+        100,
+        "Place the green cube in the goal region with the right arm and stack the blue cube on it with the left arm."
+      ]
+    }
+  },
+  "dual-panda-pick-cube": {
+    "robot": ["panda_wristcam", "panda_wristcam"],
+    "layout": "dual-panda",
+    "actionSize": 16,
+    "goalPosition": "goal_site",
+    "tasks": {
+      "TwoRobotPickCube-v1": [
+        100,
+        "Pass the cube from the left arm to the right arm and move it to the goal."
+      ]
+    }
+  },
+  "so100": {
+    "robot": "so100",
+    "layout": "so100",
+    "actionSize": 6,
+    "goalPosition": "extra.goal_pos",
+    "tasks": {
+      "PickCubeSO100-v1": [50, "Pick up the cube and move it to the goal."]
+    }
+  },
+  "assembling-kits": {
+    "robot": "panda_wristcam",
+    "layout": "panda-wrist",
+    "wristCamera": true,
+    "actionSize": 8,
+    "assetDirectory": "data/tasks/assembling_kits",
+    "assetSource": "assembling_kits",
+    "tasks": {
+      "AssemblingKits-v1": [200, "Place the loose piece into its matching slot."]
+    }
+  },
+  "ycb": {
+    "robot": "panda_wristcam",
+    "layout": "panda-wrist",
+    "wristCamera": true,
+    "actionSize": 8,
+    "assetDirectory": "data/assets/mani_skill2_ycb",
+    "assetSource": "ycb",
+    "goalPosition": "extra.goal_pos",
+    "tasks": {
+      "PickSingleYCB-v1": [50, "Pick up the object and move it to the goal."]
+    }
+  },
+  "faucet": {
+    "robot": "panda_wristcam",
+    "layout": "panda-wrist",
+    "wristCamera": true,
+    "actionSize": 8,
+    "assetDirectory": "data/partnet_mobility/dataset",
+    "assetSource": "partnet_mobility_faucet",
+    "tasks": {
+      "TurnFaucet-v1": [200, "Turn the faucet handle."]
+    }
+  },
+  "widowxai": {
+    "robot": "widowxai",
+    "layout": "widowxai",
+    "actionSize": 8,
+    "assetDirectory": "data/robots/widowxai",
+    "assetSource": "widowxai",
+    "goalPosition": "extra.goal_pos",
+    "tasks": {
+      "PickCubeWidowXAI-v1": [50, "Pick up the cube and move it to the goal."]
+    }
+  }
+}

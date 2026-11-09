@@ -11,6 +11,42 @@ The four recipes reuse the existing fixed-batch, CPU verification and rescore pa
 | `maniskill3-plate25-native` | `openvla-oft-rlinf-maniskill3` | [RLinf/RLinf-OpenVLAOFT-GRPO-ManiSkill3-25ood](https://huggingface.co/RLinf/RLinf-OpenVLAOFT-GRPO-ManiSkill3-25ood) | `cf4b6c5a1181c1055c6ab4500d1173b6db9e5ffa` |
 | `metaworld-mt50-native` | `pi05-rlinf-metaworld` | [RLinf/RLinf-Pi05-MetaWorld-SFT](https://huggingface.co/RLinf/RLinf-Pi05-MetaWorld-SFT) | `60b2d0309af8bb087c9e9b250f8c7f9db50c0f8e` |
 
+## ManiSkill3 native tabletop tasks
+
+The `3.0.0b22` [tabletop catalog](profiles/maniskill3-tabletop.json) groups tasks by the
+native robot, joint controller and observation contract. The adapter freezes each native time limit
+and reads `info.success`. Each profile uses 128 × 128 RGB, seeded CPU physics, and the
+native normalized `pd_joint_delta_pos` controller. Dual Panda actions use the simulator's
+flattened Dict order. The language field is a fixed task description from the catalog.
+
+The `panda-pick-cube`, `dual-panda-pick-cube`, `so100`, `widowxai` and `ycb` profiles
+include `goal_pos` as a float32 XYZ target in world metres. The single-arm tasks use the
+native RGB observation's goal field. The dual-arm task uses the native goal marker pose.
+Register the updated profiles and regenerate sample plans for the `/2` recipe.
+
+Use the ManiSkill3 simulator image below and choose a profile. These registrations accept
+an independent `policy-ws` service that matches the profile's observation and action
+declarations. The RLinf Plate-25 checkpoint uses a separate WidowX end-effector recipe.
+
+```bash
+adapter=examples/bench-adapters/embodied
+python3 -B "$adapter/configure_maniskill.py" --profile panda-pick-cube \
+  --benchmark-image orbit/embodied-maniskill3:3.0.0b22 --output-dir "$MANISKILL_CONFIG"
+orbit bench add-file "$MANISKILL_CONFIG/benchmark.json"
+orbit bench tasks maniskill3-tabletop-panda-pick-cube-native --json
+python3 -B "$adapter/plan.py" --reference-source "$adapter" \
+  --reference-file "$MANISKILL_CONFIG/reference.json" --task PickCube-v1 \
+  --initial-state 0 --initial-state 1 > "$MANISKILL_CONFIG/samples.json"
+```
+
+The `assembling-kits`, `ycb`, `faucet` and `widowxai` profiles require the corresponding
+ManiSkill assets. Download `assembling_kits`, `ycb`, `partnet_mobility_faucet` or `widowxai`
+with `python -m mani_skill.utils.download_asset -y` in the pinned runtime and keep the
+resulting `data/` tree under `$MANISKILL_ASSETS`. Pass `--assets "$MANISKILL_ASSETS"`
+when configuring and register that directory under the dataset name in `reference.json`.
+The upstream `PickClutterYCB-v1` has a constant false success flag and is excluded from
+scored profiles.
+
 ## Build images and prepare weights
 
 Keep checkpoints, source checkouts, simulator assets and generated configs outside the Orbit checkout.
