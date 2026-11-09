@@ -16,15 +16,20 @@
 | SimplerEnv Google Robot Visual Matching | 11 | `simpler-google-visual-matching-native` | — | — | — | — | — | — | — |
 | SimplerEnv Google Robot Variant Aggregation | 11 | `simpler-google-variant-aggregation-native` | — | — | — | — | — | — | — |
 | SimplerEnv WidowX Visual Matching | 4 | `simpler-widowx-visual-matching-native` | — | — | — | — | — | — | — |
+| SimplerEnv 策略终止协议 | 三套固定网格共用原目录 | `simpler-<profile>-stop-native` | — | — | — | — | — | — | — |
 | RoboCasa365 Atomic-Seen | 18 | `robocasa365-atomic-seen-native` / `robocasa365-atomic-seen-gr00t-native` | 实测 `pi05-robocasa365-shared` | — | 实测 `groot-n15-robocasa365-shared` | — | — | — | — |
-| RoboCasa365 Composite-Seen | 16 | `robocasa365-composite-seen-native` / `robocasa365-composite-seen-gr00t-native` | — | — | — | — | — | — | — |
-| RoboCasa365 Composite-Unseen | 16 | `robocasa365-composite-unseen-native` / `robocasa365-composite-unseen-gr00t-native` | — | — | — | — | — | — | — |
+| RoboCasa365 Composite-Seen | 16 | `robocasa365-composite-seen-native` / `robocasa365-composite-seen-gr00t-native` | — | — | 实测（`target50` 抽样） | — | — | — | — |
+| RoboCasa365 Composite-Unseen | 16 | `robocasa365-composite-unseen-native` / `robocasa365-composite-unseen-gr00t-native` | — | — | 实测（`target50` 抽样） | — | — | — | — |
+| RoboCasa365 固定版本全目录 | 317 | `robocasa365-all-tasks-native` / `robocasa365-all-tasks-gr00t-native` | — | — | — | — | — | — | — |
+| RoboCasa365 Lifelong | 125 | 四个阶段及三个累计套件，[登记说明](../../examples/bench-adapters/embodied/ROBOCASA365.md) | — | — | — | — | — | — | — |
 | RoboTwin 2.0 Clean（单任务验收） | 1 | `robotwin-demo-clean-native` | 实测 `pi05-robotwin-adjust-bottle-shared` | — | — | — | — | — | — |
 | RoboTwin 2.0 Clean | 50 | `robotwin-demo-clean-full-native` | — | — | — | — | — | — | — |
 | RoboTwin 2.0 Randomized | 50 | `robotwin-demo-randomized-full-native` | — | — | — | — | — | — | — |
 | ManiSkill3 Plate-25（RLinf） | 1 | `maniskill3-plate25-native` | — | — | — | 实测 `openvla-oft-rlinf-maniskill3` | — | — | — |
+| ManiSkill3 原生桌面套件 | 20，含两个待资产验证的任务 | `maniskill3-tabletop-<profile>-native` | — | — | — | — | — | — | — |
 | Meta-World MT50（RLinf） | 50 | `metaworld-mt50-native` | 实测 `pi05-rlinf-metaworld` | — | — | — | — | — | — |
 | RoboTwin 2.0 Clean（末端位姿） | 50 | `robotwin-demo-clean-cartesian-native` | — | — | — | — | — | — | 实测 `xvla-robotwin2` |
+| RoboTwin 2.0 Randomized（末端位姿） | 50 | `robotwin-demo-randomized-cartesian-native` | — | — | — | — | — | — | 实测 `xvla-robotwin2` |
 | CALVIN ABC→D | 1（1,000 条序列） | `calvin-abc-d-native` | 实测 `pi05-rlinf-calvin-abc-d` | — | — | — | — | — | — |
 
 π₀.₅ 的四个已实测 LIBERO 套件共用官方 `pi05_libero` 权重，Policy 登记为 `pi05-libero`，共享 GPU 配置登记为 `pi05-libero-shared`。RoboCasa365 使用自己的公开 π₀.₅ 权重。GR00T 的 LIBERO 权重按 suite 子目录选择，WidowX 用 Bridge，Google Robot 用 Fractal，三条路径共用固定 backbone 缓存。OFT 的 Spatial 专用权重和四套件联合权重分别有实测记录。联合权重按 suite 选择 `<suite>_no_noops`，Long 对应 `libero_10_no_noops`。[LIBERO 套件选择](libero-suites.md) · [RoboCasa365 配置](../../examples/bench-adapters/embodied/ROBOCASA365.md) · [GR00T 配置](../../examples/bench-adapters/embodied/GR00T.md) · [OFT 模型配置](../../examples/bench-adapters/embodied/profiles/openvla-model.json)
@@ -59,22 +64,26 @@ RoboCasa365 的 `target50` 登记汇总三个任务组。场景划分独立于�
 
 | 范围 | 已记录的验证 |
 | --- | --- |
-| LIBERO Spatial | π₀.₅ 真实样本、原生正负例和独立验证。GR00T 固定批次及独立 CPU 验证。OFT 专用和联合 checkpoint 分别通过真实抽样接入。[π₀.₅](../tasks/20261105-embodied-eval.md) · [GR00T 批次](../tasks/20261106-embodied-batches.md) · [OFT 专用](../tasks/20261106-embodied-endpoints.md) · [OFT 联合](../tasks/20261107-libero-suites.md) |
+| LIBERO Spatial | 10 个任务通过原生 reset、相机和控制步检查。π₀.₅、GR00T、OFT 均有真实抽样及独立验证。[原生目录验收](../tasks/20261109-embodied-benchmark-coverage.md) · [早期 π₀.₅](../tasks/20261105-embodied-eval.md) · [GR00T 批次](../tasks/20261106-embodied-batches.md) · [OFT 联合](../tasks/20261107-libero-suites.md) |
 | LIBERO Object、Goal、Long | 30 个任务通过原生 reset 和控制步检查。9 个新增模型与套件组合分别通过两个冻结 episode 的真实接入检查。[LIBERO 扩展验收](../tasks/20261107-libero-suites.md) |
 | LIBERO-90 | 90 个任务通过原生 reset、settle、相机和控制步检查。RLinf OpenVLA-OFT 在两个冻结任务上通过共享批次、独立 CPU 验证和重评。[目录验收](../tasks/20261108-libero-90.md) · [模型验收](../tasks/20261108-libero-90-rlinf.md) |
 | SimplerEnv WidowX | 7 个任务通过原生初始化、渲染和控制步检查，Bridge 通过真实抽样与固定批次检查。[原生覆盖](../tasks/20261106-embodied-endpoints.md) · [Bridge 批次](../tasks/20261106-embodied-batches.md) |
 | SimplerEnv Google Robot | 6 个任务通过原生初始化和控制步检查，原生固定动作对照通过，Fractal 通过有界真实抽样、CPU 验证与重评。[Google Robot 验收](../tasks/20261107-groot-google.md) |
 | SimplerEnv 完整目录与固定网格 | 141 个任务与场景设置完成原生 reset、渲染和控制步。默认 OptiX 可在此机器返回空白原始帧，关闭降噪的独立配置通过 RT 复核。[SimplerEnv 验收](../tasks/20261108-simplerenv-task-sets.md) |
+| SimplerEnv 策略终止协议 | 三套网格通过脚本策略的原生停止和 CPU 证据检查。Google 两套用关闭 OptiX 降噪的配置。[协议验收](../tasks/20261109-embodied-benchmark-coverage.md) |
 | RoboCasa365 Atomic-Seen | 18 个任务通过原生初始化、渲染和控制步检查。两个任务的原生状态和控制向量一致，独立渲染最大差 1 个灰阶值。官方 π₀.₅ 通过两个冻结样本的共享 GPU 批次、CPU 验证和选定样本重评。[RoboCasa365 验收](../tasks/20261107-robocasa365.md) |
 | RoboCasa365 Atomic-Seen，GR00T N1.5 | 1.0.1 的 18 个任务 ID 和 horizon 已核对，两个任务与官方多步 wrapper 的状态、控制和计分一致。官方 N1.5 通过两样本真实批次、CPU 验证和选定样本重评。[N1.5 验收](../tasks/20261107-robocasa365-gr00t-n15.md) |
-| RoboCasa365 完整目录 | 50 个任务在两个运行时和两种场景划分下共通过 200 个原生 EGL 重置、渲染与控制检查。两个 Composite 组分别选了一个任务，在四种配置下与原生环境直接对照。[RoboCasa365 扩展验收](../tasks/20261108-robocasa365-task-sets.md) |
+| RoboCasa365 榜单目录 | 50 个任务在两个运行时和两种场景划分下共通过 200 个原生 EGL 重置、渲染与控制检查。两个 Composite 组分别选了一个任务，在四种配置下与原生环境直接对照。[RoboCasa365 扩展验收](../tasks/20261108-robocasa365-task-sets.md) |
+| RoboCasa365 全目录和 Lifelong | 固定 1.0.1 的 317 个任务在 pretrain 场景中通过原生检查。Lifelong 的阶段和累计任务数已通过 CLI 核对。[全目录验收](../tasks/20261109-embodied-benchmark-coverage.md) |
 | 参考对照 | π₀.₅ Spatial 的确定性处理、固定动作和共享编译模型控制通过，独立 GPU 进程逐位比较失败。GR00T 的 Spatial 与 WidowX 做过抽样参考边界检查。OFT 做过确定性 I/O helper 对照。[π₀.₅ 对照](../tasks/20261105-embodied-eval.md) · [GR00T 与 OFT 对照](../tasks/20261106-embodied-endpoints.md) |
 | RoboTwin 2.0 Clean | `adjust_bottle` 的两个专家通过场景完成原生重置与固定动作对照。社区 π₀.₅ 通过两样本固定批次、独立 CPU 验证、选定样本重评和汇总核对。[接入配置](../../examples/bench-adapters/embodied/ROBOTWIN.md) · [验收记录](../tasks/20261107-robotwin.md) |
 | RoboTwin 2.0 两套完整目录 | Clean 和 Randomized 各 50 个任务完成原生控制、三相机观测和判定检查。专家种子计划在两个模式下均有实测，逐任务验收范围见任务记录。[RoboTwin 套件验收](../tasks/20261108-robotwin-suites.md) |
 | SmolVLA × LIBERO Spatial | 同一原生任务的两个冻结初态通过共享批次、独立 CPU 验证和选定样本重评。[接入验收](../tasks/20261108-embodied-native-expansion.md) |
 | MolmoAct2 × LIBERO Goal | 同一原生任务的两个冻结初态通过共享批次、独立 CPU 验证和选定样本重评。[接入验收](../tasks/20261108-embodied-native-expansion.md) |
 | ManiSkill3 Plate-25 | 原生场景通过断网 GPU 重置、渲染及控制检查。RLinf OFT 的两个冻结初态通过共享批次、独立 CPU 验证及重评。[接入验收](../tasks/20261108-embodied-native-expansion.md) |
+| ManiSkill3 桌面套件 | 18 个任务通过原生重置、相机和控制步检查。PickCube 的脚本策略完成完整步数并通过 CPU 验证。另有两个任务等待上游资产。[桌面任务验收](../tasks/20261109-embodied-benchmark-coverage.md) |
 | Meta-World MT50 | 50 个任务通过原生重置、渲染及控制步检查。RLinf π₀.₅ 在两个冻结任务上通过真实批次、独立 CPU 验证及重评。[接入验收](../tasks/20261108-embodied-native-expansion.md) |
 | X-VLA × RoboTwin 2.0 Clean | 两个专家通过场景完成真实批次、独立 CPU 验证和重评。[接入验收](../tasks/20261108-embodied-calvin-xvla.md) |
+| X-VLA × RoboTwin 2.0 Randomized | 两个专家通过任务完成真实批次、独立 CPU 验证和重评。[协议验收](../tasks/20261109-embodied-benchmark-coverage.md) |
 | CALVIN ABC→D | 冻结目录包含 1,000 条原生指令序列。两个样本通过真实 π₀.₅ 批次、逐段计分、独立 CPU 验证和重评。[接入验收](../tasks/20261108-embodied-calvin-xvla.md) |
 | 完整套件统计等价 | `not_run`。现有记录覆盖原生任务目录检查、真实抽样和指定条件下的参考对照。 |

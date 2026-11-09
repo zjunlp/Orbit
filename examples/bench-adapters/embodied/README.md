@@ -15,17 +15,18 @@ eight-step evaluation recipe; see [OPENVLA.md](OPENVLA.md).
 All three model families support Spatial, Object, Goal and Long through explicit suite and
 checkpoint selection. LIBERO-90 supports benchmark-only registration and has a sampled RLinf OpenVLA-OFT calibration.
 [LIBERO suites](../../../docs/guides/libero-suites.md).
-RoboCasa365 runs all 50 native tasks across Atomic-Seen, Composite-Seen and Composite-Unseen.
-The OpenPI and GR00T recipes support both scene splits. Earlier Atomic-Seen model checks use
+RoboCasa365 registers the 50 official multitask tasks, the four lifelong phases and the fixed
+317-task catalog. The OpenPI and GR00T recipes support both scene splits. Earlier Atomic-Seen model checks use
 the published RoboCasa π₀.₅ and GR00T N1.5 checkpoints. [RoboCasa365 setup](ROBOCASA365.md)
 RoboTwin 2.0 registers all 50 Aloha-AgileX tasks in Clean and Randomized and freezes native
 expert-accepted seeds. The separate `adjust_bottle` registration has a sampled community π₀.₅
 checkpoint. [RoboTwin setup](ROBOTWIN.md)
-X-VLA uses the native RoboTwin Clean scene and its Cartesian controller in a separate registration.
-CALVIN ABC→D runs the pinned five-instruction sequences and records native per-subtask completion.
+X-VLA uses separate native Cartesian registrations for RoboTwin Clean and Randomized.
+CALVIN runs the pinned scene D instruction sequences and records native per-subtask completion.
 [CALVIN setup](CALVIN.md)
 SmolVLA and MolmoAct2 reuse native LIBERO. ManiSkill3 Plate-25 and Meta-World MT50 use native
-Gymnasium environments and separate OFT and π₀.₅ services. [Setup for all four recipes](NATIVE-EXPANSION.md)
+Gymnasium environments and separate OFT and π₀.₅ services. ManiSkill3 also exposes benchmark-only
+tabletop profiles for its native joint controllers. [Native expansion setup](NATIVE-EXPANSION.md)
 For new endpoints, see the [onboarding templates](../../../docs/guides/embodied-onboarding.md)
 and [compatibility matrix](../../../docs/guides/embodied-compatibility.md).
 

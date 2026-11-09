@@ -868,6 +868,7 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   `policy-ws` 把 Binding 选出的观测交给 Policy 服务，由服务负责图像、状态、语言与动作转换，返回 benchmark 控制器使用的动作块。
   握手核对冻结的动作维数、重规划步数、权重和归一化摘要以及随机流约定。
   Google Robot 固定矩形相机、xyzw 状态、单步重规划及原生 sticky gripper，复用 Gym driver。
+  SimplerEnv 固定网格可独立登记 RT-1/Octo 的策略终止协议，直接执行 7 维原生动作并另收终止信号，最终一步的原生 done 决定成功。
   原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
@@ -876,15 +877,18 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/ROBOCASA365.md)
   GR00T N1.5 共用环境 driver，以 RoboCasa 1.0.1 原生 horizon 运行。每 16 步重规划，按动作段末尾的原生成功信号计分。
   两条 recipe 分别登记，GR00T recipe 的统计排除无效样本。
+  固定任务目录、Lifelong 的阶段及累计套件独立于模型登记，复用每任务的原生步数和判定。
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/ROBOTWIN.md)
-  X-VLA 使用单独的 Clean 末端位姿配置，保留同一原生场景和专家筛选逻辑。策略输出转换为 16 维原生控制目标，每 30 步重规划。
+  X-VLA 在 Clean 和 Randomized 各使用独立的末端位姿配置，沿用原生场景和专家筛选逻辑。策略输出转换为 16 维原生控制目标，每 30 步重规划。
 - **ManiSkill3 与 Meta-World**：两个 RLinf recipe 分别使用原生 SAPIEN WidowX 和 MuJoCo Sawyer 环境。冻结样本种子、观测和控制语义，
   以原生 `info.success` 判定 episode。Meta-World 用同一个 `environmentSeed + initialStateId` 生成 MT1 目标并重置环境。
   Policy 服务分别提供 OFT 和 π₀.₅ 推理。
+  ManiSkill3 桌面套件按机器人、观测和原生关节动作语义独立登记，沿用原生任务步数和成功判定。隐藏目标的任务将原生目标坐标声明为策略输入并保存到证据。
 - **CALVIN ABC→D**：一个样本对应冻结目录的一条五指令序列。仿真仅在序列开始时重置，原生 oracle 完成一段后，driver 丢弃剩余动作并
   用下一条指令重规划。独立 verifier 从封存的动作证据核对子任务进度、重规划边界和停止条件。主分数为完成的连续子任务数。
+  Scene D 的 benchmark 可独立登记，checkpoint 的训练场景属于策略来源。
 - **固定批次**：`spec.batchSize` 按方法、计划顺序和相同生效预算拆分，成员、attemptId、episodeId 与清单摘要提交时冻结；模型服务
   每 Run 启动一次，逐 episode 重建环境并清空连接器状态。容器 watchdog 为逐 episode 预算之和。已封存且独立验证通过的 episode
   不被后续服务失败、OOM 或取消覆盖；共享文件由 Run 持有，随最后所属作业删除；重试结果采用时旧尝试存入 `Trial.priorAttempts`。
