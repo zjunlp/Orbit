@@ -466,15 +466,16 @@ Agent 的 home 放在 `/orbit/agent/<name>`，会话轨迹随 Run 记录保留�
 ## 7. 刷榜（bench）
 
 ```
-Method       = Agent definition + model + auth + bundle, or external policy entrypoint + config
+Method       = Agent definition + model + auth + bundle, or Policy snapshot, or external entrypoint + config
 Benchmark    = tasks + per-task environment + instruction + verifier + aggregation
 Trial        = task × Method × seed → solve Run (Agent inside) + verify Run (separate)
 Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore, metrics?, issues[], cleanup }
 ```
 
-- **Method**（`contracts.Method`）：`{ name, agent, auth?, model?, effort?, bundle?, entrypoint?, config?, passEnv? }`。
+- **Method**（`contracts.Method`）：`{ name, agent, auth?, model?, effort?, bundle?, policyRef?, policySnapshot?, entrypoint?, config?, passEnv? }`。
   `agent` 是一个已注册的 Agent 名（§6；`codex`、`claude-code`、`pi`、`opencode`…），或 `external`（adapter 自己的策略）、
-  `oracle`（跑参考解）、`empty`（不作答，用于检验适配器）；`policy` 为保留名，尚不可运行，保留名也不能注册为 Agent。
+  `oracle`（跑参考解）、`empty`（不作答，用于检验适配器），或 `policy`（独立具身策略，见 §9.4a）。这些保留名不能注册为 Agent。
+  `policy` 通过 `policyRef` 选择已登记定义，提交时保存 `policySnapshot`；不接收 CLI 的 auth、model 或 bundle。
   提交 job 前检查 Agent 已注册、auth profile 的 harness 与之一致且 kind 受该 Agent 支持；`agentCommand` 由定义的模板渲染。
   `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`），安装失败记为环境失败、不 verify；
   process Run 拒绝 `install` 型 Agent。ASI 与 LongDS 的原生 runner 只启动 codex / claude-code，其他 Agent 明确拒绝。
@@ -825,8 +826,8 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - **Agent**：已实现的注册表（§6），任意 CLI，含自定义 harness。
 - **Policy**：独立于 benchmark 登记的 `PolicyDefinition`（`policies.json`，daemon 唯一写者），固定模型 service、connector、
   语义 profile、checkpoint 与归一化摘要，以及命名权重 dataset。`Method.agent = policy` 通过 `policyRef` 选择定义，提交时保存
-  权威快照；benchmark adapter 不解释模型启动参数。D1 先支持 `openpi-ws`，`vla-eval-ws / gr00t-zmq / lite-http / custom`
-  属于后续 connector，列表顺序不表示优先级。policy 为独立 GPU service，与仿真整组准入；仅接受固定镜像，模型 readiness 与
+  权威快照；benchmark adapter 不解释模型启动参数。已实现 `openpi-ws`、`groot-zmq`、`openvla-ws` 与 `policy-ws`，
+  具体语义边界见 §9.4a。policy 为独立 GPU service，与仿真整组准入；仅接受固定镜像，模型 readiness 与
   SDK 身份握手分别检查，权重以命名 dataset 只读挂载。
 - **按角色分配**：租约持久化 `main / sim / policy → gpuIds / devices / limits`，满足异构要求（如 sim 需 RTX、policy 需大显存）；
   首阶段同节点原子分配，逐组件核对设备映射，启动失败整组清理，清理确认前保留租约。
@@ -1036,7 +1037,7 @@ Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目�
 级别：`L0 实验性` → `L1 校准通过`（benchmark 声明的正负校准符合预期：可以是 oracle、官方 baseline、脚本正例或固定证据，
 期望值或范围由 benchmark 指定；脚本正例只算校准，不冒充通用 oracle 或真实模型；是否存在 oracle 单独记录）→ `L2 样例对齐`（与原生 runner 抽样一致）→ `L3 真实 Agent/Policy 对照` →
 `L4 持续维护`。另记 `hub-claimed`（上游矩阵声称复现，本机未验证）。`deviations` 列出所有改动；不可复现就 `refused`。
-catalog 是一个公开 git 仓库：每个 bench 一条（来源、指纹、kind、资源、保真度、最近验证日期），Web 与 `orbit bench search` 读取。
+独立公开 catalog 仓库与 `orbit bench search` 是后续规划；当前产品目录随 Orbit 源码发布，由现有 HTTP API 提供（§9.18）。
 
 ### 9.11 具身两阶段
 
@@ -1136,11 +1137,11 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
 - `POST /api/v1/bench/calibrations`：daemon 抽样、建作业；作业结束后若需重评，daemon 自动发起一次（重评前的分数留在 trial
   `history`），全部结束后由 `GET /bench/jobs/:id` 的 `calibration` 字段给出报告（`running` / `rescoring` / `done` + 检查列表）。
   报告按需从 trial 计算，不另建账本。`orbit bench calibrate` 改为调用这个 API，输出不变。
-- `GET /api/v1/bench/catalog`：每个已登记 benchmark 一行——登记信息、任务列表摘要（类别、profile、supported/listed、按 suite
+- `GET /api/v1/bench/catalog` 的 `entries[]`：每个已登记 benchmark 一行——登记信息、任务列表摘要（类别、profile、supported/listed、按 suite
   的覆盖与原因；daemon 内存缓存、后台刷新，列表失败保留错误和上次成功时间）、最近 5 次校准（离散记录，不画连续健康条）、
   真实方法（agent/model/effort 相同视为同一方法）最近一次的主指标与 valid/total、保真度。保真度级别沿用 §9.10，Web 显示名称而不是
   `L*`（避免与接入层级 L0–L2 混淆）：校准通过由报告算出；样例对齐与真实对照由 adapter 在 `capabilities.parity` 声明证据，
-  未声明显示"未验证"。
+  未声明显示"未验证"。另有 §9.18 的 `supported[]` 产品目录，与本地登记证据分开。
 
 **C3/C4 对话轨迹**：新增 review kind `conversation`，契约 `ConversationTrajectory`（`contracts/trajectory.ts`）：
 
@@ -1159,7 +1160,7 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
   这是 Orbit 脚手架，不是榜单的原生 FC 提示，conditions 中声明"不可与榜单直接比较"。任务文件由服务读取后删除，后续轮次不留在
   Agent 可读的磁盘上。模型只经 Agent 工具调用（ARK 等方案不允许脚本直接调用）；τ² 的用户模拟器需要单独的模型来源，暂未运行。
 
-**不做**：跨类别总榜或单一健康分；在 Web 复制 `docs/catalog.md`；从缺失证据推测成功或补 0；把 Rescore 表述为重跑 Agent。
+**不做**：跨类别总榜或单一健康分；从 Markdown 复制一份 Web 目录（目录共用 §9.18 的源码数据）；从缺失证据推测成功或补 0；把 Rescore 表述为重跑 Agent。
 
 ### 9.16 Web 信息架构：any harness × any bench × 迭代进化（2026-11-06）
 
@@ -1190,20 +1191,22 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
 
 **Benchmarks**：
 
-- 六维入口与受控词表见 §9.17；页面支持多选分面、可移除筛选和 URL 保存状态。卡片/列表显示主要分类与登记证据，
-  可切换到领域 × 任务类型矩阵；矩阵和联合筛选使用同一任务描述，不能用集合并集制造交叉命中。
-  本轮已实现，整体验收见 [分类任务](tasks/20261109-benchmark-taxonomy.md)。
-- 详情按六组展示分类，可选择具体任务描述组；未标注与明确空集合分别显示 “Not annotated” 与 “None”。
-  旧 `category` / `domains` / `profiles` 留作兼容元数据，旧 category/domain URL 筛选继续可用。
+- 默认展示 Orbit 已适配的产品目录（§9.18），不依赖本机是否安装、登记或运行过；一个 benchmark 家族只有一张卡。
+  本地登记是可切换的独立视图，保留登记级分类编辑、校准与运行入口；运行历史仍在 Evaluations 和 Runs。
+- 六维入口与受控词表见 §9.17；页面支持多选分面、可移除筛选和 URL 保存状态，以及卡片、列表和领域 × 任务类型矩阵。
+  联合筛选在同一个目录 profile 或本地 task 描述上判断，不能用集合并集制造交叉命中。
+  [六维分类任务](tasks/20261109-benchmark-taxonomy.md) · [产品目录修正](tasks/20261109-benchmark-library.md)。
+- 产品卡详情展开接入路径、suite/recipe、验收范围和来源。本地详情按六组展示任务分类；未标注与明确空集合分别显示
+  “Not annotated” 与 “None”。旧 `category` / `domains` / `profiles` 和 category/domain URL 保留在本地登记兼容视图。
 - `capabilities.identity`（`id`、`name`、可选 `version`、`variant`）声明 benchmark 身份。Catalog 按 `id` 归并登记；
   无声明时按 adapter 与数据路径派生稳定 ID，不以登记名猜测。标签优先于 adapter 声明，可通过 Web 或 `orbit bench label` 修改。
   `PATCH /benchmarks/:name/labels` 只改变展示标签，不改变执行；重新登记默认保留标签，清空后回退声明。
-- benchmarks / variants / registrations / tasks 分别计数；多领域的计数之和可大于 benchmark 总数。
+- 产品目录、variants、registrations 和 tasks 分别计数；多领域的计数之和可大于 benchmark 家族总数。
   聚合 adapter 仍是一个集合身份（如 “CUA-Lite collection”），不把它列出的全部 suite 宣称为已校准独立 benchmark。
   BrowserGym 的 MiniWoB 身份记录任务源码版本，运行框架作为 variant/conditions；vla-eval 的其他 benchmark 类不会冒充 LIBERO。
 - 原生对话框编辑登记级六维默认值，具体 task 声明仍优先。CLI 通过 `bench label --taxonomy` 或
   `--taxonomy-file` 设置相同默认值；两种输入互斥。身份、分类与运行条件分开，不能通过改标签改变执行。
-- Evidence 筛选与统计仍按登记记录显示抽样校准、真实方法与 parity；页面注明其登记和样本范围，
+- 本地登记视图的 Evidence 筛选与统计仍按登记记录显示抽样校准、真实方法与 parity；页面注明其登记和样本范围，
   不声称当前筛选命中的每道题都经过验证。覆盖视图只表达覆盖，不表达成绩。
   强制刷新只请求一次重列任务，随后轮询缓存进度。
 
@@ -1221,6 +1224,9 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
   矩阵是登记级准入，不代替逐任务的镜像、设备、资源和 adapter 运行前检查。
 - API：保留 `GET /agents`；新增 `GET /agents/catalog`（能力、profile、证据、使用情况）与 `GET /bench/compatibility`。
   本机探测版本不是历史 trial 的实跑版本；尚未记录的历史节点/版本不补造。
+- 原生 VLA 策略独立登记在 `PolicyDefinition`，已有 `GET /policies`；当前 Agents 页仍只读取 CLI 定义与历史 external
+  entrypoint，尚无原生 Policy 目录。后续可增加 VLA Policies 视图，列模型版本、可用配置与按 suite/recipe 验证的关系；
+  不能把历史 external 列表冒充已适配模型目录，也不能把 VLA 模型加入 benchmark 的六维词表。
 
 **Methods 与迭代进化**：
 
@@ -1402,8 +1408,38 @@ Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包�
   其他适配器逐步补充，未标注不等于不具备该条件。
 
 **Benchmarks 页面**：以领域、任务类型、评测目标为主要分面；接口与模态、环境与交互条件、评分方式按子字段展开。
-仍按 benchmark 身份归并登记，保留证据、覆盖、运行入口与条件详情。未知值明确显示；C1–C7 与 Harbor 等接入信息
-放在详情或兼容筛选中，不作为唯一总目录，也不以“7/7”表达评测生态完整覆盖。
+默认以 §9.18 产品目录展示已适配 benchmark 家族；本地登记视图保留证据、覆盖、运行入口与条件详情。未知值明确显示；
+C1–C7 与 Harbor 等接入信息放在详情或兼容筛选中，不作为唯一总目录，也不以“7/7”表达评测生态完整覆盖。
+
+### 9.18 已适配 benchmark 产品目录（2026-11-09）
+
+Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别评测什么”。目录随源码发布，即使本机没有登记或
+评测历史也能浏览。目录不是新的运行注册表、安装器或成绩库；现有 daemon 仍是本地状态的唯一写者。
+实施与验收记录见 [目录任务](tasks/20261109-benchmark-library.md)，入口索引见 [catalog](catalog.md)。
+
+- 既有 `BenchCatalog` 增加 `supported[]` 产品目录，保留 `entries[]` 本地登记数据。Web 从同一个 HTTP 接口读取，
+  CLI 和旧调用方仍可使用登记数据。受控数据集中在 `bench/supported.ts`，`contracts/bench.ts` 声明
+  `SupportedBenchmark`：id/name/description、具名 taxonomyGroups、integrations、verification、suites 与 registrationNames。
+- registrationNames 只关联显式身份或代码已知的内置接入、原生语义 profile，不按登记名、文件路径或运行记录猜测。
+  CUA-Lite 必须有显式 `cua-lite` 身份，且列出的精确 suite 有 `supported > 0`，才关联 MiniWoB、WebVoyager 或
+  Online-Mind2Web 家族；无 listing、未知 suite 或全部 unsupported 不自动关联。
+  本地未关联的自定义登记仍在本地视图可用；没有本地登记时产品条目依然存在。
+- 一条产品记录代表一个 benchmark 家族；接入框架、启动格式、suite、recipe 和本地登记不重复占主卡片。
+  多条接入路径与可核实的任务 profile 放在详情，Harbor、BrowserGym、CUA-Lite、vla-eval 等只解释如何接入。
+  包装改变题目或被测对象时保留独立身份，如 EFE coding-agent 任务与原生 Policy benchmark。
+- 产品支持状态区分 `sample-checked`（指定抽样接入验收）、`adapter-tested`（适配器测试）和
+  `pending-calibration`（真实校准尚待完成）。状态随来源与限定范围展示；不等于本机资源已准备、全部任务可运行、
+  任意模型都兼容或完整套件成绩已与官方等价。不能把本机某次运行证据推广到整个产品家族。
+- 六维词表复用 §9.17。每个字段只填源码协议或文档明确支持的值；多个 profile 的展示可以汇总，
+  联合筛选和矩阵必须由同一 profile 满足。同字段 OR、不同字段 AND；计数按产品 ID 去重。
+- 本地登记、安装和运行证据继续独立呈现。目录的接入说明说明如何准备环境；启动评测仍需要明确选择现有登记，
+  目录页不静默创建登记或启动任务。更新本地标签不会修改随版本发布的产品分类。
+- VLA 是被测 Policy；LIBERO、SimplerEnv、RoboCasa365 等是 benchmark。具体权重、归一化、服务与控制配置由
+  PolicyDefinition 保存，Method 通过 policyRef 选用并冻结快照；一次执行进入 Evaluation/Run。模型和 benchmark 的
+  支持关系按 suite/recipe 展示，不能从模型家族名推断任意组合可运行。
+
+原生具身家族与模型组合的详细范围见 [具身兼容矩阵](guides/embodied-compatibility.md)。其中 RoboCasa365 的
+GR00T recipe 是 N1.5，LIBERO 与 SimplerEnv 使用 N1.7；矩阵中的真实抽样验证不表示完整套件统计等价。
 
 ## 10. 路线
 

@@ -3,6 +3,10 @@ import { TAXONOMY_FIELDS, type TaxonomyField, taxonomyMatches } from "@zjunlp/or
 import type { CatalogEntry } from "./api.ts";
 
 export type TaxonomyFilters = Partial<Record<TaxonomyField, string[]>>;
+export type TaxonomySource = {
+  taxonomy?: BenchTaxonomy;
+  taxonomyGroups?: { taxonomy: BenchTaxonomy; taskCount?: number | null }[];
+};
 export const taxonomyFields = Object.keys(TAXONOMY_FIELDS) as TaxonomyField[];
 
 export function readTaxonomyFilters(query: URLSearchParams): TaxonomyFilters {
@@ -21,14 +25,14 @@ export const taxonomyLabel = (field: TaxonomyField, value: string) =>
       ? "None"
       : (TAXONOMY_FIELDS[field].values.find((v) => v.value === value)?.label ?? value);
 
-export const taxonomyGroups = (entry: CatalogEntry) =>
+export const taxonomyGroups = (entry: TaxonomySource) =>
   entry.taxonomyGroups ?? [{ taxonomy: entry.taxonomy ?? {}, taskCount: null }];
 
 export const matchesLegacyDomain = (entry: CatalogEntry, value: string) =>
   value === "all" ||
   (value === "unlabeled" ? entry.domains.length === 0 : entry.domains.includes(value));
 
-export function matchesTaxonomy(entry: CatalogEntry, filters: TaxonomyFilters) {
+export function matchesTaxonomy(entry: TaxonomySource, filters: TaxonomyFilters) {
   if (!Object.values(filters).some((values) => values?.length)) return true;
   return taxonomyGroups(entry).some((group) => taxonomyMatches(group.taxonomy, filters));
 }

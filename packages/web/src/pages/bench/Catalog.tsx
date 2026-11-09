@@ -37,6 +37,7 @@ import {
   matchesTaxonomy,
   readTaxonomyFilters,
   type TaxonomyFilters,
+  type TaxonomySource,
   taxonomyFields,
   taxonomyGroups,
   taxonomyLabel,
@@ -44,6 +45,7 @@ import {
 } from "../../lib/taxonomy.ts";
 import { useAsync } from "../../lib/use.ts";
 import { TaxonomyEditor } from "./TaxonomyEditor.tsx";
+import { TaxonomyFacets } from "./TaxonomyFacets.tsx";
 import "./catalog.css";
 import "./taxonomy.css";
 import "../hub.css";
@@ -71,8 +73,9 @@ const FIDELITY: Record<CatalogEntry["fidelity"], { label: string; title: string 
 
 const identity = (e: CatalogEntry) =>
   e.capabilities?.conditions.Identity ?? e.capabilities?.conditions.Benchmark;
-export const benchmarkKey = (e: CatalogEntry) => e.identity.id;
-export const distinct = (entries: CatalogEntry[]) => new Set(entries.map(benchmarkKey)).size;
+export const benchmarkKey = (e: { identity: { id: string } }) => e.identity.id;
+export const distinct = (entries: { identity: { id: string } }[]) =>
+  new Set(entries.map(benchmarkKey)).size;
 const legacyCategory = (e: CatalogEntry) =>
   benchCategory(e.capabilities ?? undefined) ??
   (e.listing ? "none" : e.listingError ? "failed" : "listing");
@@ -110,11 +113,9 @@ const EVIDENCE = [
     test: (e: CatalogEntry) => Boolean(e.capabilities?.parity),
   },
 ];
-const DIMENSION_ICONS = [IconLayers, IconTerminal, IconBrain, IconDashboard, IconBox, IconCheck];
 
 export function BenchCatalogView() {
   const loc = useLocation();
-  const [activeDimension, setActiveDimension] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const catalog = useAsync(() => api.benchCatalog().then((r) => r.entries), [], {
@@ -134,6 +135,7 @@ export function BenchCatalogView() {
   const order = loc.query.get("sort") ?? "name";
   const open = loc.query.get("open");
   const searched = entries.filter((e) => {
+    if (loc.query.get("setup") && e.benchmark.name !== loc.query.get("setup")) return false;
     const labels = taxonomyFields.flatMap((field) =>
       (e.taxonomy?.[field] ?? []).map((v) => taxonomyLabel(field, v)),
     );
@@ -160,7 +162,6 @@ export function BenchCatalogView() {
         a.benchmark.name.localeCompare(b.benchmark.name),
     );
   const families = [...new Set(shown.map(benchmarkKey))];
-  const dimension = TAXONOMY_GROUPS.find((g) => g.id === activeDimension);
   const toggle = (field: TaxonomyField, value: string) =>
     setQuery({
       [field]: toggleTaxonomyValue(filters, field, value).join(",") || null,
@@ -206,9 +207,9 @@ export function BenchCatalogView() {
             <span /> EVALUATION LIBRARY
           </div>
           <h1>
-            Benchmarks<span className="library-title-dot">.</span>
+            Local setups<span className="library-title-dot">.</span>
           </h1>
-          <p>Find the right tasks. Understand what they measure.</p>
+          <p>Manage local registrations, task listings, and recorded evaluation evidence.</p>
         </div>
         <section className="library-totals" aria-label="Library totals">
           <div>
@@ -255,87 +256,7 @@ export function BenchCatalogView() {
           <span>Refresh</span>
         </button>
       </div>
-      <section className="dimension-bar" aria-label="Six classification dimensions">
-        {TAXONOMY_GROUPS.map((group, i) => {
-          const n = group.fields.reduce((sum, f) => sum + (filters[f]?.length ?? 0), 0);
-          const Icon = DIMENSION_ICONS[i] ?? IconLayers;
-          return (
-            <button
-              type="button"
-              key={group.id}
-              className={`dimension-button${activeDimension === group.id ? " expanded" : ""}${n ? " selected" : ""}`}
-              aria-expanded={activeDimension === group.id}
-              aria-controls="dimension-options"
-              onClick={() => setActiveDimension(activeDimension === group.id ? null : group.id)}
-            >
-              <span className="dimension-number">
-                0{i + 1}
-                <Icon size={15} />
-              </span>
-              <span className="dimension-name">
-                {group.label}
-                <IconChevronDown size={13} />
-              </span>
-              <span className="dimension-summary">{n ? `${n} selected` : group.question}</span>
-            </button>
-          );
-        })}
-      </section>
-      {dimension && (
-        <section
-          id="dimension-options"
-          className="dimension-panel"
-          aria-label={`${dimension.label} filters`}
-        >
-          <div className="dimension-panel-head">
-            <div>
-              <b>{dimension.label}</b>
-              <p>Choose any values within a field. Different fields must match the same tasks.</p>
-            </div>
-            <button
-              type="button"
-              className="btn ghost icon"
-              aria-label="Close filters"
-              onClick={() => setActiveDimension(null)}
-            >
-              <IconX size={16} />
-            </button>
-          </div>
-          <div className={`dimension-fields fields-${dimension.fields.length}`}>
-            {dimension.fields.map((field) => (
-              <fieldset key={field}>
-                <legend>{TAXONOMY_FIELDS[field].label}</legend>
-                <div className="dimension-options">
-                  {[
-                    ...TAXONOMY_FIELDS[field].values.map((v) => v.value),
-                    "unlabeled",
-                    "__none__",
-                  ].map((value) => {
-                    const count = distinct(
-                      base.filter((e) => matchesTaxonomy(e, { ...filters, [field]: [value] })),
-                    );
-                    const selected = filters[field]?.includes(value) ?? false;
-                    if (!count && !selected) return null;
-                    return (
-                      <button
-                        type="button"
-                        key={value}
-                        className={`dimension-option${selected ? " on" : ""}`}
-                        aria-pressed={selected}
-                        onClick={() => toggle(field, value)}
-                      >
-                        <span className="filter-check">{selected && <IconCheck size={11} />}</span>
-                        <span>{taxonomyLabel(field, value)}</span>
-                        <small>{count}</small>
-                      </button>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            ))}
-          </div>
-        </section>
-      )}
+      <TaxonomyFacets entries={base} filters={filters} toggle={toggle} />
       {(active.length > 0 || category !== "all" || legacyDomain !== "all" || q || ev !== "all") && (
         <section className="library-active-filters" aria-label="Active filters">
           <IconFilter size={14} />
@@ -492,12 +413,12 @@ export function BenchCatalogView() {
   );
 }
 
-function TaxonomyTags({
+export function TaxonomyTags({
   e,
   field,
   limit = 3,
 }: {
-  e: CatalogEntry;
+  e: TaxonomySource;
   field: TaxonomyField;
   limit?: number;
 }) {
@@ -530,7 +451,7 @@ export function CoverageMatrix({
   entries,
   filters = {},
 }: {
-  entries: CatalogEntry[];
+  entries: (TaxonomySource & { identity: { id: string } })[];
   filters?: TaxonomyFilters;
 }) {
   const available = (field: TaxonomyField) => [

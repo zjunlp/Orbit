@@ -95,6 +95,7 @@ import {
 } from "./hub.ts";
 import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
+import { supportedBenchmarks } from "./supported.ts";
 
 export { benchGroup } from "./consolidate.ts";
 export { compareJobs, summarize } from "./summary.ts";
@@ -678,25 +679,24 @@ export class BenchService {
     return calibrationReport(job, trials, runs);
   }
 
-  /** Every registered benchmark with its listing, calibrations, real methods and fidelity. */
+  /** Product support plus local registrations and their separate execution evidence. */
   catalog(refresh: string[] = []): BenchCatalog {
     const jobs = this.jobs(10_000).jobs;
-    return {
-      entries: this.deps.registry.list().map((b) => {
-        this.refreshListing(b, refresh.includes(b.name));
-        const own = jobs.filter((j) => j.spec.benchmark === b.name);
-        const selected = [
-          ...own
-            .filter((j) => j.spec.calibration && j.spec.calibration.mode !== "policy")
-            .slice(0, 5),
-          ...own.filter((j) => j.spec.calibration?.mode === "policy").slice(0, 5),
-        ];
-        const calibrations = selected
-          .map((j) => this.calibration(j, this.deps.store.trials(j.id)))
-          .filter((r) => r !== null);
-        return catalogEntry(b, this.listing(b.name), own, calibrations);
-      }),
-    };
+    const entries = this.deps.registry.list().map((b) => {
+      this.refreshListing(b, refresh.includes(b.name));
+      const own = jobs.filter((j) => j.spec.benchmark === b.name);
+      const selected = [
+        ...own
+          .filter((j) => j.spec.calibration && j.spec.calibration.mode !== "policy")
+          .slice(0, 5),
+        ...own.filter((j) => j.spec.calibration?.mode === "policy").slice(0, 5),
+      ];
+      const calibrations = selected
+        .map((j) => this.calibration(j, this.deps.store.trials(j.id)))
+        .filter((r) => r !== null);
+      return catalogEntry(b, this.listing(b.name), own, calibrations);
+    });
+    return { entries, supported: supportedBenchmarks(entries) };
   }
 
   /** Every Agent with its wiring, profiles, evidence and use (design §9.16). */

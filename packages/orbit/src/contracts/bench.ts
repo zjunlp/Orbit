@@ -1089,7 +1089,26 @@ export const CatalogEntry = z.object({
   fidelity: z.enum(["experimental", "calibrated", "sample-aligned", "agent-compared"]),
 });
 export type CatalogEntry = z.infer<typeof CatalogEntry>;
-export const BenchCatalog = z.object({ entries: z.array(CatalogEntry) });
+/** Product integrations shipped or documented by Orbit, independent of local runs and setup. */
+export const SupportedBenchmark = z.object({
+  id: BenchIdentity.shape.id,
+  name: z.string(),
+  description: z.string(),
+  taxonomyGroups: z.array(z.object({ label: z.string(), taxonomy: BenchTaxonomy })).min(1),
+  integrations: z.array(z.object({ name: z.string(), url: z.url(), scope: z.string() })).min(1),
+  verification: z.object({
+    level: z.enum(["sample-checked", "adapter-tested", "pending-calibration"]),
+    detail: z.string(),
+    url: z.url(),
+  }),
+  suites: z.array(z.string()),
+  registrationNames: z.array(z.string()),
+});
+export type SupportedBenchmark = z.infer<typeof SupportedBenchmark>;
+export const BenchCatalog = z.object({
+  entries: z.array(CatalogEntry),
+  supported: z.array(SupportedBenchmark).default([]),
+});
 export type BenchCatalog = z.infer<typeof BenchCatalog>;
 export const BenchTaskList = z.object({
   tasks: z.array(BenchTask),

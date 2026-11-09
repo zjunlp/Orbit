@@ -13,6 +13,7 @@ import { BenchService, summarize } from "../src/bench/service.ts";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
 import {
   AdapterTasksResponse,
+  BenchCatalog,
   BenchJob,
   MetricSpec,
   Outcome,
@@ -104,6 +105,23 @@ function fixture(adapter = "harbor") {
   });
   return { home, paths, source, store, runs, registry, bench, run, job, trial, submit, auth };
 }
+
+it("serves the supported benchmark library before any local registration or run", async () => {
+  const f = fixture();
+  f.registry.remove("fixture");
+  const listing = vi.spyOn(AdapterClient.prototype, "tasks");
+  const app = createApp({ token: "fixture", runs: f.runs, bench: f.bench } as AppDeps);
+  const response = await app.request("/api/v1/bench/catalog", {
+    headers: { authorization: "Bearer fixture" },
+  });
+  expect(response.status).toBe(200);
+  const catalog = BenchCatalog.parse(await response.json());
+  expect(catalog.entries).toEqual([]);
+  expect(catalog.supported).toHaveLength(24);
+  expect(catalog.supported.every((row) => row.registrationNames.length === 0)).toBe(true);
+  expect(listing).not.toHaveBeenCalled();
+  expect(f.submit).not.toHaveBeenCalled();
+});
 
 it("adopts a live solve submitted before a restart instead of solving the trial twice", async () => {
   const f = fixture();
