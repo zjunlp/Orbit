@@ -257,6 +257,37 @@ class AdapterPlanningTests(unittest.TestCase):
                 with self.subTest(key=key):
                     self.assertTrue(adapter.score(request)["invalid"])
 
+    def test_calvin_reports_raw_completed_subtasks_as_its_primary_metric(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            config = request["benchmark"]["config"]
+            reference = json.loads(config["reference"])
+            reference["environment"] = {"kind": "calvin", "tasks": [request["trial"]["task"]],
+                                        "catalog": {"sequences": [[0, ["one", "two", "three", "four", "five"]]]}}
+            config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+            with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                catalog = adapter.tasks(request)
+            self.assertEqual(catalog["official"]["metric"], "completed_subtasks")
+            primary = [metric for metric in catalog["metrics"] if metric.get("primary")]
+            self.assertEqual([(metric["name"], metric["range"]) for metric in primary],
+                             [("completed_subtasks", [0, 5])])
+
+            request["verify"] = {"output": str(root / "verify-output")}
+            expected = adapter.verification_expectation(request)
+            result = {"sampleRef": request["trial"]["sampleRef"], "episodeId": "synthetic-trial.attempt",
+                      "valid": True, "success": False, "issues": [], "native": {"completedSubtasks": 2}}
+            write_json(root / "solve-output/episode/native-result.json", result)
+            write_json(root / "verify-output/verified.json", result)
+            write_json(root / "verify-output/verification.json",
+                       {"sampleRef": result["sampleRef"], "episodeId": result["episodeId"],
+                        "solveRunId": expected["solveRunId"], "trialId": expected["trialId"],
+                        "implementationDigest": expected["verifierDigest"], "expectationDigest": digest(expected)})
+            outcome = adapter.score(request)
+            self.assertFalse(outcome["invalid"])
+            self.assertEqual(outcome["metrics"], {"completed_subtasks": 2, "success_at_1": 1, "success_at_2": 1,
+                                                   "success_at_3": 0, "success_at_4": 0, "success_at_5": 0})
+
     def test_host_verifier_planning_requires_only_the_standard_library(self):
         with tempfile.TemporaryDirectory() as temporary:
             request = {**self.request(Path(temporary)), "protocol": 1, "op": "verify"}

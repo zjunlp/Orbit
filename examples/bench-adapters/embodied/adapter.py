@@ -19,6 +19,9 @@ from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets
 from orbit_embodied.simpler import initial_state_count, scene_at
 
 
+CALVIN_COMPLETED_SUBTASKS = "completed_subtasks"
+
+
 def check_source(root, source, files):
     commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
     if commit != source["commit"]:
@@ -83,6 +86,7 @@ def tasks(req):
     root, config, reference = settings(req)
     suite = config.get("suite", "libero_spatial")
     environment = reference.get("environment", {})
+    calvin = environment.get("kind") == "calvin"
     if environment.get("kind") in GENERATED_ENVIRONMENTS:
         listing = [{"id": task, "title": task.split("/")[-1].replace("_", " "),
                     "supported": True, "reason": None, "tags": {"initialStateDigest": seed_asset(reference, task)}}
@@ -90,22 +94,32 @@ def tasks(req):
         if "simplerScenes" in environment:
             for task in listing:
                 task["tags"]["initialStateCount"] = str(initial_state_count(environment, task["id"]))
+        if calvin:
+            listing[0]["tags"]["initialStateCount"] = str(len(environment["catalog"]["sequences"]))
     else:
         if suite not in reference["horizons"]:
             raise ValueError("unsupported LIBERO suite")
         listing = catalog(root, suite)
     source = reference["reference"].get("evaluation", reference["reference"].get("openpi"))
+    metrics = []
+    if calvin:
+        metrics = [{"name": CALVIN_COMPLETED_SUBTASKS, "label": "Completed subtasks", "range": [0, 5],
+                    "primary": True}]
+        metrics.extend({"name": f"success_at_{n}", "label": f"Completed at least {n}", "unit": "ratio",
+                        "range": [0, 1]} for n in range(1, 6))
     return {"tasks": listing,
+            **({"metrics": metrics} if calvin else {}),
             "capabilities": {"category": "embodied-policy", "embodied": {"profile": reference["id"], "semanticProfile": reference["benchmarkProfile"], "observationMap": reference["observationMap"], "batch": {"maxEpisodes": 128}}, "profiles": ["sim", "sync", "step"],
                              "domains": ["embodied"], "methods": ["policy"],
-                             "scoreKind": "binary", "rescore": "evidence",
+                             "scoreKind": "scalar" if calvin else "binary", "rescore": "evidence",
                              "calibration": {"oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
                                             "Source": source["commit"],
                                             "Environment": config["image"], "Renderer": config.get("renderer", "osmesa"),
                                             "Randomness": "fresh policy service per solve Run; fixed batches advance its declared stream in frozen order"}},
             "official": {"name": reference.get("scoreName", "OpenPI LIBERO success"), "version": source["commit"],
-                         "errors": reference.get("scoreErrors", "fail"), "unit": reference.get("scoreUnit", "sample")}}
+                         "errors": reference.get("scoreErrors", "fail"), "unit": reference.get("scoreUnit", "sample"),
+                         **({"metric": CALVIN_COMPLETED_SUBTASKS} if calvin else {})}}
 
 
 def stage(req):
@@ -288,6 +302,12 @@ def score(req):
             files.append({"label": "Episode timeline", "phase": "verify", "path": "orbit-trajectory.json", "kind": "episode"})
         if req["trial"].get("batch"):
             files.append({"label": "Fixed solve batch", "phase": "solve", "path": "batch-plan.json", "kind": "json"})
+        if expected["reference"].get("environment", {}).get("kind") == "calvin":
+            completed = result["native"]["completedSubtasks"]
+            metrics = {CALVIN_COMPLETED_SUBTASKS: completed,
+                       **{f"success_at_{n}": int(completed >= n) for n in range(1, 6)}}
+            return valid(completed, 5, metrics=metrics,
+                         issues=result["issues"], review={"files": files})
         return valid(int(result["success"]), issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

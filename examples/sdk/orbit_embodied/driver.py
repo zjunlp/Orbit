@@ -39,6 +39,7 @@ class StepResult:
     success: bool
     simulation_time: Optional[float] = None
     native_action: Optional[list] = None
+    replan: bool = False
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity,
@@ -159,7 +160,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                 result["steps"] = step + 1
                 if budget is not None and row["wallSeconds"] >= budget:
                     raise EpisodeFailure("call_watchdog", "episode watchdog expired during an environment step")
-                chunk_index += 1
+                chunk_index = len(chunk) if native.replan else chunk_index + 1
                 observation = native.observation
                 if native.terminated:
                     break

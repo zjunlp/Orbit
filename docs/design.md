@@ -883,6 +883,8 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - **ManiSkill3 与 Meta-World**：两个 RLinf recipe 分别使用原生 SAPIEN WidowX 和 MuJoCo Sawyer 环境。冻结样本种子、观测和控制语义，
   以原生 `info.success` 判定 episode。Meta-World 用同一个 `environmentSeed + initialStateId` 生成 MT1 目标并重置环境。
   Policy 服务分别提供 OFT 和 π₀.₅ 推理。
+- **CALVIN ABC→D**：一个样本对应冻结目录的一条五指令序列。仿真仅在序列开始时重置，原生 oracle 完成一段后，driver 丢弃剩余动作并
+  用下一条指令重规划。独立 verifier 从封存的动作证据核对子任务进度、重规划边界和停止条件。主分数为完成的连续子任务数。
 - **固定批次**：`spec.batchSize` 按方法、计划顺序和相同生效预算拆分，成员、attemptId、episodeId 与清单摘要提交时冻结；模型服务
   每 Run 启动一次，逐 episode 重建环境并清空连接器状态。容器 watchdog 为逐 episode 预算之和。已封存且独立验证通过的 episode
   不被后续服务失败、OOM 或取消覆盖；共享文件由 Run 持有，随最后所属作业删除；重试结果采用时旧尝试存入 `Trial.priorAttempts`。

@@ -1,4 +1,4 @@
-"""Serve RLinf's Meta-World pi0.5 checkpoint through the OpenPI Torch runtime."""
+"""Serve RLinf pi0.5 checkpoints through the OpenPI Torch runtime."""
 
 import argparse
 import asyncio
@@ -11,6 +11,7 @@ from orbit_embodied.binding import file_digest
 
 
 NORMALIZATION_DIR = "lerobot/metaworld_mt50"
+CALVIN_NORMALIZATION_DIR = "InternRobotics/InternData-Calvin_ABC"
 
 
 def inputs(observation):
@@ -23,8 +24,18 @@ def inputs(observation):
             "image_mask": {"base_0_rgb": np.True_, "left_wrist_0_rgb": np.False_, "right_wrist_0_rgb": np.False_}}
 
 
+def calvin_inputs(observation):
+    import numpy as np
+
+    data = inputs(observation)
+    data["image"]["left_wrist_0_rgb"] = observation["wrist_rgb"]
+    data["image_mask"]["left_wrist_0_rgb"] = np.True_
+    return data
+
+
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--recipe", choices=("metaworld", "calvin"), default="metaworld")
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--checkpoint-digest")
     parser.add_argument("--normalization-digest")
@@ -39,7 +50,8 @@ def main():
         parser.error("checkpoint and both content digests are required")
     if tree_digest(args.checkpoint) != args.checkpoint_digest:
         raise ValueError("policy checkpoint content digest mismatch")
-    norm = args.checkpoint / NORMALIZATION_DIR
+    calvin = args.recipe == "calvin"
+    norm = args.checkpoint / (CALVIN_NORMALIZATION_DIR if calvin else NORMALIZATION_DIR)
     if file_digest(norm / "norm_stats.json") != args.normalization_digest:
         raise ValueError("policy normalization content digest mismatch")
 
@@ -59,16 +71,25 @@ def main():
     model.paligemma_with_expert.to_bfloat16_for_selected_params("bfloat16")
     stats = load(norm)
     processor = ModelTransformFactory()(config)
-    policy = Policy(model, transforms=[inputs, transforms.Normalize(stats, use_quantiles=True), *processor.inputs],
+    prepare = calvin_inputs if calvin else inputs
+    action_size = 7 if calvin else 4
+    policy = Policy(model, transforms=[prepare, transforms.Normalize(stats, use_quantiles=True), *processor.inputs],
                     output_transforms=[*processor.outputs, transforms.Unnormalize(stats, use_quantiles=True)],
                     sample_kwargs={"num_steps": 5}, is_pytorch=True, pytorch_device="cuda")
     torch.manual_seed(0)
 
     @torch.inference_mode()
     def infer(observation):
-        return policy.infer(observation)["actions"][:, :4]
+        actions = policy.infer(observation)["actions"][:, :action_size]
+        if calvin:
+            import numpy as np
 
-    metadata = {"calibration": False, "actionSize": 4, "replanSteps": 5, "orbit": {
+            if not np.isfinite(actions).all():
+                raise ValueError("CALVIN policy returned non-finite actions")
+            actions[:, -1] = np.where(actions[:, -1] > 0, 1, -1)
+        return actions
+
+    metadata = {"calibration": False, "actionSize": action_size, "replanSteps": 5, "orbit": {
         "checkpointDigest": args.checkpoint_digest, "normalizationDigest": args.normalization_digest,
         "randomness": {"backend": "torch", "initialSeed": 0, "scope": "service"},
     }}

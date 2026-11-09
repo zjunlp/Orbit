@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .binding import check_sample, digest, file_digest, reference_horizon
+from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed
 
 
 def write_json(path, value):
@@ -35,6 +35,26 @@ def seal(directory, result):
         "version": 1, "sampleRef": result["sampleRef"], "episodeId": result["episodeId"],
         "files": files, "optionalFiles": optional_files,
     })
+
+
+def verify_calvin_sequence(reference, sample, controls, result):
+    _, sequence = reference["environment"]["catalog"]["sequences"][reset_seed(sample, reference)]
+    limit = reference["parameters"]["subtaskSteps"]
+    completed, elapsed, replan = 0, 0, True
+    for index, row in enumerate(controls):
+        if row["reward"] not in (0, 1) or (replan and row["chunkIndex"] != 0):
+            raise ValueError("CALVIN control evidence differs from the native sequence protocol")
+        replan = row["reward"] == 1
+        completed += int(replan)
+        elapsed = 0 if replan else elapsed + 1
+        success = completed == len(sequence)
+        terminal = success or elapsed == limit
+        if (row["state"]["completedSubtasks"] != completed or row["nativeSuccess"] != success
+                or row["terminated"] != terminal or terminal != (index == len(controls) - 1)):
+            raise ValueError("CALVIN subtask progression or stopping point is inconsistent")
+    if (result["native"]["sequence"] != sequence or result["native"]["completedSubtasks"] != completed
+            or result["success"] != (completed == len(sequence))):
+        raise ValueError("CALVIN result differs from the recorded subtask completions")
 
 
 def verify_episode(directory, sample_ref, episode_id, expected=None):
@@ -153,6 +173,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         success = bool(controls and controls[-1]["nativeSuccess"])
     if result["valid"] and result["success"] != success:
         raise ValueError("native verdict contradicts the declared control-step aggregation")
+    if result["valid"] and reference.get("environment", {}).get("kind") == "calvin":
+        verify_calvin_sequence(reference, contract["sample"], controls, result)
     # A valid failure ends at the horizon or at a native termination (e.g. Gym truncation).
     if (result["valid"] and not result["success"] and result["steps"] != contract["horizon"]
             and not controls[-1]["terminated"]):

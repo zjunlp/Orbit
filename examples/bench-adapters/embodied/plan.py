@@ -22,16 +22,19 @@ def main():
     states = parser.add_mutually_exclusive_group(required=True)
     states.add_argument("--initial-state", action="append", type=int)
     states.add_argument("--all-initial-states", action="store_true",
-                        help="Expand every pose and scene variant in a fixed SimplerEnv grid")
-    parser.add_argument("--environment-seed", type=int, default=7)
+                        help="Expand every initial state in a fixed native catalog")
+    parser.add_argument("--environment-seed", type=int)
     parser.add_argument("--repetitions", type=int, default=1)
     args = parser.parse_args()
     reference = json.loads(args.reference_file.read_text())
     environment = reference.get("environment", {})
     kind = environment.get("kind")
+    environment_seed = args.environment_seed
+    if environment_seed is None:
+        environment_seed = 0 if kind == "calvin" else 7
     generated = kind in GENERATED_ENVIRONMENTS
     uint32_seed = kind in ("robocasa365", "robotwin") or "simplerRobot" in environment
-    if args.environment_seed < 0:
+    if environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
     if generated:
         tasks = {task: {"tags": {"initialStateDigest": seed_asset(reference, task)}}
@@ -41,21 +44,21 @@ def main():
     items = []
     for task_id in args.task:
         task = tasks[task_id]
-        count = initial_state_count(environment, task_id)
+        count = len(environment["catalog"]["sequences"]) if kind == "calvin" else initial_state_count(environment, task_id)
         if args.all_initial_states and count is None:
-            parser.error("--all-initial-states requires a fixed SimplerEnv grid")
+            parser.error("--all-initial-states requires a fixed native catalog")
         selected = range(count) if args.all_initial_states else args.initial_state
         limit = count if count is not None else 2 ** 31 if generated else 50
         for initial_state in selected:
             if not 0 <= initial_state < limit:
                 raise ValueError("initial-state index exceeds the selected reset recipe")
-            scene_seed = args.environment_seed if count is not None else args.environment_seed + initial_state
+            scene_seed = environment_seed if count is not None else environment_seed + initial_state
             if uint32_seed and scene_seed >= 2 ** 32:
                 raise ValueError("scene seed must fit in an unsigned 32-bit integer")
             for repetition in range(args.repetitions):
                 content = {"taskId": task_id, "benchmarkProfile": reference["id"],
                            "initialStateId": str(initial_state), "initialStateDigest": task["tags"]["initialStateDigest"],
-                           "environmentSeed": args.environment_seed, "policySeed": 0, "repetition": repetition}
+                           "environmentSeed": environment_seed, "policySeed": 0, "repetition": repetition}
                 items.append({"sampleId": digest(content), **content})
     if generated:
         check_distinct_resets(items, reference)

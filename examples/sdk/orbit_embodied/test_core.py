@@ -86,6 +86,39 @@ class CoreTests(unittest.TestCase):
     def verify(self):
         return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
 
+    def test_calvin_partial_sequence_replans_and_verifies_its_progress(self):
+        tasks = ["one", "two", "three", "four", "five"]
+
+        class Sequence(SyntheticBenchmark):
+            horizon = 10
+            settle_steps = 0
+
+            def step(self, action):
+                self.count += 1
+                completed = self.count <= 2
+                return StepResult({"state": np.zeros(3)}, float(completed), self.count == 4,
+                                  False, replan=completed)
+
+            def state(self, observation):
+                return {"completedSubtasks": min(self.count, 2)}
+
+            def result(self):
+                return {"success": False, "sequence": tasks, "completedSubtasks": 2}
+
+        self.sample["environmentSeed"] = 0
+        self.sample["sampleId"] = digest({key: value for key, value in self.sample.items() if key != "sampleId"})
+        reference = {"environment": {"kind": "calvin", "horizon": 10,
+                                     "catalog": {"sequences": [[0, tasks]]}},
+                     "parameters": {"settleSteps": 0, "replanSteps": 5, "subtaskSteps": 2}}
+        result = self.run_sample(Sequence(), SyntheticPolicy(), {"reference": reference})
+        rows = [json.loads(line) for line in (self.output / "actions.jsonl").read_text().splitlines()]
+        self.assertEqual([row["chunkIndex"] for row in rows], [0, 0, 0, 1])
+        self.assertEqual(self.verify()["native"]["completedSubtasks"], 2)
+        result["native"]["completedSubtasks"] = 3
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "recorded subtask completions"):
+            self.verify()
+
     def test_requires_explicit_complete_semantically_equal_mapping(self):
         with self.assertRaisesRegex(ValueError, "exactly"):
             resolve_binding(self.benchmark_profile, self.policy_profile, {})

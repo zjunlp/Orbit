@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
-GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "metaworld")
+GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "metaworld", "calvin")
 
 
 def digest(value):
@@ -91,6 +91,11 @@ def validate_observation(observation, descriptions):
 def reset_seed(sample, reference=None):
     """Use a separate scene index and RNG seed for a fixed scene grid."""
     environment = reference["environment"] if reference else {}
+    if environment.get("kind") == "calvin":
+        index = int(sample["initialStateId"])
+        if sample["environmentSeed"] != 0 or not 0 <= index < len(environment["catalog"]["sequences"]):
+            raise ValueError("CALVIN samples require environment seed 0 and a frozen sequence index")
+        return index
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
     seed = sample["environmentSeed"] + int(sample["initialStateId"])

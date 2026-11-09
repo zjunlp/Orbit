@@ -148,6 +148,9 @@ def execute_episode(request, destination, cancelled=None):
         from orbit_embodied.tabletop import ManiSkillBenchmark, MetaWorldBenchmark
         native = ManiSkillBenchmark if kind == "maniskill3" else MetaWorldBenchmark
         benchmark = native(reference, sample["taskId"])
+    elif kind == "calvin":
+        from orbit_embodied.calvin import CalvinBenchmark
+        benchmark = CalvinBenchmark(reference, sample["taskId"])
     else:
         from orbit_embodied.libero import LiberoBenchmark
         suite, name = sample["taskId"].split(":", 1)
@@ -157,7 +160,7 @@ def execute_episode(request, destination, cancelled=None):
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
-            or (kind not in ("robotwin", "maniskill3", "metaworld") and parameters["renderSize"] != 256)
+            or (kind not in ("robotwin", "maniskill3", "metaworld", "calvin") and parameters["renderSize"] != 256)
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],
