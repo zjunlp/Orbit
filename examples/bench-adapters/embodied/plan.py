@@ -11,6 +11,7 @@ from orbit_embodied import digest
 from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, seed_asset
 from orbit_embodied.libero_plus import catalog as libero_plus_catalog
 from orbit_embodied.simpler import initial_state_count
+from orbit_embodied.vlabench import initial_state_count as vlabench_state_count
 from adapter import catalog
 
 
@@ -35,7 +36,7 @@ def main():
     kind = environment.get("kind")
     environment_seed = args.environment_seed
     if environment_seed is None:
-        environment_seed = 0 if kind == "calvin" else 7
+        environment_seed = {"calvin": 0, "vlabench": 42}.get(kind, 7)
     generated = kind in GENERATED_ENVIRONMENTS
     uint32_seed = kind in ("robocasa365", "robotwin") or "simplerRobot" in environment
     if environment_seed < 0:
@@ -58,6 +59,8 @@ def main():
             count = len(environment["catalog"]["sequences"])
         elif kind == "libero-plus":
             count = int(task["tags"]["initialStateCount"])
+        elif kind == "vlabench":
+            count = vlabench_state_count(environment, task_id)
         else:
             count = initial_state_count(environment, task_id)
         if args.all_initial_states and count is None:

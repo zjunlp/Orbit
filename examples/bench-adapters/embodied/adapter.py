@@ -15,9 +15,10 @@ SDK = HERE.parents[1] / "sdk"
 sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
-from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, seed_asset
+from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, reset_seed, seed_asset
 from orbit_embodied.libero_plus import PERTURBATIONS, catalog as libero_plus_catalog, metric_name
 from orbit_embodied.simpler import initial_state_count, scene_at
+from orbit_embodied.vlabench import METRICS as VLABENCH_METRICS, initial_state_count as vlabench_state_count
 
 
 CALVIN_COMPLETED_SUBTASKS = "completed_subtasks"
@@ -98,6 +99,11 @@ def tasks(req):
                 task["tags"]["initialStateCount"] = str(initial_state_count(environment, task["id"]))
         if calvin:
             listing[0]["tags"]["initialStateCount"] = str(len(environment["catalog"]["sequences"]))
+        if kind == "vlabench":
+            for task in listing:
+                count = vlabench_state_count(environment, task["id"])
+                if count is not None:
+                    task["tags"]["initialStateCount"] = str(count)
     elif kind == "libero-plus":
         if suite != environment["suite"]:
             raise ValueError("LIBERO-Plus suite differs from the frozen registration")
@@ -113,6 +119,9 @@ def tasks(req):
                     "primary": True}]
         metrics.extend({"name": f"success_at_{n}", "label": f"Completed at least {n}", "unit": "ratio",
                         "range": [0, 1]} for n in range(1, 6))
+    if kind == "vlabench":
+        metrics = [{"name": name, "label": label, "unit": "ratio", "range": [0, 1]}
+                   for name, label in VLABENCH_METRICS.items()]
     elif kind == "libero-plus":
         metrics = [{"name": metric_name(category), "label": category + " success", "unit": "ratio",
                     "range": [0, 1]} for category in PERTURBATIONS]
@@ -155,6 +164,10 @@ def solve_one(req):
     sample = trial["sample"]
     if "simplerScenes" in environment:
         scene_at(environment, sample["taskId"], int(sample["initialStateId"]))
+    if environment.get("kind") == "vlabench":
+        if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
+            raise ValueError("VLABench sample differs from the frozen catalog")
+        reset_seed(sample, reference)
     if environment.get("kind") == "libero-plus":
         if sample["taskId"].partition(":")[0] != environment["suite"] or sample["initialStateId"] != "0":
             raise ValueError("LIBERO-Plus requires the selected suite and one initial state per task")
@@ -185,7 +198,7 @@ def solve_one(req):
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
-                     "env": {"PYTHONPATH": "/orbit-embodied/python:/opt/libero-plus:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
+                     "env": {"PYTHONPATH": "/orbit-embodied/python:/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
                              "MUJOCO_GL": gl_platform,
                              "PYOPENGL_PLATFORM": gl_platform},
                      "resources": resources,
@@ -331,7 +344,9 @@ def score(req):
                          issues=result["issues"], review={"files": files})
         success = int(result["success"])
         metrics = None
-        if kind == "libero-plus":
+        if kind == "vlabench":
+            metrics = result["native"]["metrics"]
+        elif kind == "libero-plus":
             metrics = {metric_name(result["native"]["perturbation"]): success}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:

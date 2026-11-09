@@ -14,9 +14,10 @@ from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 from orbit_embodied.libero_plus import NATIVE_ROOT as LIBERO_PLUS_ROOT
 from orbit_embodied.libero_suites import HORIZONS
+from orbit_embodied.vlabench import ASSETS_ROOT as VLABENCH_ASSETS
 
 
-SIMULATOR_ASSET_ROOTS = {"libero-plus": LIBERO_PLUS_ROOT + "/assets"}
+SIMULATOR_ASSET_ROOTS = {"libero-plus": LIBERO_PLUS_ROOT + "/assets", "vlabench": VLABENCH_ASSETS}
 
 
 class LazyPolicy:
@@ -189,6 +190,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "calvin":
         from orbit_embodied.calvin import CalvinBenchmark
         benchmark = CalvinBenchmark(reference, sample["taskId"])
+    elif kind == "vlabench":
+        from orbit_embodied.vlabench import VLABenchBenchmark
+        benchmark = VLABenchBenchmark(reference, sample["taskId"])
     else:
         from orbit_embodied.libero import LiberoBenchmark, LiberoPlusBenchmark
         suite, name = sample["taskId"].split(":", 1)
@@ -200,7 +204,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
             or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin")
-                and parameters["renderSize"] != 256)
+                and parameters["renderSize"] != (480 if kind == "vlabench" else 256))
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],

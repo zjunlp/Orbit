@@ -3,6 +3,7 @@
 import importlib.util
 import copy
 import json
+from itertools import product
 from pathlib import Path
 import shutil
 import tempfile
@@ -48,8 +49,8 @@ class AdapterPlanningTests(unittest.TestCase):
         return request
 
     def test_solve_checks_the_mounted_simulator_assets_once_before_execution(self):
-        for operation in ("solve", "batch"):
-            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
+        for kind, operation in product(("libero-plus", "vlabench"), ("solve", "batch")):
+            with self.subTest(kind=kind, operation=operation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 staging = adapter.stage({"trial": {"staging": str(root / "stage")}})
                 spec = importlib.util.spec_from_file_location("staged_run", staging / "run.py")
@@ -60,7 +61,7 @@ class AdapterPlanningTests(unittest.TestCase):
                 asset = assets / "texture"
                 asset.write_bytes(b"frozen texture")
                 checksum = run.tree_digest(assets)
-                episode = {"reference": {"environment": {"kind": "libero-plus", "assets": {
+                episode = {"reference": {"environment": {"kind": kind, "assets": {
                     "target": str(assets), "digest": checksum,
                 }}}, "implementationDigest": "driver"}
                 payload = episode if operation == "solve" else {"plan": {}, "episodes": [episode, episode]}
@@ -73,7 +74,7 @@ class AdapterPlanningTests(unittest.TestCase):
                     for episode in episodes:
                         execute(episode, output)
 
-                with patch.dict(run.SIMULATOR_ASSET_ROOTS, {"libero-plus": str(assets)}), \
+                with patch.dict(run.SIMULATOR_ASSET_ROOTS, {kind: str(assets)}), \
                         patch.object(run, "archive_implementation", return_value="driver"), \
                         patch.object(run, "tree_digest", wraps=run.tree_digest) as measure, \
                         patch.object(run, "execute_episode", side_effect=prepare_only), \

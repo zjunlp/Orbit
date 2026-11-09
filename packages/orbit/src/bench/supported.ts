@@ -559,6 +559,32 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     suites: ["Spatial", "Object", "Goal", "Long"],
   },
   {
+    id: "vlabench",
+    name: "VLABench",
+    description:
+      "Evaluate language-conditioned Franka manipulation with fixed scenes and open cross-task evaluation.",
+    taxonomyGroups: [group("Language-conditioned manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "All five published fixed tracks and the released native task registry for seeded cross-task evaluation.",
+        "examples/bench-adapters/embodied/VLABENCH.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "The released catalogs and samples across all six tracks were checked.",
+      nativeDocs,
+    ),
+    suites: [
+      "In distribution",
+      "Cross category",
+      "Common sense",
+      "Semantic instruction",
+      "Cross task",
+      "Unseen texture",
+    ],
+  },
+  {
     id: "simpler-env",
     name: "SimplerEnv",
     description:
@@ -685,6 +711,7 @@ const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
   "libero-plus-panda-raw/1": "libero-plus",
+  "vlabench-franka-ee/1": "vlabench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
   "robocasa365-panda-omron-native/1": "robocasa365",

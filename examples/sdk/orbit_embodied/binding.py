@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
-                          "metaworld", "calvin")
+                          "metaworld", "calvin", "vlabench")
 
 
 def digest(value):
@@ -35,6 +35,8 @@ def seed_asset(reference, task):
         raise ValueError("use the generated reference with the frozen environment asset digest")
     reset = ("environmentSeed,sceneGrid[initialStateId]" if "simplerScenes" in reference["environment"]
              else "environmentSeed+initialStateId")
+    if "vlabenchEpisodeCounts" in reference["environment"]:
+        reset = "officialTrack[taskId][initialStateId],environmentSeed+initialStateId"
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
 
@@ -106,6 +108,12 @@ def reset_seed(sample, reference=None):
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
     seed = sample["environmentSeed"] + int(sample["initialStateId"])
+    if environment.get("kind") == "vlabench":
+        index = int(sample["initialStateId"])
+        count = environment.get("vlabenchEpisodeCounts", {}).get(sample["taskId"])
+        if not 0 <= seed < 2 ** 32 or (count is not None and
+                                      (sample["environmentSeed"] != 42 or not 0 <= index < count)):
+            raise ValueError("VLABench sample is outside the frozen track or unsigned seed range")
     if environment.get("kind") == "metaworld" and not 0 <= seed < 2 ** 32:
         raise ValueError("Meta-World scene seed must fit in an unsigned 32-bit integer")
     return seed
