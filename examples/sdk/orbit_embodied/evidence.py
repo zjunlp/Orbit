@@ -57,6 +57,21 @@ def verify_calvin_sequence(reference, sample, controls, result):
         raise ValueError("CALVIN result differs from the recorded subtask completions")
 
 
+def verify_simpler_termination(controls, initial, horizon):
+    final = initial["finalSubtask"]
+    stopped = False
+    for index, row in enumerate(controls):
+        action, state = row["action"], row["state"]
+        requested = action[7] > 0
+        stopped = (requested and final) or state["truncated"]
+        if (row["nativeAction"] != action[:7] or ((requested or final) and not state["finalSubtask"])
+                or row["terminated"] != stopped or (stopped and index != len(controls) - 1)):
+            raise ValueError("SimplerEnv control evidence differs from the policy termination protocol")
+        final = state["finalSubtask"]
+    if len(controls) != horizon and not stopped:
+        raise ValueError("SimplerEnv episode ended before the horizon without termination")
+
+
 def verify_episode(directory, sample_ref, episode_id, expected=None):
     directory = Path(directory).resolve()
     manifest = json.loads((directory / "evidence-manifest.json").read_text())
@@ -175,6 +190,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         raise ValueError("native verdict contradicts the declared control-step aggregation")
     if result["valid"] and reference.get("environment", {}).get("kind") == "calvin":
         verify_calvin_sequence(reference, contract["sample"], controls, result)
+    if result["valid"] and reference.get("environment", {}).get("policyTermination"):
+        verify_simpler_termination(controls, initial["state"], contract["horizon"])
     # A valid failure ends at the horizon or at a native termination (e.g. Gym truncation).
     if (result["valid"] and not result["success"] and result["steps"] != contract["horizon"]
             and not controls[-1]["terminated"]):

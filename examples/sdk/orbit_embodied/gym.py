@@ -124,3 +124,27 @@ class GymBenchmark:
             else:
                 self.env.close()
             self.env = None
+
+
+class SimplerPolicyTerminationBenchmark(GymBenchmark):
+    action_size = 8
+    truncated = False
+
+    def state(self, observation):
+        return {**super().state(observation), "finalSubtask": bool(self.env.env.unwrapped.is_final_subtask()),
+                "truncated": self.truncated}
+
+    def step(self, action):
+        native = self.env.env
+        terminate = bool(action[7] > 0)
+        if terminate and not native.unwrapped.is_final_subtask():
+            native.unwrapped.advance_to_next_subtask()
+            terminate = False
+        raw, reward, done, truncated, _ = native.step(action[:7])
+        self.success, self.truncated = bool(done), bool(truncated)
+        observation = self.observation(self.env._process_observation(raw))
+        return StepResult(observation, float(reward), terminate or self.truncated, self.success,
+                          native_action=self.native_action)
+
+    def result(self):
+        return {"success": self.success, "source": "native SimplerEnv done", "task": self.task}

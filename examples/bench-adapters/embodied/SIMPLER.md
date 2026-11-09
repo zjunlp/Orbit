@@ -66,3 +66,13 @@ registered policy's action convention and reads native success. Its 7-D GR00T bi
 timed progression in the drawer-placement task at control step 100. The RT-1 and Octo paper
 runners also accept a policy terminate prediction, which can advance a subtask earlier.
 Orbit's native success reports describe the registered policy and frozen sample plan.
+
+Pass `--policy-termination` for a fixed scene grid to register the RT-1/Octo stopping protocol.
+It uses a separate `-stop-native` benchmark name and expects a compatible policy
+to return the seven native controller values followed by a termination value. A positive value
+advances a non-final subtask before the control step or stops the episode after that step when
+already on the final subtask. The last native `done` flag determines success. The policy must
+perform any gripper conversion before returning its action.
+
+The existing GR00T checkpoints use the seven-channel wrapper registrations. For ray-traced
+settings the policy-termination profile can also be registered with `--disable-rt-denoiser`.

@@ -135,8 +135,9 @@ def execute_episode(request, destination, cancelled=None):
         raise ValueError("sample evaluation profile differs from the frozen reference")
     kind = reference.get("environment", {}).get("kind")
     if kind == "registered-gym":
-        from orbit_embodied.gym import GymBenchmark
-        benchmark = GymBenchmark(reference, sample["taskId"])
+        from orbit_embodied.gym import GymBenchmark, SimplerPolicyTerminationBenchmark
+        native = SimplerPolicyTerminationBenchmark if reference["environment"].get("policyTermination") else GymBenchmark
+        benchmark = native(reference, sample["taskId"])
     elif kind == "robocasa365":
         from orbit_embodied.robocasa import RoboCasaBenchmark
         benchmark = RoboCasaBenchmark(reference, sample["taskId"])

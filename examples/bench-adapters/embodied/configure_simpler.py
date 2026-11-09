@@ -81,6 +81,21 @@ def reference_for(profile, root):
     return reference
 
 
+def use_policy_termination(reference, root):
+    environment = reference["environment"]
+    environment["policyTermination"] = True
+    profile = reference["benchmarkProfile"]
+    profile["id"] = f"simpler-{environment['simplerRobot']}-policy-termination/1"
+    action = profile["action"]
+    action.update(semantic="simpler-native-action-and-terminate", shape=[8],
+                  unit="translation:metre;rotation:radian;terminate:positive",
+                  gripper="native-controller-action", order=[*action["order"], "terminate"])
+    reference["policyProfile"] = profile
+    reference["parameters"].update(replanSteps=1, successRule="last")
+    evaluator = SIMPLER + "simpler_env/evaluation/maniskill2_evaluator.py"
+    reference["reference"]["files"][evaluator] = file_digest(root / evaluator)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference-source", type=Path, required=True)
@@ -88,17 +103,27 @@ def main():
     parser.add_argument("--benchmark-image", required=True)
     parser.add_argument("--disable-rt-denoiser", action="store_true",
                         help="Register a separate RT profile without OptiX denoising")
+    parser.add_argument("--policy-termination", action="store_true",
+                        help="Use native 7-D actions plus the RT-1/Octo termination output")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     root = args.reference_source.resolve()
     profile = args.profile
     reference = reference_for(profile, root)
+    if args.policy_termination:
+        if "simplerScenes" not in reference["environment"]:
+            parser.error("--policy-termination requires a published scene grid")
+        use_policy_termination(reference, root)
+        profile += "-stop"
+        reference["id"] = f"simpler-{profile}-reference/1"
+        reference["scoreName"] = f"SimplerEnv {PROFILES[args.profile]} policy stop success"
     if args.disable_rt_denoiser:
-        if profile == "widowx-visual-matching":
+        if args.profile == "widowx-visual-matching":
             parser.error("the WidowX Visual Matching sweep does not use ray tracing")
         profile += "-no-rt-denoiser"
         reference["id"] = f"simpler-{profile}-reference/1"
-        reference["scoreName"] += " (RT denoising disabled)"
+        suffix = " (no OptiX)" if args.policy_termination or args.profile == "google-variant-aggregation" else " (RT denoising disabled)"
+        reference["scoreName"] += suffix
         reference["environment"]["rtDenoiser"] = False
     source = reference["reference"]
     check_source(root, source["wrapper"], source["files"])

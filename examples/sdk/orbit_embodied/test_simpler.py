@@ -6,6 +6,7 @@ import sys
 import unittest
 
 from orbit_embodied.binding import check_distinct_resets, reset_seed, seed_asset
+from orbit_embodied.evidence import verify_simpler_termination
 from orbit_embodied.simpler import grid_size, initial_state_count, rt_options, scene_at
 
 
@@ -17,6 +18,20 @@ SWEEPS = json.loads((ADAPTER / "profiles/simpler-sweeps.json").read_text())
 
 
 class SimplerTests(unittest.TestCase):
+    def test_termination_advances_then_stops_on_the_final_subtask(self):
+        native = [0] * 7
+        initial = {"finalSubtask": False, "truncated": False}
+        final = {"finalSubtask": True, "truncated": False}
+        advance = {"action": native + [1], "nativeAction": native, "state": final, "terminated": False}
+        stop = {**advance, "terminated": True}
+        verify_simpler_termination([advance, stop], initial, 200)
+        with self.assertRaisesRegex(ValueError, "policy termination protocol"):
+            verify_simpler_termination([stop], initial, 200)
+        with self.assertRaisesRegex(ValueError, "ended before the horizon"):
+            verify_simpler_termination([advance], initial, 200)
+        with self.assertRaisesRegex(ValueError, "policy termination protocol"):
+            verify_simpler_termination([advance, stop, stop], initial, 200)
+
     def test_scene_indices_span_each_frozen_sweep(self):
         counts = {
             "google-visual-matching": (11, 1164),
