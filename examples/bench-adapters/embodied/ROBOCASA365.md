@@ -1,6 +1,6 @@
 # Native RoboCasa365
 
-Orbit exposes the 50 official multitask evaluation tasks on the PandaOmron mobile manipulator.
+Orbit exposes the official multitask, lifelong and full task catalog on the PandaOmron mobile manipulator.
 It opens the original Gymnasium environment for each sample and uses its controller and success flag.
 The published π₀.₅ policy runs as a separate OpenPI WebSocket service. The reference fixes three
 RGB cameras, 16 state values and the native 12-element action layout.
@@ -20,6 +20,17 @@ distribution independently of the task group. The default `pretrain` matches the
 multitask setup. `--split target` selects held-out kitchens and objects and adds `-target` before
 `-native` in the registration name. Each registration freezes the task IDs, per-task horizons,
 scene split and asset digest in the sample-plan reference.
+
+`all_tasks`, `all_atomic_tasks` and `all_composite_tasks` use the fixed-version dataset registry
+and its native task horizons. The full catalog has 317 entries, including the 50 multitask tasks.
+`lifelong_learning_phase1` through `lifelong_learning_phase4` register the four disjoint phases
+of 65, 20, 20 and 20 tasks. To evaluate retention after phase 2, 3 or 4, use
+`lifelong_through_phase2`, `lifelong_through_phase3` or `lifelong_through_phase4`.
+Use `--split pretrain` for the published lifelong setup and register the checkpoint for that
+phase independently. [RoboCasa lifelong evaluation](https://robocasa.ai/docs/build/html/benchmarking/lifelong_learning.html)
+
+To plan one initial state per task in a registration, pass `--all-tasks --initial-state 0`
+to `plan.py` with that registration's `reference.json`.
 
 ## Prepare the runtimes and assets
 

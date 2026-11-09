@@ -16,7 +16,32 @@ TASK_SETS = {
     "composite_seen": "Composite-Seen",
     "composite_unseen": "Composite-Unseen",
     "target50": "Target 50",
+    "all_tasks": "All Tasks",
+    "all_atomic_tasks": "All Atomic Tasks",
+    "all_composite_tasks": "All Composite Tasks",
+    **{f"lifelong_learning_phase{n}": f"Lifelong Phase {n}" for n in range(1, 5)},
+    **{f"lifelong_through_phase{n}": f"Lifelong Through Phase {n}" for n in range(2, 5)},
 }
+
+
+def scope_tasks(definitions, task_set):
+    atomic = {item.arg: item.value for item in definitions["ATOMIC_TASK_DATASETS"].keywords}
+    composite = {item.arg: item.value for item in definitions["COMPOSITE_TASK_DATASETS"].keywords}
+    datasets = {**atomic, **composite}
+    catalogs = {"all_tasks": datasets, "all_atomic_tasks": atomic, "all_composite_tasks": composite}
+    if task_set in catalogs:
+        return list(catalogs[task_set]), datasets
+    if task_set.startswith("lifelong_"):
+        number = int(task_set[-1])
+        phases = {1: list(atomic)}
+        for item in definitions["LIFELONG_LEARNING_TASKS"].keywords:
+            if item.arg != "lifelong_learning_phase1":
+                phases[int(item.arg[-1])] = ast.literal_eval(item.value)
+        selected = range(1, number + 1) if task_set.startswith("lifelong_through") else (number,)
+        return [task for phase in selected for task in phases[phase]], datasets
+    targets = {item.arg: ast.literal_eval(item.value) for item in definitions["TARGET_TASKS"].keywords}
+    selected = ("atomic_seen", "composite_seen", "composite_unseen") if task_set == "target50" else (task_set,)
+    return [task for group in selected for task in targets[group]], datasets
 
 
 def set_benchmark_scope(reference, root, task_set, split, groot):
@@ -24,11 +49,7 @@ def set_benchmark_scope(reference, root, task_set, split, groot):
     registry = ast.parse((root / "robocasa/utils/dataset_registry.py").read_text())
     definitions = {node.targets[0].id: node.value for node in registry.body
                    if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
-    groups = {item.arg: ast.literal_eval(item.value) for item in definitions["TARGET_TASKS"].keywords}
-    selected = ("atomic_seen", "composite_seen", "composite_unseen") if task_set == "target50" else (task_set,)
-    names = [name for group in selected for name in groups[group]]
-    datasets = {item.arg: item.value for key in ("ATOMIC_TASK_DATASETS", "COMPOSITE_TASK_DATASETS")
-                for item in definitions[key].keywords}
+    names, datasets = scope_tasks(definitions, task_set)
     environment = reference["environment"]
     scale = environment.get("horizonScale", 1.5)
     horizons = {}

@@ -41,9 +41,31 @@ class RoboCasaBenchmark(GymBenchmark):
         np.random.seed(seed)
         self.env = gymnasium.make(self.task, split=config["split"], seed=seed)
         self.capture_native_step()
-        observation, _ = self.env.reset()
+        if self.task == "robocasa/DrinkwareConsolidation":
+            observation = self.reset_drinkware()
+        else:
+            observation, _ = self.env.reset()
         self.success, self.steps = False, 0
         return self.observation(observation)
+
+    def reset_drinkware(self):
+        native = self.env.unwrapped.env
+        reset = native.reset
+
+        def reset_with_observation():
+            observation = reset()
+            if observation is None:
+                # The pinned task opens a cabinet door after reset and drops the returned observation.
+                native.sim.forward()
+                return native._get_observations(force_update=True)
+            return observation
+
+        native.reset = reset_with_observation
+        try:
+            observation, _ = self.env.reset()
+            return observation
+        finally:
+            del native.reset
 
     def step(self, action):
         from robocasa.utils.env_utils import convert_action

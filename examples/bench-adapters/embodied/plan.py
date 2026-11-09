@@ -18,7 +18,10 @@ def main():
     parser.add_argument("--reference-source", type=Path, required=True)
     parser.add_argument("--reference-file", type=Path, default=HERE / "reference.json")
     parser.add_argument("--suite", default="libero_spatial")
-    parser.add_argument("--task", action="append", required=True)
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--task", action="append")
+    selection.add_argument("--all-tasks", action="store_true",
+                           help="Plan every task in the selected benchmark catalog")
     states = parser.add_mutually_exclusive_group(required=True)
     states.add_argument("--initial-state", action="append", type=int)
     states.add_argument("--all-initial-states", action="store_true",
@@ -42,7 +45,7 @@ def main():
     else:
         tasks = {task["id"]: task for task in catalog(args.reference_source, args.suite)}
     items = []
-    for task_id in args.task:
+    for task_id in tasks if args.all_tasks else args.task:
         task = tasks[task_id]
         count = len(environment["catalog"]["sequences"]) if kind == "calvin" else initial_state_count(environment, task_id)
         if args.all_initial_states and count is None:
