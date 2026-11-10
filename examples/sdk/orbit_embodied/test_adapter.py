@@ -3,6 +3,7 @@
 import importlib.util
 import copy
 import json
+from itertools import product
 from pathlib import Path
 import shutil
 import tempfile
@@ -25,6 +26,35 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_native_runtime_images_require_matching_manifest_and_entrypoint(self):
+        with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
+            import native_runtime
+
+        mt100 = native_runtime.runtime_manifest("rlbench-mt100", native_runtime.rlbench_sources(False))
+        rvt = native_runtime.runtime_manifest("rlbench-rvt18", native_runtime.rlbench_sources(True))
+        casa = native_runtime.runtime_manifest("robocasa-v02", native_runtime.robocasa_sources())
+        image_id = "sha256:" + "a" * 64
+        for expected, actual, entrypoint in (
+            (mt100, mt100, mt100["entrypoint"]),
+            (rvt, rvt, rvt["entrypoint"]),
+            (casa, casa, casa["entrypoint"]),
+            (mt100, casa, casa["entrypoint"]),
+            (mt100, rvt, rvt["entrypoint"]),
+            (casa, None, casa["entrypoint"]),
+            (rvt, rvt, ["python"]),
+            (mt100, {**mt100, "coppeliasim": "wrong"}, mt100["entrypoint"]),
+        ):
+            labels = {native_runtime.MANIFEST_LABEL: json.dumps(actual)} if actual else {}
+            config = {"Labels": labels, "Entrypoint": entrypoint}
+            output = json.dumps([{"Id": image_id, "Config": config}])
+            with self.subTest(kind=expected["kind"], actual=actual, entrypoint=entrypoint):
+                with patch.object(native_runtime.subprocess, "check_output", return_value=output):
+                    if expected == actual and entrypoint == expected["entrypoint"]:
+                        self.assertEqual(native_runtime.require_image("tag", expected), image_id)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "expected the pinned"):
+                            native_runtime.require_image("tag", expected)
+
     def batch_request(self, root):
         request = self.request(root)
         first = request["trial"]
@@ -46,6 +76,45 @@ class AdapterPlanningTests(unittest.TestCase):
         spec["params"]["batchDigest"] = plan["digest"]
         spec["tags"].update(embodied_evidence="3", execution_batch=plan["id"], batch_attempt=plan["attemptId"])
         return request
+
+    def test_solve_checks_the_mounted_simulator_assets_once_before_execution(self):
+        for kind, operation in product(("libero-plus", "vlabench"), ("solve", "batch")):
+            with self.subTest(kind=kind, operation=operation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                staging = adapter.stage({"trial": {"staging": str(root / "stage")}})
+                spec = importlib.util.spec_from_file_location("staged_run", staging / "run.py")
+                run = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(run)
+                assets = root / "assets"
+                assets.mkdir()
+                asset = assets / "texture"
+                asset.write_bytes(b"frozen texture")
+                checksum = run.tree_digest(assets)
+                episode = {"reference": {"environment": {"kind": kind, "assets": {
+                    "target": str(assets), "digest": checksum,
+                }}}, "implementationDigest": "driver"}
+                payload = episode if operation == "solve" else {"plan": {}, "episodes": [episode, episode]}
+                request = root / "request.json"
+                write_json(request, payload)
+                def prepare_only(request, destination, *, prepare):
+                    prepare()
+
+                def batch_prepare_only(plan, episodes, output, execute):
+                    for episode in episodes:
+                        execute(episode, output)
+
+                with patch.dict(run.SIMULATOR_ASSET_ROOTS, {kind: str(assets)}), \
+                        patch.object(run, "archive_implementation", return_value="driver"), \
+                        patch.object(run, "tree_digest", wraps=run.tree_digest) as measure, \
+                        patch.object(run, "execute_episode", side_effect=prepare_only), \
+                        patch("orbit_embodied.batch.run_batch", side_effect=batch_prepare_only):
+                    argv = [operation, str(request), str(root / "output")]
+                    run.main(argv)
+                    measure.assert_called_once_with(str(assets))
+                    asset.write_bytes(b"changed texture")
+                    with self.assertRaisesRegex(ValueError, "mounted simulator asset digest mismatch"):
+                        run.main(argv)
+                    self.assertEqual(measure.call_count, 2)
 
     def test_versioned_evidence_cannot_skip_the_solve_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -106,6 +175,23 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertEqual(expected["batch"]["index"], 1)
             self.assertEqual(verify["resources"]["gpus"], 0)
             self.assertNotIn("services", verify)
+
+    def test_diffusion_solve_requires_native_done_evidence_with_or_without_batch(self):
+        for batched in (False, True):
+            with self.subTest(batched=batched), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                request = self.batch_request(root) if batched else self.request(root)
+                config = request["benchmark"]["config"]
+                reference = json.loads(config["reference"])
+                reference["environment"] = {"protocol": "diffusion-policy"}
+                config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+                with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                    solve = adapter.solve(request)["spec"]
+                self.assertEqual(solve["tags"]["embodied_evidence"], "4")
+                request["solve"]["run"]["spec"]["tags"]["embodied_evidence"] = "4"
+                expected = adapter.verification_expectation(request)
+                self.assertEqual(expected["evidenceVersion"], 4)
+                self.assertEqual("batch" in expected, batched)
 
     def test_batch_verification_rejects_other_episode_or_attempt(self):
         with tempfile.TemporaryDirectory() as temporary:

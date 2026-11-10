@@ -877,8 +877,16 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   rollout，仿真资产经摘要核对并以只读数据集挂载，临时 XML 写入容器内的链接视图。`robocasa-native` I/O 保留原生 12 维动作，
   以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/ROBOCASA365.md)
   GR00T N1.5 共用环境 driver，以 RoboCasa 1.0.1 原生 horizon 运行。每 16 步重规划，按动作段末尾的原生成功信号计分。
-  两条 recipe 分别登记，GR00T recipe 的统计排除无效样本。
+  OpenPI 和 GR00T 的 recipe 分别登记，GR00T recipe 的统计排除无效样本。
+  Diffusion Policy 使用 RoboCasa 1.0.0，向 Policy 端发送两帧原生观测，每 8 步重规划。
+  原生奖励任一步为正即计成功，动作段结束时按上游单环境规则决定是否提前停止。
+  新证据单独保存原生 `done`，验证器据此重算停止点。旧证据可重评，验证记录会标明停止点未经复核。
   固定任务目录、Lifelong 的阶段及累计套件独立于模型登记，复用每任务的原生步数和判定。
+- **原版 RoboCasa**：v0.2 Atomic-24 固定旧版物体资产和 B 划分，在 PandaOmron 上执行 7 维操作臂动作。
+  原生控制器接收补齐后的 12 维动作，按任务注册表设置步数上限，原生成功时提前停止。重评核对动作补零和停止点。[接入说明](../examples/bench-adapters/embodied/ROBOCASA-V02.md)
+- **RLBench**：MT100 的种子场景与 RVT-18 的测试初态独立登记。RVT 保留四路相机、世界坐标点云、原生位姿规划和碰撞标志。
+  CoppeliaSim 使用 Xvfb 和 Mesa GLX，每个 episode 启动独立进程以保持相机输出一致。RVT 规划失败保留原生异常类型，计为有效失败。[接入说明](../examples/bench-adapters/embodied/RLBENCH.md)
+  原版 RoboCasa 和 RLBench 从固定提交导出构建输入，登记时校验构建清单及入口。
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/ROBOTWIN.md)
@@ -890,7 +898,7 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - **CALVIN ABC→D**：一个样本对应冻结目录的一条五指令序列。仿真仅在序列开始时重置，原生 oracle 完成一段后，driver 丢弃剩余动作并
   用下一条指令重规划。独立 verifier 从封存的动作证据核对子任务进度、重规划边界和停止条件。主分数为完成的连续子任务数。
   Scene D 的 benchmark 可独立登记，checkpoint 的训练场景属于策略来源。
-- **RoboDojo 与 RoboLab**：两者沿用原生 C6 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
+- **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。
   CPU verifier 核对布局身份、动作计数、终止记录和过程分数。RoboLab 保留 DROID 绝对关节与夹爪控制、双重 reset、

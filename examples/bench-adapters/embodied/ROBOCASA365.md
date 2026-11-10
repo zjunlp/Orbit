@@ -198,3 +198,64 @@ python3 -B examples/bench-adapters/embodied/plan.py --reference-source "$ROBOCAS
 orbit bench calibrate robocasa365-atomic-seen-gr00t-native --policy groot-n15-robocasa365-shared \
   --sample-plan "$GROOT_N15_CONFIG/samples.json" --budget 20 --json
 ```
+
+## Diffusion Policy
+
+Use the RoboCasa 1.0.0 and robosuite sources from the OpenPI simulator recipe, with the Diffusion
+Policy and robomimic revisions pinned in the [Diffusion Policy profile](profiles/robocasa365-diffusion-policy.json).
+The published epoch-0500 checkpoint supplies the EMA model and its normalization. The policy
+uses the latest two observations, including all three cameras and the end-effector and gripper
+state. It duplicates the reset observation for the first call and encodes the reset instruction
+with the pinned CLIP text encoder. Each prediction yields eight native PandaOmron actions.
+[Official submission](https://github.com/robocasa-benchmark/leaderboard/blob/main/submissions_md/dp_2026_04_02.md)
+
+The recipe caps each rollout at `int(1.5 * get_task_horizon(task))` and scores it successful if
+any executed step earns the native sparse reward. Orbit uses the single-environment stopping
+rule of the reference runner, which checks the earlier of the last two success signals after
+each action chunk. Orbit freezes an independent first reset per sample. The upstream runner
+also supports parallel environments, with a joint stop check and continuing reset streams.
+
+```bash
+docker build --label orbit.task=robocasa365-diffusion-policy --target simulator \
+  -f examples/bench-adapters/embodied/diffusion-policy.Dockerfile \
+  -t orbit/robocasa365-diffusion-simulator:reference .
+docker build --label orbit.task=robocasa365-diffusion-policy --target policy \
+  --build-context diffusion="$DIFFUSION_SOURCE" --build-context robomimic="$ROBOMIMIC_SOURCE" \
+  -f examples/bench-adapters/embodied/diffusion-policy.Dockerfile \
+  -t orbit/robocasa365-diffusion-policy:reference .
+
+checkpoint=diffusion_policy/17.40.09_train_diffusion_transformer_hybrid_pretrain_human300/checkpoints
+revision=c484448aba1a9b60a04c9b0ca117241518ea69f3
+clip=https://huggingface.co/openai/clip-vit-large-patch14/resolve/32bd64288804d66eefd0ccbe215aa642df71cc41
+mkdir -p "$DIFFUSION_WEIGHTS/clip"
+curl -fL "https://huggingface.co/robocasa/robocasa365_checkpoints/resolve/$revision/$checkpoint/epoch%3D0500-test_mean_score%3D-1.000.ckpt" \
+  -o "$DIFFUSION_WEIGHTS/epoch-0500.ckpt"
+for file in config.json merges.txt model.safetensors special_tokens_map.json tokenizer.json tokenizer_config.json vocab.json; do
+  curl -fL "$clip/$file" -o "$DIFFUSION_WEIGHTS/clip/$file" || exit 1
+done
+
+python3 -B examples/bench-adapters/embodied/configure_robocasa365.py \
+  --robocasa-source "$ROBOCASA_SOURCE" --robosuite-source "$ROBOSUITE_SOURCE" \
+  --diffusion-source "$DIFFUSION_SOURCE" --robomimic-source "$ROBOMIMIC_SOURCE" \
+  --assets "$ROBOCASA_ASSETS" --weights "$DIFFUSION_WEIGHTS" \
+  --benchmark-image orbit/robocasa365-diffusion-simulator:reference \
+  --policy-image orbit/robocasa365-diffusion-policy:reference \
+  --share-gpu --output-dir "$DIFFUSION_CONFIG"
+orbit data add robocasa365-assets "$ROBOCASA_ASSETS"
+orbit data add diffusion-policy-robocasa365 "$DIFFUSION_WEIGHTS"
+orbit bench add-file "$DIFFUSION_CONFIG/benchmark.json"
+orbit policy add "$DIFFUSION_CONFIG/policy.json"
+
+python3 -B examples/bench-adapters/embodied/plan.py --reference-source "$ROBOCASA_SOURCE" \
+  --reference-file "$DIFFUSION_CONFIG/reference.json" --task robocasa/OpenDrawer \
+  --task robocasa/TurnOnMicrowave --initial-state 0 --environment-seed 1111111 \
+  > "$DIFFUSION_CONFIG/samples.json"
+orbit bench calibrate robocasa365-atomic-seen-diffusion-policy-native \
+  --policy diffusion-policy-robocasa365-shared --sample-plan "$DIFFUSION_CONFIG/samples.json" --budget 15 --json
+```
+
+The Dockerfile defaults to the existing 1.0.0 simulator and OpenPI dependency images from
+the setup above. The new policy image runs Torch inference and serves native actions over
+`policy-ws`. The checkpoint, its embedded normalization and the complete local CLIP files
+are checked at service startup. Use `--benchmark-only --recipe diffusion-policy` to generate
+the benchmark registration independently of the weights.

@@ -540,6 +540,51 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     suites: ["Spatial", "Object", "Goal", "Long", "LIBERO-90"],
   },
   {
+    id: "libero-plus",
+    name: "LIBERO-Plus",
+    description:
+      "Measure manipulation robustness across 10,030 variants and seven perturbation categories.",
+    taxonomyGroups: [group("LIBERO robustness", native)],
+    integrations: [
+      nativeRoute(
+        "Four native suites, with one official initial state per perturbation variant.",
+        "examples/bench-adapters/embodied/LIBERO-PLUS.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "The full reset catalog was checked. Native samples span all seven perturbations, and two OFT episodes passed.",
+      nativeDocs,
+    ),
+    suites: ["Spatial", "Object", "Goal", "Long"],
+  },
+  {
+    id: "vlabench",
+    name: "VLABench",
+    description:
+      "Evaluate language-conditioned Franka manipulation with fixed scenes and open cross-task evaluation.",
+    taxonomyGroups: [group("Language-conditioned manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "All five published fixed tracks and the released native task registry for seeded cross-task evaluation.",
+        "examples/bench-adapters/embodied/VLABENCH.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "The released catalogs and samples across all six tracks were checked. An OpenWAM episode passed.",
+      nativeDocs,
+    ),
+    suites: [
+      "In distribution",
+      "Cross category",
+      "Common sense",
+      "Semantic instruction",
+      "Cross task",
+      "Unseen texture",
+    ],
+  },
+  {
     id: "simpler-env",
     name: "SimplerEnv",
     description:
@@ -557,6 +602,24 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
       nativeDocs,
     ),
     suites: ["Google Robot", "WidowX", "Prepackaged", "Visual matching", "Variant aggregation"],
+  },
+  {
+    id: "robocasa-v02",
+    name: "RoboCasa v0.2",
+    description: "Evaluate the original RoboCasa atomic kitchen manipulation tasks.",
+    taxonomyGroups: [group("Original kitchen manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "24 atomic tasks with held-out object instances, fixed kitchen layouts and PandaOmron arm control.",
+        "examples/bench-adapters/embodied/ROBOCASA-V02.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All 24 tasks passed native CPU checks. A fixed-action replay matched the v0.2 environment.",
+      "docs/tasks/20261109-robocasa-v02.md",
+    ),
+    suites: ["Atomic-24"],
   },
   {
     id: "robocasa365",
@@ -621,6 +684,25 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
       "docs/tasks/20261109-embodied-benchmark-coverage.md",
     ),
     suites: ["Plate-25 (RLinf)", "Native tabletop profiles"],
+  },
+  {
+    id: "rlbench",
+    name: "RLBench",
+    description:
+      "Evaluate Panda manipulation in CoppeliaSim with seeded tasks and fixed test demonstrations.",
+    taxonomyGroups: [group("Native manipulation tasks", native)],
+    integrations: [
+      nativeRoute(
+        "MT100 with seeded variations and a separate RVT 18-task test suite with frozen initial states.",
+        "examples/bench-adapters/embodied/RLBENCH.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "MT100 and RVT both ran with native CPU rendering. A fixed RVT replay matched the upstream environment.",
+      "docs/tasks/20261109-rlbench.md",
+    ),
+    suites: ["MT100", "RVT test (18 tasks)"],
   },
   {
     id: "metaworld",
@@ -703,12 +785,17 @@ const SUPPORTED = definitions.map((entry) =>
 const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
+  "libero-plus-panda-raw/1": "libero-plus",
+  "vlabench-franka-ee/1": "vlabench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
+  "robocasa-v02-panda-arm/1": "robocasa-v02",
   "robocasa365-panda-omron-native/1": "robocasa365",
   "robotwin-aloha-agilex-native/1": "robotwin",
   "robotwin-aloha-agilex-cartesian/1": "robotwin",
   "maniskill3-native/1": "maniskill3",
+  "rlbench-panda-joint-velocity/1": "rlbench",
+  "rlbench-panda-rvt-pose/1": "rlbench",
   "metaworld-native/1": "metaworld",
   "calvin-native/1": "calvin",
 };

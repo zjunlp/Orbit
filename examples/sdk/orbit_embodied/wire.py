@@ -29,7 +29,7 @@ def unpack(value):
     return msgpack.unpackb(value, object_hook=decode, raw=False)
 
 
-async def serve_actions(policy, metadata, host, port):
+async def serve_actions(policy, metadata, host, port, *, reset=None):
     import asyncio
     from http import HTTPStatus
     from websockets.exceptions import ConnectionClosed
@@ -39,12 +39,20 @@ async def serve_actions(policy, metadata, host, port):
         if path == "/healthz":
             return HTTPStatus.OK, [("Content-Type", "text/plain")], b"OK\n"
 
+    episode = asyncio.Lock()
+
     async def handler(connection):
-        await connection.send(pack(metadata))
+        if reset is not None:
+            await episode.acquire()
         try:
+            await connection.send(pack(metadata))
+            first = True
             async for message in connection:
                 if not isinstance(message, bytes):
                     raise ValueError("policy requests must be binary")
+                if first and reset is not None:
+                    reset()
+                first = False
                 actions = policy(unpack(message))
                 await connection.send(pack({"actions": actions}))
         except ConnectionClosed:
@@ -52,7 +60,10 @@ async def serve_actions(policy, metadata, host, port):
         except Exception as exc:
             await connection.send(type(exc).__name__ + ": " + str(exc))
             await connection.close(code=1011, reason="policy inference failed")
+        finally:
+            if reset is not None:
+                episode.release()
 
     async with serve(handler, host, port, compression=None, max_size=64 * 1024 * 1024,
-                     process_request=health):
+                     ping_interval=None if reset is not None else 20, process_request=health):
         await asyncio.Future()

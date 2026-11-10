@@ -138,6 +138,25 @@ class RoboDojoTests(unittest.TestCase):
             path.write_bytes(b"synthetic usd")
             configure_robodojo.reject_asset_pointers(Path(directory))
 
+    def test_native_asset_config_uses_container_paths_and_preserves_custom_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            assets = Path(directory)
+            template = assets / "Robots/x5/curobo_tmp.yml"
+            template.parent.mkdir(parents=True)
+            template.write_text("asset: ${ASSETS_PATH}/Assets/Robots/x5\nurdf: $ASSETS_PATH/Assets/x5.urdf\nradius: 0.125\n")
+            target = template.with_name("curobo.yml")
+            with self.assertRaisesRegex(ValueError, "--prepare-assets"):
+                configure_robodojo.prepare_asset_config(assets, reference())
+            receipt = configure_robodojo.prepare_asset_config(assets, reference(), write=True)
+            expected = "asset: /workspace/RoboDojo/Assets/Robots/x5\nurdf: /workspace/RoboDojo/Assets/x5.urdf\nradius: 0.125\n"
+            self.assertEqual(target.read_text(), expected)
+            self.assertEqual(receipt["generated"]["digest"], file_digest(target))
+            self.assertEqual(configure_robodojo.prepare_asset_config(assets, reference()), receipt)
+            target.write_text("custom configuration\n")
+            with self.assertRaisesRegex(ValueError, "preserve it"):
+                configure_robodojo.prepare_asset_config(assets, reference(), write=True)
+            self.assertEqual(target.read_text(), "custom configuration\n")
+
     def test_hold_fixture_repeats_native_state_without_model_identity(self):
         values = np.arange(14, dtype=np.float32) / 20
         np.testing.assert_array_equal(hold_robodojo.hold({"joint_state": values}, 2), np.stack([values, values]))

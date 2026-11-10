@@ -167,6 +167,43 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertEqual(self.verify()["steps"], 2)
 
+    def test_robocasa_v02_rejects_changed_native_commands_and_stopping(self):
+        class FixedBase(SyntheticBenchmark):
+            def step(self, action):
+                result = super().step(action)
+                result.native_action = action.tolist() + [0] * 5
+                result.terminated |= self.count == self.horizon
+                return result
+
+        reference = {"environment": {"kind": "robocasa-v02", "horizon": 7},
+                     "parameters": {"settleSteps": 0, "replanSteps": 5}}
+        for success_at in (None, 3):
+            self.output = Path(self.temporary.name) / ("episode-" + str(success_at))
+            result = self.run_sample(FixedBase(success_at=success_at), SyntheticPolicy(), {"reference": reference})
+            self.assertEqual(self.verify()["success"], success_at is not None)
+            path = self.output / "actions.jsonl"
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            for changes, message in (
+                ({"nativeAction": rows[0]["nativeAction"][:-1] + [1]}, "fixed-base conversion"),
+                ({"nativeAction": None}, "fixed-base conversion"),
+                ({"terminated": True}, "first native success or the task horizon"),
+                ({"nativeSuccess": True, "reward": 1}, "first native success or the task horizon"),
+            ):
+                with self.subTest(success_at=success_at, changes=changes):
+                    altered = [{**rows[0], **changes}, *rows[1:]]
+                    if changes == {"nativeAction": None}:
+                        del altered[0]["nativeAction"]
+                    path.write_text("".join(json.dumps(row) + "\n" for row in altered))
+                    seal(self.output, result)
+                    with self.assertRaisesRegex(ValueError, message):
+                        self.verify()
+            if success_at is None:
+                early = [*rows[:2], {**rows[2], "terminated": True}]
+                path.write_text("".join(json.dumps(row) + "\n" for row in early))
+                seal(self.output, {**result, "steps": len(early)})
+                with self.assertRaisesRegex(ValueError, "first native success or the task horizon"):
+                    self.verify()
+
     def test_requires_explicit_complete_semantically_equal_mapping(self):
         with self.assertRaisesRegex(ValueError, "exactly"):
             resolve_binding(self.benchmark_profile, self.policy_profile, {})
@@ -199,6 +236,22 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["failure"], "policy_act")
         self.assertFalse(self.verify()["valid"])
         self.assertTrue(np.isnan(np.load(self.output / "chunks/0.npy", allow_pickle=False)).all())
+
+    def test_asset_preflight_failure_is_sealed_as_reset_failure(self):
+        class UnstartedBenchmark(SyntheticBenchmark):
+            def reset(self, sample):
+                raise AssertionError("asset preflight should fail first")
+
+        def prepare():
+            raise ValueError("mounted simulator asset digest mismatch")
+
+        result = run_episode(UnstartedBenchmark(), SyntheticPolicy(), self.sample, self.binding,
+                             self.output, "synthetic-trial.attempt", {"fixture": True}, prepare=prepare)
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["failure"], "reset_failed")
+        self.assertEqual(result["steps"], 0)
+        self.assertEqual(result["issues"], ["mounted simulator asset digest mismatch"])
+        self.assertEqual(self.verify(), result)
 
     def test_completed_actions_survive_later_environment_failure(self):
         result = self.run_sample(SyntheticBenchmark(fail_at=3), SyntheticPolicy())

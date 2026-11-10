@@ -73,6 +73,30 @@ def reject_asset_pointers(assets):
                     raise ValueError("RoboDojo asset is a Git LFS pointer: " + path.relative_to(assets).as_posix())
 
 
+
+def prepare_asset_config(assets, reference, *, write=False):
+    """Apply the native x5 template substitutions for the frozen container path."""
+    template = assets / "Robots/x5/curobo_tmp.yml"
+    target = assets / "Robots/x5/curobo.yml"
+    for path in (template, target):
+        if path.is_symlink() or not path.resolve().is_relative_to(assets.resolve()):
+            raise ValueError("RoboDojo robot configuration cannot use symlinks")
+    reject_asset_pointers(assets)
+    container_root = str(Path(reference["environment"]["assets"]["target"]).parent)
+    content = template.read_text(encoding="utf-8")
+    rendered = content.replace("${ASSETS_PATH}", container_root).replace("$ASSETS_PATH", container_root)
+    if target.exists():
+        if target.read_text(encoding="utf-8") != rendered:
+            raise ValueError("RoboDojo curobo.yml differs from the native template; preserve it and prepare a separate asset tree")
+    elif write:
+        target.write_text(rendered, encoding="utf-8")
+    else:
+        raise ValueError("RoboDojo curobo.yml is missing; run --prepare-assets before registration")
+    return {"version": 1, "containerRoot": container_root,
+            "template": {"file": template.relative_to(assets).as_posix(), "digest": file_digest(template)},
+            "generated": {"file": target.relative_to(assets).as_posix(), "digest": file_digest(target)}}
+
+
 def layout_catalog(assets, tasks):
     result, unsupported = {}, {}
     for task in tasks:
@@ -117,7 +141,7 @@ def configure_benchmark(args, reference):
     for required in ("Robots", "Object", "Material", "Eval_Layout"):
         if not (assets / required).is_dir():
             raise ValueError("RoboDojo Assets is missing " + required)
-    reject_asset_pointers(assets)
+    prepare_asset_config(assets, reference)
     layouts, unsupported = layout_catalog(assets, environment["tasks"])
     environment.update(layouts=layouts, unsupported=unsupported)
     environment["assets"].update(digest=tree_digest(assets), dataset=args.dataset)
@@ -173,7 +197,9 @@ def main():
     parser.add_argument("--assets", type=Path)
     parser.add_argument("--dataset", default="robodojo-native-assets")
     parser.add_argument("--benchmark-image")
-    parser.add_argument("--prepare-image", action="store_true", help="write pinned dependency manifest before image build")
+    preparation = parser.add_mutually_exclusive_group()
+    preparation.add_argument("--prepare-image", action="store_true", help="write pinned dependency manifest before image build")
+    preparation.add_argument("--prepare-assets", action="store_true", help="generate native x5 configuration for the container path")
     parser.add_argument("--benchmark-only", action="store_true", help="benchmark registration is always independent")
     parser.add_argument("--with-hold-calibration", action="store_true", help="emit an explicit hold-position calibration fixture")
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -186,6 +212,14 @@ def main():
         args.output_dir.mkdir(parents=True, exist_ok=True)
         (args.output_dir / "robodojo-runtime.json").write_text(json.dumps(manifest, indent=2) + "\n")
         print(digest(manifest))
+        return
+    if args.prepare_assets:
+        if args.assets is None:
+            parser.error("--prepare-assets needs --assets")
+        receipt = prepare_asset_config(args.assets.resolve(), reference, write=True)
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        (args.output_dir / "asset-preparation.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        print("Prepared native x5 robot paths; registration will freeze the generated file with the assets.")
         return
     if args.assets is None or args.benchmark_image is None:
         parser.error("benchmark registration needs --assets and --benchmark-image")

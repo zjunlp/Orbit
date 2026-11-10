@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
-                          "metaworld", "calvin", "robolab", "robodojo")
+                          "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench")
 
 
 def digest(value):
@@ -35,6 +36,10 @@ def seed_asset(reference, task):
     reset = ("layouts[task][environmentSeed][initialStateId]" if reference["environment"].get("kind") == "robodojo"
              else "environmentSeed,sceneGrid[initialStateId]" if "simplerScenes" in reference["environment"]
              else "environmentSeed+initialStateId")
+    if "vlabenchEpisodeCounts" in reference["environment"]:
+        reset = "officialTrack[taskId][initialStateId],environmentSeed+initialStateId"
+    if reference["environment"].get("protocol") == "rvt-test":
+        reset = "testDemo[taskId][initialStateId]"
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
 
@@ -43,6 +48,11 @@ def reference_horizon(reference, task):
     if "horizons" in environment:
         return environment["horizons"][task]
     return environment.get("horizon", reference.get("horizons", {}).get(task.split(":")[0]))
+
+
+def robocasa_horizon(horizon, environment):
+    scaled = horizon * environment.get("horizonScale", 1.5)
+    return int(scaled) if environment.get("protocol") == "diffusion-policy" else math.ceil(scaled)
 
 
 def resolve_binding(benchmark, policy, observation_map):
@@ -116,7 +126,19 @@ def reset_seed(sample, reference=None):
         return index
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
-    seed = sample["environmentSeed"] + int(sample["initialStateId"])
+    index = int(sample["initialStateId"])
+    seed = sample["environmentSeed"] + index
+    if environment.get("kind") in ("robocasa-v02", "rlbench"):
+        count = environment.get("initialStateCount")
+        if (sample["environmentSeed"] < 0 or index < 0 or not 0 <= seed < 2 ** 32
+                or (count is not None and index >= count)
+                or (environment.get("protocol") == "rvt-test" and sample["environmentSeed"] != 0)):
+            raise ValueError("sample is outside the frozen native initial states or unsigned seed range")
+    if environment.get("kind") == "vlabench":
+        count = environment.get("vlabenchEpisodeCounts", {}).get(sample["taskId"])
+        if not 0 <= seed < 2 ** 32 or (count is not None and
+                                      (sample["environmentSeed"] != 42 or not 0 <= index < count)):
+            raise ValueError("VLABench sample is outside the frozen track or unsigned seed range")
     if environment.get("kind") in ("metaworld", "robolab", "robodojo") and not 0 <= seed < 2 ** 32:
         raise ValueError("native scene seed must fit in an unsigned 32-bit integer")
     return seed

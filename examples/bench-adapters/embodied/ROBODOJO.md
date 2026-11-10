@@ -29,6 +29,9 @@ git -C "$ROBODOJO_SOURCE" submodule update --init --recursive
 hf download RoboDojo-Benchmark/RoboDojo --repo-type dataset \
   --revision "$ROBODOJO_ASSET_REVISION" --include 'Assets/**' --local-dir "$ROBODOJO_DOWNLOAD"
 # ROBODOJO_ASSETS is "$ROBODOJO_DOWNLOAD/Assets".
+python3 -B examples/bench-adapters/embodied/configure_robodojo.py \
+  --prepare-assets --robodojo-source "$ROBODOJO_SOURCE" \
+  --assets "$ROBODOJO_ASSETS" --output-dir "$ROBODOJO_CONFIG"
 
 ROBODOJO_RUNTIME_DIGEST=$(python3 -B examples/bench-adapters/embodied/configure_robodojo.py \
   --prepare-image --robodojo-source "$ROBODOJO_SOURCE" --output-dir "$ROBODOJO_CONFIG")
@@ -41,6 +44,11 @@ docker build --label orbit.task=robodojo \
   -f examples/bench-adapters/embodied/robodojo.Dockerfile \
   -t orbit/robodojo-simulator:reference .
 ```
+
+Asset preparation applies upstream's `curobo_tmp.yml` substitutions for the container's
+`/workspace/RoboDojo` path, writes `Robots/x5/curobo.yml`, and records both hashes.
+Registration requires this generated file and includes it in the asset digest. A different
+existing configuration is rejected without overwriting it; prepare a separate asset tree.
 
 Pass a local image tag or a full repository digest as `ROBODOJO_BASE`; BuildKit does not
 accept a bare image ID as a `FROM` reference. Registration freezes the completed simulator image ID.

@@ -6,10 +6,11 @@ SHELL ["/bin/bash", "-c"]
 COPY examples/bench-adapters/embodied/profiles/robodojo-native.json /opt/orbit/robodojo-native.json
 COPY --from=runtime-manifest /robodojo-runtime.json /opt/orbit/robodojo-runtime.json
 ARG RUNTIME_MANIFEST_DIGEST
-RUN /root/miniconda3/envs/RoboDojo/bin/python -m pip uninstall -y vcs-versioning && \
+RUN /root/miniconda3/envs/RoboDojo/bin/python -m pip uninstall -y vcs-versioning python-discovery && \
     /root/miniconda3/envs/RoboDojo/bin/python -m pip install \
         psutil==5.9.8 wheel==0.43.0 pytest==8.3.5 virtualenv==20.26.6 setuptools-scm==8.2.0 \
-        viser==0.2.7 starlette==0.45.3 numpy==1.26.0 packaging==23.0 \
+        viser==0.2.7 tyro==0.9.17 typeguard==4.4.2 ipython==8.37.0 idna==3.18 \
+        starlette==0.45.3 numpy==1.26.0 packaging==23.0 \
         typing_extensions==4.12.2 filelock==3.13.1 websockets==12.0 \
         imageio==2.37.0 imageio-ffmpeg==0.6.0 msgpack==1.1.1
 RUN /root/miniconda3/envs/RoboDojo/bin/python - <<'PYTHON'

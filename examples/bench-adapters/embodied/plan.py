@@ -9,7 +9,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "sdk"))
 from orbit_embodied import digest
 from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, seed_asset
+from orbit_embodied.libero_plus import catalog as libero_plus_catalog
 from orbit_embodied.simpler import initial_state_count
+from orbit_embodied.vlabench import initial_state_count as vlabench_state_count
 from adapter import catalog
 
 
@@ -34,7 +36,7 @@ def main():
     kind = environment.get("kind")
     environment_seed = args.environment_seed
     if environment_seed is None:
-        environment_seed = 0 if kind in ("calvin", "robodojo") else 7
+        environment_seed = 0 if environment.get("protocol") == "rvt-test" else {"calvin": 0, "robodojo": 0, "vlabench": 42}.get(kind, 7)
     generated = kind in GENERATED_ENVIRONMENTS
     uint32_seed = kind in ("robocasa365", "robotwin", "robolab", "robodojo") or "simplerRobot" in environment
     if environment_seed < 0:
@@ -43,13 +45,28 @@ def main():
         tasks = {task: {"tags": {"initialStateDigest": seed_asset(reference, task)}}
                  for task in environment["tasks"]}
     else:
-        tasks = {task["id"]: task for task in catalog(args.reference_source, args.suite)}
+        if kind == "libero-plus":
+            if args.suite != environment["suite"]:
+                parser.error("--suite must match the registered LIBERO-Plus suite")
+            listing = libero_plus_catalog(args.reference_source, args.suite)
+        else:
+            listing = catalog(args.reference_source, args.suite)
+        tasks = {task["id"]: task for task in listing if task["supported"]}
     items = []
     for task_id in tasks if args.all_tasks else args.task:
         if task_id in environment.get("unsupported", {}):
             raise ValueError("unsupported task " + task_id + ": " + environment["unsupported"][task_id])
         task = tasks[task_id]
-        count = len(environment["catalog"]["sequences"]) if kind == "calvin" else initial_state_count(environment, task_id)
+        if kind == "calvin":
+            count = len(environment["catalog"]["sequences"])
+        elif kind == "libero-plus":
+            count = int(task["tags"]["initialStateCount"])
+        elif kind == "vlabench":
+            count = vlabench_state_count(environment, task_id)
+        elif kind in ("robocasa-v02", "rlbench"):
+            count = environment.get("initialStateCount")
+        else:
+            count = initial_state_count(environment, task_id)
         if kind == "robodojo":
             count = len(environment.get("layouts", {}).get(task_id, {}).get(str(environment_seed), []))
             if not count:

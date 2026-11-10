@@ -16,7 +16,9 @@ sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
 from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, reset_seed, seed_asset
+from orbit_embodied.libero_plus import PERTURBATIONS, catalog as libero_plus_catalog, metric_name
 from orbit_embodied.simpler import initial_state_count, scene_at
+from orbit_embodied.vlabench import METRICS as VLABENCH_METRICS, initial_state_count as vlabench_state_count
 
 
 CALVIN_COMPLETED_SUBTASKS = "completed_subtasks"
@@ -61,7 +63,8 @@ def settings(req):
     image = config.get("image", "")
     if not pinned(image):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
-    if config.get("renderer", "osmesa") not in ("osmesa", "egl", "vulkan"):
+    renderers = ("xvfb-glx",) if reference.get("environment", {}).get("kind") == "rlbench" else ("osmesa", "egl", "vulkan")
+    if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
 
@@ -86,9 +89,10 @@ def tasks(req):
     root, config, reference = settings(req)
     suite = config.get("suite", "libero_spatial")
     environment = reference.get("environment", {})
-    calvin = environment.get("kind") == "calvin"
-    robodojo = environment.get("kind") == "robodojo"
-    if environment.get("kind") in GENERATED_ENVIRONMENTS:
+    kind = environment.get("kind")
+    calvin = kind == "calvin"
+    robodojo = kind == "robodojo"
+    if kind in GENERATED_ENVIRONMENTS:
         listing = [{"id": task, "title": task.split("/")[-1].replace("_", " "),
                     "supported": True, "reason": None, "tags": {"initialStateDigest": seed_asset(reference, task)}}
                    for task in environment["tasks"]]
@@ -104,6 +108,18 @@ def tasks(req):
                 task["tags"]["initialStateCount"] = str(initial_state_count(environment, task["id"]))
         if calvin:
             listing[0]["tags"]["initialStateCount"] = str(len(environment["catalog"]["sequences"]))
+        if kind == "vlabench":
+            for task in listing:
+                count = vlabench_state_count(environment, task["id"])
+                if count is not None:
+                    task["tags"]["initialStateCount"] = str(count)
+        if kind in ("robocasa-v02", "rlbench") and "initialStateCount" in environment:
+            for task in listing:
+                task["tags"]["initialStateCount"] = str(environment["initialStateCount"])
+    elif kind == "libero-plus":
+        if suite != environment["suite"]:
+            raise ValueError("LIBERO-Plus suite differs from the frozen registration")
+        listing = libero_plus_catalog(root, suite)
     else:
         if suite not in reference["horizons"]:
             raise ValueError("unsupported LIBERO suite")
@@ -118,9 +134,19 @@ def tasks(req):
     if robodojo:
         metrics = [{"name": "success_rate", "label": "Native success", "unit": "ratio", "range": [0, 1]},
                    {"name": "process_score", "label": "Native process score", "range": [0, 100]}]
+    if kind == "vlabench":
+        metrics = [{"name": name, "label": label, "unit": "ratio", "range": [0, 1]}
+                   for name, label in VLABENCH_METRICS.items()]
+    elif kind == "libero-plus":
+        metrics = [{"name": metric_name(category), "label": category + " success", "unit": "ratio",
+                    "range": [0, 1]} for category in PERTURBATIONS]
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
-            "capabilities": {"category": "embodied-policy", "embodied": {"profile": reference["id"], "semanticProfile": reference["benchmarkProfile"], "observationMap": reference["observationMap"], "batch": {"maxEpisodes": 128}}, "profiles": ["sim", "sync", "step"],
+            "capabilities": {"category": "embodied-policy", "embodied": {
+                                 "profile": reference["id"], "semanticProfile": reference["benchmarkProfile"],
+                                 "observationMap": reference["observationMap"],
+                                 **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
+                             }, "profiles": ["sim", "sync", "step"],
                              "domains": ["embodied"], "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
@@ -154,16 +180,22 @@ def solve_one(req):
         raise ValueError("native embodied execution requires a planned sample, not legacy seeds")
     check_sample(trial["sample"], trial["sampleRef"])
     environment = reference.get("environment", {})
+    sample = trial["sample"]
     if "simplerScenes" in environment:
-        sample = trial["sample"]
         scene_at(environment, sample["taskId"], int(sample["initialStateId"]))
     if environment.get("kind") in ("robolab", "robodojo"):
-        sample = trial["sample"]
         if sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {}):
             raise ValueError("task is unavailable in the frozen native catalog")
         if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
+    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench"):
+        if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
+            raise ValueError("sample differs from the frozen native catalog")
+        reset_seed(sample, reference)
+    if environment.get("kind") == "libero-plus":
+        if sample["taskId"].partition(":")[0] != environment["suite"] or sample["initialStateId"] != "0":
+            raise ValueError("LIBERO-Plus requires the selected suite and one initial state per task")
     definition = trial["method"].get("policySnapshot")
     if not definition:
         raise ValueError("missing or incompatible frozen policy definition")
@@ -179,7 +211,8 @@ def solve_one(req):
                "implementationDigest": config["implementationDigest"]}
     (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": 8}
+    memory_gb = 20 if environment.get("kind") == "robocasa-v02" else 8
+    resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
     if "simGpuMemGB" in config:
         memory = float(config["simGpuMemGB"])
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
@@ -193,13 +226,13 @@ def solve_one(req):
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
-                     "env": {"PYTHONPATH": "/orbit-embodied/python:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
-                             "MUJOCO_GL": gl_platform,
-                             "PYOPENGL_PLATFORM": gl_platform},
+                     "env": {"PYTHONPATH": "/orbit-embodied/python:/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
+                             **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
+                                if gl_platform != "xvfb-glx" else {})},
                      "resources": resources,
                      **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") == "robotwin" else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
-                     "tags": {"embodied_evidence": "2"},
+                     "tags": {"embodied_evidence": "4" if environment.get("protocol") == "diffusion-policy" else "2"},
                      "mounts": mounts}}
 
 
@@ -213,6 +246,8 @@ def solve(req):
     if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
         raise ValueError("batch membership or leader mismatch")
     reference = reference_profile(req["benchmark"]["config"])
+    if reference.get("environment", {}).get("kind") == "rlbench":
+        raise ValueError("RLBench requires a fresh simulator process per episode")
     if reference.get("environment", {}).get("kind") in GENERATED_ENVIRONMENTS:
         check_distinct_resets([trial["sample"] for trial in trials], reference)
     payloads, reply = [], None
@@ -233,7 +268,9 @@ def solve(req):
     (destination / "batch-request.json").write_text(json.dumps({"plan": plan, "episodes": payloads}, allow_nan=False))
     reply["spec"]["command"] = ["/orbit-embodied/run.py", "batch", "/orbit-embodied/batch-request.json", "/orbit/output"]
     reply["spec"]["timeoutMin"] = sum(payload["timeoutMin"] for payload in payloads)
-    reply["spec"]["tags"]["embodied_evidence"] = "3"
+    tags = reply["spec"]["tags"]
+    if tags["embodied_evidence"] == "2":
+        tags["embodied_evidence"] = "3"
     return reply
 
 
@@ -268,7 +305,9 @@ def verification_expectation(req):
     if not execution_trial or not trial.get("binding") or not trial["method"].get("policySnapshot"):
         raise ValueError("missing frozen verification context")
     version = int(tags.get("embodied_evidence", "1"))
-    if version not in (1, 2, 3) or bool(batch) != (version == 3):
+    legacy = version in (1, 2, 3) and bool(batch) == (version == 3)
+    native_done = version == 4 and reference.get("environment", {}).get("protocol") == "diffusion-policy"
+    if not (legacy or native_done):
         raise ValueError("unsupported embodied evidence version")
     return {"version": 1, "trialId": trial["id"], "sample": trial["sample"],
             "binding": trial["binding"], "policy": trial["method"]["policySnapshot"],
@@ -326,7 +365,8 @@ def score(req):
             files.append({"label": "Episode timeline", "phase": "verify", "path": "orbit-trajectory.json", "kind": "episode"})
         if req["trial"].get("batch"):
             files.append({"label": "Fixed solve batch", "phase": "solve", "path": "batch-plan.json", "kind": "json"})
-        if expected["reference"].get("environment", {}).get("kind") == "calvin":
+        kind = expected["reference"].get("environment", {}).get("kind")
+        if kind == "calvin":
             completed = result["native"]["completedSubtasks"]
             metrics = {CALVIN_COMPLETED_SUBTASKS: completed,
                        **{f"success_at_{n}": int(completed >= n) for n in range(1, 6)}}
@@ -338,7 +378,13 @@ def score(req):
                 metrics["process_score"] = result["native"]["processScore"]
             return valid(result["native"]["score"], metrics=metrics,
                          issues=result["issues"], review={"files": files})
-        return valid(int(result["success"]), issues=result["issues"], review={"files": files})
+        success = int(result["success"])
+        metrics = None
+        if kind == "vlabench":
+            metrics = result["native"]["metrics"]
+        elif kind == "libero-plus":
+            metrics = {metric_name(result["native"]["perturbation"]): success}
+        return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))
 

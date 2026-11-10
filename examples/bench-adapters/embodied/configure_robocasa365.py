@@ -3,14 +3,16 @@
 import argparse
 import ast
 import json
-import math
 from pathlib import Path
 
 from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from configure_groot import image_id
 from orbit_embodied.assets import tree_digest
+from orbit_embodied.binding import robocasa_horizon
 
 
+RECIPES = {"openpi": "robocasa365-openpi", "gr00t": "robocasa365-gr00t-n15",
+           "diffusion-policy": "robocasa365-diffusion-policy"}
 TASK_SETS = {
     "atomic_seen": "Atomic-Seen",
     "composite_seen": "Composite-Seen",
@@ -44,24 +46,23 @@ def scope_tasks(definitions, task_set):
     return [task for group in selected for task in targets[group]], datasets
 
 
-def set_benchmark_scope(reference, root, task_set, split, groot):
+def set_benchmark_scope(reference, root, task_set, split, recipe):
     """Read the pinned registry without importing simulator dependencies on the host."""
     registry = ast.parse((root / "robocasa/utils/dataset_registry.py").read_text())
     definitions = {node.targets[0].id: node.value for node in registry.body
                    if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
     names, datasets = scope_tasks(definitions, task_set)
     environment = reference["environment"]
-    scale = environment.get("horizonScale", 1.5)
     horizons = {}
     for name in names:
         horizon = next(ast.literal_eval(item.value) for item in datasets[name].keywords if item.arg == "horizon")
-        horizons["robocasa/" + name] = math.ceil(horizon * scale)
+        horizons["robocasa/" + name] = robocasa_horizon(horizon, environment)
     if len(horizons) != len(names):
         raise ValueError("duplicate task in the pinned RoboCasa365 task set")
     environment.update(split=split, tasks=list(horizons), horizons=horizons)
     name = "robocasa365-" + task_set.replace("_", "-")
-    if groot:
-        name += "-gr00t"
+    if recipe != "openpi":
+        name += "-" + recipe
     if split == "target":
         name += "-target"
     reference["id"] = name + "/1"
@@ -80,6 +81,53 @@ def groot_reference(reference, model):
     reference["environment"]["horizonScale"] = 1
     reference["parameters"].pop("resizeSize")
     reference["parameters"].update(replanSteps=16, successRule="chunk-last-any")
+
+
+def diffusion_reference(reference, model):
+    reference["scoreErrors"] = "exclude"
+    reference["reference"]["evaluation"] = model["source"]
+    reference["environment"]["protocol"] = "diffusion-policy"
+    parameters = reference["parameters"]
+    parameters.pop("resizeSize")
+    parameters.update(replanSteps=8, successRule="any", environmentSeed=1111111)
+    profile = reference["benchmarkProfile"]
+    profile["id"] = "robocasa365-panda-omron-history2/1"
+    for name in ("state.base_position", "state.base_rotation"):
+        del profile["observations"][name]
+        del reference["observationMap"][name]
+    for field in profile["observations"].values():
+        if field["dtype"] != "string":
+            field["shape"] = [2, *field["shape"]]
+            if field["semantic"] == "rgb":
+                field["layout"] = "THWC"
+
+
+def diffusion_policy(args, reference, model):
+    for key in ("source", "robomimic"):
+        source = model[key]
+        check_source(args.diffusion_source if key == "source" else args.robomimic_source, source, source["files"])
+    checkpoint = file_digest(args.weights / model["checkpointFile"])
+    backbone = tree_digest(args.weights / "clip")
+    if checkpoint != model["checkpointDigest"] or backbone != model["backboneDigest"]:
+        raise ValueError("inference assets differ from the published Diffusion Policy recipe")
+    normalization = model["normalizationDigest"]
+    name = "diffusion-policy-robocasa365"
+    server = "/opt/orbit/serve_diffusion_policy.py"
+    service = {
+        "name": "policy", "image": image_id(args.policy_image), "cpus": 4, "memGB": 12, "gpuMemGB": 8,
+        "command": [server, "--weights", "/weights", "--checkpoint-digest", checkpoint,
+                    "--normalization-digest", normalization, "--backbone-digest", backbone],
+        "healthcheck": {"command": ["/.venv/bin/python", server, "--healthcheck"],
+                        "intervalSec": 5, "timeoutSec": 5, "startPeriodSec": 120, "retries": 24},
+    }
+    service.update({"gpusOf": "main", "gpus": 0} if args.share_gpu else {"role": "policy", "gpus": 1})
+    return {
+        "name": name + ("-shared" if args.share_gpu else ""),
+        "version": "1", "connector": "policy-ws", "replanSteps": reference["parameters"]["replanSteps"],
+        "randomness": model["randomness"], "profile": {**reference["benchmarkProfile"], "id": name + "/1"},
+        "checkpointDigest": checkpoint, "normalizationDigest": normalization, "backboneDigest": backbone,
+        "weights": {"dataset": name, "target": "/weights"}, "service": service,
+    }
 
 
 def configure_policy(args, reference, model, groot):
@@ -142,11 +190,13 @@ def main():
     parser.add_argument("--robosuite-source", type=Path, required=True)
     parser.add_argument("--task-set", choices=TASK_SETS, default="atomic_seen")
     parser.add_argument("--split", choices=("pretrain", "target"), default="pretrain")
-    parser.add_argument("--recipe", choices=("openpi", "gr00t"), help="Defaults to OpenPI or follows the supplied policy source.")
+    parser.add_argument("--recipe", choices=RECIPES, help="Defaults to OpenPI or follows the supplied policy source.")
     parser.add_argument("--benchmark-only", action="store_true")
     policy_source = parser.add_mutually_exclusive_group()
     policy_source.add_argument("--openpi-source", type=Path)
     policy_source.add_argument("--groot-source", type=Path)
+    policy_source.add_argument("--diffusion-source", type=Path)
+    parser.add_argument("--robomimic-source", type=Path)
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--weights", type=Path)
     parser.add_argument("--policy-image")
@@ -155,26 +205,29 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
-    policy_root = args.groot_source or args.openpi_source
+    policy_root = args.groot_source or args.diffusion_source or args.openpi_source
     if args.benchmark_only:
-        if policy_root or args.weights or args.policy_image or args.share_gpu:
+        if policy_root or args.robomimic_source or args.weights or args.policy_image or args.share_gpu:
             parser.error("policy arguments cannot be used with --benchmark-only")
     elif not (policy_root and args.weights and args.policy_image):
         parser.error("a policy source, --weights and --policy-image are required unless using --benchmark-only")
-    inferred = "gr00t" if args.groot_source else "openpi"
+    if bool(args.diffusion_source) != bool(args.robomimic_source):
+        parser.error("--diffusion-source and --robomimic-source must be provided together")
+    inferred = "gr00t" if args.groot_source else "diffusion-policy" if args.diffusion_source else "openpi"
     if policy_root and args.recipe not in (None, inferred):
         parser.error("--recipe does not match the policy source")
-    groot = (args.recipe or inferred) == "gr00t"
+    recipe = args.recipe or inferred
 
     reference = json.loads((HERE / "profiles/robocasa365-atomic-seen.json").read_text())
-    model_path = "profiles/robocasa365-gr00t-n15.json" if groot else "profiles/robocasa365-openpi.json"
-    model = json.loads((HERE / model_path).read_text())
-    if groot:
+    model = json.loads((HERE / "profiles" / (RECIPES[recipe] + ".json")).read_text())
+    if recipe == "gr00t":
         groot_reference(reference, model)
+    elif recipe == "diffusion-policy":
+        diffusion_reference(reference, model)
     source = reference["reference"]
     check_source(args.robocasa_source, source["robocasa"], source["files"])
     check_source(args.robosuite_source, source["robosuite"], source["robosuite"]["files"])
-    name = set_benchmark_scope(reference, args.robocasa_source, args.task_set, args.split, groot)
+    name = set_benchmark_scope(reference, args.robocasa_source, args.task_set, args.split, recipe)
     reference["environment"]["assets"]["digest"] = tree_digest(args.assets)
     benchmark = {
         "name": name,
@@ -187,7 +240,8 @@ def main():
     }
     outputs = {"benchmark.json": benchmark, "reference.json": reference}
     if not args.benchmark_only:
-        outputs["policy.json"] = configure_policy(args, reference, model, groot)
+        outputs["policy.json"] = (diffusion_policy(args, reference, model) if recipe == "diffusion-policy"
+                                  else configure_policy(args, reference, model, recipe == "gr00t"))
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for filename, value in outputs.items():
         (args.output_dir / filename).write_text(json.dumps(value, indent=2) + "\n")
