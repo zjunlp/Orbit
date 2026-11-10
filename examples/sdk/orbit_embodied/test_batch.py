@@ -134,6 +134,33 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(result, self.verify(0))
         self.assertTrue((self.output / "episodes" / request["episodeId"] / "media-status.json").exists())
 
+    def test_evidence_finalizer_failure_is_invalid_and_preserves_an_earlier_failure(self):
+        class BrokenFinalizer(SyntheticBenchmark):
+            def finalize_evidence(self):
+                raise OSError("synthetic recorder close failed")
+        request = self.episodes[0]
+        for invalid, expected_failure in ((False, "scorer_error"), (True, "policy_act")):
+            with self.subTest(invalid=invalid):
+                directory = self.output / str(invalid)
+                result = self.execute(request, directory, lambda: False, invalid=invalid,
+                                      benchmark=BrokenFinalizer(success_at=2))
+                self.assertFalse(result["valid"])
+                self.assertEqual(result["failure"], expected_failure)
+                self.assertIn("evidence finalization: synthetic recorder close failed", result["issues"])
+                self.assertEqual(result, verify_episode(directory, request["sample"]["sampleId"],
+                                                        request["episodeId"], self.expected(0)))
+
+    def test_cancelled_episode_does_not_finalize_or_seal_evidence(self):
+        test = self
+        class Unfinished(SyntheticBenchmark):
+            def finalize_evidence(self):
+                test.fail("cancelled evidence must not be finalized")
+        def execute(request, directory, cancelled):
+            signal.raise_signal(signal.SIGTERM)
+            return self.execute(request, directory, cancelled, benchmark=Unfinished())
+        run_batch(self.plan, self.episodes, self.output, execute)
+        self.assertFalse((self.output / "episodes" / self.episodes[0]["episodeId"] / "evidence-manifest.json").exists())
+
     def test_changed_or_reordered_plan_is_rejected_before_any_episode(self):
         changed = copy.deepcopy(self.episodes)
         changed.reverse()

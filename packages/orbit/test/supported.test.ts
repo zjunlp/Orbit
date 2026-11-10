@@ -39,7 +39,7 @@ function registration(
 
 it("ships one supported family per benchmark even with no local registrations", () => {
   const supported = supportedBenchmarks([]);
-  expect(supported).toHaveLength(24);
+  expect(supported).toHaveLength(26);
   expect(new Set(supported.map((row) => row.id)).size).toBe(supported.length);
   expect(supported.every((row) => row.registrationNames.length === 0)).toBe(true);
   expect(
@@ -99,6 +99,9 @@ it("links known built-in adapters and exact native semantic profiles only", () =
 
 it("retains profile boundaries and keeps limited integrations visibly limited", () => {
   const rows = supportedBenchmarks([]);
+  for (const id of ["robodojo", "robolab"]) {
+    expect(rows.find((row) => row.id === id)?.verification.level).toBe("pending-calibration");
+  }
   const miniwob = rows.find((row) => row.id === "miniwob");
   expect(miniwob?.integrations).toHaveLength(2);
   const webvoyager = rows.find((row) => row.id === "webvoyager");

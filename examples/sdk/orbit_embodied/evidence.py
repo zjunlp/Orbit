@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 
 import numpy as np
 
-from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed
+from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed, robodojo_layout
 
 
 def write_json(path, value):
@@ -55,6 +56,33 @@ def verify_calvin_sequence(reference, sample, controls, result):
     if (result["native"]["sequence"] != sequence or result["native"]["completedSubtasks"] != completed
             or result["success"] != (completed == len(sequence))):
         raise ValueError("CALVIN result differs from the recorded subtask completions")
+
+
+def verify_robodojo_episode(reference, sample, controls, initial, result):
+    layout = robodojo_layout(reference, sample["taskId"], sample["environmentSeed"], int(sample["initialStateId"]))
+    identity = {"evalSeed": sample["environmentSeed"], **layout}
+    if initial["layout"] != identity or initial["nativeStepCount"] != 0:
+        raise ValueError("RoboDojo initial state differs from its frozen layout")
+    for index, row in enumerate(controls):
+        state = row["state"]
+        progress = state["processScore"]
+        if progress is not None and (isinstance(progress, bool) or not isinstance(progress, (int, float))
+                                     or not math.isfinite(progress) or not 0 <= progress <= 100):
+            raise ValueError("RoboDojo process score is outside its native range")
+        if (state["layout"] != identity or state["nativeStepCount"] != index + 1
+                or state["nativeUnstable"] is not False
+                or state["nativeEnded"] is not row["terminated"]
+                or state["nativeSuccess"] is not row["nativeSuccess"]
+                or row["terminated"] != (index == len(controls) - 1)):
+            raise ValueError("RoboDojo control evidence contradicts native termination or layout")
+    final = controls[-1]["state"]
+    expected_score = 1.0 if result["success"] else (final["processScore"] or 0.0) / 100.0
+    native = result["native"]
+    for key in ("layout", "nativeStepCount", "nativeEnded", "nativeSuccess", "nativeUnstable", "processScore"):
+        if native[key] != final[key]:
+            raise ValueError("RoboDojo result differs from recorded native state: " + key)
+    if native["score"] != expected_score:
+        raise ValueError("RoboDojo score differs from native success and process score")
 
 
 def verify_simpler_termination(controls, initial, horizon):
@@ -190,6 +218,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         raise ValueError("native verdict contradicts the declared control-step aggregation")
     if result["valid"] and reference.get("environment", {}).get("kind") == "calvin":
         verify_calvin_sequence(reference, contract["sample"], controls, result)
+    if result["valid"] and reference.get("environment", {}).get("kind") == "robodojo":
+        verify_robodojo_episode(reference, contract["sample"], controls, initial["state"], result)
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     # A valid failure ends at the horizon or at a native termination (e.g. Gym truncation).

@@ -890,6 +890,16 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - **CALVIN ABC→D**：一个样本对应冻结目录的一条五指令序列。仿真仅在序列开始时重置，原生 oracle 完成一段后，driver 丢弃剩余动作并
   用下一条指令重规划。独立 verifier 从封存的动作证据核对子任务进度、重规划边界和停止条件。主分数为完成的连续子任务数。
   Scene D 的 benchmark 可独立登记，checkpoint 的训练场景属于策略来源。
+- **RoboDojo 与 RoboLab**：两者沿用原生 C6 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
+  RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
+  目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。
+  CPU verifier 核对布局身份、动作计数、终止记录和过程分数。RoboLab 保留 DROID 绝对关节与夹爪控制、双重 reset、
+  每任务原生时限以及 `get_env_results` 的终止结果；初始物理异常产生的 Gym 标记不直接算成功。
+  两者的源码/资产检查与实际 GPU 任务校准分别记录，接入配置不自动提升保真等级。
+  Isaac 启动器只在 Linux 查询到一致的实际 R535.256+ 驱动时，采用 NVIDIA 公布的 Vulkan 版本误报兼容参数，并记录版本与处理原因；
+  其他版本或查询失败保留原生驱动检查。该处理不修改主机驱动、原生场景或成功判定。
+- **证据封存**：benchmark 可在 `finalize_evidence` 中关闭原生写入器，再计算必需证据摘要；例如 HDF5 的 close 会改变文件，flush 不能替代。
+  收尾失败使 episode 无效，保留已有失败原因；视频等可选媒体仍可在封存后结束。取消中的未完成样本不新增封存。
 - **固定批次**：`spec.batchSize` 按方法、计划顺序和相同生效预算拆分，成员、attemptId、episodeId 与清单摘要提交时冻结；模型服务
   每 Run 启动一次，逐 episode 重建环境并清空连接器状态。容器 watchdog 为逐 episode 预算之和。已封存且独立验证通过的 episode
   不被后续服务失败、OOM 或取消覆盖；共享文件由 Run 持有，随最后所属作业删除；重试结果采用时旧尝试存入 `Trial.priorAttempts`。

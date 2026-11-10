@@ -10,6 +10,7 @@ import numpy as np
 
 from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.evidence import seal, write_json
+from orbit_embodied.driver import SampleRejected
 from orbit_embodied.openpi import quaternion_to_axis_angle
 
 
@@ -118,6 +119,53 @@ class CoreTests(unittest.TestCase):
         seal(self.output, result)
         with self.assertRaisesRegex(ValueError, "recorded subtask completions"):
             self.verify()
+
+    def test_robodojo_partial_score_is_verified_against_native_steps_and_layout(self):
+        layout = {"id": 0, "file": "Eval_Layout/synthetic/task_3.json", "digest": "sha256:" + "b" * 64}
+        identity = {"evalSeed": 0, **layout}
+        reference = {"environment": {"kind": "robodojo", "tasks": [self.sample["taskId"]], "horizon": 7,
+                                    "layouts": {self.sample["taskId"]: {"0": [layout]}}},
+                     "parameters": {"settleSteps": 0, "replanSteps": 5, "successRule": "last"}}
+        self.sample["environmentSeed"] = 0
+        self.sample["sampleId"] = digest({key: value for key, value in self.sample.items() if key != "sampleId"})
+
+        class Partial(SyntheticBenchmark):
+            def step(self, action):
+                result = super().step(action)
+                result.terminated = self.count == self.horizon
+                return result
+
+            def state(self, observation):
+                return {"layout": identity, "nativeStepCount": self.count, "nativeEnded": self.count == self.horizon,
+                        "nativeSuccess": False, "nativeUnstable": False, "processScore": 40.0}
+
+            def result(self):
+                return {"success": False, "score": 0.4, **self.state(None)}
+
+        result = self.run_sample(Partial(), SyntheticPolicy(), {"reference": reference})
+        self.assertTrue(self.verify()["valid"])
+        self.assertEqual(self.verify()["native"]["score"], 0.4)
+        result["native"]["score"] = 1.0
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "score differs"):
+            self.verify()
+        result["native"]["score"] = 0.4
+        result["native"]["processScore"] = 100.0
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "recorded native state"):
+            self.verify()
+
+    def test_native_instability_during_control_remains_an_explicit_rejected_sample(self):
+        class Unstable(SyntheticBenchmark):
+            def step(self, action):
+                if self.count == 2:
+                    raise SampleRejected("synthetic native instability after control")
+                return super().step(action)
+
+        result = self.run_sample(Unstable(), SyntheticPolicy())
+        self.assertEqual(result["failure"], "sample_rejected")
+        self.assertFalse(result["valid"])
+        self.assertEqual(self.verify()["steps"], 2)
 
     def test_requires_explicit_complete_semantically_equal_mapping(self):
         with self.assertRaisesRegex(ValueError, "exactly"):
