@@ -12,14 +12,16 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from orbit_embodied import digest, resolve_binding
-from orbit_embodied.binding import reference_horizon, seed_asset
-from orbit_embodied.evidence import write_json
-from orbit_embodied.implementation import archive_implementation, verify_implementation
-
-
 ROOT = Path(__file__).resolve().parents[3]
-ADAPTER = ROOT / "examples/bench-adapters/embodied/adapter.py"
+sys.path.insert(0, str(ROOT / "examples/sdk"))
+
+from orbit_embodied import digest, resolve_binding  # noqa: E402
+from orbit_embodied.binding import reference_horizon, seed_asset  # noqa: E402
+from orbit_embodied.evidence import write_json  # noqa: E402
+from orbit_embodied.implementation import archive_implementation, verify_implementation  # noqa: E402
+
+
+ADAPTER = Path(__file__).resolve().parent / "adapter.py"
 SPEC = importlib.util.spec_from_file_location("native_embodied_adapter", ADAPTER)
 adapter = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(adapter)

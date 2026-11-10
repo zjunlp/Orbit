@@ -15,36 +15,17 @@ const catalogSource = readdirSync(catalogRoot)
   .map((f) => readFileSync(catalogRoot + f, "utf8"))
   .join("\n");
 
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
-
-/**
- * Adapters whose tests live with the shared code they exercise rather than in their own directory.
- * The named file must exist, so the exception cannot rot into a silent gap.
- */
-const TESTS_ELSEWHERE: Record<string, string> = {
-  // The embodied adapter is a thin protocol shim over the shared Python SDK, tested as a package.
-  embodied: "examples/sdk/orbit_embodied/test_adapter.py",
-  // The Harbor suite adapter imports the built-in harbor module; its tests drive that adapter directly.
-  "harbor-suites": "packages/orbit/test/benchmark-gaps.test.ts",
-};
-
 /** The contract every adapter directory must satisfy (docs/guides/bench-adapter.md §0). */
 function check(name: string): string[] {
-  const dir = adaptersRoot + name + "/";
+  const dir = `${adaptersRoot}${name}/`;
   const files = readdirSync(dir);
   const problems: string[] = [];
   if (!files.some((f) => f === "adapter.py" || f === "adapter.ts"))
     problems.push(`${name}: no adapter.py or adapter.ts`);
   if (!files.includes("README.md")) problems.push(`${name}: no README.md`);
   const hasTests =
-    files.some((f) => /^test_.*\.py$/.test(f)) || files.some((f) => /\.test\.ts$/.test(f));
-  const elsewhere = TESTS_ELSEWHERE[name];
-  if (elsewhere) {
-    if (!existsSync(repoRoot + elsewhere))
-      problems.push(`${name}: declared tests at ${elsewhere} do not exist`);
-  } else if (!hasTests) {
-    problems.push(`${name}: no test_adapter.py or *.test.ts`);
-  }
+    files.some((f) => /^test_.*\.py$/.test(f)) || files.some((f) => /\.(test|spec)\.ts$/.test(f));
+  if (!hasTests) problems.push(`${name}: no test_adapter.py or *.test.ts`);
   return problems;
 }
 
@@ -67,14 +48,16 @@ it("has no product-catalog route pointing at a directory that does not exist", (
   for (const m of catalogSource.matchAll(/adapter\("([^"]+)"\)/g)) referenced.add(m[1] as string);
   for (const m of catalogSource.matchAll(/examples\/bench-adapters\/([^/"]+)\//g))
     referenced.add(m[1] as string);
-  expect([...referenced].filter((name) => !existsSync(adaptersRoot + name)).sort()).toEqual([]);
+  expect([...referenced].filter((name) => !existsSync(`${adaptersRoot}${name}`)).sort()).toEqual(
+    [],
+  );
 });
 
 it("keeps the per-family files and the catalog index in step", () => {
   const files = readdirSync(catalogRoot)
     .filter((f) => f.endsWith(".ts") && f !== "shared.ts" && f !== "index.ts")
     .sort();
-  const index = readFileSync(catalogRoot + "index.ts", "utf8");
+  const index = readFileSync(`${catalogRoot}index.ts`, "utf8");
   const missing = files.filter((f) => !index.includes(`from "./${f}"`));
   expect(missing).toEqual([]);
 });
