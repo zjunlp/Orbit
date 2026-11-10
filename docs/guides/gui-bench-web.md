@@ -1,6 +1,6 @@
 # GUI evaluation in Web
 
-运行 `orbit web --open`，进入 **Bench**。先由维护者准备并登记环境与策略；Web 不安装 BrowserGym 或自动实现模型策略。
+运行 `orbit web --open`，进入 **Evaluations**。先由维护者准备并登记环境与策略；Web 不安装 BrowserGym 或自动实现模型策略。
 BrowserGym 适配器覆盖固定版本注册的 125 个 MiniWoB++ 任务；详见[准备指南](../../examples/bench-adapters/browsergym/README.md)。
 
 ## Create an evaluation
@@ -8,16 +8,23 @@ BrowserGym 适配器覆盖固定版本注册的 125 个 MiniWoB++ 任务；详�
 选择 **New evaluation**，或在已有评测中选择 **Copy and create**：
 
 1. **Environment & tasks**：选择已登记的环境和支持的任务。观察方式、动作空间、步数上限等预设条件只读。
-2. **Methods**：配置方法，复制已有评测的方法，或导入方法 JSON。BrowserGym 声明支持 external、empty 和已注册 CLI Agent；密钥应由 daemon 环境提供，这里只填写变量名。
-3. **Review & start**：检查任务 × 方法 × 重复次数、名称和超时。点击 **Start evaluation** 后进入详情。
+2. **Configurations**：设置运行器、模型、思考强度和可选提示词 / skills 包，选择策略，复制已有评测配置，或导入配置 JSON。BrowserGym 声明支持 external、empty 和已注册 CLI Agent；密钥应由 daemon 环境提供，这里只填写变量名。
+3. **Review & start**：检查任务 × 配置 × 重复次数、名称和超时。点击 **Start evaluation** 后进入详情。
 
 登记成功不表示浏览器或模型连接已经检查。复制使用当前登记，页面提示其与来源配置的差异；新 job 固定登记配置，但不会冻结路径下的策略代码或远端模型。
-**New evaluation from these tasks** 复制筛选后的任务，以及原评测的全部方法和重复次数；不是只重跑特定 seed。
+**New evaluation from these tasks** 复制筛选后的任务，以及原评测的全部配置和重复次数；不是只重跑特定 seed。
+
+## Reuse evaluation configurations
+
+侧栏 **Configurations** 打开 **Evaluation configurations**，查看已运行过的配置、内容版本和相同条件下的结果。
+页面从历史评测按配置名称聚合；改变模型、思考强度或配置包会产生新配置版本，不表示方法进化。
+Trial 的 **Adjust configuration** 复制当前配置和任务选择，供调整后发起新评测。
+独立 Method 概念尚未设计；导入文件与 CLI 继续使用现有 `methods` / `--method` 名称。
 
 ## Review results
 
-详情提供 **List / Matrix**、任务搜索、方法和 seed 筛选。对于声明二元成绩的适配器，**Task not completed** 表示有效零分；**Evaluation issues** 表示无效、未知或包含问题的评测。标量 benchmark 保留原分数，不推断成功阈值。
-方法均值先对任务内的有效重复实验平均，再对任务等权平均；无效、未知和未完成 trial 不当作零分。
+详情提供 **List / Matrix**、任务搜索、配置和 seed 筛选。对于声明二元成绩的适配器，**Task not completed** 表示有效零分；**Evaluation issues** 表示无效、未知或包含问题的评测。标量 benchmark 保留原分数，不推断成功阈值。
+每个配置的均值先对任务内的有效重复实验平均，再对任务等权平均；无效、未知和未完成 trial 不当作零分。
 
 进入 Trial 的 **Trajectory**：左侧选择步骤，中间查看 **Before / After**，右侧显示动作和反馈。
 初始观察为 step 0；第 k 个动作连接截图 k−1 和截图 k。支持左右键、进度条、**Copy step link**、**100% / Fit** 和原图；输入控件获得焦点时不抢占快捷键。
@@ -56,10 +63,10 @@ EFE MetaWorld+ standard/2.1 的 Harbor trial 会在评分后自动生成 `orbit-
 CLI GUI 由共享服务承载，BrowserGym 使用原高层动作字符串，CUA-Lite MiniWoB 使用自己的 canonical JSON tool call；权限和时间限制在 Conditions 中显示。
 `agentTask.tools` 声明的 MCP 由 Orbit 自动接入支持的 Agent；Details 的 `mcpToolsUsed` 只列会话中真正调用过的 MCP 工具。
 
-## Compare methods
+## Compare configurations
 
-Bench 中选择评测后点击 **Compare**，选择 **Baseline** 和 **Compare with**，按改善、退步或缺少配对结果筛选任务。
+Evaluations 中选择评测后点击 **Compare**，选择 **Baseline** 和 **Compare with**，按改善、退步或缺少配对结果筛选任务。
 条件区显示保存的版本、配置、任务集和预算差异；旧记录缺失字段标记为 **Not recorded**。任务筛选不改变整体统计，配对差仍使用共享指标函数。
-点击任务分数进入对应方法的 trial 列表，再选择 seed 查看轨迹。
+点击任务分数进入对应配置的 trial 列表，再选择 seed 查看轨迹。
 
 页面保持单用户 daemon 的访问方式；实时画面、环境恢复和多用户权限不属于该功能。

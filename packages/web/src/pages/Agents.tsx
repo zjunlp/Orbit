@@ -457,7 +457,7 @@ function Compatibility() {
     <section className="card">
       <div className="card-h">
         Which Agent can take which benchmark
-        <span className="sub">method admission, capabilities and credentials</span>
+        <span className="sub">configuration compatibility, capabilities and credentials</span>
         <span className="spacer" />
         <label className="row faint" style={{ gap: 6, fontWeight: 400 }}>
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
@@ -522,7 +522,7 @@ function Compatibility() {
             {CELL[selected.state].label}
             {selected.reason
               ? `: ${selected.reason}`
-              : ": passes the method checks; task resources and environment are checked when starting."}
+              : ": passes the configuration checks; task resources and environment are checked when starting."}
           </span>
           {selected.job && (
             <Link href={jobPath(selected.job)}>
@@ -548,7 +548,8 @@ function ExternalTable({
   if (!rows.length)
     return (
       <Empty title="No external policy has run yet">
-        External methods are adapter-owned entrypoints (a VLA policy server, a scripted GUI policy).
+        External configurations use adapter-owned entrypoints (a VLA policy server, a scripted GUI
+        policy).
       </Empty>
     );
   return (

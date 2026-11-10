@@ -316,12 +316,15 @@ orbit bench cancel <job>
 orbit bench rm-job <job>        # delete a finished job with its trials and runs (type the job id)
 ```
 
-Methods are `name=agent[,auth=P,model=M,effort=E,bundle=DIR]` with agent `codex`, `claude-code`,
+Evaluation configurations use the existing `--method` syntax
+`name=agent[,auth=P,model=M,effort=E,bundle=DIR]` with agent `codex`, `claude-code`,
 `oracle` (reference solution) or `empty` (submits nothing; checks that the verifier gives 0). Every
 trial records execution (how the solve run ended), evaluation (`valid` / `invalid` / `unknown`) and
-cleanup separately; only valid scores count. The Web UI shows jobs, a task × method matrix and
-cross-job comparison under **Bench**. Grader secrets given with `--pass-env` reach only the verify
-run. Per-task solve resources (GPU, memory, CPU, timeout) come from an optional JSON file given with
+cleanup separately; only valid scores count. The Web UI shows jobs, a task × configuration matrix and
+cross-job comparison under **Evaluations**. **Configurations** groups previously evaluated settings
+by name and content revision; changing the model or reasoning effort creates a configuration version.
+An independent Method concept remains future design. Grader secrets given with `--pass-env` reach
+only the verify run. Per-task solve resources (GPU, memory, CPU, timeout) come from an optional JSON file given with
 `orbit bench add --resources`; every run records its measured peaks, and a solve run killed for memory
 makes the trial invalid instead of a zero. Any other benchmark needs only an adapter executable that speaks a small JSON protocol (no
 rebuild of Orbit): [docs/guides/bench-adapter.md](docs/guides/bench-adapter.md).

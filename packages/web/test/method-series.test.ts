@@ -1,9 +1,9 @@
 import { expect, it, vi } from "vitest";
 import type { MethodLine, MethodRevisionEntry } from "../src/lib/api.ts";
-import { benchmarkSeries, resultHref } from "../src/pages/Methods.tsx";
+import { benchmarkSeries, resultHref } from "../src/pages/Configurations.tsx";
 
 vi.mock("../src/lib/router.ts", () => ({
-  useLocation: () => ({ query: new URLSearchParams(), path: "/methods" }),
+  useLocation: () => ({ query: new URLSearchParams(), path: "/configurations" }),
   setQuery: vi.fn(),
   onLinkClick: vi.fn(),
 }));

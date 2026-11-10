@@ -141,7 +141,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
       const revision = lines
         .flatMap((line) => line.revisions)
         .find((r) => r.results.some((x) => x.job === job.id && x.method === trial.method));
-      if (!revision) throw new Error("No method revision is available for this trial.");
+      if (!revision) throw new Error("No configuration version is available for this trial.");
       navigate(deriveHref(job.id, revision.revision, trial.id, trial.method));
     } catch (e) {
       toast((e as Error).message);
@@ -196,9 +196,9 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
                 trial.id,
                 trial.method,
               )}
-              title="Start a new evaluation whose method descends from this one, informed by this trial"
+              title="Copy this configuration to adjust its model, reasoning effort or optional files in a new evaluation"
             >
-              Derive next method
+              Adjust configuration
             </Link>
           )}
         {!job.revisions[trial.method] && method && !["empty", "oracle"].includes(method.agent) && (
@@ -206,9 +206,9 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
             type="button"
             className="btn sm"
             onClick={() => void deriveLegacy()}
-            title="Derive from the approximate revision reconstructed for this older evaluation"
+            title="Adjust the configuration reconstructed from this older evaluation"
           >
-            Derive next method
+            Adjust configuration
           </button>
         )}
         {job.state !== "running" &&
@@ -454,11 +454,11 @@ function TrialConfiguration({ job, trial }: { job: BenchJob; trial: Trial }) {
     ["Checkpoint digest", method?.policySnapshot?.checkpointDigest],
     ["Normalization digest", method?.policySnapshot?.normalizationDigest],
     ["Normalization key", method?.policySnapshot?.normalizationKey],
-    ["Method", method?.name],
+    ["Configuration", method?.name],
     ["Agent", method?.agent],
     ["Model", method?.model],
     ["Entrypoint", method?.entrypoint],
-    ["Method settings", method?.config],
+    ["Configuration settings", method?.config],
     ["Reasoning effort", method?.effort],
     ["Solve timeout (minutes)", job.spec.timeoutMin ?? job.resources?.[trial.task]?.timeoutMin],
     ["Solve resources", job.resources?.[trial.task]],

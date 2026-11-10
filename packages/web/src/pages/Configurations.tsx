@@ -1,6 +1,3 @@
-// Methods (design §9.16): the method lines Orbit has run (a method name over jobs), each content
-// revision with what it is made of and where it came from, and its results per benchmark compared
-// with the revision before it. Orbit records and compares; people and Agents decide what to change.
 import {
   fmtCi,
   fmtMetric,
@@ -8,7 +5,7 @@ import {
   primaryMetric,
   resolveMetrics,
 } from "@zjunlp/orbit/metrics";
-import { IconBranch } from "../components/icons.tsx";
+import { IconLayers } from "../components/icons.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { CopyButton, Empty, Link, Loading } from "../components/ui.tsx";
 import { api, type MethodLine, type MethodRevisionEntry } from "../lib/api.ts";
@@ -58,7 +55,7 @@ export function benchmarkSeries(
     .sort((a, b) => (a.x.at < b.x.at ? -1 : 1));
 }
 
-export function MethodsPage() {
+export function ConfigurationsPage() {
   const loc = useLocation();
   const requestedMetric = loc.query.get("metric") ?? undefined;
   const methods = useAsync(() => api.methods(requestedMetric), [requestedMetric], {
@@ -72,35 +69,39 @@ export function MethodsPage() {
     .sort((a, b) => ((a.revisions[0]?.firstAt ?? "") < (b.revisions[0]?.firstAt ?? "") ? 1 : -1));
   const selected = shown.find((l) => l.name === loc.query.get("m")) ?? shown[0];
   const revisions = lines.reduce((n, l) => n + l.revisions.length, 0);
-  const derived = lines.reduce(
-    (n, l) => n + l.revisions.filter((r) => r.lineage?.parent).length,
-    0,
-  );
+  const evaluations = new Set(
+    lines.flatMap((l) => l.revisions.flatMap((r) => r.results.map((x) => x.job))),
+  ).size;
   const compared = lines.reduce(
     (n, l) => n + l.revisions.flatMap((r) => r.results).filter((x) => x.versus).length,
     0,
   );
   return (
     <>
-      <TopBar crumbs={[{ label: "Methods" }]}>
+      <TopBar crumbs={[{ label: "Evaluation configurations" }]}>
         <Link className="btn primary sm" href="/bench/new">
           New evaluation
         </Link>
       </TopBar>
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
+          <p className="faint">
+            Review the Agent or policy, model, reasoning effort and optional instructions or skills
+            used in your evaluations. Configurations are grouped by name, with versions for changes
+            to their recorded settings.
+          </p>
           {methods.error && !methods.data ? (
             <div className="callout" role="alert">
               {methods.error}
             </div>
           ) : !methods.data ? (
-            <Loading what="Loading methods" />
+            <Loading what="Loading configurations" />
           ) : !lines.length ? (
-            <Empty title="No method has run yet" icon={<IconBranch size={36} />}>
+            <Empty title="No evaluation configurations yet" icon={<IconLayers size={36} />}>
               <p>
-                A method is an Agent (or policy) with its model, settings and method bundle. Each
-                change of what it is made of is a new revision; this page lines revisions up on the
-                same benchmark so you can see whether a change helped.
+                An evaluation configuration records the Agent or policy, model, reasoning effort and
+                optional instructions or skills used in an evaluation. Compare configuration
+                versions on the same benchmark and task set.
               </p>
               <p>
                 <Link className="btn primary" href="/bench/new">
@@ -113,32 +114,32 @@ export function MethodsPage() {
               <div className="hub-stats">
                 <div className="hub-stat">
                   <b className="num">{lines.length}</b>
-                  <span>method lines</span>
-                  <small className="faint">a method name over evaluations</small>
+                  <span>named configurations</span>
+                  <small className="faint">grouped by name across evaluations</small>
                 </div>
                 <div className="hub-stat">
                   <b className="num">{revisions}</b>
-                  <span>revisions</span>
-                  <small className="faint">distinct content (model, CLI, bundle…)</small>
+                  <span>configuration versions</span>
+                  <small className="faint">model, reasoning effort and setup</small>
                 </div>
                 <div className="hub-stat">
-                  <b className="num">{derived}</b>
-                  <span>with a declared parent</span>
-                  <small className="faint">lineage you recorded</small>
+                  <b className="num">{evaluations}</b>
+                  <span>evaluations</span>
+                  <small className="faint">recorded configuration results</small>
                 </div>
                 <div className="hub-stat good">
                   <b className="num">{compared}</b>
                   <span>paired comparisons</span>
-                  <small className="faint">against the revision before</small>
+                  <small className="faint">under matching evaluation conditions</small>
                 </div>
               </div>
               <div className="hub-layout">
-                <aside className="facets" aria-label="Method lines">
+                <aside className="facets" aria-label="Evaluation configurations">
                   <input
                     className="input"
                     type="search"
-                    placeholder="Search methods"
-                    aria-label="Search methods"
+                    placeholder="Search configurations"
+                    aria-label="Search configurations"
                     value={loc.query.get("q") ?? ""}
                     onChange={(e) => setQuery({ q: e.target.value || null })}
                   />
@@ -159,7 +160,11 @@ export function MethodsPage() {
                     ))}
                   </div>
                 </aside>
-                {selected ? <LineView line={selected} /> : <Empty title="No matching method" />}
+                {selected ? (
+                  <LineView line={selected} />
+                ) : (
+                  <Empty title="No matching configuration" />
+                )}
               </div>
             </>
           )}
@@ -192,9 +197,9 @@ function LineView({ line }: { line: MethodLine }) {
     <div className="col" style={{ gap: 12, minWidth: 0 }}>
       <section className="card">
         <div className="card-h">
-          <IconBranch size={14} /> {line.name}
+          <IconLayers size={14} /> {line.name}
           <span className="sub">
-            {line.revisions.length} revision{line.revisions.length === 1 ? "" : "s"} ·{" "}
+            {line.revisions.length} version{line.revisions.length === 1 ? "" : "s"} ·{" "}
             {line.agents.join(", ")}
           </span>
           <span className="spacer" />
@@ -276,16 +281,16 @@ function LineView({ line }: { line: MethodLine }) {
       </section>
       <section className="card">
         <div className="card-h">
-          Revisions on {benchmark}
-          <span className="sub">newest first · Δ is paired over tasks both revisions ran</span>
+          Configuration versions on {benchmark}
+          <span className="sub">newest first · Δ is paired over tasks both versions ran</span>
         </div>
         <div className="matrix-wrap">
           <table className="table hub-table method-table">
             <thead>
               <tr>
-                <th>Revision</th>
-                <th>Made of</th>
-                <th>Lineage</th>
+                <th>Version</th>
+                <th>Configuration</th>
+                <th>Source and notes</th>
                 <th className="r">{metric.label} ± 95% CI</th>
                 <th className="r">Δ vs previous</th>
                 <th className="r" />
@@ -300,21 +305,20 @@ function LineView({ line }: { line: MethodLine }) {
         </div>
       </section>
       <section className="card">
-        <div className="card-h">Iterate</div>
+        <div className="card-h">Compare configurations</div>
         <div className="card-b iterate">
           <ol>
             <li>
-              Open a failed trial from a revision's evaluation; invalid trials are infrastructure,
-              fix and retry the same revision.
+              Review the trial evidence first. Resolve execution or setup issues before retrying an
+              invalid trial with the same configuration.
             </li>
             <li>
-              On a valid failure, change the method (bundle, model, settings) and start an
-              evaluation with <b>Derive next method</b> on the trial page, or <code>--parent</code>{" "}
-              <code>--note</code> <code>--informed-by</code> on <code>orbit bench run</code>.
+              Choose <b>Adjust configuration</b> on a trial to reuse its setup and change the model,
+              reasoning effort or optional instructions and skills.
             </li>
             <li>
-              Run the failed tasks first (marked <i>subset</i>), then the full set before claiming
-              an improvement.
+              Keep the benchmark conditions and task set consistent when comparing results. Check
+              subset results on the full task set before drawing conclusions.
             </li>
           </ol>
         </div>
@@ -337,7 +341,7 @@ function RevisionRow({ r, x }: { r: MethodRevisionEntry; x: Result }) {
         {r.approximate && (
           <div
             className="faint catalog-sub"
-            title="Some execution details were unavailable when this revision was recorded"
+            title="Some execution details were unavailable when this configuration version was recorded"
           >
             approximate
           </div>
@@ -349,9 +353,9 @@ function RevisionRow({ r, x }: { r: MethodRevisionEntry; x: Result }) {
       </td>
       <td>
         {r.lineage?.parent ? (
-          <span className="mono">← {r.lineage.parent}</span>
+          <span className="mono">Based on {r.lineage.parent}</span>
         ) : (
-          <span className="faint">no parent recorded</span>
+          <span className="faint">no source configuration recorded</span>
         )}
         {r.lineage?.note && <div className="catalog-sub">{r.lineage.note}</div>}
         {(r.lineage?.informedBy ?? []).map((t) => (

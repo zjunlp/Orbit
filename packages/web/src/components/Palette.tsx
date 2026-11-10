@@ -4,7 +4,6 @@ import { navigate } from "../lib/router.ts";
 import { useRuns } from "../lib/runs-store.ts";
 import {
   IconBot,
-  IconBranch,
   IconChip,
   IconCompare,
   IconDashboard,
@@ -58,12 +57,12 @@ export function Palette({ onClose }: { onClose: () => void }) {
         go: "/agents",
       },
       {
-        key: "p-methods",
+        key: "p-configurations",
         group: "Pages",
-        label: "Methods",
-        icon: <IconBranch size={15} />,
-        text: "methods revisions lineage",
-        go: "/methods",
+        label: "Evaluation configurations",
+        icon: <IconLayers size={15} />,
+        text: "evaluation configurations models reasoning effort versions",
+        go: "/configurations",
       },
       {
         key: "p-bench",

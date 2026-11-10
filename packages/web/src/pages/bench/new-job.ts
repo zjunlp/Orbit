@@ -89,18 +89,18 @@ export function buildMethods(
   capabilities?: BenchCapabilities,
   profiles?: AuthProfile[],
 ): Method[] {
-  if (!drafts.length) throw new Error("Add at least one method.");
+  if (!drafts.length) throw new Error("Add at least one configuration.");
   const names = new Set<string>();
   return drafts.map((d) => {
     const name = d.name.trim();
     if (!profileName.test(name))
       throw new Error(
-        "Method names need 1–64 letters, digits, '.', '_' or '-', starting with a letter or digit.",
+        "Configuration names need 1–64 letters, digits, '.', '_' or '-', starting with a letter or digit.",
       );
-    if (names.has(name)) throw new Error(`Duplicate method name: ${name}.`);
+    if (names.has(name)) throw new Error(`Duplicate configuration name: ${name}.`);
     names.add(name);
     if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(d.agent) || d.agent === "policy")
-      throw new Error(`${name}: unknown method type.`);
+      throw new Error(`${name}: unknown configuration type.`);
     if (capabilities && !capabilityAllows(capabilities.methods, d.agent))
       throw new Error(`${name}: ${d.agent} is not supported by this environment.`);
     const m: Method = { name, agent: d.agent };
@@ -140,9 +140,10 @@ export function importMethods(text: string): MethodDraft[] {
   try {
     value = JSON.parse(text);
   } catch {
-    throw new Error("Methods must be a JSON array.");
+    throw new Error("Configurations must be a JSON array.");
   }
-  if (!Array.isArray(value) || !value.length) throw new Error("Import a non-empty methods array.");
+  if (!Array.isArray(value) || !value.length)
+    throw new Error("Import a non-empty configurations array.");
   const keys = [
     "name",
     "agent",
@@ -156,24 +157,24 @@ export function importMethods(text: string): MethodDraft[] {
   ];
   const drafts = value.map((v) => {
     if (!isObject(v) || Object.keys(v).some((k) => !keys.includes(k)))
-      throw new Error("Each method must contain only supported method fields.");
+      throw new Error("Each configuration must contain only supported fields.");
     for (const key of ["name", "agent"]) {
-      if (typeof v[key] !== "string") throw new Error(`Every method needs a ${key}.`);
+      if (typeof v[key] !== "string") throw new Error(`Every configuration needs a ${key}.`);
     }
     for (const key of ["model", "auth", "entrypoint", "effort", "bundle"]) {
       if (v[key] !== undefined && typeof v[key] !== "string")
-        throw new Error(`Method ${key} must be text.`);
+        throw new Error(`Configuration ${key} must be text.`);
     }
     if (
       v.config !== undefined &&
       (!isObject(v.config) || Object.values(v.config).some((x) => typeof x !== "string"))
     )
-      throw new Error("Method config must contain string values.");
+      throw new Error("Configuration settings must contain string values.");
     if (
       v.passEnv !== undefined &&
       (!Array.isArray(v.passEnv) || v.passEnv.some((x) => typeof x !== "string"))
     )
-      throw new Error("Method passEnv must be an array of variable names.");
+      throw new Error("Configuration passEnv must be an array of variable names.");
     if (v.agent === "external" && (v.auth || v.bundle))
       throw new Error("External policies use passEnv, not CLI auth profiles or bundles.");
     if (
@@ -185,7 +186,7 @@ export function importMethods(text: string): MethodDraft[] {
       (v.agent === "empty" || v.agent === "oracle") &&
       (v.model || v.auth || v.bundle || v.effort)
     )
-      throw new Error("Empty and oracle methods do not take model or auth settings.");
+      throw new Error("Empty and oracle configurations do not take model or auth settings.");
     return methodDraft(v as Method);
   });
   buildMethods(drafts);
@@ -220,7 +221,7 @@ export function evaluationSpec(
   if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0))
     throw new Error("Timeout must be a positive number of minutes, or blank for the preset.");
   if (fields.name.length > 200) throw new Error("Evaluation name must be at most 200 characters.");
-  if (!methods.length) throw new Error("Add at least one method.");
+  if (!methods.length) throw new Error("Add at least one configuration.");
   return {
     benchmark: fields.benchmark,
     tasks: selected,
@@ -260,12 +261,12 @@ export function withLineage(
     .map((x) => x.trim())
     .filter(Boolean);
   if (parent && !/^[0-9a-f]{12}$/.test(parent))
-    throw new Error("Parent revision must be 12 lowercase hex digits.");
+    throw new Error("Source version must be 12 lowercase hex digits.");
   if (!parent && !note && !informedBy.length) return spec;
   const methods = spec.methods.filter((m) => m.agent !== "oracle" && m.agent !== "empty");
   if (l.method && !methods.some((m) => m.name === l.method))
-    throw new Error("Select the method this lineage applies to.");
-  if (methods.length > 1 && !l.method) throw new Error("Select one method for this lineage.");
+    throw new Error("Select the configuration these notes apply to.");
+  if (methods.length > 1 && !l.method) throw new Error("Select one configuration for these notes.");
   const lineage = Object.fromEntries(
     methods
       .filter((m) => !l.method || m.name === l.method)
@@ -287,9 +288,9 @@ export function copiedMethods(source: BenchJob, method: string, parent: string):
     candidates.length !== 1 ||
     candidates.some((m) => m.agent === "oracle" || m.agent === "empty")
   )
-    throw new Error("Select a single evaluated method to derive.");
+    throw new Error("Select a single evaluated configuration to adjust.");
   const recorded = source.revisions[candidates[0]?.name ?? ""];
   if (parent && recorded && recorded.revision !== parent)
-    throw new Error("The parent revision does not match this method.");
+    throw new Error("The source version does not match this configuration.");
   return candidates;
 }

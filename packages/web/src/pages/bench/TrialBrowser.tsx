@@ -63,7 +63,7 @@ export function TrialBrowser(props: {
           <Link
             className="btn sm"
             href={`/bench/new?${newQuery}`}
-            title="Creates a new evaluation for these tasks, with all original methods and repetitions"
+            title="Creates a new evaluation for these tasks, with all original configurations and repetitions"
           >
             New evaluation from these tasks
           </Link>
@@ -93,13 +93,13 @@ export function TrialBrowser(props: {
           </select>
         </label>
         <label>
-          Method
+          Configuration
           <select
             className="input"
             value={method}
             onChange={(e) => setQuery({ method: e.target.value })}
           >
-            <option value="">All methods</option>
+            <option value="">All configurations</option>
             {job.spec.methods.map((m) => (
               <option key={m.name} value={m.name}>
                 {m.name}
@@ -163,7 +163,7 @@ export function TrialBrowser(props: {
             <thead>
               <tr>
                 <th>Task</th>
-                <th>Method / seed</th>
+                <th>Configuration / seed</th>
                 <th>{metric.label}</th>
                 <th>Task result</th>
                 <th>Phase</th>

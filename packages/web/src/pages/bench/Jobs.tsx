@@ -60,8 +60,8 @@ export function BenchJobs() {
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
           <p className="muted" style={{ margin: 0 }}>
-            Every evaluation of a benchmark: methods × tasks × seeds, each trial solved and then
-            verified. Browse what can be evaluated under{" "}
+            Every evaluation of a benchmark: configurations × tasks × seeds, each trial solved and
+            then verified. Browse what can be evaluated under{" "}
             <Link href="/benchmarks">Benchmarks ({benchmarks.data?.length ?? "…"} registered)</Link>
             .
           </p>
@@ -72,7 +72,7 @@ export function BenchJobs() {
                   className="input"
                   type="search"
                   aria-label="Search evaluations"
-                  placeholder="Search evaluations, environments or methods"
+                  placeholder="Search evaluations, environments or configurations"
                   value={query}
                   onChange={(e) => setQuery({ q: e.target.value || null })}
                 />
@@ -115,7 +115,10 @@ export function BenchJobs() {
                 <Loading what="Loading evaluations" />
               ) : jobs.data.length === 0 ? (
                 <Empty title="No evaluations yet" icon={<IconFlask size={36} />}>
-                  <p>Select a registered environment and methods to start your first evaluation.</p>
+                  <p>
+                    Select a registered environment and configurations to start your first
+                    evaluation.
+                  </p>
                   <p>
                     <Link className="btn primary" href="/bench/new">
                       New evaluation
@@ -163,7 +166,7 @@ function JobTable({
           <th>Job</th>
           <th>Benchmark</th>
           <th>Execution</th>
-          <th>Methods (primary metric ± 95% CI · valid/total)</th>
+          <th>Configurations (primary metric ± 95% CI · valid/total)</th>
           <th className="r">Created</th>
         </tr>
       </thead>

@@ -5,7 +5,6 @@ import {
   IconBot,
   IconBox,
   IconBrain,
-  IconBranch,
   IconCheck,
   IconChevron,
   IconDashboard,
@@ -57,7 +56,7 @@ export function taxonomyOverviewHref(dimension: string, field?: TaxonomyField, v
   return `/benchmarks?${query}`;
 }
 
-/** The newest paired comparisons across method lines, newest first. */
+/** The newest paired comparisons across named configurations, newest first. */
 export function recentChanges(lines: MethodLine[], n = 5) {
   return lines
     .flatMap((l) =>
@@ -84,7 +83,7 @@ export function Overview() {
   const failures = [
     { label: "Benchmarks", request: catalog },
     { label: "Agents", request: agents },
-    { label: "Methods", request: methods },
+    { label: "Evaluation configurations", request: methods },
     { label: "Evaluations", request: jobs },
   ].filter(({ request }) => request.error);
   const realJobs = (jobs.data ?? []).filter((j) => !j.spec.calibration);
@@ -141,10 +140,7 @@ export function Overview() {
             <div>
               <p className="overview-eyebrow">ORBIT WORKSPACE</p>
               <h1>Explore. Evaluate. Improve.</h1>
-              <p>
-                Find a benchmark, choose an Agent or policy, and follow the evidence to your next
-                method.
-              </p>
+              <p>Find a benchmark, configure an Agent or policy, and compare evaluation results.</p>
             </div>
             <Link className="btn overview-browse" href="/benchmarks">
               Browse benchmarks <IconChevron size={15} />
@@ -186,12 +182,12 @@ export function Overview() {
                   detail={`${agentList.filter((a) => a.evidence).length} with evidence here · ${agentList.filter((a) => a.profiles.length).length} with credentials`}
                 />
                 <SummaryCard
-                  href="/methods"
-                  icon={<IconBranch size={19} />}
-                  label="Methods"
+                  href="/configurations"
+                  icon={<IconLayers size={19} />}
+                  label="Evaluation configurations"
                   value={lines.reduce((n, l) => n + l.revisions.length, 0)}
-                  unit="method revisions"
-                  detail={`${lines.length} method lines · ${changes.length ? `latest comparison ${ago(changes[0]?.x.at)}` : "no paired comparison yet"}`}
+                  unit="configuration versions"
+                  detail={`${lines.length} named configurations · ${changes.length ? `latest comparison ${ago(changes[0]?.x.at)}` : "no paired comparison yet"}`}
                 />
               </section>
               <section className="overview-local" aria-label="Local setup evidence">
@@ -203,8 +199,8 @@ export function Overview() {
                   <b>{calibrated}</b> sample-calibrated setups
                 </Link>
                 <Link href="/benchmarks?mode=local&ev=real">
-                  <b>{entries.filter((e) => e.methods.length > 0).length}</b> setups with real
-                  methods
+                  <b>{entries.filter((e) => e.methods.length > 0).length}</b> setups with evaluation
+                  results
                 </Link>
               </section>
               <OverviewTaxonomy products={products} />
@@ -294,20 +290,20 @@ export function Overview() {
               </section>
               <section className="card overview-evolution">
                 <div className="card-h">
-                  <h2>How methods evolved</h2>
+                  <h2>Configuration comparisons</h2>
                   <span className="spacer" />
-                  <Link href="/methods" className="sub">
-                    Methods <IconChevron size={12} />
+                  <Link href="/configurations" className="sub">
+                    Configurations <IconChevron size={12} />
                   </Link>
                 </div>
                 {!changes.length ? (
                   <div className="overview-quiet overview-evolution-empty">
-                    <IconBranch size={22} />
+                    <IconLayers size={22} />
                     <div>
-                      <b>Your method history starts with a comparison.</b>
+                      <b>Compare results across configuration versions.</b>
                       <p>
-                        Run a changed model, setting or method bundle on the same benchmark to
-                        compare revisions.
+                        Evaluate a different model, reasoning effort or instruction bundle on the
+                        same benchmark and task set to compare results.
                       </p>
                     </div>
                   </div>
@@ -316,7 +312,7 @@ export function Overview() {
                     <table className="table overview-change-table">
                       <thead>
                         <tr>
-                          <th>Method revision</th>
+                          <th>Configuration version</th>
                           <th>Benchmark</th>
                           <th className="r">Paired change</th>
                           <th className="r">When</th>
@@ -341,7 +337,7 @@ export function Overview() {
                           return (
                             <tr key={`${line}/${x.job}`}>
                               <td>
-                                <Link href={`/methods?${query}`}>
+                                <Link href={`/configurations?${query}`}>
                                   <b>{line}</b>
                                 </Link>
                                 <div className="mono faint">

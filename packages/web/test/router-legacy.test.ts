@@ -37,3 +37,15 @@ it("keeps the new home and evaluation list while restoring saved run views", () 
     "/bench/compare?jobs=a%2Cb",
   );
 });
+
+it("preserves configuration filters and anchors in saved Methods links", () => {
+  const query = new URLSearchParams(
+    "m=sol%20high&b=miniwob&c=conditions&tasks=subset&metric=score&q=sol",
+  );
+  const target = legacyHref("/methods/", query, "results");
+  const url = new URL(target ?? "", "http://orbit.local");
+  expect(url.pathname).toBe("/configurations");
+  expect(url.searchParams.toString()).toBe(query.toString());
+  expect(url.hash).toBe("#results");
+  expect(legacyHref("/configurations", query, "results")).toBeNull();
+});

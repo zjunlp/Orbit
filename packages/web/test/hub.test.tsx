@@ -4,7 +4,7 @@ import type { CatalogEntry, MethodLine } from "../src/lib/api.ts";
 import { capLevel } from "../src/pages/Agents.tsx";
 import { CoverageMatrix, distinct } from "../src/pages/bench/Catalog.tsx";
 import { withLineage } from "../src/pages/bench/new-job.ts";
-import { basisText, benchmarkSeries } from "../src/pages/Methods.tsx";
+import { basisText, benchmarkSeries } from "../src/pages/Configurations.tsx";
 import { recentChanges } from "../src/pages/Overview.tsx";
 import { deriveHref } from "../src/pages/Trial.tsx";
 

@@ -101,10 +101,14 @@ const EVIDENCE = [
     label: "Calibration running",
     test: (e: CatalogEntry) => calState(e) === "running",
   },
-  { key: "real", label: "Real methods ran", test: (e: CatalogEntry) => e.methods.length > 0 },
+  {
+    key: "real",
+    label: "Evaluated configurations",
+    test: (e: CatalogEntry) => e.methods.length > 0,
+  },
   {
     key: "no-real",
-    label: "No real methods yet",
+    label: "No evaluated configurations yet",
     test: (e: CatalogEntry) => e.methods.length === 0,
   },
   {
@@ -849,8 +853,7 @@ function Detail({ e }: { e: CatalogEntry }) {
               setQuery({ ptab: t === "classification" ? null : t });
             }}
           >
-            {t[0]?.toUpperCase()}
-            {t.slice(1)}
+            {t === "methods" ? "Configurations" : `${t[0]?.toUpperCase()}${t.slice(1)}`}
           </a>
         ))}
       </nav>
@@ -872,7 +875,7 @@ export function CalibrationDetail({ e }: { e: CatalogEntry }) {
       ) : (
         <div className="catalog-empty">
           <p>
-            No calibration recorded. Calibration runs the do-nothing and reference methods on
+            No calibration recorded. Calibration runs the do-nothing and reference baselines on
             sampled tasks and checks validity, expected scores, repeats, cleanup and a rescore from
             saved evidence.
           </p>
@@ -918,7 +921,7 @@ function CalibrationResult({ r }: { r: CalibrationReport }) {
             {r.job}
           </Link>
         </span>
-        <span>methods {r.methods.join(", ")}</span>
+        <span>configurations {r.methods.join(", ")}</span>
         {r.mode === "policy" ? (
           <span>
             Policy {r.policyRef} · {r.samples} frozen episodes · {r.budget?.minutes} minute total
@@ -1054,14 +1057,14 @@ function MethodsDetail({ e }: { e: CatalogEntry }) {
     <div className="col" style={{ gap: 10 }}>
       {e.methods.length === 0 ? (
         <p className="muted">
-          No real method has run yet — only calibration methods. Calibration shows that the
-          integration judges correctly; it says nothing about how a model scores.
+          No evaluated configurations are recorded yet. Calibration checks the integration's scoring
+          behavior separately from model evaluation.
         </p>
       ) : (
         <table className="table">
           <thead>
             <tr>
-              <th>Method (agent · model · effort)</th>
+              <th>Configuration (agent · model · effort)</th>
               <th>Latest job</th>
               <th className="r">{metric.label} ± 95% CI</th>
               <th className="r">Valid / trials</th>
@@ -1282,7 +1285,7 @@ function CalibrateDialog({
           ) : (
             <>
               <p className="muted">
-                Runs the do-nothing method{canOracle ? " and the reference solution" : ""} on
+                Runs the do-nothing baseline{canOracle ? " and the reference solution" : ""} on
                 sampled tasks. No model is called.
               </p>
               <div className="form-grid">

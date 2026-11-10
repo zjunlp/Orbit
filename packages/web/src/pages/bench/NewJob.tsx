@@ -39,7 +39,7 @@ const TYPE_LABEL: Record<string, string> = {
   oracle: "Oracle baseline",
 };
 const typeLabel = (agent: string) => TYPE_LABEL[agent] ?? agent;
-const STEPS = ["Environment & tasks", "Methods", "Review & start"];
+const STEPS = ["Environment & tasks", "Configurations", "Review & start"];
 
 export function NewBenchJob() {
   const loc = useLocation();
@@ -51,7 +51,7 @@ export function NewBenchJob() {
   const agents = useAsync(() => api.agents(), []);
   const preset = loc.query.get("benchmark") ?? "";
   const subset = taskSubset(loc.query);
-  // "Derive next method" (design §9.16): the new methods descend from this revision and trials.
+  // Reuse a trial configuration while retaining its source version and supporting trials.
   const derive = {
     parent: loc.query.get("parent") ?? "",
     method: loc.query.get("method") ?? "",
@@ -293,7 +293,7 @@ function NewJobForm({
                   </p>
                 )}
                 {benchmark && info.loading && (
-                  <Loading what="Listing tasks and supported methods" />
+                  <Loading what="Listing tasks and supported configuration types" />
                 )}
                 {info.error && (
                   <div className="callout" role="alert">
@@ -372,14 +372,14 @@ function NewJobForm({
           {stage === 1 && (
             <>
               <section className="card">
-                <div className="card-h">Methods</div>
+                <div className="card-h">Evaluation configurations</div>
                 <div className="card-b col" style={{ gap: 12 }}>
                   <p className="muted">
                     Use an installed policy or a configured CLI agent. External policies must
                     already be available in the environment.
                   </p>
                   <label className="bench-field">
-                    Copy methods from an evaluation
+                    Copy configurations from an evaluation
                     <select
                       className="input"
                       value=""
@@ -400,10 +400,10 @@ function NewJobForm({
                     </select>
                   </label>
                   <details>
-                    <summary>Import method configuration</summary>
+                    <summary>Import configurations</summary>
                     <div className="col" style={{ gap: 8, marginTop: 8 }}>
                       <label className="bench-field">
-                        Methods JSON
+                        Configurations JSON
                         <textarea
                           className="input mono"
                           rows={5}
@@ -424,7 +424,7 @@ function NewJobForm({
                         disabled={!importText.trim()}
                         onClick={importFromText}
                       >
-                        Import methods
+                        Import configurations
                       </button>
                     </div>
                   </details>
@@ -455,11 +455,11 @@ function NewJobForm({
                       : (methodAllowed[0] ?? "empty");
                     setDrafts([
                       ...drafts,
-                      methodDraft({ name: `method-${drafts.length + 1}`, agent }),
+                      methodDraft({ name: `configuration-${drafts.length + 1}`, agent }),
                     ]);
                   }}
                 >
-                  Add method
+                  Add configuration
                 </button>
               </div>
             </>
@@ -469,14 +469,14 @@ function NewJobForm({
               <div className="card-h">Review & start</div>
               <div className="card-b col" style={{ gap: 16 }}>
                 <fieldset className="bench-lineage">
-                  <legend>Method lineage (optional)</legend>
+                  <legend>Configuration notes (optional)</legend>
                   <p className="faint">
-                    Record the parent and evidence for one method. Change the model, settings or
-                    bundle to create a new revision; leave the parent empty to rerun the same
-                    method.
+                    Record the source version and supporting trials for one configuration. Changing
+                    the model, reasoning effort or optional files creates a new version; leave the
+                    source version empty to repeat the same configuration.
                   </p>
                   <label className="bench-field">
-                    Method
+                    Configuration
                     <select
                       className="input"
                       value={lineageMethod?.id ?? ""}
@@ -484,21 +484,21 @@ function NewJobForm({
                       disabled={!lineageMethods.length}
                     >
                       {!lineageMethods.length && (
-                        <option value="">Add an Agent or policy method first</option>
+                        <option value="">Add an Agent or policy configuration first</option>
                       )}
                       {lineageMethods.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.name || "Unnamed method"}
+                          {m.name || "Unnamed configuration"}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="bench-field">
-                    Parent revision
+                    Based on version
                     <input
                       className="input mono"
                       value={parent}
-                      placeholder="12 hex digits, from the Methods page"
+                      placeholder="12 hex digits, from Evaluation configurations"
                       onChange={(e) => setParent(e.target.value.trim())}
                     />
                   </label>
@@ -508,12 +508,12 @@ function NewJobForm({
                       className="input"
                       rows={2}
                       value={note}
-                      placeholder="e.g. retry tool calls that return an error"
+                      placeholder="e.g. change reasoning effort from high to xhigh"
                       onChange={(e) => setNote(e.target.value)}
                     />
                   </label>
                   <label className="bench-field">
-                    Informed by trials
+                    Supporting trials
                     <input
                       className="input mono"
                       value={informedBy}
@@ -534,7 +534,7 @@ function NewJobForm({
                 </label>
                 <div className="bench-field-grid">
                   <label className="bench-field">
-                    Repetitions per task and method
+                    Repetitions per task and configuration
                     <input
                       className="input"
                       type="number"
@@ -610,7 +610,7 @@ function NewJobForm({
                   </div>
                 </details>
                 <p className="muted">
-                  All selected tasks run with every method for {seeds || "—"} repetition(s).
+                  All selected tasks run with every configuration for {seeds || "—"} repetition(s).
                   Scheduling uses the environment’s resource settings. Setup and model connectivity
                   are checked during execution.
                 </p>
@@ -669,7 +669,7 @@ function NewJobForm({
               <dd>{benchmark || "Not selected"}</dd>
               <dt>Tasks</dt>
               <dd>{selected.length}</dd>
-              <dt>Methods</dt>
+              <dt>Configurations</dt>
               <dd>{drafts.length}</dd>
               <dt>Repetitions</dt>
               <dd>{seeds || "—"}</dd>
@@ -681,7 +681,7 @@ function NewJobForm({
               <dd>{timeout ? `${timeout} min / solve` : "Environment preset"}</dd>
             </dl>
             <p className="muted">
-              {selected.length} tasks × {drafts.length} methods × {seeds || "—"} repetitions
+              {selected.length} tasks × {drafts.length} configurations × {seeds || "—"} repetitions
             </p>
             {registered?.resources && (
               <p className="muted">Resource limits come from the registered per-task settings.</p>
@@ -743,7 +743,7 @@ function MethodEditor({
   return (
     <section className="card">
       <div className="card-h">
-        Method {index + 1}
+        Configuration {index + 1}
         <span className="spacer" />
         <button className="btn sm ghost" type="button" onClick={onRemove}>
           Remove
@@ -830,7 +830,7 @@ function MethodEditor({
         )}
         {(cli || d.agent === "external") && (
           <details>
-            <summary>Advanced method settings</summary>
+            <summary>Advanced configuration settings</summary>
             <div className="col" style={{ gap: 12, marginTop: 12 }}>
               <label className="bench-field">
                 Effort
@@ -843,7 +843,7 @@ function MethodEditor({
               </label>
               {cli && (
                 <label className="bench-field">
-                  Method bundle path
+                  Prompt and skills directory
                   <input
                     className="input mono"
                     value={d.bundle}

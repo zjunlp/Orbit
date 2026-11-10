@@ -255,17 +255,21 @@ it("derives only the selected trial method from a multi-method evaluation", () =
   expect(copiedMethods(job, "", "111111111111")).toEqual([first]);
   expect(copiedMethods(job, "", "")).toEqual([first, second, empty]);
   expect(() => copiedMethods(job, "second", "111111111111")).toThrow("does not match");
-  expect(() => copiedMethods(job, "missing", "111111111111")).toThrow("single evaluated method");
-  expect(() => copiedMethods(job, "empty", "")).toThrow("single evaluated method");
+  expect(() => copiedMethods(job, "missing", "111111111111")).toThrow(
+    "single evaluated configuration",
+  );
+  expect(() => copiedMethods(job, "empty", "")).toThrow("single evaluated configuration");
   expect(JSON.stringify(job)).toBe(before);
   const lineage = {
     parent: "111111111111",
     note: "Fix tool recovery",
     informedBy: "original.00001",
   };
-  expect(() => withLineage(job.spec, lineage)).toThrow("Select one method");
+  expect(() => withLineage(job.spec, lineage)).toThrow("Select one configuration");
   expect(withLineage(job.spec, { ...lineage, method: "first" }).lineage).toEqual({
     first: { ...lineage, informedBy: ["original.00001"] },
   });
-  expect(() => withLineage(job.spec, { ...lineage, method: "empty" })).toThrow("Select the method");
+  expect(() => withLineage(job.spec, { ...lineage, method: "empty" })).toThrow(
+    "Select the configuration",
+  );
 });

@@ -162,8 +162,8 @@ export function BenchJobDetail({ id }: { id: string }) {
             )}
             <span className="faint">
               {job.spec.samplePlan
-                ? `${job.spec.samplePlan.items.length} samples × ${methods.length} methods`
-                : `${tasks.length} tasks × ${methods.length} methods × ${job.spec.seeds} seeds`}{" "}
+                ? `${job.spec.samplePlan.items.length} samples × ${methods.length} configurations`
+                : `${tasks.length} tasks × ${methods.length} configurations × ${job.spec.seeds} seeds`}{" "}
               · started {dateTime(job.createdAt)} · {duration(end - Date.parse(job.createdAt))}
             </span>
             {Object.entries(job.spec.options).map(([k, v]) => (
@@ -282,7 +282,7 @@ function Reports({ id, version }: { id: string; version: number }) {
               <th>Created</th>
               <th>Reason</th>
               <th>Plan</th>
-              <th>Per method</th>
+              <th>Per configuration</th>
             </tr>
           </thead>
           <tbody>

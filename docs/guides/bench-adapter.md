@@ -19,7 +19,7 @@
 ### ASI-Bench 版本兼容
 
 内置 `asi` 使用注册目录中的 ASI runner/scorer，不随 Orbit 捆绑一份 ASI 源码。
-Agent 方法需要完整源码 checkout、支持 `--fail-on-agent-error` 的 CLI，以及已修复的
+Agent 配置需要完整源码 checkout、支持 `--fail-on-agent-error` 的 CLI，以及已修复的
 Codex/Claude 沙箱状态判定：正常退出不能被后台请求的 `timed out` 日志覆盖。
 Orbit 在生成 Agent solve 命令前，使用 `config.python` 只读解析所选 adapter 与 CLI；
 识别已知的错误条件结构时拒绝启动并提示升级。
@@ -49,7 +49,7 @@ else:
 
 升级的是 `orbit bench ls` 中显示的**注册路径**。如果此前注册了固定快照，修改主 checkout
 或仅升级 pip 包不会更新快照；为后续实验注册包含修复的新快照，并保留旧批次的源码与版本记录。
-`orbit bench tasks asi` 仍仅列任务，Agent 兼容性检查在规划该方法的 solve 时执行。
+`orbit bench tasks asi` 仍仅列任务，Agent 兼容性检查在规划该配置的 solve 时执行。
 
 trial review 显示最新 attempt 的 `completed` / `execution_timeout` / `execution_failed` /
 `execution_incomplete`，分数是否 valid 由独立评分过程决定。真实超时仍可留下可评分的输出。
@@ -83,7 +83,7 @@ main 租用，否则由第一个非监控服务租用；监控服务看到同一
 `[environment] gpu_types` 限定可用型号；本机没有这些型号时可登记 `-c gpuTypes=any`（记为偏差）。
 
 verifier 必须把分数写到 `/logs/verifier/reward.txt`（一个数）或 `reward.json`（`reward` 键或唯一键），满分为 1。
-`environment/docker-compose.yaml` 中的其他服务作为服务容器与 solve Run 一起启动（就绪后才启动 Agent），`service = "<名>"` 的 artifacts 从该服务采集；服务日志在 solve Run 的 `output/services/<名>/log`。shared 模式（默认）的 verifier 在 solve Run 的同一容器里、方法结束后运行（after 阶段），这类 trial 不能 `bench rescore`。
+`environment/docker-compose.yaml` 中的其他服务作为服务容器与 solve Run 一起启动（就绪后才启动 Agent），`service = "<名>"` 的 artifacts 从该服务采集；服务日志在 solve Run 的 `output/services/<名>/log`。shared 模式（默认）的 verifier 在 solve Run 的同一容器里、求解结束后运行（after 阶段），这类 trial 不能 `bench rescore`。
 
 ## 2a. 声明式清单（L1）
 
@@ -101,8 +101,8 @@ orbit bench calibrate libero --sample 2
 | `kind`、`scoreKind`、`conditions`、`metrics`、`official` | 同适配器 `tasks` 回复（能力、固定条件、指标、官方口径） |
 | `tasks.list` 或 `tasks.command` (+`entrypoint`, `id`) | 固定任务表；或在镜像内无网络运行命令，最后一行 JSON 数组为任务，`id` 模板默认 `{{id}}`，字符串字段成为 tag |
 | `files` | 写入 trial 私有 staging、只读挂在 `/orbit-config` 的文件模板 |
-| `solve` | 各方法共用的 Run 设置：`image entrypoint command env resources network root timeoutMin mounts services` |
-| `methods.empty / oracle / external` | 允许的方法，各自覆盖 `solve`（例如 empty 的零动作策略服务、external 的模型服务镜像） |
+| `solve` | 各执行类型共用的 Run 设置：`image entrypoint command env resources network root timeoutMin mounts services` |
+| `methods.empty / oracle / external` | 允许的执行类型，各自覆盖 `solve`（例如 empty 的零动作策略服务、external 的模型服务镜像） |
 | `result.file` | solve 输出里的结果 JSON（`*` 只匹配一段，按名字取最后一个） |
 | `result.score` / `metrics` | `{path, reduce, scale}`：路径如 `tasks[*].episodes[*].metrics.success`，`reduce` 为 mean/sum/min/max/first/last/count/all/any |
 | `result.invalid` | `{path, when: truthy\|present, failure, issue}`：命中即无效并记封闭的失败类型（如上游 episode 报错 → `env_step`） |
@@ -150,14 +150,14 @@ Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`re
 `collect`、`timeoutMin`、`backend: "process"`、`cwd`……），另有两条规则：
 
 - **Agent 交给 Orbit**：`trial.method.agent` 是 `codex` / `claude-code` 时，solve 给 `"agentTask": {"instruction": "..."}`
-  而不是 `command`。Orbit 生成对应 CLI 命令并注入 auth、方法 bundle 和网络；适配器不要拼 `codex exec` 之类的参数。
+  而不是 `command`。Orbit 生成对应 CLI 命令并注入 auth、配置 bundle 和网络；适配器不要拼 `codex exec` 之类的参数。
   `oracle` / `empty` 给 `command`（没有参考解时对 oracle 报错即可，trial 会记为 invalid 并写明原因）。
   原生 runner 自己调用 Agent 时可以给 process `command`，Orbit 仍通过 Docker shim 注入 CLI、auth 和 bundle。
 - **不要写 Orbit 管的字段**：`name group params project snapshot auth agentBundle agent parentId priority passEnv`。
   benchmark 的 `env` 会加到两个 Run，`--pass-env` 的密钥只给 verify Run。
-- **外部 Agent 方法**：`agent: "external"` 必须给 `entrypoint`，可带 `model`、`effort`、非密钥 `config`、
-  `passEnv: ["MODEL_KEY"]`，不接受 auth/bundle。适配器解释入口并给 `command`；Orbit 只把方法的 passEnv 注入 solve，
-  不生成 CLI 命令。复杂配置用 `--methods-file` JSON 数组。内置 Harbor/ASI 不支持此方法时明确拒绝。
+- **外部 Agent 配置**：`agent: "external"` 必须给 `entrypoint`，可带 `model`、`effort`、非密钥 `config`、
+  `passEnv: ["MODEL_KEY"]`，不接受 auth/bundle。适配器解释入口并给 `command`；Orbit 只把配置的 passEnv 注入 solve，
+  不生成 CLI 命令。复杂配置用 `--methods-file` JSON 数组。内置 Harbor/ASI 不支持此执行类型时明确拒绝。
   GUI 评分需要活环境时，应在 runtime 中调用原版 grader 并保存结果，不能把离线证据检查描述为原环境重评。
 
 约定：
@@ -168,7 +168,7 @@ Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`re
   与 checkout，staging 里需要的东西每次重新准备，不要假设 solve 时写入的 staging 还在。
 - benchmark checkout 只读：不要在里面写结果；Python 设 `PYTHONDONTWRITEBYTECODE=1`。
 - 分数可信才算 `invalid: false`：评审 / scorer 内部出错、模型不可用导致的 0 分要标 `invalid` 并写 issue；
-  "方法没有产出"是方法的结果，应是有效的 0 分。取消、超时、未启动由 Orbit 判定，不用处理。
+  "被测 Agent 没有产出"是该次执行的结果，应是有效的 0 分。取消、超时、未启动由 Orbit 判定，不用处理。
 - 原生 runner 自己起容器时用 `backend: "process"`，容器经过 PATH 中的 `docker`（Orbit shim）才会被标记、限 GPU 与清理。
 - `trial.resources` 是提交 job 时解析的任务资源覆盖值（不是完整默认资源）；原生 runner 将其与适配器默认值合并，
   同时设置子容器限制。`trial.timeoutMin` 已按 CLI > 任务资源 > 默认资源解析，只控制 solve；verify 单独设预算。
@@ -214,8 +214,8 @@ GUI 轨迹使用 `GuiTrajectory` 版本 1：`{ version: 1, goal, steps, stopReas
 step 从 0 连续递增；第 0 行的 action 必须为 null，后续行保存动作执行后的截图。Web 负责前后帧配对；不接受外部 URL 或向上跳转的截图路径。
 
 `tasks` 回复还可带 `capabilities: { kind, methods, conditions, scoreKind, rescore }`。
-kind 为 browser/desktop/mobile/other，methods 为支持的方法类型数组，conditions 为非敏感字符串字典，scoreKind 为 binary/scalar，rescore 为 evidence/score/none。
-它决定 Web 的方法选择、条件展示、二元任务筛选和重查文案；未声明时使用通用界面。该信息不是环境或模型连通性检查。
+kind 为 browser/desktop/mobile/other，methods 为支持的执行类型数组，conditions 为非敏感字符串字典，scoreKind 为 binary/scalar，rescore 为 evidence/score/none。
+它决定 Web 的配置选择、条件展示、二元任务筛选和重查文案；未声明时使用通用界面。该信息不是环境或模型连通性检查。
 
 ### 指标（`metrics`，可选）
 
@@ -297,7 +297,7 @@ orbit bench add rcb /path/to/ResearchClawBench --adapter .../adapter.py --resour
   任务名悬停可见），之后改文件只影响新 job，改完不用重新登记。
 - Orbit 从不修改这个文件。
 
-**用实测修正**：每个 Run 都会记录实测峰值（`orbit show` 的 `usage`，Web Run 详情的 Measured）。用真实 Agent 方法跑过
+**用实测修正**：每个 Run 都会记录实测峰值（`orbit show` 的 `usage`，Web Run 详情的 Measured）。用真实 Agent 配置跑过
 之后：
 
 ```bash
@@ -307,7 +307,7 @@ orbit bench usage <job>... --suggest  # 只输出建议改动，资源文件片�
 
 建议规则：内存 / 显存 = 峰值 × 1.2 向上取档，OOM 后至少升一档，至少两次运行且余量过半才建议调低；CPU 取峰值档位；
 超时 = 最长耗时 × 1.5 取整小时。GPU 数量不给建议（这次没用 GPU 可能只是 Agent 没选择训练）。建议只打印，由人或
-其 Agent 合并进资源文件。solve 因内存不足被杀的 trial 记为 invalid（不当作方法的 0 分），调大 `memGB` 后重跑这些任务。
+其 Agent 合并进资源文件。solve 因内存不足被杀的 trial 记为 invalid（不当作该配置的 0 分），调大 `memGB` 后重跑这些任务。
 
 ## 5. 接入验收
 
@@ -323,7 +323,7 @@ orbit bench calibrate efe -t <task> --seeds 2 --json > calibration.json
 
 1. **oracle 满分**：`-m oracle` 在抽样任务上全部 valid 且为满分（没有参考解的 benchmark 省略，并写明）。
 2. **空答案零分**：`-m empty` 全部 valid 且为 0。invalid 说明适配器把"没有产出"当成了环境错误，要修。
-3. **与原版一致**：对同一批产物运行原版打分（或用原版工具跑同一方法），逐任务比较；差异要能解释（随机性、版本），
+3. **与原版一致**：对同一批产物运行原版打分（或用原版工具跑同一评测配置），逐任务比较；差异要能解释（随机性、版本），
    不能解释的视为适配器错误。评审为 LLM 时，同一份产物多次打分的波动本身就要先量出来。
 
-然后再用真实 Agent 方法跑，`orbit bench compare <job...>` 或 Web `/bench/compare` 查看。
+然后再用真实 Agent 配置跑，`orbit bench compare <job...>` 或 Web `/bench/compare` 查看。

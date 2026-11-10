@@ -186,7 +186,7 @@ export function ConversationViewer({ c }: { c: Conversation }) {
                   {q
                     ? "No matching events in this turn."
                     : t.events.length === 0 && whole
-                      ? "No messages or tool calls: the method did nothing (as the do-nothing baseline should)."
+                      ? "No messages or tool calls: this is the expected behavior of the do-nothing baseline."
                       : "No events in this turn."}
                 </div>
               )}

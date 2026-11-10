@@ -39,7 +39,7 @@ export function BenchComparePage() {
 
   return (
     <>
-      <TopBar crumbs={[{ label: "Bench", href: "/bench" }, { label: "Compare methods" }]} />
+      <TopBar crumbs={[{ label: "Bench", href: "/bench" }, { label: "Compare configurations" }]} />
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
           <section className="col" style={{ gap: 8 }}>
@@ -60,7 +60,7 @@ export function BenchComparePage() {
           </section>
           {ids.length === 0 ? (
             <Empty title="Pick jobs to compare" icon={<IconCompare size={36} />}>
-              Methods of the selected jobs are compared task by task on valid trials.
+              Configurations of the selected evaluations are compared task by task on valid trials.
             </Empty>
           ) : cmp.error ? (
             <div className="callout">{cmp.error}</div>

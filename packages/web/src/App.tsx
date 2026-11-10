@@ -1,11 +1,11 @@
 import { Component, useEffect, useState, useSyncExternalStore } from "react";
 import {
   IconBot,
-  IconBranch,
   IconChip,
   IconDashboard,
   IconFlask,
   IconKeyboard,
+  IconLayers,
   IconLibrary,
   IconLogo,
   IconMoon,
@@ -24,7 +24,7 @@ import { AgentsPage } from "./pages/Agents.tsx";
 import { BenchComparePage, BenchJobDetail, BenchJobs, NewBenchJob } from "./pages/Bench.tsx";
 import { BenchmarksPage } from "./pages/Benchmarks.tsx";
 import { Compare } from "./pages/Compare.tsx";
-import { MethodsPage } from "./pages/Methods.tsx";
+import { ConfigurationsPage } from "./pages/Configurations.tsx";
 import { Overview } from "./pages/Overview.tsx";
 import { Resources } from "./pages/Resources.tsx";
 import { RunDetail } from "./pages/RunDetail.tsx";
@@ -95,7 +95,7 @@ export function App() {
     "g o": () => navigate("/"),
     "g b": () => navigate("/benchmarks"),
     "g a": () => navigate("/agents"),
-    "g m": () => navigate("/methods"),
+    "g m": () => navigate("/configurations"),
     "g e": () => navigate("/bench"),
     "g r": () => navigate("/runs"),
     "g c": () => navigate("/compare"),
@@ -128,7 +128,7 @@ export function App() {
   else if (loc.path === "/bench" || loc.path === "/bench/") page = <BenchJobs />;
   else if (loc.path === "/benchmarks") page = <BenchmarksPage />;
   else if (loc.path === "/agents") page = <AgentsPage />;
-  else if (loc.path === "/methods") page = <MethodsPage />;
+  else if (loc.path === "/configurations") page = <ConfigurationsPage />;
   else if (loc.path === "/runs") page = <Runs />;
   else if (loc.path === "/compare") page = <Compare />;
   else if (loc.path === "/resources") page = <Resources />;
@@ -188,7 +188,7 @@ export function App() {
         <div className="rail-group">Evaluate</div>
         {nav("/benchmarks", "Benchmarks", <IconLibrary />, path === "/benchmarks", "b")}
         {nav("/agents", "Agents", <IconBot />, path === "/agents", "a")}
-        {nav("/methods", "Methods", <IconBranch />, path === "/methods", "m")}
+        {nav("/configurations", "Configurations", <IconLayers />, path === "/configurations", "m")}
         {nav("/bench", "Evaluations", <IconFlask />, evalActive, "e")}
         <div className="rail-group">Operate</div>
         {nav("/runs", "Runs", <IconRuns />, runsActive, "r")}
@@ -276,7 +276,10 @@ class PageBoundary extends Component<{ children: React.ReactNode }, { error: Err
 
 const SHORTCUTS: [string, string][] = [
   ["⌘K / Ctrl K", "Command palette: jump to any run or page"],
-  ["g o · g b · g a · g m · g e", "Go to Overview · Benchmarks · Agents · Methods · Evaluations"],
+  [
+    "g o · g b · g a · g m · g e",
+    "Go to Overview · Benchmarks · Agents · Configurations · Evaluations",
+  ],
   ["g r · g c · g s · g p", "Go to Runs · Compare · Resources · Settings"],
   ["j / k", "Move down / up in lists"],
   ["Enter / o", "Open the selected run"],

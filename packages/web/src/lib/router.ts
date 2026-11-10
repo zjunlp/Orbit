@@ -72,12 +72,14 @@ export function onLinkClick(e: React.MouseEvent<HTMLAnchorElement>) {
   navigate(a.pathname + a.search + a.hash);
 }
 
-/** Preserve saved views when moving the old home and Catalog into their own pages. */
+/** Preserve saved views when moving or renaming pages. */
 export function legacyHref(path: string, query: URLSearchParams, hash = ""): string | null {
   const normalized = path.replace(/\/+$/, "") || "/";
   const q = new URLSearchParams(query);
   let destination = normalized;
-  if (normalized === "/bench" && q.get("tab") === "catalog") {
+  if (normalized === "/methods") {
+    destination = "/configurations";
+  } else if (normalized === "/bench" && q.get("tab") === "catalog") {
     destination = "/benchmarks";
     q.delete("tab");
     const evidence: Record<string, string> = {

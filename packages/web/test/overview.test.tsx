@@ -45,10 +45,10 @@ it("keeps loaded data visible with a stale-data warning on refresh failure", () 
   expect(html).toContain("Showing the last loaded data.");
   expect(html).toContain("Getting started");
 });
-it("does not present pending methods as zero revisions", () => {
+it("does not present pending configurations as zero versions", () => {
   const html = render(loaded(emptyCatalog), { ...loaded(undefined), loading: true });
   expect(html).toContain("Loading overview");
-  expect(html).not.toContain("0 method lines");
+  expect(html).not.toContain("0 named configurations");
 });
 
 it("uses each comparison's metric unit and improvement direction", () => {

@@ -18,7 +18,7 @@ R5（任意 Agent + 跨场景评测规范，§6、§9）中只有 Agent 注册�
 - **Orbit 是插件和规范**：提供 CLI（Agent 通过 bash 调用，`--json` 输出）、薄 MCP、skill 与约定（指标、产物、实验笔记的写法）。
 - **两种用法，同一个执行原语 Run**：
   1. 日常科研：宿主机上的 Agent 改代码 → `orbit run` 把代码快照放进容器跑 → 监控、比较、复盘。
-  2. 刷榜：`Agent + 方法包 × Benchmark`，每个 trial 在容器中运行 Agent，再独立评测，保留轨迹和分数。
+  2. 刷榜：`Agent + 模型与评测配置 × Benchmark`，每个 trial 在容器中运行 Agent，再独立评测，保留轨迹和分数。
 - **使用范围**：单人使用；一台或多台自己的机器（可跨网络，Tailscale）；空闲资源都可以用。
 - **不做**：多用户/权限、云控制面、自研 Agent 循环、自研实验追踪全功能替代品、官方榜单自动提交、手机对话（后续再议）。
 
@@ -325,7 +325,7 @@ HTTP wait 按 Run ID 保存等待者，与全部 SSE 订阅共用一个 Run chan
 Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行详情、GitHub 的 diff 视图）：
 
 - **Runs**：按 group 折叠、状态筛选、全文过滤（名称/参数/标签/分支），多选对比，键盘导航。三类条目：单个 Run、
-  `-g` 实验组、bench job（显示为 job 行：benchmark、trial 进度、各方法均分；展开为 trial 行，每行 solve → verify
+  `-g` 实验组、bench job（显示为 job 行：benchmark、trial 进度、各配置均分；展开为 trial 行，每行 solve → verify
   状态、分数、有效性，点击进入 trial 页）。顶部按 All / Experiments / Benchmarks 筛选。首次加载及 SSE 重连时逐页加载全部 Run；
   加载期间的 SSE 更新和删除覆盖快照，加载途中断线重连会再取一遍，文件夹计数与筛选不再受 1000 条上限影响。
 - **Trial**（`/bench/<job>/trials/<trial>`）：结果与 issues、solve → verify 时间线与实测用量、重新评分前的历次结果；标签由 adapter 的
@@ -339,7 +339,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 - **Compare**：`?ids=` / `?group=`，按 seed 聚合 mean ± std、相对基线的变化、曲线叠加、配置差异。
 - **Resources**：GPU 卡片（Orbit 租约 / 外部占用 / 空闲、显存与利用率，以及占用显存的每个进程：用户、
   命令、PID、容器或 Run、已运行多久）、租约与队列、worker 节点表（§8）。
-- **Bench**：job 列表、job 详情（分数矩阵，格子进入 trial 页）、方法对比（§7）。Merge retries 对话框提供来源 ID 和选项解释，
+- **Bench**：job 列表、job 详情（分数矩阵，格子进入 trial 页）、配置对比（§7）。Merge retries 对话框提供来源 ID 和选项解释，
   先预览 adopted、reclassified（task/kind）、removed runs/jobs，再输入目标 job ID 并携带 digest 应用；改选项后必须重新预览。
   使用原生 modal dialog 管理焦点与 Esc，关闭后恢复入口焦点。
 - **轮询**：`useAsync` 与 Logs 在隐藏标签页暂停轮询，重新可见时刷新一次后恢复；进行中的请求仍可完成，SSE 继续接收。
@@ -466,13 +466,17 @@ Agent 的 home 放在 `/orbit/agent/<name>`，会话轨迹随 Run 记录保留�
 ## 7. 刷榜（bench）
 
 ```
-Method       = Agent definition + model + auth + bundle, or Policy snapshot, or external entrypoint + config
-Benchmark    = tasks + per-task environment + instruction + verifier + aggregation
-Trial        = task × Method × seed → solve Run (Agent inside) + verify Run (separate)
-Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore, metrics?, issues[], cleanup }
+Configuration = Agent definition + model + effort + auth + optional bundle, or Policy snapshot, or external entrypoint + config
+Benchmark     = tasks + per-task environment + instruction + verifier + aggregation
+Trial         = task × Configuration × seed → solve Run (Agent inside) + verify Run (separate)
+Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore, metrics?, issues[], cleanup }
 ```
 
-- **Method**（`contracts.Method`）：`{ name, agent, auth?, model?, effort?, bundle?, policyRef?, policySnapshot?, entrypoint?, config?, passEnv? }`。
+当前产品使用“评测配置”（Evaluation configuration）：选择运行器、模型、思考强度和可选提示词 / skills 包，
+或选择 Policy / external 的具体配置。独立 Method 的身份、定义与生命周期尚未设计，留待后续引入。
+为兼容已有作业与调用方，类型 `Method`、API / JSON 的 `method(s)` 字段和 CLI 参数保留原名；以下接口说明中的旧名称均指评测配置。
+
+- **评测配置**（兼容类型 `contracts.Method`）：`{ name, agent, auth?, model?, effort?, bundle?, policyRef?, policySnapshot?, entrypoint?, config?, passEnv? }`。
   `agent` 是一个已注册的 Agent 名（§6；`codex`、`claude-code`、`pi`、`opencode`…），或 `external`（adapter 自己的策略）、
   `oracle`（跑参考解）、`empty`（不作答，用于检验适配器），或 `policy`（独立具身策略，见 §9.4a）。这些保留名不能注册为 Agent。
   `policy` 通过 `policyRef` 选择已登记定义，提交时保存 `policySnapshot`；不接收 CLI 的 auth、model 或 bundle。
@@ -667,11 +671,11 @@ daemon 重启后按 pid + 启动时间重新接管进程。运行中的 process 
 `GET/POST /bench/jobs`、`GET /bench/jobs/:id`、`POST /bench/jobs/:id/{cancel,rescore}`、`GET /bench/compare?jobs=a,b`；
 CLI `orbit bench add|ls|rm|tasks|run|jobs|show|cancel|rescore|compare [--metric]|usage`（`add --adapter <name|path> -c KEY=VALUE
 --resources <file>`）；Web `/bench`（job 列表与登记的 benchmark）、
-`/bench/<job>`（方法均分、有效性分布、任务 × 方法分数矩阵、问题列表与 solve/verify Run 链接）、
+`/bench/<job>`（配置均分、有效性分布、任务 × 配置分数矩阵、问题列表与 solve/verify Run 链接）、
 `/bench/compare?jobs=`（逐任务对比、全部与配对均值 ± 95% CI、相对第一列的配对差、带参考线的排名条；`?metric=` 切换指标）。接入新 benchmark 见
 [guides/bench-adapter.md](guides/bench-adapter.md)。
 
-Web `/bench/new` 支持环境/任务选择、方法配置或导入、复制已有 job、运行数量预览与提交。固定环境条件只读，复制使用当前登记并提示与原快照的差异。详情区分有效零分和评测异常，支持任务/方法/seed 筛选；重查期间根据 trial 刷新，不因 job 已结束停止更新。Compare 可选择任意方法为基线，复用共享统计函数重算配对差，按任务改善/退步筛选并链接到 seed 列表；筛选不改变整体统计。Trial 的 trajectory 查看器提供动作前后画面、步骤链接、键盘导航、原图/缩放和缺失记录提示，默认仅加载选中截图，保留 Markdown 与非 GUI review。指南：[GUI Web](guides/gui-bench-web.md)。
+Web `/bench/new` 支持环境/任务选择、评测配置编辑或导入、复制已有 job、运行数量预览与提交。固定环境条件只读，复制使用当前登记并提示与原快照的差异。详情区分有效零分和评测异常，支持任务/配置/seed 筛选；重查期间根据 trial 刷新，不因 job 已结束停止更新。Compare 可选择任意配置为基线，复用共享统计函数重算配对差，按任务改善/退步筛选并链接到 seed 列表；筛选不改变整体统计。Trial 的 trajectory 查看器提供动作前后画面、步骤链接、键盘导航、原图/缩放和缺失记录提示，默认仅加载选中截图，保留 Markdown 与非 GUI review。指南：[GUI Web](guides/gui-bench-web.md)。
 
 - **外部适配器示例**：ResearchClawBench（`examples/bench-adapters/researchclawbench/`）。solve 为 Ubuntu 22.04 容器，
   任务 workspace 在 `/task`（`data/`、`related_work/` 只读，其余可写，结束时采集），原版指令模板，RCB 的 venv 按宿主路径
@@ -1146,7 +1150,7 @@ coding agent / VLA 正向校准；覆盖数字在 `coverage` 落地前不对外�
 ### 9.15 Web：Catalog 与工具和模拟用户对话视图（2026-11-05）
 
 依据 [Web UI 调研](research/web-ui/landscape.md)。原则：结果与证据一起出现；总览是紧凑分组表、逐层展开；对话是主视图、树与原始
-JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"四件事分开显示，不合成一个健康分。
+JSON 是辅助；"能跑 / 校准通过 / 真实 Agent 或 Policy 跑过 / 与官方对齐"四件事分开显示，不合成一个健康分。
 
 **校准成为一等记录**（取代只在 CLI 内存中判定）：
 
@@ -1157,7 +1161,7 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
   报告按需从 trial 计算，不另建账本。`orbit bench calibrate` 改为调用这个 API，输出不变。
 - `GET /api/v1/bench/catalog` 的 `entries[]`：每个已登记 benchmark 一行——登记信息、任务列表摘要（类别、profile、supported/listed、按 suite
   的覆盖与原因；daemon 内存缓存、后台刷新，列表失败保留错误和上次成功时间）、最近 5 次校准（离散记录，不画连续健康条）、
-  真实方法（agent/model/effort 相同视为同一方法）最近一次的主指标与 valid/total、保真度。保真度级别沿用 §9.10，Web 显示名称而不是
+  实际评测配置最近一次的主指标与 valid/total、保真度（配置版本按 §9.16 区分）。保真度级别沿用 §9.10，Web 显示名称而不是
   `L*`（避免与接入层级 L0–L2 混淆）：校准通过由报告算出；样例对齐与真实对照由 adapter 在 `capabilities.parity` 声明证据，
   未声明显示"未验证"。另有 §9.18 的 `supported[]` 产品目录，与本地登记证据分开。
 
@@ -1180,33 +1184,34 @@ JSON 是辅助；"能跑 / 校准通过 / 真实方法跑过 / 与官方对齐"�
 
 **不做**：跨类别总榜或单一健康分；从 Markdown 复制一份 Web 目录（目录共用 §9.18 的源码数据）；从缺失证据推测成功或补 0；把 Rescore 表述为重跑 Agent。
 
-### 9.16 Web 信息架构：any harness × any bench × 迭代进化（2026-11-06）
+### 9.16 Web 信息架构：评测配置与结果比较（2026-11-10）
 
-依据 [信息架构调研](research/web-ui/information-architecture.md)。Web 围绕三个对象组织：**Agents**（被评测的 harness /
-policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 方法包的版本，迭代的对象）；Evaluations 与 Runs 是它们
-的执行记录。本轮实现与验收记录见 [Web 信息架构任务](tasks/20261106-web-ia.md)。仍复用现有 registry、Job、Trial、Run 与报告，
-不新增状态库或执行路径。
+Web 围绕 **Agents**（运行器与已知策略入口）、**Benchmarks**（评测什么）和 **Evaluation configurations**（评测配置）组织；
+Evaluations 与 Runs 保存执行记录。评测配置页面从历史评测聚合运行器、模型、思考强度、可选提示词 / skills 包，以及 Policy / external 配置，
+按配置名称归组、按内容摘要区分版本。它没有独立登记的 Method 实体，模型或推理预算的变化也不代表方法进化。
+Method 的定义与生命周期留待后续设计。[原信息架构调研](research/web-ui/information-architecture.md) 和
+[原实现验收](tasks/20261106-web-ia.md) 保留历史名称；当前实现仍复用 registry、Job、Trial、Run 与报告。
 
 **导航**：侧栏默认展开为“图标 + 文字”，可折叠为图标栏，偏好记在本地；窄屏自动折叠。名称与快捷键在悬停或键盘聚焦时可见。
 
 | 组 | 项（快捷键） | 内容 |
 | --- | --- | --- |
-| — | Overview（`g o`） | 覆盖、Agent、当前执行与方法变化 |
+| — | Overview（`g o`） | 覆盖、Agent、当前执行与配置比较 |
 | Evaluate | Benchmarks（`g b`） | Catalog 一级页 |
 | | Agents（`g a`） | Agent 定义、能力、凭据与证据 |
-| | Methods（`g m`） | 方法版本与评测结果 |
+| | Configurations（`g m`） | 评测配置版本与结果 |
 | | Evaluations（`g e`） | 作业列表、作业、trial、作业对比 |
 | Operate | Runs（`g r`）、Resources（`g s`） | 运行与资源；Runs 对比保留原入口 |
 | 底部 | Settings（`g p`）、快捷键、主题、连接状态 | Settings 保留凭据配置并链接 Agents |
 
 `/` 是 Overview，Runs 列表在 `/runs`；`/bench` 与 `/compare` 保留；旧 Catalog 地址 `/bench?tab=catalog` 转到 `/benchmarks`。
-界面文字为英文。
+评测配置入口为 `/configurations`，页面标题为 “Evaluation configurations”；旧 `/methods` 地址保留兼容。界面文字为英文。
 
-**Overview**：顶部展示产品库 benchmark 家族数（按产品 ID 去重）、已登记 Agent 数和 Method revision 数；
-“On this node”另列本地登记数、最近一次校准通过的登记数、具有真实方法记录的登记数，不能把产品目录当作本机可运行证据。
+**Overview**：顶部展示产品库 benchmark 家族数（按产品 ID 去重）、已登记 Agent 数和评测配置版本数；
+“On this node”另列本地登记数、最近一次校准通过的登记数、具有真实 Agent / Policy 运行记录的登记数，不能把产品目录当作本机可运行证据。
 六维发现入口（§9.17）按子字段展示代表取值及命中的产品家族数；同一 profile 判断取值，按产品 ID 去重，取值间允许重叠。
 点击取值进入 `/benchmarks?dimension=<group>&<field>=<value>`，展开对应维度并筛选；未知与明确空集合仍区分为
-“Not annotated”与“None”。保留运行中的作业、排队原因、待复盘失败和同一评测条件下方法版本的配对变化。
+“Not annotated”与“None”。保留运行中的作业、排队原因、待复盘失败和同一评测条件下配置版本的配对比较。
 即使本地没有登记，仍可浏览已适配产品；本地首次使用步骤为登记 benchmark → 配置凭据 → 校准 → 选兼容组合运行。
 读取失败显示错误与重试，避免永久加载。旧 C1–C7 编号与七类覆盖比例不再出现在首页。
 
@@ -1227,7 +1232,7 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
   BrowserGym 的 MiniWoB 身份记录任务源码版本，运行框架作为 variant/conditions；vla-eval 的其他 benchmark 类不会冒充 LIBERO。
 - 原生对话框编辑登记级六维默认值，具体 task 声明仍优先。CLI 通过 `bench label --taxonomy` 或
   `--taxonomy-file` 设置相同默认值；两种输入互斥。身份、分类与运行条件分开，不能通过改标签改变执行。
-- 本地登记视图的 Evidence 筛选与统计仍按登记记录显示抽样校准、真实方法与 parity；页面注明其登记和样本范围，
+- 本地登记视图的 Evidence 筛选与统计仍按登记记录显示抽样校准、真实 Agent / Policy 运行与 parity；页面注明其登记和样本范围，
   不声称当前筛选命中的每道题都经过验证。覆盖视图只表达覆盖，不表达成绩。
   强制刷新只请求一次重列任务，随后轮询缓存进度。
 
@@ -1249,27 +1254,28 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
   entrypoint，尚无原生 Policy 目录。后续可增加 VLA Policies 视图，列模型版本、可用配置与按 suite/recipe 验证的关系；
   不能把历史 external 列表冒充已适配模型目录，也不能把 VLA 模型加入 benchmark 的六维词表。
 
-**Methods 与迭代进化**：
+**Evaluation configurations：评测配置与比较**：
 
-- 作业提交时保存每个方法的 `revision` 与 `basis`：Agent、解析后的模型、effort、凭据类型、提交节点可见的 CLI 版本、
-  方法包文件内容 digest，或 external entrypoint / 配置。凭据值不进入摘要；Catalog 也按 revision 区分方法包，
-  不再仅按 agent/model/effort 合并。方法包按安装时的解引用行为计算内容与执行位摘要并限制大小。
-  同名不同内容为不同版本；旧作业按已有字段补算，缺少实际模型、CLI 或 external 运行镜像信息时标 “approximate”。
-  摘要不冻结可变镜像标签、安装命令或提交后的方法包，因此不能当作完整运行环境指纹。
-- 可选派生信息为 `BenchJobSpec.lineage[method] = { parent?, note?, informedBy[] }`，由用户或 Agent 显式填写
-  （`orbit bench run --parent … --note … --informed-by …`）。旧作业的 approximate revision 也可作为父版本；不允许把未改变的方法派生为自身。
-  Trial 的 “Derive next method” 只复制当前 trial 对应的方法，并保留原任务选择供调整，避免把其他方法错误归入同一谱系；无效 trial 用原方法重试。
-- `GET /methods?metric=<name>` 返回方法名称下各版本及结果；缺省指标为 benchmark 主指标。结果包含评测条件摘要、任务集摘要、
+- 作业提交时保存每个配置的 `revision` 与 `basis`：Agent、解析后的模型、effort、凭据类型、提交节点可见的 CLI 版本、
+  可选配置包文件内容 digest、Policy 快照摘要，或 external entrypoint / 配置。凭据值不进入摘要；Catalog 也按 revision 区分配置包，
+  不再仅按 agent/model/effort 合并。配置包按安装时的解引用行为计算内容与执行位摘要并限制大小。
+  同名不同内容为不同配置版本；模型、effort 或 CLI 版本变化也会产生新版本。旧作业按已有字段补算，缺少实际模型、CLI 或 external 运行镜像信息时标 “approximate”。
+  摘要不冻结可变镜像标签、安装命令或提交后的配置包，因此不能当作完整运行环境指纹。
+- 可选配置来源仍使用兼容字段 `BenchJobSpec.lineage[method] = { parent?, note?, informedBy[] }`，由用户或 Agent 显式填写
+  （`orbit bench run --parent … --note … --informed-by …`）。旧作业的 approximate revision 也可作为来源版本；未改变的配置不能引用自身为来源。
+  Trial 的 “Adjust configuration” 只复制当前 trial 对应的配置，并保留原任务选择供调整；无效 trial 可用原配置重试。
+  这些字段记录配置复用和参考证据，不定义方法谱系。
+- 兼容 API `GET /methods?metric=<name>` 返回配置名称下各版本及结果；缺省指标为 benchmark 主指标。结果包含评测条件摘要、任务集摘要、
   指标声明与已有不可变报告修订。条件包含 benchmark 源版本、运行配置、seed 与评分规则；不同条件不自动给出进步 Δ。
   dirty 源码的内容无法由 commit 标识，跨作业不自动比较。主指标存在匹配计划的报告时，从冻结 entries 计算汇总与 Δ；
   其他指标或无报告时用当前 trial，并返回 `reportRevision: null`，不冒充不可变历史。
   同条件的不同版本按配对任务比较，公共任务的资源覆盖必须一致；显式 parent 优先且不静默替换为其他版本；严格任务子集标 “regression subset”。
   Web 按条件与任务集分开趋势，支持指标选择、固定报告链接及退步任务入口；缺少报告或证据时明确保留缺项。
-- 重试归并也要求方法 revision 一致，不能把变更过的方法包或 CLI 的结果归入旧版本。
-  闭环为：失败证据 → invalid 修环境重试 / valid 失败派生方法 → 回归子集 → 更大集合确认。改进由人或 Agent 决定。
+- 重试归并也要求配置 revision 一致，不能把变更过的配置包或 CLI 的结果归入旧版本。
+  用户或 Agent 可根据失败证据修复环境后重试，或调整评测配置并比较可比结果；页面不将这些变化称为方法进化。
 
 **不做**：跨 benchmark 总分或总榜；单一 Ready 徽章合并安装、凭据、能力、校准与有效性；按 hub 声称的套件数宣传接入量；
-无证据的谱系；Web 内的科研编排。
+独立 Method 系统或方法进化声明；Web 内的科研编排。
 
 ### 9.17 Benchmark 六维分类 v1（2026-11-09）
 
@@ -1413,14 +1419,14 @@ Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包�
 - 同一子字段多选为 OR、不同子字段为 AND，必须由同一个 task/variant 同时满足，然后再按 benchmark 身份归并。
   science + 终端的子集与 software + GUI 的子集不能合成 science + GUI 命中。缺少足够细的描述时，
   不把集合分别覆盖的维度宣称为联合覆盖；未知不算已覆盖。
-- 本轮校准、真实方法、parity 等仍是登记级证据，保留原任务与协议范围；命中分类不代表筛选任务都经过验证。
+- 本轮校准、真实 Agent / Policy 运行、parity 等仍是登记级证据，保留原任务与协议范围；命中分类不代表筛选任务都经过验证。
   某子集的证据不提升整个集合或另一子集，任务级分类筛选不改写登记级证据统计。
   领域、任务和目标计数是非互斥覆盖数，不相加为 benchmark 总量，不生成跨 benchmark 总分。
 - 未声明、明确未知与明确不存在分开；未标注不补猜。词表外内容保留为补充标签，不参与受控词表的覆盖计数。
   v1 不增加难度或凭任务名推导的能力标签。
 - benchmark 来源与版本沿用现有身份。作业保留已有 benchmark/capabilities 快照，当前标签修改不重写历史报告；
-  本轮未新增逐 task 的完整历史 taxonomy 快照或独立分类修订。分类元数据不进入方法可比性与重试兼容指纹。
-  方法的模型、harness、权重与工具配置属于 Method；Run 记录执行设施，均不由分类代替。
+  本轮未新增逐 task 的完整历史 taxonomy 快照或独立分类修订。分类元数据不进入配置可比性与重试兼容指纹。
+  模型、harness、权重与工具配置属于评测配置（兼容类型 `Method`）；Run 记录执行设施，均不由分类代替。
 - C1–C7、旧 `domains` / `profiles` 与旧作业保持兼容，作为工程元数据或旧记录展示。只迁移有明确语义对应的值，
   当前精确回退仅为 `software`、`machine-learning`、`science`、`games` 同值和 `embodied` → `robotics`；
   `knowledge`、`gui-web`、`data-analysis` 等保留原标签，不猜新字段。不从 C2 猜软件领域、从 C5 猜感知能力、
@@ -1459,7 +1465,7 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 - 本地登记、安装和运行证据继续独立呈现。目录的接入说明说明如何准备环境；启动评测仍需要明确选择现有登记，
   目录页不静默创建登记或启动任务。更新本地标签不会修改随版本发布的产品分类。
 - VLA 是被测 Policy；LIBERO、SimplerEnv、RoboCasa365 等是 benchmark。具体权重、归一化、服务与控制配置由
-  PolicyDefinition 保存，Method 通过 policyRef 选用并冻结快照；一次执行进入 Evaluation/Run。模型和 benchmark 的
+  PolicyDefinition 保存，评测配置通过 `policyRef` 选用并冻结快照；一次执行进入 Evaluation/Run。模型和 benchmark 的
   支持关系按 suite/recipe 展示，不能从模型家族名推断任意组合可运行。
 
 原生具身家族与模型组合的详细范围见 [具身兼容矩阵](guides/embodied-compatibility.md)。其中 RoboCasa365 的
@@ -1472,7 +1478,7 @@ GR00T recipe 是 N1.5，LIBERO 与 SimplerEnv 使用 N1.7；矩阵中的真实�
 | R0 | 清理旧实现、TS 骨架、规则与设计 | `pnpm verify` 通过；`orbit resources` 在本机读出真实 GPU/CPU/内存 |
 | R1 | 单机日常科研闭环 | Codex 估算资源并提交 3-seed GPU sweep，排队、`orbit wait`、失败留证据；Web 看到 diff、曲线、日志、会话；Codex 与 Claude Code 都走通 |
 | R2 | 认证模块与通知 | login / API key / relay 三类 profile 可用于容器内 Codex、Claude Code；完成/失败通知 |
-| R3 | 刷榜 | ASI 原生包装、TB-Science Harbor 格式在同一 Run/租约上运行；方法对比页面；新 bench 接入指南 |
+| R3 | 刷榜 | ASI 原生包装、TB-Science Harbor 格式在同一 Run/租约上运行；配置对比页面；新 bench 接入指南 |
 | R4 | 多节点 | 一个 Agent 调度两台机器 8 张 GPU；已实现，仅同机双 daemon 仿真验证（§8） |
 | R5 | 任意 Agent + 跨场景评测规范 | Agent 注册表已实现（§6）；P2–P8 见 §9.13 |
 

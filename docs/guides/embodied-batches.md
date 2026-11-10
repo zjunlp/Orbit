@@ -11,7 +11,7 @@ orbit bench run libero-native --method pi05=policy,policyRef=pi05-libero \
 
 `--batch-size` accepts 2–256; the selected benchmark also declares its own maximum (the native
 adapter accepts 128). Without the option, existing single-episode behavior is preserved. The
-daemon groups consecutive samples of one method with the same effective resources and timeout
+daemon groups consecutive samples of one evaluation configuration with the same effective resources and timeout
 (the job `--timeout` takes precedence over per-task timeouts), preserving sample-plan order. The
 grouping is part of the comparison conditions. Each group gets one solve Run, one model service and one resource
 lease. Every episode remains an individual Trial with its own evidence directory and CPU verify Run.
@@ -22,7 +22,7 @@ The model's declared random stream continues across the fixed group. Environment
 state reset for each episode; service RNG reset is not implied. Batch size, complete ordered sample
 plan and resource partition conditions enter comparison fingerprints. A subset with a new model
 service does not reproduce a later episode's service-stream prefix. To retry, submit the complete
-original plan with the same method, batch size and resource conditions. Consolidation validates the
+original plan with the same evaluation configuration, batch size and resource conditions. Consolidation validates the
 original prefix and protects valid completed episodes; it does not choose historical best scores.
 Adopting a compatible retry retains earlier solve/verify references, outcomes and scoring history
 in the Trial's `priorAttempts`. Their shared files remain available until the owning job is deleted.

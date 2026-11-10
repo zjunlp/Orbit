@@ -45,10 +45,10 @@ Validation is deliberately scoped. `sample-checked` records bounded real integra
 `adapter-tested` records adapter tests; `pending-calibration` marks outstanding real calibration.
 Each product entry links its evidence and limits. None of these labels promises local installation,
 every task being runnable, compatibility with every model, or full-suite statistical equivalence.
-Local registrations and their calibration or method evidence remain independent of these product labels.
+Local registrations and their calibration or Agent/Policy evaluation evidence remain independent of these product labels.
 
 VLA models are evaluated **Policies**, not benchmark environments. Their concrete weights,
-normalization and serving configuration belong to Policy definitions; a Method selects one policy
+normalization and serving configuration belong to Policy definitions; an evaluation configuration selects one policy
 and freezes it for evaluation. The [compatibility matrix](guides/embodied-compatibility.md) records
 the supported suite/recipe combinations, including GR00T N1.7 for LIBERO/SimplerEnv and N1.5 for
 RoboCasa365. The current Agents page does not yet provide a native Policy catalog; its historical
