@@ -39,7 +39,7 @@ function registration(
 
 it("ships one supported family per benchmark even with no local registrations", () => {
   const supported = supportedBenchmarks([]);
-  expect(supported).toHaveLength(30);
+  expect(supported).toHaveLength(31);
   expect(new Set(supported.map((row) => row.id)).size).toBe(supported.length);
   expect(supported.every((row) => row.registrationNames.length === 0)).toBe(true);
   expect(

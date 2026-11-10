@@ -36,9 +36,9 @@ def main():
     kind = environment.get("kind")
     environment_seed = args.environment_seed
     if environment_seed is None:
-        environment_seed = 0 if environment.get("protocol") == "rvt-test" else {"calvin": 0, "robodojo": 0, "vlabench": 42}.get(kind, 7)
+        environment_seed = 0 if environment.get("protocol") == "rvt-test" else {"calvin": 0, "robodojo": 0, "vlabench": 42, "robomimic": 0}.get(kind, 7)
     generated = kind in GENERATED_ENVIRONMENTS
-    uint32_seed = kind in ("robocasa365", "robotwin", "robolab", "robodojo") or "simplerRobot" in environment
+    uint32_seed = kind in ("robocasa365", "robotwin", "robolab", "robodojo", "robomimic") or "simplerRobot" in environment
     if environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
     if generated:

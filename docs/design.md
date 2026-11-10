@@ -898,6 +898,8 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - **CALVIN ABC→D**：一个样本对应冻结目录的一条五指令序列。仿真仅在序列开始时重置，原生 oracle 完成一段后，driver 丢弃剩余动作并
   用下一条指令重规划。独立 verifier 从封存的动作证据核对子任务进度、重规划边界和停止条件。主分数为完成的连续子任务数。
   Scene D 的 benchmark 可独立登记，checkpoint 的训练场景属于策略来源。
+- **RoboMimic**：从 PH v1.5.1 数据集冻结五个环境的控制器、动作顺序和步数上限。低维与图像模式分别登记，Transport 使用双臂。
+  种子重置后恢复初始仿真状态，并按原生成功或终止判分。[接入说明](../examples/bench-adapters/embodied/ROBOMIMIC.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

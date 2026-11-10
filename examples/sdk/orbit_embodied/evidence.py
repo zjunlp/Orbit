@@ -100,6 +100,15 @@ def verify_simpler_termination(controls, initial, horizon):
         raise ValueError("SimplerEnv episode ended before the horizon without termination")
 
 
+def verify_robomimic_stopping(controls, horizon):
+    for step, row in enumerate(controls, start=1):
+        done, success = row.get("nativeDone"), row["nativeSuccess"]
+        stopped = done is True or step == horizon or success is True
+        if (type(done) is not bool or type(success) is not bool
+                or row["terminated"] is not stopped or stopped != (step == len(controls))):
+            raise ValueError("control evidence differs from the native termination protocol")
+
+
 def verify_robocasa_v02(controls, horizon):
     for step, row in enumerate(controls, start=1):
         action = row["action"]
@@ -254,6 +263,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         verify_robodojo_episode(reference, contract["sample"], controls, initial["state"], result)
     if result["valid"] and reference.get("environment", {}).get("kind") == "robocasa-v02":
         verify_robocasa_v02(controls, contract["horizon"])
+    if result["valid"] and reference.get("environment", {}).get("kind") == "robomimic":
+        verify_robomimic_stopping(controls, contract["horizon"])
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     if (result["valid"] and contract.get("version") == 3

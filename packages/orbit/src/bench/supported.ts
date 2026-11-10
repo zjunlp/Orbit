@@ -741,6 +741,26 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   },
 
   {
+    id: "robomimic",
+    name: "RoboMimic",
+    description:
+      "Evaluate policies on the five classic proficient-human manipulation tasks in robosuite.",
+    taxonomyGroups: [group("Demonstration-conditioned manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "PH v1.5.1 environments with separate low-dimensional and RGB policy profiles.",
+        "examples/bench-adapters/embodied/ROBOMIMIC.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All five tasks passed native low-dimensional and RGB checks. Two published demonstrations replayed successfully.",
+      "docs/tasks/20261110-robomimic.md",
+    ),
+    suites: ["Proficient Human (PH)", "Low-dimensional", "RGB"],
+  },
+
+  {
     id: "robodojo",
     name: "RoboDojo",
     description: "Evaluate dual-arm manipulation in the official Isaac Sim task environments.",
@@ -799,6 +819,11 @@ const nativeProfiles: Record<string, string> = {
   "metaworld-native/1": "metaworld",
   "calvin-native/1": "calvin",
 };
+for (const task of ["lift", "can", "square", "transport", "tool-hang"]) {
+  for (const observation of ["low-dim", "image"]) {
+    nativeProfiles[`robomimic-${task}-${observation}/1`] = "robomimic";
+  }
+}
 for (const layout of ["panda", "panda-wrist", "panda-stick", "dual-panda", "so100"]) {
   for (const goal of ["", "-goal"])
     nativeProfiles[`maniskill3-${layout}-joint-delta${goal}/1`] = "maniskill3";

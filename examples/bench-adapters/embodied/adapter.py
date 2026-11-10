@@ -189,7 +189,7 @@ def solve_one(req):
         if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
-    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench"):
+    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic"):
         if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)

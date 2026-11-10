@@ -9,7 +9,7 @@ import unittest
 import numpy as np
 
 from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
-from orbit_embodied.evidence import seal, write_json
+from orbit_embodied.evidence import seal, verify_robomimic_stopping, write_json
 from orbit_embodied.driver import SampleRejected
 from orbit_embodied.openpi import quaternion_to_axis_angle
 
@@ -203,6 +203,12 @@ class CoreTests(unittest.TestCase):
                 seal(self.output, {**result, "steps": len(early)})
                 with self.assertRaisesRegex(ValueError, "first native success or the task horizon"):
                     self.verify()
+
+    def test_robomimic_evidence_stops_at_native_success(self):
+        terminal = {"nativeDone": False, "nativeSuccess": True, "terminated": True}
+        verify_robomimic_stopping([terminal], 5)
+        with self.assertRaisesRegex(ValueError, "native termination protocol"):
+            verify_robomimic_stopping([{**terminal, "nativeSuccess": False}], 5)
 
     def test_requires_explicit_complete_semantically_equal_mapping(self):
         with self.assertRaisesRegex(ValueError, "exactly"):
