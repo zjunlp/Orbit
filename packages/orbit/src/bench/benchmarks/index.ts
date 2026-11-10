@@ -6,6 +6,7 @@ import { automationbench } from "./automationbench.ts";
 import { bfcl } from "./bfcl.ts";
 import { calvin } from "./calvin.ts";
 import { chartography } from "./chartography.ts";
+import { colosseumV2 } from "./colosseum-v2.ts";
 import { cuaBench } from "./cua-bench.ts";
 import { embodiedClbench } from "./embodied-clbench.ts";
 import { embodiedFirstExam } from "./embodied-first-exam.ts";
@@ -81,6 +82,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   robomimic,
   vimaBench,
   molmospaces,
+  colosseumV2,
   robodojo,
   robolab,
 ];
@@ -93,6 +95,8 @@ const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
   "libero-plus-panda-raw/1": "libero-plus",
   "molmospaces-franka-droid/1": "molmospaces",
+  "colosseum-v2-single-arm/1": "colosseum-v2",
+  "colosseum-v2-bimanual/1": "colosseum-v2",
   "vlabench-franka-ee/1": "vlabench",
   "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",

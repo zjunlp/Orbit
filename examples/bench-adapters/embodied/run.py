@@ -8,7 +8,7 @@ import sys
 import time
 
 from orbit_embodied import digest, run_episode, verify_episode
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import COLOSSEUM_ASSET_ROOT, tree_digest
 from orbit_embodied.binding import reference_horizon
 from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
@@ -18,7 +18,7 @@ from orbit_embodied.vlabench import ASSETS_ROOT as VLABENCH_ASSETS
 
 
 SIMULATOR_ASSET_ROOTS = {"libero-plus": LIBERO_PLUS_ROOT + "/assets", "vlabench": VLABENCH_ASSETS,
-                        "molmospaces": "/molmospaces"}
+                        "molmospaces": "/molmospaces", "colosseum-v2": COLOSSEUM_ASSET_ROOT}
 
 
 class LazyPolicy:
@@ -189,6 +189,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "molmospaces":
         from orbit_embodied.molmospaces import MolmoSpacesBenchmark
         benchmark = MolmoSpacesBenchmark(reference, sample["taskId"])
+    elif kind == "colosseum-v2":
+        from orbit_embodied.colosseum import ColosseumBenchmark
+        benchmark = ColosseumBenchmark(reference, sample["taskId"])
     elif kind == "rlbench":
         from orbit_embodied.rlbench import RLBenchBenchmark
         benchmark = RLBenchBenchmark(reference, sample["taskId"])
@@ -227,7 +230,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
             or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin", "robolab", "robodojo",
-                            "robomimic", "vima-bench", "molmospaces")
+                            "robomimic", "vima-bench", "molmospaces", "colosseum-v2")
                 and parameters["renderSize"] != expected_render_size)
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")

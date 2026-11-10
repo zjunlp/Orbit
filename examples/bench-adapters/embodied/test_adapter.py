@@ -419,6 +419,14 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertEqual(outcome["metrics"], {"completed_subtasks": 2, "success_at_1": 1, "success_at_2": 1,
                                                    "success_at_3": 0, "success_at_4": 0, "success_at_5": 0})
 
+    def test_native_registration_help_requires_only_the_standard_library(self):
+        for script in ("configure_colosseum.py",):
+            with self.subTest(script=script):
+                completed = subprocess.run([sys.executable, "-S", "-B", str(ADAPTER.parent / script), "--help"],
+                                           text=True, capture_output=True)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertIn("--benchmark-image", completed.stdout)
+
     def test_host_verifier_planning_requires_only_the_standard_library(self):
         with tempfile.TemporaryDirectory() as temporary:
             request = {**self.request(Path(temporary)), "protocol": 1, "op": "verify"}

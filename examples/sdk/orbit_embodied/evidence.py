@@ -273,6 +273,13 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if result["valid"] and kind == "molmospaces":
         from .molmospaces import verify_molmospaces
         verify_molmospaces(controls, contract["horizon"], reference["parameters"])
+    if result["valid"] and kind == "colosseum-v2":
+        native = result["native"]
+        if (len(controls) != contract["horizon"] or not controls[-1]["terminated"]
+                or any(row["terminated"] for row in controls[:-1])
+                or native["successOnce"] is not success
+                or native["successAtEnd"] is not controls[-1]["nativeSuccess"]):
+            raise ValueError("Colosseum V2 horizon or success flags differ from the controls")
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     if (result["valid"] and contract.get("version") == 3

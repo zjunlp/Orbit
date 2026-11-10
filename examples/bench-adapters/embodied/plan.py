@@ -36,10 +36,10 @@ def main():
     kind = environment.get("kind")
     environment_seed = args.environment_seed
     if environment_seed is None:
-        defaults = {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0}
+        defaults = {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0, "colosseum-v2": 0}
         environment_seed = environment.get("environmentSeed", 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7))
     generated = kind in GENERATED_ENVIRONMENTS
-    uint32_seed = (kind in ("robocasa365", "robotwin", "robolab", "robodojo", "robomimic", "vima-bench")
+    uint32_seed = (kind in ("robocasa365", "robotwin", "robolab", "robodojo", "robomimic", "vima-bench", "colosseum-v2")
                    or "simplerRobot" in environment or "initialStateCounts" in environment)
     if environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
@@ -55,9 +55,13 @@ def main():
             listing = catalog(args.reference_source, args.suite)
         tasks = {task["id"]: task for task in listing if task["supported"]}
     items = []
-    for task_id in tasks if args.all_tasks else args.task:
-        if task_id in environment.get("unsupported", {}):
-            raise ValueError("unsupported task " + task_id + ": " + environment["unsupported"][task_id])
+    unsupported = environment.get("unsupported", {})
+    selected_tasks = [task for task in tasks if task not in unsupported] if args.all_tasks else args.task
+    if not selected_tasks:
+        parser.error("no available tasks in the selected benchmark")
+    for task_id in selected_tasks:
+        if task_id in unsupported:
+            raise ValueError("unsupported task " + task_id + ": " + unsupported[task_id])
         task = tasks[task_id]
         if kind == "calvin":
             count = len(environment["catalog"]["sequences"])

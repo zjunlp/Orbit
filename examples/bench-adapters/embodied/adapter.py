@@ -145,6 +145,8 @@ def tasks(req):
     elif kind == "libero-plus":
         metrics = [{"name": metric_name(category), "label": category + " success", "unit": "ratio",
                     "range": [0, 1]} for category in PERTURBATIONS]
+    elif kind == "colosseum-v2":
+        metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
             "capabilities": {"embodied": {
@@ -195,8 +197,8 @@ def solve_one(req):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
-                                  "molmospaces"):
-        if (sample["taskId"] not in environment["tasks"]
+                                  "molmospaces", "colosseum-v2"):
+        if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
@@ -391,6 +393,8 @@ def score(req):
             metrics = result["native"]["metrics"]
         elif kind == "libero-plus":
             metrics = {metric_name(result["native"]["perturbation"]): success}
+        elif kind == "colosseum-v2":
+            metrics = {"success_at_end": int(result["native"]["successAtEnd"])}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

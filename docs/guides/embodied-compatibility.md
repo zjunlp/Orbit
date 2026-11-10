@@ -26,6 +26,7 @@
 | [RoboMimic](../../examples/bench-adapters/embodied/ROBOMIMIC.md) | PH v1.5.1 的 5 个仿真任务 | 5 个任务各有低维和 RGB 登记，共 10 个 | 10 个登记均通过原生检查；Lift、Transport 做过固定动作对照及 PH 示教回放；另有脚本 Lift 重评。[记录](../tasks/20261110-robomimic.md) |
 | [VIMA-Bench](../../examples/bench-adapters/embodied/VIMA-BENCH.md) | 4 个测试划分，42 个划分内条目，17 个不同任务模板 | 4 个划分全部接入 | 42 个条目均通过原生 reset、观测与控制检查。[记录](../tasks/20261110-vima-bench.md) |
 | [MolmoSpaces-Bench](../../examples/bench-adapters/embodied/MOLMOSPACES.md) | 固定 MS v1 操作轨道，Pick 1,000、PnP 1,000、Open 1,000、Close 915 个 episode | 四条轨道共 3,915 个固定场景样本，使用原生 DROID 控制与最终判定 | 完整资产包通过登记与 3,915 个样本的文件核对。四条轨道各有一组原生 reset、双相机与固定动作对照。[记录](../tasks/20261110-molmospaces.md) |
+| [Colosseum V2](../../examples/bench-adapters/embodied/COLOSSEUM.md) | 16 个单臂、12 个双臂任务及 21 个原生预设（含无扰动与合并扰动） | 42 个登记共 588 个任务与预设组合，455 个可用，70 个由上游排除，63 个涉及缺资产 | 24 个可用任务通过 GPU reset、观测和一步控制检查；单臂、双臂各有全时限固定动作原生对照。另 4 个任务缺 PartNet 模型 1005 或 1027。[记录](../tasks/20261110-colosseum-v2.md) |
 
 ## 真实模型实测
 
