@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import {
@@ -10,18 +11,21 @@ import {
 } from "../src/contracts/index.ts";
 import { modelMatches } from "../src/resources/allocate.ts";
 
-it.each([
-  "posttrainbench",
-  "automationbench",
-  "chartography",
-  "researchclawbench",
-  "longds",
-  "browsergym",
-  "cua-bench",
-  "cua-lite",
-  "mobileworld",
-  "osworld-v2",
-])("checks the %s Python adapter", (name) => {
+const adapterDirsRoot = fileURLToPath(
+  new URL("../../../examples/bench-adapters/", import.meta.url),
+);
+
+/** Every adapter directory with its own Python tests runs them here; new adapters need no edit. */
+const pythonAdapters = readdirSync(adapterDirsRoot, { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name)
+  .filter((name) => {
+    const files = readdirSync(adapterDirsRoot + name + "/");
+    return files.includes("adapter.py") && files.some((f) => /^test_.*\.py$/.test(f));
+  })
+  .sort();
+
+it.each(pythonAdapters)("checks the %s Python adapter", (name) => {
   const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
   execFileSync("python3", ["-B", "-m", "unittest", "discover", "-s", dir], {
     encoding: "utf8",
