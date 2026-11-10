@@ -900,6 +900,9 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   Scene D 的 benchmark 可独立登记，checkpoint 的训练场景属于策略来源。
 - **RoboMimic**：从 PH v1.5.1 数据集冻结五个环境的控制器、动作顺序和步数上限。低维与图像模式分别登记，Transport 使用双臂。
   种子重置后恢复初始仿真状态，并按原生成功或终止判分。[接入说明](../examples/bench-adapters/embodied/ROBOMIMIC.md)
+- **VIMA-Bench**：独立登记四档官方测试划分，保留图文提示、实例分割和原生抓放动作。变长提示资产使用显式编码字段，
+  VIMA 推理由独立 Policy 服务执行，登记时核对其镜像构建清单中的 SDK 文件摘要。证据记录原生动作与终止，供 CPU 重评核对。
+  [接入说明](../examples/bench-adapters/embodied/VIMA-BENCH.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

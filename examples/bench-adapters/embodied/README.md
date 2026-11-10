@@ -30,7 +30,8 @@ tabletop profiles for its native joint controllers. [Native expansion setup](NAT
 RoboDojo and RoboLab use the official Isaac Sim environments with independently registered policies.
 Their runtime preparation and validation status are separate from the existing MuJoCo/SAPIEN recipes.
 [RoboDojo setup](ROBODOJO.md) · [RoboLab setup](ROBOLAB.md)
-[RoboMimic PH](ROBOMIMIC.md) uses separate native registrations for low-dimensional and RGB policies.
+[RoboMimic PH](ROBOMIMIC.md) and [VIMA-Bench](VIMA-BENCH.md) use separate native
+registrations and the same independent Policy interface.
 For new endpoints, see the [onboarding templates](../../../docs/guides/embodied-onboarding.md)
 and [compatibility matrix](../../../docs/guides/embodied-compatibility.md).
 

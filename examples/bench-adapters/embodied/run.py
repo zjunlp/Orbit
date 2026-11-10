@@ -182,6 +182,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "robomimic":
         from orbit_embodied.robomimic import RoboMimicBenchmark
         benchmark = RoboMimicBenchmark(reference, sample["taskId"])
+    elif kind == "vima-bench":
+        from orbit_embodied.vima_bench import VIMABenchBenchmark
+        benchmark = VIMABenchBenchmark(reference, sample["taskId"])
     elif kind == "rlbench":
         from orbit_embodied.rlbench import RLBenchBenchmark
         benchmark = RLBenchBenchmark(reference, sample["taskId"])
@@ -219,7 +222,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
-            or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin", "robolab", "robodojo", "robomimic")
+            or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin", "robolab", "robodojo", "robomimic", "vima-bench")
                 and parameters["renderSize"] != expected_render_size)
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")

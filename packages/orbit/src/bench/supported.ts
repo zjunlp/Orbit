@@ -759,6 +759,25 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     ),
     suites: ["Proficient Human (PH)", "Low-dimensional", "RGB"],
   },
+  {
+    id: "vima-bench",
+    name: "VIMA-Bench",
+    description:
+      "Evaluate multimodal prompt following and generalization with native PyBullet manipulation primitives.",
+    taxonomyGroups: [group("Multimodal manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "Four official test partitions with multimodal prompt assets and independently served VIMA.",
+        "examples/bench-adapters/embodied/VIMA-BENCH.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All four test partitions passed native checks. Selected VIMA 20M episodes passed independent verification.",
+      "docs/tasks/20261110-vima-bench.md",
+    ),
+    suites: ["Placement", "Combinatorial", "Novel object", "Novel task"],
+  },
 
   {
     id: "robodojo",
@@ -807,6 +826,7 @@ const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
   "libero-plus-panda-raw/1": "libero-plus",
   "vlabench-franka-ee/1": "vlabench",
+  "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
   "robocasa-v02-panda-arm/1": "robocasa-v02",

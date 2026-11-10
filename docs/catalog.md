@@ -7,7 +7,7 @@ remain a separate view, and execution history belongs in Evaluations and Runs.
 
 The authoritative product data is [bench/supported.ts](../packages/orbit/src/bench/supported.ts),
 with the shared response shape in [contracts/bench.ts](../packages/orbit/src/contracts/bench.ts).
-The catalog currently contains 31 families. This document is a navigation index, not another
+The catalog currently contains 32 families. This document is a navigation index, not another
 taxonomy or a machine-specific record. [Six dimensions](design.md#917-benchmark-六维分类-v12026-11-09)
 · [Catalog contract and behavior](design.md#918-已适配-benchmark-产品目录2026-11-09)
 
@@ -34,7 +34,7 @@ or model capability; product families, local registrations and evaluated tasks r
 | Tools, user interaction and games | BFCL; τ²-bench; TextArena | [BFCL](tasks/20261105-sample-bfcl-multiturn.md) · [τ²-bench](tasks/20261105-sample-tau2.md) · [Game integration](tasks/20261105-samples-c1-c7.md) |
 | Browser, desktop and mobile tasks | MiniWoB++; WebVoyager; Online-Mind2Web; Cua Bench; MobileWorld; OSWorld-V2 | [GUI guide](guides/gui-bench-web.md) · [CUA-Lite](../examples/bench-adapters/cua-lite/) · [Cua Bench](../examples/bench-adapters/cua-bench/) · [MobileWorld](../examples/bench-adapters/mobileworld/) · [OSWorld-V2](../examples/bench-adapters/osworld-v2/) |
 | Embodied coding-agent tasks | Embodied First Exam | [EFE integration](tasks/20261104-p3-browsergym-efe.md) · [Execution boundaries](design.md#94-被评测对象agent-与-policy) |
-| Native embodied policies | LIBERO, LIBERO-Plus, VLABench, SimplerEnv, RoboCasa v0.2, RoboCasa365, RoboTwin 2.0, ManiSkill3, RLBench, Meta-World, CALVIN, RoboDojo, RoboLab, RoboMimic | [Native adapter](../examples/bench-adapters/embodied/) · [Compatibility matrix](guides/embodied-compatibility.md) · [Onboarding](guides/embodied-onboarding.md) |
+| Native embodied policies | LIBERO, LIBERO-Plus, VLABench, SimplerEnv, RoboCasa v0.2, RoboCasa365, RoboTwin 2.0, ManiSkill3, RLBench, Meta-World, CALVIN, RoboDojo, RoboLab, RoboMimic, VIMA-Bench | [Native adapter](../examples/bench-adapters/embodied/) · [Compatibility matrix](guides/embodied-compatibility.md) · [Onboarding](guides/embodied-onboarding.md) |
 
 The area column is a reading aid. The six-dimensional filters use the source catalog's explicit
 profiles, and one profile must satisfy all selected fields. A shared adapter or format does not

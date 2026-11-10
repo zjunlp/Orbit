@@ -63,7 +63,8 @@ def settings(req):
     image = config.get("image", "")
     if not pinned(image):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
-    renderers = ("xvfb-glx",) if reference.get("environment", {}).get("kind") == "rlbench" else ("osmesa", "egl", "vulkan")
+    kind = reference.get("environment", {}).get("kind")
+    renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -189,7 +190,7 @@ def solve_one(req):
         if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
-    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic"):
+    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench"):
         if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
@@ -228,7 +229,7 @@ def solve_one(req):
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python:/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
                              **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
-                                if gl_platform != "xvfb-glx" else {})},
+                                if gl_platform not in ("xvfb-glx", "pybullet-direct") else {})},
                      "resources": resources,
                      **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") == "robotwin" else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
