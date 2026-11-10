@@ -1,8 +1,9 @@
-# Orbit 项目总览（2026-11-05）
+# Orbit 项目总览（2026-11-05 历史快照）
 
-给决策用的一页概览：现在做到哪、架构是什么、接了哪些 benchmark 和 Agent、哪些没做好。细节以
-[design.md](design.md)（架构权威）、[status.md](status.md)（当前状态）、[catalog.md](catalog.md)（接入目录）、
-[integration-categories.md](integration-categories.md)（大类规范）为准；本文过时后以它们为准。
+本文保留当时的实现、验证与缺口，供追溯决策，不作为当前产品目录或待办清单。文中的 C1–C7 是历史接入原型，
+不再作为产品分类；当前公开分类为六个独立维度及各自的受控取值，见 [design §9.17](design.md#917-benchmark-六维分类-v12026-11-09)。
+当前架构、状态与已适配产品分别以 [design.md](design.md)、[status.md](status.md)、[catalog.md](catalog.md) 为准；
+旧编号的兼容范围见 [历史接入规范](integration-categories.md)。
 
 ## 1. 到什么程度了
 

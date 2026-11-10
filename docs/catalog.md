@@ -11,6 +11,22 @@ The catalog currently contains 24 families. This document is a navigation index,
 taxonomy or a machine-specific record. [Six dimensions](design.md#917-benchmark-六维分类-v12026-11-09)
 · [Catalog contract and behavior](design.md#918-已适配-benchmark-产品目录2026-11-09)
 
+The public classification has **six independent dimensions**, each with controlled values;
+these are not six mutually exclusive benchmark categories. The Web shows a card for each dimension.
+
+| Dimension | Fields and value counts | Example values |
+| --- | --- | --- |
+| Domain | `domains` (12) | Software engineering, natural science, robotics, games |
+| Task type | `taskTypes` (14) | Answering, implementation, repair, manipulation |
+| Evaluation target | `targets` (14) | Reasoning, planning, tool use, control |
+| Interface & modality | `modalities` (5), `interfaces` (6) | Image / text input; terminal / GUI / physical-control actions |
+| Environment & interaction | `platforms` (6), `world` (2), `feedback` (3), `participants` (4) | Browser / simulation; controlled / live; step / realtime; teammate / opponent |
+| Scoring | `scoringEvidence` (4), `scoringMethods` (5) | Artifact / final-state evidence; execution tests / model judges |
+
+The full vocabulary and matching rules live in [design §9.17](design.md#917-benchmark-六维分类-v12026-11-09).
+A task or profile can have multiple values. Counts are discovery metadata, not evidence of calibration
+or model capability; product families, local registrations and evaluated tasks remain separate counts.
+
 | Area | Benchmark families | Setup and scope |
 | --- | --- | --- |
 | Code generation and terminal work | HumanEval; Terminal-Bench 4.0 | [HumanEval adapter](../examples/bench-adapters/humaneval/) · [Harbor support](tasks/20261010-harbor-verifier-modes.md) |
@@ -37,3 +53,8 @@ and freezes it for evaluation. The [compatibility matrix](guides/embodied-compat
 the supported suite/recipe combinations, including GR00T N1.7 for LIBERO/SimplerEnv and N1.5 for
 RoboCasa365. The current Agents page does not yet provide a native Policy catalog; its historical
 external-entrypoint list is a different view.
+
+Historical task and research records may use C1–C7, including C6 for native policy evaluation.
+These are [legacy integration prototypes](integration-categories.md), not public product categories.
+They remain in old records and compatibility fields; their presence does not define six-dimensional
+labels or imply seven-category coverage. Historical validation results retain their original scope.

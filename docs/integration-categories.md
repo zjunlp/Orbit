@@ -1,17 +1,19 @@
 # Benchmark 接入原型与兼容规范
 
-适用范围：本文保留 C1–C7 的工程接入契约、校准依据与既有实现记录。面向用户的分类以
-[design §9.17 六维 v1](design.md#917-benchmark-六维分类-v12026-11-09) 为准；C1–C7 不再作为唯一总目录。
-六维改版沿用这里的执行与证据约束，不把领域、任务或评测目标标签变成新的执行路径。
+**历史范围说明（2026-11-09）**：本文保留 2026-11-05 的 C1–C7 工程接入方案、校准依据与后续实施记录，
+不再定义产品分类或当前覆盖情况。公开分类采用 [design §9.17 六维 v1](design.md#917-benchmark-六维分类-v12026-11-09)：
+领域、任务类型、评测目标、接口与模态、环境与交互条件、评分方式；每个维度各有受控取值，不能从旧编号自动推断。
+当前产品与状态见 [catalog](catalog.md)、[status](status.md)。下文的缺口、计划和验证结果保留原时点范围，
+不代表当前待办；`category` / `profiles` 等旧字段继续兼容。执行与证据约束仍适用，分类不建立新的执行路径。
 
-状态：**已确认并开始实施**（2026-11-05；EFE 归 C2 + 具身 profile，原生具身归 C6）。实施进度见 §7。依据为四份调研报告：[外部生态](research/taxonomy/landscape.md)、
+原方案状态：**2026-11-05 确认并开始实施**（EFE 归 C2 + 具身 profile，原生具身归 C6）。历史实施记录见 §7。依据为四份调研报告：[外部生态](research/taxonomy/landscape.md)、
 [具身](research/taxonomy/embodied.md)、[GUI](research/taxonomy/gui.md)、[代码/科研/问答](research/taxonomy/code.md)。
 这些报告由 Codex 读取本机各 bench 源码并联网查阅官方资料后写成，事实带出处；本文是在此基础上的取舍。
 
 ## 0. 一句话
 
 **旧接入规范按"被评测对象怎样与任务交互"分 7 个原型；环境、评分方式、是否联网记录为 profile。** 每个具体 benchmark
-用自己的身份（原始任务来源 + 版本）直接登记到它的大类下；Harbor、BrowserGym、vla-eval 这类 hub 或库只是实现手段，
+用自己的身份（原始任务来源 + 版本）直接登记，附带接入原型；Harbor、BrowserGym、vla-eval 这类 hub 或库只是实现手段，
 不再是 benchmark 身份的上一层。只有当某个 hub **重新定义了考题**（例如 EFE 把机器人任务改成 coding agent 的考题）时，
 它本身才是一个 benchmark。
 
@@ -32,9 +34,9 @@
 （写控制程序或调用仿真 API）；同一个 BFCL，静态题是一次输出，执行版是工具循环；同一个浏览器，WebArena 是冻结网站，
 Online-Mind2Web 是真实网页加 judge。
 
-## 2. 七个大类
+## 2. 七个历史接入原型
 
-| 大类 | 纳入规则（这一轮评测的到底是什么） | 典型 benchmark | profile |
+| 接入原型 | 纳入规则（这一轮评测的到底是什么） | 典型 benchmark | profile |
 | --- | --- | --- | --- |
 | **C1 固定输入响应** | 给模型固定输入（含固定多轮历史），取输出或概率；没有根据输出演化的外部环境 | GPQA、SimpleQA、HumanEval/MBPP/LiveCodeBench（一次生成后执行测试）、静态 BFCL、GUI grounding、离线下一动作预测 | `generate` / `likelihood`；评分 `match` / `exec-test` / `judge`；模态 text / image / audio |
 | **C2 Agent 工作区** | Agent 在可读写的工作区里自主运行命令、改代码、训练、调试，交付 patch / 文件 / 模型 / 报告 / 控制程序；交付物及其执行是评测对象 | SWE-bench、Terminal-Bench、TB-Science、MLE-bench、PaperBench、RE-Bench、ASI、ResearchClawBench、LongDS、PostTrainBench、**EFE** | `repo-patch` / `terminal` / `ml-experiment` / `research-report` / `embodied-program`（交付后回放判分）/ `embodied-live`（在线操纵仿真，sidecar 实时判分） |
@@ -102,7 +104,7 @@ calibration  按类别的正例 / 负例 / 边界期望、原生对照、偏差�
 ## 5. 2026-11-05 接入实施方案
 
 1. **契约**：`BenchCapabilities` 增加 `category`（C1–C7）与 `profiles`（受控取值），取代现在只有
-   `browser / desktop / mobile / other` 的 `kind`（旧记录映射到 C5 或 unknown）。Web 与 catalog 按大类组织。
+   `browser / desktop / mobile / other` 的 `kind`（旧记录映射到 C5 或 unknown）。当时的 Web 与 catalog 按接入原型组织；现已由六维发现入口取代。
 2. **身份**：benchmark 登记带原始来源与版本；catalog 以 benchmark 为行、大类为组，hub / 库写在"实现"一列。
 3. **按类别的校准**：`orbit bench calibrate` 的期望改为由类别和 benchmark 声明（允许 empty ≠ 0、没有 oracle、
    有容差的连续指标、judge 的重复一致性统计），替代现在统一的"empty = 0、oracle 满分、严格相等"。

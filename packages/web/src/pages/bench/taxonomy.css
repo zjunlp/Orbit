@@ -107,19 +107,37 @@
   padding: 0 17px;
   gap: 7px;
 }
+.dimension-categories {
+  container-type: inline-size;
+}
+.dimension-heading {
+  margin-bottom: 14px;
+}
+.dimension-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.dimension-heading p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
 .dimension-bar {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 .dimension-button {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  align-items: flex-start;
+  gap: 10px;
   min-width: 0;
-  padding: 13px 14px 12px;
+  padding: 18px 16px 14px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 12px;
   background: var(--surface);
   text-align: left;
   cursor: pointer;
@@ -131,41 +149,80 @@
   background: var(--hover);
   border-color: var(--border-strong);
 }
+.dimension-button.expanded,
+.dimension-button.selected {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
 .dimension-button.expanded {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
-.dimension-button.selected .dimension-number {
-  color: var(--accent);
+.dimension-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
-.dimension-number {
-  display: flex;
+.dimension-icon {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  color: var(--text-3);
-  font: 10px var(--font-mono);
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  margin-bottom: 2px;
 }
 .dimension-name {
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.dimension-summary {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dimension-action {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 6px;
+  color: var(--text-2);
   font-size: 12px;
-  font-weight: 550;
 }
-.dimension-name svg {
-  color: var(--text-3);
+.dimension-action > svg {
   flex-shrink: 0;
+  transition: transform 0.15s;
 }
-.dimension-summary {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-3);
-  font-size: 11px;
+.dimension-button.expanded .dimension-action > svg {
+  transform: rotate(180deg);
 }
-.dimension-button.selected .dimension-summary {
+.dimension-status {
+  padding: 3px 0;
+}
+.dimension-button.selected .dimension-status {
+  padding: 3px 8px;
+  border-radius: 5px;
   color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+@container (max-width: 1150px) {
+  .dimension-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 560px) {
+  .dimension-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .dimension-button {
+    padding: 14px 12px 10px;
+  }
 }
 .dimension-panel {
   margin-top: -8px;
@@ -962,15 +1019,6 @@ dialog.taxonomy-editor {
   .library-totals > div {
     padding-left: 16px;
   }
-  .dimension-bar {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .dimension-button {
-    gap: 5px;
-  }
-  .dimension-summary {
-    display: none;
-  }
   .library-cards {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1054,9 +1102,6 @@ dialog.taxonomy-editor {
   }
 }
 @media (max-width: 420px) {
-  .dimension-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .fields-1 .dimension-options,
   .dimension-options {
     grid-template-columns: 1fr;
