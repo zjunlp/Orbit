@@ -75,12 +75,32 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'simulator service'):
             adapter.solve(self.req)
 
+    def test_shorter_timeout_requires_a_bounded_registration(self):
+        self.assertIn('official', adapter.tasks(self.req))
+        self.req['trial']['timeoutMin'] = 90
+        with self.assertRaisesRegex(ValueError, 'explicit wallSeconds registration'):
+            adapter.solve(self.req)
+        self.assertFalse((self.root / 'staging').exists())
+        for timeout in (130, 180):
+            with self.subTest(timeout=timeout):
+                self.req['trial']['timeoutMin'] = timeout
+                reply = adapter.solve(self.req)
+                self.assertEqual(reply['spec']['timeoutMin'], 130)
+                self.assertEqual(reply['issues'], [])
+                plan = json.loads((self.root / 'staging/plan.json').read_text())
+                self.assertEqual(plan['wall_s'], plan['official_wall_s'])
+
     def test_smoke_is_labeled_and_has_no_official_aggregate(self):
         self.req['benchmark']['config']['wallSeconds'] = '120'
         self.assertNotIn('official', adapter.tasks(self.req))
         reply = adapter.solve(self.req)
         self.assertEqual(reply['spec']['timeoutMin'], 2)
         self.assertIn('Bounded smoke', reply['issues'][0])
+        self.req['trial']['timeoutMin'] = 1
+        reply = adapter.solve(self.req)
+        self.assertEqual(reply['spec']['timeoutMin'], 1)
+        self.assertIn('60s replaces native', reply['issues'][0])
+        self.assertNotIn('official', adapter.tasks(self.req))
         self.req['benchmark']['config']['wallSeconds'] = '9000'
         with self.assertRaisesRegex(ValueError, 'official'):
             adapter.solve(self.req)
@@ -153,6 +173,24 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         finally:
             release.set()
             lab.executor.shutdown(wait=True)
+
+
+    def test_renderer_failure_is_not_overridden_by_native_ready_marker(self):
+        private = self.root / 'native-worker'
+        private.mkdir()
+        (private / 'device.log').write_text(
+            '[Error] [carb.scenerenderer-rtx.plugin] rtx driver verification failed.\n'
+            '[Warning] [omni.hydra.rtx] HydraEngine rtx failed creating scene renderer.\n'
+            'Simulation App Startup Complete\napp ready\nISAAC_NATIVE_READY\n')
+        closed = []
+        worker = types.SimpleNamespace(root=private, close=lambda: closed.append(True))
+        evidence = self.root / 'evidence'
+        with patch.object(service, 'ROOT', evidence):
+            with self.assertRaisesRegex(RuntimeError, 'RTX renderer initialization failed'):
+                service.validate_worker_startup(worker)
+        self.assertEqual(closed, [True])
+        self.assertEqual(json.loads((evidence / 'environment_error.json').read_text())['stage'], 'renderer_startup')
+        self.assertTrue((evidence / 'captures/orbit-lab/diagnostics/startup-device.log').is_file())
 
     def test_private_finalization_rejects_agent_network_peer(self):
         class ExplicitHTTPException(Exception):

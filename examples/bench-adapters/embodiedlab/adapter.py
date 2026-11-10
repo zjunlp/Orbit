@@ -87,8 +87,14 @@ def solve(req):
     wall = float(config.get('wallSeconds', row['budget']['wall_s']))
     if not math.isfinite(wall) or wall <= 0 or wall > row['budget']['wall_s']:
         raise ValueError('wallSeconds must be positive and no greater than the official task wall budget')
-    if trial.get('timeoutMin'):
-        wall = min(wall, float(trial['timeoutMin']) * 60)
+    if trial.get('timeoutMin') is not None:
+        timeout = float(trial['timeoutMin']) * 60
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError('timeoutMin must be positive and finite')
+        if timeout < row['budget']['wall_s'] and 'wallSeconds' not in config:
+            raise ValueError('A shorter timeout requires explicit wallSeconds registration; '
+                             'full-budget registrations retain the official aggregate')
+        wall = min(wall, timeout)
     staging = Path(trial['staging'])
     staging.mkdir(parents=True, exist_ok=True)
     for name in ('service.py', 'verify.py'):

@@ -110,6 +110,25 @@ class Lab:
             return {'finalized': True}
 
 
+def validate_worker_startup(worker):
+    log = worker.root / 'device.log'
+    try:
+        text = log.read_text(errors='replace').lower()
+        failures = ('rtx driver verification failed', 'hydraengine rtx failed creating scene renderer')
+        if any(marker in text for marker in failures):
+            raise RuntimeError('Native RTX renderer initialization failed despite application readiness')
+    except (OSError, RuntimeError) as exc:
+        diagnostics = ROOT / 'captures' / ENVIRONMENT / 'diagnostics'
+        diagnostics.mkdir(parents=True, exist_ok=True)
+        if log.is_file():
+            shutil.copyfile(log, diagnostics / 'startup-device.log')
+        write(ROOT / 'environment_error.json', {'stage': 'renderer_startup', 'error': str(exc)})
+        try:
+            worker.close()
+        finally:
+            raise
+
+
 def prepare():
     from benchmark.instances import snapshot
     from benchmark.instances.service import derive, materialize
@@ -131,6 +150,7 @@ def prepare():
                       EMBODIEDLAB_CAPTURE_DIR=str(ROOT / 'captures' / ENVIRONMENT))
     from embodiedlab_sdk.robot.embodiedlab.bootstrap import Worker, catalog, exposed
     worker = Worker()
+    validate_worker_startup(worker)
     task = worker.call('get_task_spec', {})
     if task.get('exposure') != 'T0':
         worker.close()

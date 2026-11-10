@@ -372,8 +372,8 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
       ),
     ],
     verification: checked(
-      "pending-calibration",
-      "Native task budgets and graders are retained; sampled calibration is pending.",
+      "sample-checked",
+      "Native empty/reference calibration passed on task08 with complete budgets. Task07 and full-suite equivalence remain unverified.",
       "docs/tasks/20261110-embodied-harness-benchmarks.md",
     ),
     suites: ["Robot perception", "Policy learning", "Control", "Robot design"],
@@ -460,7 +460,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     ],
     verification: checked(
       "pending-calibration",
-      "Native simulator compatibility and sampled experiment calibration are pending.",
+      "Images and native CPU dependencies were checked. Real startup detected an incompatible RTX runtime; experiment calibration requires a compatible environment.",
       "docs/tasks/20261110-embodied-harness-benchmarks.md",
     ),
     suites: ["Mechanics", "Circuits", "Optics", "Thermal physics", "Chemistry"],
