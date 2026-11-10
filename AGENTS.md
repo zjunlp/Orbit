@@ -12,6 +12,16 @@ These rules apply to every change, including this file. `CLAUDE.md` imports this
    Do not trust a record or conversation memory over the actual files.
 3. Identify the goal, the modules touched and how you will prove it works.
 
+### Downloads
+
+- For downloads from overseas sources, the user-provided local HTTP proxy is
+  `http://127.0.0.1:17890`. Enable it only for the download command when needed:
+  `HTTP_PROXY=http://127.0.0.1:17890 HTTPS_PROXY=http://127.0.0.1:17890 NO_PROXY=localhost,127.0.0.1 <download-command>`.
+- Check proxy connectivity before retrying a failed download. Keep proxy settings scoped to the
+  command; do not change global shell, Git or Docker settings. Keep datasets outside the source checkout.
+- Container loopback refers to the container itself. Container downloads require an explicitly
+  reachable proxy address; preserve the benchmark's declared network restrictions.
+
 ## 2. Git
 
 - Never edit, commit or push on `main`. Work on a task branch (`feat/…`, `fix/…`, `docs/…`, `refactor/…`).
