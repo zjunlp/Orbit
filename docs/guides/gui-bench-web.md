@@ -1,6 +1,6 @@
 # GUI evaluation in Web
 
-运行 `orbit web --open`，进入 **Bench**。先由维护者准备并登记环境与策略；Web 不安装 BrowserGym 或自动实现模型策略。
+运行 `orbit web --open`，进入 **Evaluations**。先由维护者准备并登记环境与策略；Web 不安装 BrowserGym 或自动实现模型策略。
 BrowserGym 适配器覆盖固定版本注册的 125 个 MiniWoB++ 任务；详见[准备指南](../../examples/bench-adapters/browsergym/README.md)。
 
 ## Create an evaluation
@@ -31,6 +31,8 @@ CLI 桥记录动作调用 id；右侧 **Agent at this step** 仅按返回结果�
 BrowserGym 的 **Recheck evidence** 只验证保存的奖励、轨迹和哈希；不重新执行 Agent、不回放浏览器。重查过程中保留历史证据入口，结果历史与当前核验状态分开显示。
 
 ## Embodied episodes
+
+原生具身任务从 [具身快速开始](embodied-quickstart.md#3-在-web-回看-trial) 进入 Trial。
 
 独立的 MP4、WebM 和 Ogg 视频产物可在 Trial 的文件页播放，预览上限为 64 MiB。超限文件可下载。
 

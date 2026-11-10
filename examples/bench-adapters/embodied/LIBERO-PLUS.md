@@ -14,7 +14,7 @@ Each variant uses initial-state index 0 from the fork's native resolver. The for
 
 ## Build and register
 
-Set `$LIBERO_PLUS_SOURCE` to the pinned source and `$LIBERO_PLUS_ASSETS` to the extracted `assets` directory containing `scenes`, `textures`, and `new_objects`. The [official archive](https://huggingface.co/datasets/Sylvest/LIBERO-plus/tree/dd2bd61b7d9a6fef1abc52d606e983b41886a149) includes a prefix before the `assets` directory. Keep the extracted directory outside the source checkout. Use the original [native LIBERO runtime build](README.md#reference-and-assets) as `$LIBERO_RUNTIME` and choose a local output directory `$LOCAL_CONFIG`.
+Set `$LIBERO_PLUS_SOURCE` to the pinned source and `$LIBERO_PLUS_ASSETS` to the extracted `assets` directory containing `scenes`, `textures`, and `new_objects`. The [official archive](https://huggingface.co/datasets/Sylvest/LIBERO-plus/tree/dd2bd61b7d9a6fef1abc52d606e983b41886a149) includes a prefix before the `assets` directory. Keep the extracted directory outside the source checkout. Use the original [native LIBERO runtime build](OPENPI-LIBERO.md#reference-and-assets) as `$LIBERO_RUNTIME` and choose a local output directory `$LOCAL_CONFIG`.
 
 ```bash
 docker build --build-arg BENCHMARK_BASE="$LIBERO_RUNTIME" --build-context libero_plus="$LIBERO_PLUS_SOURCE" \

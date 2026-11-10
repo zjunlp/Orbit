@@ -47,7 +47,7 @@ recipe. These remain distinct from full official-runtime or published-score equi
 
 Keep sources, weights, generated configuration and audit outputs outside the checkout. Set the
 local variables used below to the corresponding locations. Follow the image and source setup in
-[the native adapter guide](../../examples/bench-adapters/embodied/README.md),
+[the OpenPI runtime build](../../examples/bench-adapters/embodied/OPENPI-LIBERO.md#reference-and-assets),
 [GR00T setup](../../examples/bench-adapters/embodied/GR00T.md) and
 [OpenVLA-OFT setup](../../examples/bench-adapters/embodied/OPENVLA.md).
 

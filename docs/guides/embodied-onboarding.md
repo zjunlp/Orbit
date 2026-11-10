@@ -1,6 +1,6 @@
 # 具身评测接入模板
 
-模型端和 benchmark 端分别登记，组合验收记录具体的权重、评测 recipe 和样本计划。先从兼容矩阵选一个已有组合做基线。新增模型优先复用 benchmark 和 connector，新增套件优先复用原生 driver。遇到新的传输协议或环境 API 时，在对应端实现适配。[兼容矩阵](embodied-compatibility.md) · [原生适配器](../../examples/bench-adapters/embodied/README.md)
+模型端和 benchmark 端分别登记，组合验收记录具体的权重、评测 recipe 和样本计划。先选一个[已实测的组合](embodied-compatibility.md#真实模型实测)做基线。新增模型优先复用 benchmark 和 connector，新增套件优先复用原生 driver。遇到新的传输协议或环境 API 时，在对应端实现适配。[配置指南索引](../../examples/bench-adapters/embodied/README.md) · [Python 环境和开发验证](embodied-development.md)
 
 ## 模型端
 
@@ -46,14 +46,29 @@ python3 examples/bench-adapters/embodied/plan.py \
   --reference-source "$BENCHMARK_SOURCE" --reference-file "$REFERENCE_FILE" \
   --suite "$SUITE" --task "$TASK_ID" --initial-state 0 --initial-state 1 \
   --environment-seed "$ENVIRONMENT_SEED" > "$LOCAL_CONFIG/samples.json"
-
-orbit bench calibrate "$BENCHMARK" --policy "$POLICY" \
-  --sample-plan "$LOCAL_CONFIG/samples.json" --budget 20 --json
 ```
 
 SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。预打包任务用 `environmentSeed + initialStateId` 生成场景。固定场景网格用 `initialStateId` 选场景和位姿，`environmentSeed` 单独控制模拟器随机流。LIBERO 用 `initialStateId` 索引已固定的初态文件。[LIBERO 配置示例](libero-suites.md) · [SimplerEnv 配置示例](../../examples/bench-adapters/embodied/SIMPLER.md)
 
-每个新组合先跑 2–5 个冻结样本，通常选同一代表任务的不同初态。20 分钟预算包含排队、模型启动、执行、CPU 验证及默认首样本重评，最长可设 30 分钟。判定时检查真实模型身份、一个批次一次模型加载、独立 CPU 验证、重评一致性和清理完成。原生任务失败可以得到有效的 0 分，仍可通过接入检查。超时和无效结果按校准报告记录。[接入校准](policy-integration-checks.md) · [批量运行](embodied-batches.md)
+先选同一代表任务的 2–5 个冻结样本。支持固定批次的登记使用[有界 Policy 校准](policy-integration-checks.md)。
+例如 LIBERO 的 20 分钟预算涵盖排队、模型启动、执行、CPU 验证和默认首样本重评。
+
+```bash
+orbit bench calibrate "$BENCHMARK" --policy "$POLICY" \
+  --sample-plan "$LOCAL_CONFIG/samples.json" --budget 20 --json
+```
+
+RLBench 等登记按单 episode 启动，使用普通作业验收，再选一个完成的 Trial 重评。
+如需限制求解时间，`--timeout` 按 Trial 生效。记录各自的执行、验证和清理结果。
+
+```bash
+orbit bench run "$BENCHMARK" --method "model=policy,policyRef=$POLICY" \
+  --sample-plan "$LOCAL_CONFIG/samples.json"
+orbit bench rescore "$JOB" --trial "$TRIAL"
+```
+
+两条路径都核对真实模型身份、独立 CPU 验证、重评一致性和资源清理。
+固定批次额外核对同批样本共享一次模型加载。原生任务失败可以得到有效的 0 分，仍可通过接入检查。
 
 复制以下验收记录。状态使用 `passed`、`failed` 或 `not_run`，并记录依据或原因。具体作业 ID、分数、权重、生成配置及运行产物留在源码工作树之外。
 
@@ -70,7 +85,7 @@ SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。预�
 | --- | --- | --- |
 | 模型接口和语义 binding | <状态> | <检查版本与范围> |
 | 原生任务覆盖 | <状态> | <目录数、实际 reset/step 数、正负例或固定动作对照> |
-| 真实抽样接入 | <状态> | <样本数、批次、CPU 验证、重评、资源释放> |
+| 真实抽样接入 | <状态> | <样本数、固定批次或单 episode、CPU 验证、重评、资源释放> |
 | 参考对照 | <状态> | <上游版本、确定性 I/O / 固定动作 / rollout 的实际范围> |
 | 完整套件统计 | <状态> | <样本范围、预先声明的统计标准，或未运行原因> |
 ```
