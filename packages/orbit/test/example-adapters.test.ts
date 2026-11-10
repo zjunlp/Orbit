@@ -10,6 +10,8 @@ import {
 
 it.each([
   "posttrainbench",
+  "automationbench",
+  "chartography",
   "researchclawbench",
   "longds",
   "browsergym",

@@ -42,6 +42,128 @@ const nativeRoute = (scope: string, path = adapter("embodied")) =>
 
 const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   {
+    id: "automationbench",
+    name: "AutomationBench",
+    description:
+      "Execute business workflows through the original simulated service APIs and strict task rubric.",
+    taxonomyGroups: [
+      group("Public and simple workflows", {
+        domains: ["business-services"],
+        taskTypes: ["business-operation"],
+        targets: ["tool-use"],
+        modalities: ["text", "structured-data"],
+        interfaces: ["tool-api"],
+        platforms: ["software-system"],
+        world: ["controlled"],
+        feedback: ["step"],
+        scoringEvidence: ["final-state", "trajectory"],
+        scoringMethods: ["rule-check"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native auto-bench adapter",
+        adapter("automationbench"),
+        "600 public tasks and 200 simple tasks registered separately. Native external agent and empty baseline; the leaderboard's private split is unavailable.",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "Original empty scoring and a real model rollout checked. Full-suite model evaluation and private leaderboard parity are unverified.",
+      "docs/tasks/20261110-benchmark-gaps.md",
+    ),
+    suites: ["Public (six business domains)", "Simple (separate calibration suite)"],
+  },
+  {
+    id: "frontierswe-v2",
+    name: "FrontierSWE v2",
+    description:
+      "Solve frontier software and scientific programming tasks in their original Harbor environments.",
+    taxonomyGroups: [
+      group("Original coding-agent tasks", {
+        ...workspace,
+        domains: ["software", "science", "machine-learning"],
+        taskTypes: ["implementation", "optimization"],
+        scoringEvidence: ["artifact"],
+        scoringMethods: ["execution-test"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Pinned Harbor suite adapter",
+        adapter("harbor-suites"),
+        "Original task images, dedicated agent accounts, artifact exclusions and independent verifiers. Missing source files and unsupported task conditions remain visible.",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "Original reference/empty calibration and a real CLI auth check under the task account passed. Allowlist-as-public is an explicit network deviation; full-suite model parity is unverified.",
+      "docs/tasks/20261110-benchmark-gaps.md",
+    ),
+    suites: ["v2.0.0 public tasks"],
+  },
+  {
+    id: "wandr",
+    name: "WANDR",
+    description:
+      "Research and extract evidence from the Web, retaining native relaxed recall and all twelve reward metrics.",
+    taxonomyGroups: [
+      group("Web evidence collection", {
+        ...workspace,
+        domains: ["general-knowledge"],
+        taskTypes: ["retrieval", "information-processing"],
+        world: ["live"],
+        scoringEvidence: ["artifact"],
+        scoringMethods: ["model-judge"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Pinned Harbor suite adapter",
+        adapter("harbor-suites"),
+        "501 public tasks. CLI agent or empty method; no published oracle. Nonempty grading needs the original judge and page-fetch services.",
+      ),
+    ],
+    verification: checked(
+      "pending-calibration",
+      "Task catalog and native reward parsing checked. Native environment preparation timed out downloading dependencies; empty and judge-backed calibration remain pending.",
+      "docs/tasks/20261110-benchmark-gaps.md",
+    ),
+    suites: ["Public WANDR catalog"],
+  },
+  {
+    id: "chartography",
+    name: "Chartography",
+    description:
+      "Answer professional chart-reading questions through the original no-tools Inspect solver and independent judge.",
+    taxonomyGroups: [
+      group("Chart questions", {
+        domains: ["science", "finance", "healthcare"],
+        taskTypes: ["answering"],
+        modalities: ["text", "image"],
+        interfaces: ["response"],
+        platforms: ["software-system"],
+        world: ["controlled"],
+        feedback: ["none"],
+        scoringEvidence: ["response"],
+        scoringMethods: ["model-judge"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native Inspect adapter",
+        adapter("chartography"),
+        "Original local task-pack format with charts, frozen catalog and native judge. The two dummy tasks are explicitly labelled sample; released data must be supplied separately.",
+      ),
+    ],
+    verification: checked(
+      "adapter-tested",
+      "Protocol, original dummy sample loader, real vision generation and an explicitly alternate judge checked. Released-data and default-judge calibration remain pending; ten-epoch leaderboard reducers are not implemented.",
+      "docs/tasks/20261110-benchmark-gaps.md",
+    ),
+    suites: ["User-supplied original task pack", "Two upstream dummy samples (development only)"],
+  },
+  {
     id: "humaneval",
     name: "HumanEval",
     description:

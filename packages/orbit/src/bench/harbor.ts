@@ -2,14 +2,17 @@
 // Orbit runs the solve phase in the task environment and the verifier in a separate container
 // (environment_mode = "separate"), with the declared artifacts copied across. Settings Orbit cannot
 // honour mark the task unsupported instead of being ignored, so scores keep the task's conditions.
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
@@ -33,6 +36,7 @@ export interface Artifact {
   optional?: boolean;
   /** A compose service other than `main` the file comes from. */
   service?: string;
+  exclude?: string[];
 }
 
 /** Harbor copies this directory from the solve to the verifier environment without a declaration. */
@@ -63,6 +67,7 @@ export interface HarborTask {
   /** `[[verifier.collect]]`: commands run before artifacts are collected. */
   hooks: { service?: string; command: string; timeoutSec: number }[];
   agentTimeoutSec: number | null;
+  agentUser?: string;
   verifierTimeoutSec: number | null;
   env: Resources & {
     network: boolean;
@@ -212,6 +217,9 @@ export function parseArtifacts(v: unknown): { artifacts: Artifact[]; skipped: st
       source: trimSlash(source),
       destination: trimSlash(dest?.startsWith("/") ? dest : source),
       ...(service && service !== "main" ? { service } : {}),
+      ...(exclude.length
+        ? { exclude: exclude.filter((x): x is string => typeof x === "string") }
+        : {}),
     });
   }
   return { artifacts, skipped };
@@ -301,7 +309,11 @@ function unsupportedSettings(toml: Table): string[] {
     for (const k of ["gpu_types", "tpu", "mcp_servers", "skills_dir", "healthcheck"])
       if (k !== "gpu_types" || label !== "[environment]") check(nonEmpty(env[k]), `${label} ${k}`);
   }
-  check(nonEmpty(agent.user), "[agent] user");
+  check(
+    nonEmpty(agent.user) &&
+      (typeof agent.user !== "string" || !/^[a-z_][a-z0-9_-]{0,31}$/.test(agent.user)),
+    "[agent] user (expected an existing image account name)",
+  );
   check(nonEmpty(verifier.user), "[verifier] user");
   check(nonEmpty(toml.steps), "[[steps]] (multi-step tasks)");
   const tables: [string, unknown][] = [
@@ -468,6 +480,8 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     if (v) tags[k] = v;
   }
   Object.assign(tags, embodiedTags(id, task, meta));
+  if (typeof meta.oracle_reward_threshold === "number" && meta.oracle_reward_threshold < 1)
+    tags.oracle = "partial";
   return {
     id,
     dir,
@@ -478,6 +492,7 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     compose,
     hooks,
     agentTimeoutSec: num(agent.timeout_sec),
+    ...(str(agent.user) ? { agentUser: str(agent.user) as string } : {}),
     verifierTimeoutSec: num(verifier.timeout_sec),
     env: {
       ...envRes,
@@ -618,6 +633,7 @@ export function harborSolveSpec(
     env,
     network: t.env.network,
     root: true,
+    ...(t.agentUser ? { commandUser: t.agentUser } : {}),
     workdir: t.env.workdir ?? c?.workdir ?? "image",
     timeoutMin: timeoutMin ?? (t.agentTimeoutSec ? t.agentTimeoutSec / 60 : undefined),
     collect: t.artifacts.filter((a) => !a.service).map((a) => a.source),
@@ -696,7 +712,25 @@ export function harborVerifySpec(
       mkdirSync(copy, { recursive: true });
     } else {
       mkdirSync(dirname(copy), { recursive: true });
-      cpSync(src, copy, { recursive: true });
+      if (a.exclude?.length && lstatSync(src).isDirectory()) {
+        // Harbor transfers exclusions through tar; filesystem globs differ for ./paths and *.
+        const temporary = mkdtempSync(join(staging, "artifact-filter-"));
+        try {
+          const archive = join(temporary, "artifact.tar");
+          execFileSync("tar", [
+            "-cf",
+            archive,
+            ...a.exclude.map((p) => `--exclude=${p}`),
+            "-C",
+            src,
+            ".",
+          ]);
+          mkdirSync(copy, { recursive: true });
+          execFileSync("tar", ["-xf", archive, "--no-same-owner", "-C", copy]);
+        } finally {
+          rmSync(temporary, { recursive: true, force: true });
+        }
+      } else cpSync(src, copy, { recursive: true });
     }
     mounts.push({ source: copy, target: a.destination, mode: "rw" });
   }

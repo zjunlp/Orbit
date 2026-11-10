@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import type { AfterPhase, AfterStatus, RunPhase, RunSpec } from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
@@ -560,7 +561,8 @@ export async function copyCollected(
  * which keeps the container once the command has exited.
  */
 export function runCommand(s: RunSpec): string[] {
-  let cmd = keepsContainer(s) ? ["/bin/sh", "/orbit/phases/run.sh", ...s.command] : s.command;
+  const main = s.commandUser ? commandAsUser(s.command, s.commandUser, s.mkdirs) : s.command;
+  let cmd = keepsContainer(s) ? ["/bin/sh", "/orbit/phases/run.sh", ...main] : main;
   if (s.mkdirs.length)
     cmd = [
       "/bin/sh",
@@ -570,6 +572,31 @@ export function runCommand(s: RunSpec): string[] {
       ...cmd,
     ];
   return cmd;
+}
+
+/** Keep private host ancestors intact; the command account owns only this run's writable files. */
+export function commandAsUser(command: string[], user: string, directories: string[]): string[] {
+  const script = `set -eu
+if [ "$(id -u)" != 0 ]; then echo 'commandUser requires root initialization' >&2; exit 125; fi
+command -v runuser >/dev/null || { echo 'commandUser requires runuser in the image' >&2; exit 125; }
+account=$1; host_group=$2; shift 2
+id -u "$account" >/dev/null
+mkdir -p /orbit/agent /orbit/output
+chmod o+x /orbit
+for path in /orbit/agent /orbit/output; do
+  chown -hR "$account:$host_group" "$path"
+  find -P "$path" -type d -exec chmod u+rwx,g+rws,o-rwx {} +
+  find -P "$path" -type f -exec chmod u+rw,g+rw,o-rwx {} +
+done
+touch /orbit/metrics.jsonl
+chown "$account:$host_group" /orbit/metrics.jsonl
+chmod 0660 /orbit/metrics.jsonl
+${directories.length ? `chown -- "$account:$host_group" ${docker.shellJoin(directories)}` : ""}
+user_home=$(getent passwd "$account" | cut -d: -f6)
+[ -n "$user_home" ] || { echo 'commandUser has no home directory' >&2; exit 125; }
+umask 0007
+exec runuser -u "$account" -- env HOME="$user_home" "$@"`;
+  return ["/bin/sh", "-c", script, "sh", user, String(userInfo().gid), ...command];
 }
 
 /** Runs whose container stays once the command exits: for hooks and an after phase. */

@@ -293,6 +293,11 @@ export const RunSpec = z
     snapshot: z.boolean().default(true),
     /** Run as root instead of the host user (files in outputs are then root-owned). */
     root: z.boolean().default(false),
+    /** Run the command as this existing image account; initialization and later phases keep the image user. */
+    commandUser: z
+      .string()
+      .regex(/^[a-z_][a-z0-9_-]{0,31}$/)
+      .optional(),
     timeoutMin: z.number().positive().optional(),
     /** Save local filesystem and native session state before failure cleanup. */
     checkpoint: CheckpointPolicy.optional(),
@@ -388,6 +393,12 @@ export const RunSpec = z
     },
   )
   .superRefine((s, ctx) => {
+    if (s.commandUser && (s.backend !== "docker" || !s.root || s.project || s.checkpoint))
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "commandUser needs a Docker image started as root, without a project or checkpoint",
+      });
     if (
       s.checkpoint &&
       (s.backend !== "docker" ||

@@ -29,6 +29,7 @@ export interface RunOpts {
   auth?: string;
   snapshot: boolean;
   root?: boolean;
+  commandUser?: string;
   timeout?: number;
   checkpoint?: number;
   tag: string[];
@@ -90,6 +91,10 @@ export function addRunOptions(cmd: Command): Command {
       num,
     )
     .option("--root", "run as root instead of your user")
+    .option(
+      "--command-user <user>",
+      "run the command as an existing image account (needs --root --no-project)",
+    )
     .option("--timeout <min>", "stop the run after this many minutes", num)
     .option("-t, --tag <KEY=VALUE>", "tag", collect, [])
     .option("-w, --wait", "wait for completion and exit with the run's status")
@@ -203,6 +208,7 @@ export async function buildSpec(
     auth: o.auth,
     snapshot: o.snapshot,
     root: o.root ?? false,
+    commandUser: o.commandUser,
     timeoutMin: o.timeout,
     checkpoint: o.checkpoint === undefined ? undefined : { maxSizeGB: o.checkpoint },
     tags: kv(o.tag, "--tag"),

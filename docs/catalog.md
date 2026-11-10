@@ -7,16 +7,17 @@ remain a separate view, and execution history belongs in Evaluations and Runs.
 
 The authoritative product data is [bench/supported.ts](../packages/orbit/src/bench/supported.ts),
 with the shared response shape in [contracts/bench.ts](../packages/orbit/src/contracts/bench.ts).
-The catalog currently contains 24 families. This document is a navigation index, not another
+The catalog currently contains 28 families. This document is a navigation index, not another
 taxonomy or a machine-specific record. [Six dimensions](design.md#917-benchmark-六维分类-v12026-11-09)
 · [Catalog contract and behavior](design.md#918-已适配-benchmark-产品目录2026-11-09)
 
 | Area | Benchmark families | Setup and scope |
 | --- | --- | --- |
-| Code generation and terminal work | HumanEval; Terminal-Bench 4.0 | [HumanEval adapter](../examples/bench-adapters/humaneval/) · [Harbor support](tasks/20261010-harbor-verifier-modes.md) |
-| Research and model development | ASI-Bench; LongDS-Bench; ResearchClawBench; PostTrainBench; Terminal-Bench Science | [ASI conditions](tasks/20261009-asi-runner-timeouts.md) · [LongDS adapter](../examples/bench-adapters/longds/) · [ResearchClawBench adapter](../examples/bench-adapters/researchclawbench/) · [Adapter protocol](tasks/20261003-bench-adapter-protocol.md) |
-| Tools, user interaction and games | BFCL; τ²-bench; TextArena | [BFCL](tasks/20261105-sample-bfcl-multiturn.md) · [τ²-bench](tasks/20261105-sample-tau2.md) · [Game integration](tasks/20261105-samples-c1-c7.md) |
+| Code generation and terminal work | HumanEval; Terminal-Bench 4.0; FrontierSWE v2 | [HumanEval adapter](../examples/bench-adapters/humaneval/) · [Harbor support](tasks/20261010-harbor-verifier-modes.md) |
+| Research and model development | ASI-Bench; LongDS-Bench; ResearchClawBench; PostTrainBench; Terminal-Bench Science; WANDR | [ASI conditions](tasks/20261009-asi-runner-timeouts.md) · [LongDS adapter](../examples/bench-adapters/longds/) · [ResearchClawBench adapter](../examples/bench-adapters/researchclawbench/) · [Adapter protocol](tasks/20261003-bench-adapter-protocol.md) |
+| Tools, user interaction and games | BFCL; τ²-bench; TextArena; AutomationBench | [BFCL](tasks/20261105-sample-bfcl-multiturn.md) · [τ²-bench](tasks/20261105-sample-tau2.md) · [Game integration](tasks/20261105-samples-c1-c7.md) |
 | Browser, desktop and mobile tasks | MiniWoB++; WebVoyager; Online-Mind2Web; Cua Bench; MobileWorld; OSWorld-V2 | [GUI guide](guides/gui-bench-web.md) · [CUA-Lite](../examples/bench-adapters/cua-lite/) · [Cua Bench](../examples/bench-adapters/cua-bench/) · [MobileWorld](../examples/bench-adapters/mobileworld/) · [OSWorld-V2](../examples/bench-adapters/osworld-v2/) |
+| Visual reasoning | Chartography | [Native no-tools adapter](../examples/bench-adapters/chartography/) · released data calibration pending |
 | Embodied coding-agent tasks | Embodied First Exam | [EFE integration](tasks/20261104-p3-browsergym-efe.md) · [Execution boundaries](design.md#94-被评测对象agent-与-policy) |
 | Native embodied policies | LIBERO; SimplerEnv; RoboCasa365; RoboTwin 2.0; ManiSkill3; Meta-World; CALVIN | [Native adapter](../examples/bench-adapters/embodied/) · [Compatibility matrix](guides/embodied-compatibility.md) · [Onboarding](guides/embodied-onboarding.md) |
 
@@ -37,3 +38,5 @@ and freezes it for evaluation. The [compatibility matrix](guides/embodied-compat
 the supported suite/recipe combinations, including GR00T N1.7 for LIBERO/SimplerEnv and N1.5 for
 RoboCasa365. The current Agents page does not yet provide a native Policy catalog; its historical
 external-entrypoint list is a different view.
+
+[New native integrations](tasks/20261110-benchmark-gaps.md) · [Original-suite availability and protocol gaps](guides/benchmark-availability.md)

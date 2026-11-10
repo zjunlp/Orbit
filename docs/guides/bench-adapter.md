@@ -327,3 +327,5 @@ orbit bench calibrate efe -t <task> --seeds 2 --json > calibration.json
    不能解释的视为适配器错误。评审为 LLM 时，同一份产物多次打分的波动本身就要先量出来。
 
 然后再用真实 Agent 方法跑，`orbit bench compare <job...>` 或 Web `/bench/compare` 查看。
+
+原生 AutomationBench、FrontierSWE v2、WANDR 和 Chartography 的接入与限制见[可用性矩阵](benchmark-availability.md)。Harbor 的 `[agent] user` 通过受限的 `commandUser` 运行；`[[artifacts]].exclude` 在独立验证前过滤。

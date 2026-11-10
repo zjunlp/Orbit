@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "default": { "cpus": 1, "memGB": 2, "gpus": 0, "timeoutMin": 15 },
+  "tasks": {}
+}

@@ -247,6 +247,11 @@ alternate（兼容 linked worktree），结束或失败后删除，不向用户�
 NVIDIA spec 时）；未启用或能力查询失败则用 `--gpus device=<UUID>`，不能只凭本机文件判定。首次使用时探测，
 Docker 应答后固定结果；查询失败（如 daemon 先于 Docker 启动）至多每分钟重试一次。启动后核对 `nvidia-smi -L` 与租约一致。默认以宿主用户
 `uid:gid` 运行（产物归属正确），`--root` 例外。每个 Run 的记录目录挂载为 `/orbit`（rw）。
+`commandUser` / `--command-user` 可在 root 初始化之后，只把主命令切到镜像内已有的命名账户；
+后续验证阶段保留镜像用户。仅支持无 project、无 checkpoint 的 Docker Run，镜像需包含
+`runuser`、`getent`、`find` 与 coreutils；非 root 镜像会明确失败。只授权本 Run 的 Agent home、
+输出、metrics 和声明的 mkdirs，私有宿主祖先目录保持私有；托管可写目录保留 daemon 组访问，
+不改变任务镜像内私有评分器的权限。CLI/API 共用 RunSpec，Web 显示命令账户并保留在复现命令中。
 没有租到 GPU 的容器设置 `NVIDIA_VISIBLE_DEVICES=void`，避免镜像默认值暴露全部 GPU。`image` 本地不存在时先
 `docker pull`（输出写入 Run 日志），拉取失败记为环境失败。daemon 重启后重新附着容器时，日志截回启动时记录的
 偏移再重新跟随，避免重复。
@@ -588,7 +593,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染），并设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
   `command`；external 也给 adapter 自己的 `command`，Orbit 只加方法的 solve `passEnv`，不注入 CLI 或强改网络。
-  verify 不能请求 Agent。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
+  verify 不能请求 Agent。显式 `passEnv` 在对应阶段优先于 adapter 的同名环境默认值，避免 Harbor 模板空值遮住凭据；变量值仍不入记录。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
   `snapshot = false`，最后按 RunSpec 校验。
 - **任务资源文件**（`contracts.BenchResources`，`bench/resources.ts`）：`orbit bench add --resources <file>` 登记一个
   JSON：`{ version: 1, default, tasks: { <task>: { cpus?, memGB?, gpus?, gpuMemGB?, timeoutMin?, evidence?, confidence?,
@@ -610,7 +615,7 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
    `tests/`、`solution/`。solve / verify 按 ID 直接定位平铺任务，只解析选中的任务；嵌套短名与重名的相对路径 ID
    保留 listing 的四层目录发现规则，但只扫描目录元数据。score 直接读取 verifier 输出。
    solve Run 用 `[environment] docker_image`（Harbor 优先用它），否则从 `environment/Dockerfile`
-   构建，以 root 与 `workdir`（缺省为镜像 WORKDIR）运行；资源、超时来自 `task.toml`；Agent 方法给出 `agentTask`
+   构建，以镜像用户初始化并遵守 `workdir`（缺省为镜像 WORKDIR）；声明的 `[agent] user` 通过 `commandUser` 切换主命令账户；资源、超时来自 `task.toml`；Agent 方法给出 `agentTask`
    （`instruction.md`），oracle 把 `solution/` 挂到 `/solution` 执行 `solve.sh`。顶层 `artifacts` 声明的路径在 solve
    结束时采集（`RunSpec.collect`，写入 `output/collected/<abs path>`）。verifier 模式按 Harbor 规则解析：显式
    `environment_mode`，否则有 `[verifier.environment]` 即 separate，否则 shared。shared：solve Run 带 after 阶段——
@@ -1463,3 +1468,15 @@ v0 的代码、文档与任务记录保留在标签 `v0-python-final`。
 - ASI 容器内旧版 Codex CLI 导致模型拒绝；harness 版本必须固定并在 doctor 中检查。
 - GPU 映射：Docker `--gpus device=<UUID>` 或 CDI `--device nvidia.com/gpu=<UUID>`，启动后核对实际映射与租约一致。
 - 文档与流程记录量接近代码量，拖慢迭代。只保留本文、status 与必要的任务记录。
+
+### Benchmark-specific native adapters (2026-11-10)
+
+AutomationBench uses its native tool agent and an independent original rubric over saved world state;
+public and simple splits remain separate. Chartography uses the original no-tools Inspect solver and
+an independent native judge; its dummy sample pack is never represented as the released dataset.
+Their images pin upstream code/dependencies; read-only runtime wrappers remain external-adapter code.
+FrontierSWE/WANDR wrappers reuse Harbor rather than adding an executor: frozen catalogs, task-account
+execution, native tar artifact exclusions, oracle-only release flags, native invalid markers and WANDR's
+12 metrics. All four routes preserve API/scorer failures as invalid and keep evidence for review.
+The product library has 28 families with per-route validation limits; unavailable originals and exact
+protocol gaps are recorded in [availability](guides/benchmark-availability.md).
