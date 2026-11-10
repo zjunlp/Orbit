@@ -479,8 +479,11 @@ timeout_sec = 120
 
   it("reads the Compose subset: interpolation, durations, sizes, conditions", () => {
     const p: string[] = [];
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: compose interpolation fixtures
     expect(interpolate("${A}-${B:-x}-${C-y}-$$-$A", { A: "1", B: "" }, p)).toBe("1-x-y-$-1");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: compose interpolation fixtures
     expect(interpolate("${MISSING}", {}, p)).toBe("");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the compose interpolation message
     expect(p).toEqual(["compose variable ${MISSING} is not set"]);
     expect([durationSec("1m30s"), durationSec("500ms"), durationSec(7), durationSec("x")]).toEqual([
       90,

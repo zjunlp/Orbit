@@ -20,7 +20,7 @@ const pythonAdapters = readdirSync(adapterDirsRoot, { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name)
   .filter((name) => {
-    const files = readdirSync(adapterDirsRoot + name + "/");
+    const files = readdirSync(`${adapterDirsRoot}${name}/`);
     return files.includes("adapter.py") && files.some((f) => /^test_.*\.py$/.test(f));
   })
   .sort();

@@ -34,7 +34,12 @@ let the adapter directory carry its own contract.
 
 ## Next / open issues
 
-- The repository has no CI job that runs `pnpm verify`; these checks ran locally.
+- CI (`.github/workflows/ci.yml`) runs `pnpm verify` on pull requests and `main`; the checks here
+  also ran locally first. Adapter tests that need optional Python packages still only run where
+  those packages exist.
+- `examples/sdk/` has no README and no dependency declaration, so its tests have no documented
+  setup; 43 of 126 fail locally for missing optional packages (`msgpack`, `websockets`,
+  `openpi_client`), not for code defects.
 - `service.ts` remains 1,626 lines. `BenchServiceDeps` is referenced 147 times, so splitting the
   class would cost more than it saves; further work should narrow that dependency bag rather than
   split the file.

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: compose interpolation fixtures
 // Pure coverage and calibration judgement over explicit task and trial fixtures.
 import { expect, it } from "vitest";
 import {
