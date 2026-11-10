@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "default": {
+    "cpus": 2,
+    "memGB": 4,
+    "gpus": 0,
+    "evidence": "The main role runs the coding agent only. The adapter reserves the native Isaac Sim service separately: one RTX GPU, 24 GB GPU memory, 8 CPUs, 32 GB RAM. The GPU minimum follows the pinned upstream README hardware requirement. Runtime budgets come from each pinned experiment.yaml.",
+    "confidence": "low"
+  },
+  "tasks": {}
+}

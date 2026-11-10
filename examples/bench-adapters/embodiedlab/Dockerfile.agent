@@ -1,0 +1,8 @@
+FROM node:24.18.0-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv git openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir numpy==1.26.4 scipy==1.15.3 pyyaml==6.0.3 jsonschema==4.26.0 \
+       cloudpickle==3.1.2 fastapi==0.141.1 httpx==0.28.1 pydantic==2.13.5 uvicorn==0.53.0 pillow==12.3.0 packaging==26.3
+ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1
+WORKDIR /task

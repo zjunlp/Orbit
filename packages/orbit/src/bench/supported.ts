@@ -349,6 +349,123 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     suites: ["Embodied program tasks", "Embodied live tasks"],
   },
   {
+    id: "rle-bench",
+    name: "RLE-Bench",
+    description: "Evaluate coding agents on robotic engineering, control and design tasks.",
+    taxonomyGroups: [
+      group("Robotic engineering workflows", {
+        ...workspace,
+        domains: ["robotics"],
+        taskTypes: ["implementation", "experimentation", "optimization"],
+        targets: ["planning", "tool-use", "control"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        scoringEvidence: ["artifact"],
+        scoringMethods: ["execution-test"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native Harbor bridge",
+        adapter("rle-bench"),
+        "All 51 workflows remain visible; tasks 07 and 08 use the supported Harbor subset. Task 09 lacks native grader isolation; other unsupported runtime conditions remain explicit.",
+      ),
+    ],
+    verification: checked(
+      "pending-calibration",
+      "Native task budgets and graders are retained; sampled calibration is pending.",
+      "docs/tasks/20261110-embodied-harness-benchmarks.md",
+    ),
+    suites: ["Robot perception", "Policy learning", "Control", "Robot design"],
+  },
+  {
+    id: "embodied-clbench",
+    name: "EmbodiedCLBench",
+    description: "Evaluate embodied agents and experience reuse across native task sequences.",
+    taxonomyGroups: [
+      group("Basic and zero-shot episodes", {
+        domains: ["robotics"],
+        taskTypes: ["navigation", "manipulation"],
+        targets: ["planning", "tool-use", "perception-grounding"],
+        modalities: ["text", "image"],
+        interfaces: ["tool-api"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        feedback: ["step"],
+        participants: [],
+        scoringEvidence: ["trajectory", "final-state"],
+        scoringMethods: ["rule-check"],
+      }),
+      group("In-context continual sequences", {
+        domains: ["robotics"],
+        taskTypes: ["navigation", "manipulation"],
+        targets: [
+          "memory",
+          "learning-adaptation",
+          "generalization",
+          "planning",
+          "tool-use",
+          "perception-grounding",
+        ],
+        modalities: ["text", "image"],
+        interfaces: ["tool-api"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        feedback: ["step"],
+        participants: [],
+        scoringEvidence: ["trajectory", "final-state"],
+        scoringMethods: ["rule-check"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native sequence MCP adapter",
+        adapter("embodied-clbench"),
+        "Basic, zero-shot and complete in-context sequences preserve native images, tools and grading. Skill-summary sessions remain unsupported.",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "A native basic task and complete in-context sequence passed reference/empty and real visual CLI Agent checks. Full-suite parity is unverified.",
+      "docs/tasks/20261110-embodied-harness-benchmarks.md",
+    ),
+    suites: ["Basic", "Zero-shot", "In-context continual learning"],
+  },
+  {
+    id: "embodiedlab",
+    name: "EmbodiedLab",
+    description:
+      "Evaluate agents performing robot-controlled scientific experiments and submitting evidenced results.",
+    taxonomyGroups: [
+      group("Scientific experiments with T0 robot control", {
+        domains: ["science", "robotics"],
+        taskTypes: ["experimentation", "analysis", "manipulation"],
+        targets: ["knowledge", "tool-use", "control"],
+        modalities: ["text", "image", "structured-data"],
+        interfaces: ["terminal", "file-edit", "physical-control"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        feedback: ["step"],
+        participants: [],
+        scoringEvidence: ["artifact", "trajectory"],
+        scoringMethods: ["rule-check"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native experiment service adapter",
+        adapter("embodiedlab"),
+        "30 native experiments through the T0 public robot API and private native grader; T1 services and unreleased T2 remain unsupported. Requires Isaac Sim 6.0.1.",
+      ),
+    ],
+    verification: checked(
+      "pending-calibration",
+      "Native simulator compatibility and sampled experiment calibration are pending.",
+      "docs/tasks/20261110-embodied-harness-benchmarks.md",
+    ),
+    suites: ["Mechanics", "Circuits", "Optics", "Thermal physics", "Chemistry"],
+  },
+  {
     id: "miniwob",
     name: "MiniWoB++",
     description:

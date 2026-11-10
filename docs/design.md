@@ -1271,6 +1271,36 @@ policy）、**Benchmarks**（评测什么）、**Methods**（harness + 模型 + 
 **不做**：跨 benchmark 总分或总榜；单一 Ready 徽章合并安装、凭据、能力、校准与有效性；按 hub 声称的套件数宣传接入量；
 无证据的谱系；Web 内的科研编排。
 
+### Embodied harness benchmark adapters
+
+RLE-Bench, EmbodiedCLBench and EmbodiedLab evaluate an Agent together with its harness,
+tools and task conditions. They use the existing external adapter protocol and `agentTask`
+CLI launch path; they do not register an independent VLA Policy or introduce an Agent loop.
+Model selection and credentials remain Method/auth configuration, including Ark Agent Plan.
+
+- **RLE-Bench** delegates planning to the built-in Harbor adapter and retains native task
+  instructions, budgets and independent verifier images. Its wrapper preserves the complete
+  task catalog. Native infrastructure/scorer failures invalidate evaluation; proven submission
+  format or size rejections remain valid failures. Tasks whose submitted code can modify the
+  native grader and unsupported Harbor runtime conditions remain explicitly unsupported.
+- **EmbodiedCLBench** runs the native graph environment and image-producing MCP tools in a
+  private service. One in-context learning trial contains the complete ordered prerequisite
+  and target sequence in one CLI session. Basic and zero-shot trials retain their own native
+  conditions. Skill-summary evaluation is unsupported until its fresh-session boundary can
+  be preserved. An independent verifier replays native action evidence with the native grader.
+- **EmbodiedLab** runs Isaac Sim and the native experiment worker in an Orbit-managed GPU
+  service. The Agent receives the public T0 robot API, task card and writable submission
+  workspace; private instance state and scoring evidence stay inside the service. The
+  independent verifier consumes sealed service evidence and the submitted experiment result,
+  using the native experiment evaluator. T1's additional services and unreleased T2 are
+  explicitly unsupported.
+
+Native images, datasets, instance state and run evidence stay outside the source checkout.
+Readiness, execution outcome, cleanup and evaluation validity remain separate. Unusable
+model backends and missing or untrustworthy environment evidence are invalid evaluations. Discovery metadata uses §9.17 and
+retains per-profile support limits; sampled checks do not establish full-suite parity.
+Implementation and validation: [task record](tasks/20261110-embodied-harness-benchmarks.md).
+
 ### 9.17 Benchmark 六维分类 v1（2026-11-09）
 
 状态：**词表、共享契约与 Benchmarks 页面已实现并通过本轮验收**。实施与验收见
