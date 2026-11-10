@@ -142,5 +142,6 @@ PYTHONPATH=examples/sdk python3 -B -m unittest orbit_embodied.test_robolab -v
 
 These are explicitly synthetic tests for source and asset identities, reset ordering, native result
 handling, action semantics and application lifetime. They do not attest real Isaac execution or
-positive calibration. The supported-family catalog remains pending calibration until the native
-checks above have passed.
+positive calibration. The native two-task hold check, independent CPU verification, rescore and
+separate official successful replay have passed; see the [development record](../../../docs/tasks/20261109-robodojo-robolab.md).
+Trained-policy calibration and full-suite statistical equivalence remain unverified.

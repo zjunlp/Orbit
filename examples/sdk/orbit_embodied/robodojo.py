@@ -51,9 +51,17 @@ def check_runtime(source_files, assets_target, assets_digest):
         raise ValueError("RoboDojo assets differ from the frozen reference")
 
 
+def prepare_native_imports():
+    # Kit adds OpenCV's regular utils package, which shadows RoboDojo's namespace.
+    native_utils = importlib.import_module("utils.load_file")
+    if Path(native_utils.__file__).resolve() != (ROOT / "utils/load_file.py").resolve():
+        raise RuntimeError("RoboDojo utils resolves outside the frozen native repository")
+
+
 def simulation_app():
     global _APP
     if _APP is None:
+        prepare_native_imports()
         from src.eval_client.physx_warning_monitor import get_monitor
         from env.camera_manager.capture.render_sync import add_zero_delay_kit_args
         from isaaclab.app import AppLauncher

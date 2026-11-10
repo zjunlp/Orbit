@@ -3,7 +3,8 @@
 `robodojo-arx-x5-native` registers all 54 native tasks (42 base tasks and 12 random
 variants) at commit `f57e1633ffed59761bc8e568cfe7530c4b33381c`. The benchmark registration
 is independent of a policy. Tasks with no downloaded replay layouts remain listed with an
-explicit unsupported reason. Simulator and full-suite statistical equivalence require calibration.
+explicit unsupported reason. Sampled native execution checks are recorded below; trained-policy
+performance and full-suite statistical equivalence remain unverified.
 
 [Official source](https://github.com/RoboDojo-Benchmark/RoboDojo/tree/f57e1633ffed59761bc8e568cfe7530c4b33381c)
 · [Evaluation guide](https://robodojo-benchmark.com/doc/usage/quick-evaluation/)
@@ -82,8 +83,8 @@ One upstream requirement cannot be satisfied simultaneously: the pinned IsaacLab
 Starlette 0.49.1 for livestreaming, while Isaac Sim 5.1's fixed FastAPI requires Starlette below
 0.46. The image keeps Starlette 0.45.3 for Isaac Sim and reports this remaining `pip check`
 conflict explicitly. This integration supports headless evaluation; the IsaacLab livestream/UI
-path is unsupported and unverified. Native initialization, cameras and control still need real
-validation after building the image.
+path is unsupported and unverified. Rebuilt images require their own native initialization, camera and control checks;
+the development results below apply only to the pinned stack that was checked.
 
 ## Register and freeze samples
 
@@ -142,6 +143,10 @@ Both native joint groups contain measured arm positions and the last commanded n
 the gripper fields are not measured finger positions. Actions are 14 absolute joint/gripper targets in left-arm, left-gripper, right-arm,
 right-gripper order. Native `take_action` owns control interpolation, clipping and physics steps.
 No frame resizing, action normalization, settling override or horizon shortening is applied.
+Runs use the native repository as their working directory so relative material paths resolve correctly.
+Before Kit starts, the SDK imports and checks the native `utils.load_file` module: Kit exposes
+OpenCV’s same-named regular package, which otherwise shadows RoboDojo’s namespace package.
+An already conflicting module is rejected; the SDK does not replace another loaded module.
 
 The SDK calls the official `create_eval_env`, `reset`, `run_reward`, optional `get_score`,
 `get_obs` and `take_action`. Only the constructor's WebSocket policy transport is replaced by
@@ -173,3 +178,8 @@ tests use explicitly synthetic doubles. Passing them does not establish that Isa
 assets load, policies solve tasks, or published scores are reproduced. A real task check should
 retain the frozen plan, per-step evidence and Orbit resource measurements separately from these
 unit tests.
+
+Two full-horizon native hold-control episodes passed actual GPU execution, independent CPU
+verification and rescore, including a fresh environment for the second task in one process.
+A separate native reset/camera/control check retained all three original RGB frames. These
+checks do not establish trained-policy performance, a successful RoboDojo oracle, or full-suite parity.

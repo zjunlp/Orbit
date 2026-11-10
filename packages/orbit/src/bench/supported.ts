@@ -752,8 +752,8 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
       ),
     ],
     verification: checked(
-      "pending-calibration",
-      "Source and adapter checks are separate from native GPU episodes; real task calibration is pending.",
+      "sample-checked",
+      "Two full-horizon native hold-control episodes, CPU verification and rescore checked. Trained-policy, positive-oracle and full-suite parity are unverified.",
       "docs/tasks/20261109-robodojo-robolab.md",
     ),
     suites: ["Native simulation tasks"],
@@ -771,8 +771,8 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
       ),
     ],
     verification: checked(
-      "pending-calibration",
-      "Source and adapter checks are separate from native GPU episodes; real task calibration is pending.",
+      "sample-checked",
+      "Two native hold-control episodes, CPU verification and rescore checked; an official successful replay was checked separately. Trained-policy and full-suite parity are unverified.",
       "docs/tasks/20261109-robodojo-robolab.md",
     ),
     suites: ["Native DROID tasks"],

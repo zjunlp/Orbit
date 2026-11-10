@@ -99,9 +99,8 @@ it("links known built-in adapters and exact native semantic profiles only", () =
 
 it("retains profile boundaries and keeps limited integrations visibly limited", () => {
   const rows = supportedBenchmarks([]);
-  for (const id of ["robodojo", "robolab"]) {
-    expect(rows.find((row) => row.id === id)?.verification.level).toBe("pending-calibration");
-  }
+  expect(rows.find((row) => row.id === "robodojo")?.verification.level).toBe("sample-checked");
+  expect(rows.find((row) => row.id === "robolab")?.verification.level).toBe("sample-checked");
   const miniwob = rows.find((row) => row.id === "miniwob");
   expect(miniwob?.integrations).toHaveLength(2);
   const webvoyager = rows.find((row) => row.id === "webvoyager");

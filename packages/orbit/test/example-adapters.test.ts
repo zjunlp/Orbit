@@ -209,6 +209,7 @@ with tempfile.TemporaryDirectory() as folder:
     const solve = RunSpec.parse(AdapterSpecResponse.parse(saved.solve).spec);
     expect(solve.resources.gpus).toBe(1);
     expect(solve.resources.gpuMemGB).toBe(16);
+    if (kind === "robodojo") expect(solve.workdir).toBe("/workspace/RoboDojo");
     expect(solve.resources.gpuModels?.length).toBeGreaterThan(0);
     for (const card of ["NVIDIA GeForce RTX 3090", "NVIDIA L40S", "NVIDIA A10"])
       expect(modelMatches(card, solve.resources.gpuModels)).toBe(true);

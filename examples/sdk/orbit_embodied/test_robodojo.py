@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -110,13 +111,44 @@ class RoboDojoTests(unittest.TestCase):
         }
         with patch.object(robodojo, "_APP", None), patch.dict(sys.modules, modules), \
                 patch.object(robodojo, "driver_version_kit_args", return_value="synthetic-workaround"), \
-                patch.object(robodojo.atexit, "register"):
+                patch.object(robodojo.atexit, "register"), \
+                patch.object(robodojo, "prepare_native_imports") as prepare:
             self.assertIs(robodojo.simulation_app(), app)
             self.assertIs(robodojo.simulation_app(), app)
+        prepare.assert_called_once()
         launcher.assert_called_once()
         self.assertEqual(launcher.call_args.args[0].kit_args,
                          "--/app/renderer/waitIdle=true synthetic-workaround")
         monitor.start.assert_called_once_with(enabled=True)
+
+    def test_native_namespace_survives_later_opencv_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            native = root / "native"
+            foreign = root / "opencv"
+            (native / "utils").mkdir(parents=True)
+            (foreign / "utils").mkdir(parents=True)
+            (native / "utils/load_file.py").write_text("origin = 'native'\n")
+            (native / "utils/pipeline_utils.py").write_text("origin = 'native'\n")
+            (foreign / "utils/__init__.py").write_text("origin = 'opencv'\n")
+            code = """
+import importlib, sys
+from pathlib import Path
+from orbit_embodied import robodojo
+robodojo.ROOT = Path(sys.argv[1])
+sys.path.insert(0, sys.argv[1])
+robodojo.prepare_native_imports()
+sys.path.insert(0, sys.argv[2])
+assert importlib.import_module('utils.pipeline_utils').origin == 'native'
+"""
+            subprocess.run([sys.executable, "-c", code, str(native), str(foreign)], check=True)
+
+    def test_foreign_utils_are_rejected_without_overwriting_modules(self):
+        foreign = SimpleNamespace(__file__="/foreign/utils/load_file.py")
+        with patch.dict(sys.modules, {"utils.load_file": foreign}):
+            with self.assertRaisesRegex(RuntimeError, "outside the frozen"):
+                robodojo.prepare_native_imports()
+            self.assertIs(sys.modules["utils.load_file"], foreign)
 
     def test_native_joint_targets_preserve_order_and_gripper_clipping_owner(self):
         targets = joint_action(np.arange(14, dtype=float))

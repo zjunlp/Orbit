@@ -39,7 +39,7 @@
 
 π₀.₅ 的四个已实测 LIBERO 套件共用官方 `pi05_libero` 权重，Policy 登记为 `pi05-libero`，共享 GPU 配置登记为 `pi05-libero-shared`。RoboCasa365 使用自己的公开 π₀.₅ 权重。GR00T 的 LIBERO 权重按 suite 子目录选择，WidowX 用 Bridge，Google Robot 用 Fractal，三条路径共用固定 backbone 缓存。OFT 的 Spatial 专用权重和四套件联合权重分别有实测记录。联合权重按 suite 选择 `<suite>_no_noops`，Long 对应 `libero_10_no_noops`。[LIBERO 套件选择](libero-suites.md) · [RoboCasa365 配置](../../examples/bench-adapters/embodied/ROBOCASA365.md) · [GR00T 配置](../../examples/bench-adapters/embodied/GR00T.md) · [OFT 模型配置](../../examples/bench-adapters/embodied/profiles/openvla-model.json)
 
-RoboDojo 和 RoboLab 的目录与原生接口已接入；真实 GPU 任务校准仍待完成。两者要求各自的 Isaac Sim 运行时和资产，现有 LIBERO 等模型权重不代表兼容这两个环境。显式的保持姿态脚本只用于环境负对照，不能当作真实模型评测。[RoboDojo](../../examples/bench-adapters/embodied/ROBODOJO.md) · [RoboLab](../../examples/bench-adapters/embodied/ROBOLAB.md)
+RoboDojo 和 RoboLab 的目录与原生接口已接入。两者各两项完整原生保持位置对照、独立验证和重评分已通过；RoboLab 另完成官方成功轨迹回放。两者要求各自的 Isaac Sim 运行时和资产，现有 LIBERO 等模型权重不代表兼容这两个环境。显式的保持姿态脚本只用于环境负对照，不能当作真实模型评测。[RoboDojo](../../examples/bench-adapters/embodied/ROBODOJO.md) · [RoboLab](../../examples/bench-adapters/embodied/ROBOLAB.md)
 
 ## 评测条件
 

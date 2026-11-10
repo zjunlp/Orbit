@@ -230,7 +230,7 @@ def solve_one(req):
                              **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
                                 if gl_platform != "xvfb-glx" else {})},
                      "resources": resources,
-                     **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") == "robotwin" else {}),
+                     **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") in ("robotwin", "robodojo") else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
                      "tags": {"embodied_evidence": "4" if environment.get("protocol") == "diffusion-policy" else "2"},
                      "mounts": mounts}}
