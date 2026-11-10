@@ -77,6 +77,7 @@ import { AUTH_TEST_GROUP, NotFoundError, type RunService, UserError } from "../r
 import { type AgentFailure, loadRunAgentTranscript, runAgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
 import { gitSource } from "../workspace/snapshot.ts";
+import { supportedBenchmarks } from "./benchmarks/index.ts";
 import { catalogEntry, type Listing } from "./catalog.ts";
 import { classify, cleanupOf, shouldCheckAgentFailure, solveVerdict } from "./classify.ts";
 import {
@@ -95,7 +96,6 @@ import {
 } from "./hub.ts";
 import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
-import { supportedBenchmarks } from "./supported.ts";
 
 export { benchGroup } from "./consolidate.ts";
 export { compareJobs, summarize } from "./summary.ts";

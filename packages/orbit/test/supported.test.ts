@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { supportedBenchmarks } from "../src/bench/supported.ts";
+import { supportedBenchmarks } from "../src/bench/benchmarks/index.ts";
 import {
   Benchmark,
   CatalogEntry,
