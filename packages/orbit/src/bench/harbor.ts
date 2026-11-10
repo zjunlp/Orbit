@@ -96,7 +96,7 @@ export interface HarborOptions {
   hostNamespaces?: string;
   /** `public`: run an `allowlist` agent network as public internet (a recorded deviation). */
   allowlistNetwork?: string;
-  /** `any`: do not restrict `[environment] gpu_types` to those models (a recorded deviation). */
+  /** `any`: do not enforce solve/verifier `gpu_types` (a recorded deviation for each phase). */
   gpuTypes?: string;
   /**
    * The integration category of the tasks (default agent-workspace); Harbor is only the format, so a
@@ -156,11 +156,11 @@ export function embodiedTags(id: string, task: Table, meta: Table): Record<strin
   return out;
 }
 
-/** `[environment] gpu_types`: GPU models any of which Harbor may provision. */
-function gpuTypes(v: unknown, problems: string[]): string[] {
+/** GPU models any of which Harbor may provision for the specified environment. */
+function gpuTypes(v: unknown, problems: string[], label = "[environment]"): string[] {
   if (v === undefined || v === null) return [];
   if (!Array.isArray(v) || !v.every((x) => typeof x === "string" && x.trim() && x.length <= 40)) {
-    problems.push("[environment] gpu_types must be a list of GPU model names");
+    problems.push(`${label} gpu_types must be a list of GPU model names`);
     return [];
   }
   return [...new Set(v.map((x) => (x as string).trim()))].slice(0, 16);
@@ -306,8 +306,8 @@ function unsupportedSettings(toml: Table): string[] {
     ["[verifier.environment]", verifierEnv],
   ] as const) {
     check((str(env.os) ?? "linux").toLowerCase() !== "linux", `${label} os "${str(env.os)}"`);
-    for (const k of ["gpu_types", "tpu", "mcp_servers", "skills_dir", "healthcheck"])
-      if (k !== "gpu_types" || label !== "[environment]") check(nonEmpty(env[k]), `${label} ${k}`);
+    for (const k of ["tpu", "mcp_servers", "skills_dir", "healthcheck"])
+      check(nonEmpty(env[k]), `${label} ${k}`);
   }
   check(
     nonEmpty(agent.user) &&
@@ -474,6 +474,18 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
         if (svc.role && (svc.gpus ?? 0) > 0) svc.gpuModels = gpuModels;
     }
   }
+  const verifyRes = resources(verifierEnv, envRes);
+  const verifierModels = gpuTypes(verifierEnv.gpu_types, problems, "[verifier.environment]");
+  if (verifierModels.length && mode === "separate") {
+    if (!verifyRes.gpus)
+      problems.push("[verifier.environment] gpu_types without a GPU reservation");
+    else if (opts.gpuTypes === "any")
+      deviations.push(
+        `verifier gpu_types ${verifierModels.join(" / ")} not enforced (registration allows any GPU)`,
+      );
+    else verifyRes.gpuModels = verifierModels;
+  } else if (verifierModels.length && ownVerifierEnv)
+    problems.push("[verifier.environment] gpu_types requires a separate verifier");
   const tags: Record<string, string> = {};
   for (const k of ["domain", "field", "subfield"]) {
     const v = str(meta[k]);
@@ -503,7 +515,7 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     },
     solutionEnv: vars(table(toml.solution).env),
     verifier: {
-      ...resources(verifierEnv, envRes),
+      ...verifyRes,
       network: verifierNetwork,
       vars: { ...vars(verifierEnv.env), ...vars(verifier.env) },
       mode: mode === "shared" ? "shared" : "separate",
@@ -743,7 +755,12 @@ export function harborVerifySpec(
     spec: {
       ...imageFields(t.verifier.image),
       command: ["sh", "-c", VERIFY_COMMAND],
-      resources: { gpus: t.verifier.gpus, cpus: t.verifier.cpus, memGB: t.verifier.memGB },
+      resources: {
+        gpus: t.verifier.gpus,
+        cpus: t.verifier.cpus,
+        memGB: t.verifier.memGB,
+        ...(t.verifier.gpuModels?.length ? { gpuModels: t.verifier.gpuModels } : {}),
+      },
       mounts,
       env: t.verifier.vars,
       network: t.verifier.network,

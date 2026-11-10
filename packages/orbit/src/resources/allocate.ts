@@ -189,14 +189,16 @@ const tokens = (name: string) =>
 
 /**
  * Whether a card is one of the acceptable models (none listed: any card). A model matches whole
- * words of the card name in order: `L4` is "NVIDIA L4", not "NVIDIA L40S"; `A10` is not "A100".
+ * words of the card name in order, allowing form-factor words between them: `A100-80GB`
+ * matches "NVIDIA A100-SXM4-80GB". `L4` is not "NVIDIA L40S"; `A10` is not "A100".
  */
 export function modelMatches(name: string, models: string[] | undefined): boolean {
   if (!models?.length) return true;
   const card = tokens(name);
   return models.some((m) => {
     const want = tokens(m);
-    return want.length > 0 && card.some((_, i) => want.every((w, j) => card[i + j] === w));
+    const names = card.filter((word) => !/^(sxm\d*|pcie)$/.test(word) || want.includes(word));
+    return want.length > 0 && names.some((_, i) => want.every((word, j) => names[i + j] === word));
   });
 }
 

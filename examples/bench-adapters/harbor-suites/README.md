@@ -31,6 +31,11 @@ verification keeps its own image user. This requires a root-started Linux image 
 account; private host ancestors stay private. Project mounts and checkpoints are rejected for this
 mode. `[verifier] user` remains unsupported.
 
+Separate verifier GPU types are enforced independently of the solver, including different solver
+and verifier models. The requested hardware must exist on a worker; a complete source checkout does
+not imply that a local GPU can run every task. `gpuTypes=any` explicitly relaxes both phases and is
+recorded as a protocol deviation.
+
 Artifact exclusions use the original tar semantics (including `./tests` and nested paths) before
 handing files to the independent verifier. The daemon host needs `tar`, as the native transfer does. Oracle
 runs receive the release's `HARBOR_ORACLE_FLAG` on both phases; model runs never receive it. Native

@@ -7,7 +7,7 @@ licensed data outside Orbit's repository. Model credentials do not grant dataset
 | Benchmark named in the comparison | Orbit route and remaining condition |
 | --- | --- |
 | FrontierCode 2.0 | No public task bundle/evaluator verified. [Cognition's benchmark description](https://cognition.com/frontiercode) is insufficient to build a faithful executable adapter. Obtain the original private package. |
-| FrontierSWE v2 | [Pinned Harbor adapter](../../examples/bench-adapters/harbor-suites/). Preserves task accounts, original images and independent verifiers. Allowlist-as-public remains a recorded deviation; individual unavailable/unsupported tasks stay visible. |
+| FrontierSWE v2 | [Pinned Harbor adapter](../../examples/bench-adapters/harbor-suites/). Preserves task accounts, original images, independent verifiers and phase-specific GPU model requirements. Allowlist-as-public remains a recorded deviation; individual unavailable/unsupported tasks stay visible. |
 | AutomationBench | [Native adapter](../../examples/bench-adapters/automationbench/) for the 600 public and separate 200 simple tasks. The private leaderboard split is not included. |
 | Terminal-Bench-Science 0.1 | Existing Harbor route. Checked scientific tasks do not establish parity with every numbered release or the comparison's full protocol. |
 | CyScenarioBench | The original [Irregular evaluation](https://www.irregular.com/research/cyscenariobench) is proprietary. No faithful task/evaluator package available for registration. |

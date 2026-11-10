@@ -1478,5 +1478,10 @@ Their images pin upstream code/dependencies; read-only runtime wrappers remain e
 FrontierSWE/WANDR wrappers reuse Harbor rather than adding an executor: frozen catalogs, task-account
 execution, native tar artifact exclusions, oracle-only release flags, native invalid markers and WANDR's
 12 metrics. All four routes preserve API/scorer failures as invalid and keep evidence for review.
+Separate Harbor verifiers preserve their own GPU model restrictions, including when they reuse the
+solve environment. Independent verifier environments do not inherit solver model choices. Shared
+verifiers cannot replace their running GPU allocation with a separate environment declaration.
+GPU model matching uses whole name tokens in order, allowing form-factor tokens between model and
+memory variants (for example A100-SXM4-80GB for A100-80GB); different memory variants remain distinct.
 The product library has 28 families with per-route validation limits; unavailable originals and exact
 protocol gaps are recorded in [availability](guides/benchmark-availability.md).
