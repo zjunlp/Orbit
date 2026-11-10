@@ -13,7 +13,7 @@ licensed data outside Orbit's repository. Model credentials do not grant dataset
 | CyScenarioBench | The original [Irregular evaluation](https://www.irregular.com/research/cyscenariobench) is proprietary. No faithful task/evaluator package available for registration. |
 | CVE Rediscovery | An internal evaluation in the [Anthropic release description](https://www.anthropic.com/claude-fable-and-mythos-5-2). Public CVE data alone does not reproduce its task selection, environment or success criteria. |
 | De novo binder design (24 hr) | Requires the original targets, design/assay workflow and success rubric. A generic protein-design dataset is a different benchmark. Original executable evaluation unavailable. |
-| WANDR (relaxed score) | [Pinned Harbor adapter](../../examples/bench-adapters/harbor-suites/) retains `soft_recall_full` and all twelve original metrics. Nonempty scoring needs original judge and page-fetch services. |
+| WANDR (relaxed score) | [Pinned Harbor adapter](../../examples/bench-adapters/harbor-suites/) retains `soft_recall_full` and all twelve original metrics. Native empty calibration passed; nonempty scoring needs original judge and page-fetch services. |
 | OSWorld 2.1 | Existing [OSWorld-V2 adapter](../../examples/bench-adapters/osworld-v2/) retains release catalogs. Authorized task assets, VM images and real KVM calibration are required. |
 | RoboDojo Sim | Native work is tracked separately; it is not supplied by this integration branch. Do not equate other robotics environments with RoboDojo. |
 | AA-Briefcase v1.1 | [Artificial Analysis](https://artificialanalysis.ai/articles/aa-briefcase) keeps the scored suite private. Its Lite examples do not provide a replacement for the original scored task set. |

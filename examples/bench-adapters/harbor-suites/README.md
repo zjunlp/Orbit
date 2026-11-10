@@ -74,6 +74,7 @@ orbit bench run wandr -t TASK \
 ```
 
 Shared verifier runs preserve their after-phase evidence; rescore follows the existing Harbor path.
-Fixture tests cover all native metric keys and invalid-score handling. The native WANDR environment
-build exceeded its deadline downloading upstream dependencies, so local native calibration and
-full-suite model parity remain unverified. Current bounded development validation is recorded in the task record.
+Fixture tests cover all native metric keys and invalid-score handling. A bounded native empty
+calibration passed with the original environment and grader: valid zero reward, all twelve metrics,
+saved after-phase evidence and confirmed cleanup. Nonempty model calibration and full-suite parity
+remain unverified without the original judge/fetch services. Development validation is recorded in the task record.

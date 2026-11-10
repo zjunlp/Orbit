@@ -21,11 +21,11 @@ Connect the available original benchmark protocols from the comparison table thr
 | AutomationBench native development checks | working tree | passed | Original catalogs, empty world, real compatible-provider rollout, independent original-rubric agreement and bounded valid failure checked. No fake model or replacement grader. |
 | FrontierSWE native development checks | working tree | passed | Original empty/reference controls and real Claude Code auth under the task account; reference and empty rescoring also passed with native tar exclusions. Public networking is an explicit deviation from upstream allowlisting. |
 | Chartography native development checks | working tree | passed | Complete bench flow on an original dummy sample with real vision generation and an explicitly alternate real model judge; empty/reference controls and malformed mock-judge rejection checked. Adapter verifies saved response identity. |
-| WANDR native environment | working tree | failed | Original dependency download exceeded the image-build deadline; cleanup completed. Native empty scoring did not execute; catalog/metric fixtures passed. |
+| WANDR native empty calibration | bd0024b | passed | Original environment and grader returned a valid empty score with all twelve native metrics. Ordinary container networking, saved after-phase evidence and cleanup checked. No judge service or mock grader used. |
 | Released/full-suite protocol parity | working tree | not_run | Missing private packages, restricted datasets, judge/fetch services or original tool environments as documented in the matrix. |
 
 ## Next / open issues
-- Retry WANDR native calibration when original dependencies can be downloaded; nonempty grading also requires original judge/fetch services. No successful native WANDR result is claimed.
+- WANDR nonempty grading and model calibration still require original judge/fetch services; empty calibration does not establish model or full-suite parity.
 - Obtain released Chartography data and default judge access; HLE additionally needs its restricted web/code harness. Do not replace either protocol with an unrestricted CLI.
 - Private FrontierCode, CyScenarioBench, CVE Rediscovery, binder-design and AA-Briefcase evaluations require their original executable packages. RLI requires its original human assessment workflow.
 - OSWorld retains its existing asset/KVM calibration requirement. RoboDojo is being developed in a separate branch and is not included here.
