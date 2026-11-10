@@ -16,7 +16,7 @@ These rules apply to every change, including this file. `CLAUDE.md` imports this
 
 - For downloads from overseas sources, the user-provided local HTTP proxy is
   `http://127.0.0.1:17890`. Enable it only for the download command when needed:
-  `HTTP_PROXY=http://127.0.0.1:17890 HTTPS_PROXY=http://127.0.0.1:17890 NO_PROXY=localhost,127.0.0.1 <download-command>`.
+  `http_proxy=http://127.0.0.1:17890 https_proxy=http://127.0.0.1:17890 no_proxy=localhost,127.0.0.1 <download-command>`.
 - Check proxy connectivity before retrying a failed download. Keep proxy settings scoped to the
   command; do not change global shell, Git or Docker settings. Keep datasets outside the source checkout.
 - Container loopback refers to the container itself. Container downloads require an explicitly
