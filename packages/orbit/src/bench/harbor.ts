@@ -2,14 +2,17 @@
 // Orbit runs the solve phase in the task environment and the verifier in a separate container
 // (environment_mode = "separate"), with the declared artifacts copied across. Settings Orbit cannot
 // honour mark the task unsupported instead of being ignored, so scores keep the task's conditions.
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
@@ -33,6 +36,7 @@ export interface Artifact {
   optional?: boolean;
   /** A compose service other than `main` the file comes from. */
   service?: string;
+  exclude?: string[];
 }
 
 /** Harbor copies this directory from the solve to the verifier environment without a declaration. */
@@ -63,6 +67,7 @@ export interface HarborTask {
   /** `[[verifier.collect]]`: commands run before artifacts are collected. */
   hooks: { service?: string; command: string; timeoutSec: number }[];
   agentTimeoutSec: number | null;
+  agentUser?: string;
   verifierTimeoutSec: number | null;
   env: Resources & {
     network: boolean;
@@ -91,7 +96,7 @@ export interface HarborOptions {
   hostNamespaces?: string;
   /** `public`: run an `allowlist` agent network as public internet (a recorded deviation). */
   allowlistNetwork?: string;
-  /** `any`: do not restrict `[environment] gpu_types` to those models (a recorded deviation). */
+  /** `any`: do not enforce solve/verifier `gpu_types` (a recorded deviation for each phase). */
   gpuTypes?: string;
   /**
    * The integration category of the tasks (default agent-workspace); Harbor is only the format, so a
@@ -151,11 +156,11 @@ export function embodiedTags(id: string, task: Table, meta: Table): Record<strin
   return out;
 }
 
-/** `[environment] gpu_types`: GPU models any of which Harbor may provision. */
-function gpuTypes(v: unknown, problems: string[]): string[] {
+/** GPU models any of which Harbor may provision for the specified environment. */
+function gpuTypes(v: unknown, problems: string[], label = "[environment]"): string[] {
   if (v === undefined || v === null) return [];
   if (!Array.isArray(v) || !v.every((x) => typeof x === "string" && x.trim() && x.length <= 40)) {
-    problems.push("[environment] gpu_types must be a list of GPU model names");
+    problems.push(`${label} gpu_types must be a list of GPU model names`);
     return [];
   }
   return [...new Set(v.map((x) => (x as string).trim()))].slice(0, 16);
@@ -212,6 +217,9 @@ export function parseArtifacts(v: unknown): { artifacts: Artifact[]; skipped: st
       source: trimSlash(source),
       destination: trimSlash(dest?.startsWith("/") ? dest : source),
       ...(service && service !== "main" ? { service } : {}),
+      ...(exclude.length
+        ? { exclude: exclude.filter((x): x is string => typeof x === "string") }
+        : {}),
     });
   }
   return { artifacts, skipped };
@@ -298,10 +306,14 @@ function unsupportedSettings(toml: Table): string[] {
     ["[verifier.environment]", verifierEnv],
   ] as const) {
     check((str(env.os) ?? "linux").toLowerCase() !== "linux", `${label} os "${str(env.os)}"`);
-    for (const k of ["gpu_types", "tpu", "mcp_servers", "skills_dir", "healthcheck"])
-      if (k !== "gpu_types" || label !== "[environment]") check(nonEmpty(env[k]), `${label} ${k}`);
+    for (const k of ["tpu", "mcp_servers", "skills_dir", "healthcheck"])
+      check(nonEmpty(env[k]), `${label} ${k}`);
   }
-  check(nonEmpty(agent.user), "[agent] user");
+  check(
+    nonEmpty(agent.user) &&
+      (typeof agent.user !== "string" || !/^[a-z_][a-z0-9_-]{0,31}$/.test(agent.user)),
+    "[agent] user (expected an existing image account name)",
+  );
   check(nonEmpty(verifier.user), "[verifier] user");
   check(nonEmpty(toml.steps), "[[steps]] (multi-step tasks)");
   const tables: [string, unknown][] = [
@@ -462,12 +474,26 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
         if (svc.role && (svc.gpus ?? 0) > 0) svc.gpuModels = gpuModels;
     }
   }
+  const verifyRes = resources(verifierEnv, envRes);
+  const verifierModels = gpuTypes(verifierEnv.gpu_types, problems, "[verifier.environment]");
+  if (verifierModels.length && mode === "separate") {
+    if (!verifyRes.gpus)
+      problems.push("[verifier.environment] gpu_types without a GPU reservation");
+    else if (opts.gpuTypes === "any")
+      deviations.push(
+        `verifier gpu_types ${verifierModels.join(" / ")} not enforced (registration allows any GPU)`,
+      );
+    else verifyRes.gpuModels = verifierModels;
+  } else if (verifierModels.length && ownVerifierEnv)
+    problems.push("[verifier.environment] gpu_types requires a separate verifier");
   const tags: Record<string, string> = {};
   for (const k of ["domain", "field", "subfield"]) {
     const v = str(meta[k]);
     if (v) tags[k] = v;
   }
   Object.assign(tags, embodiedTags(id, task, meta));
+  if (typeof meta.oracle_reward_threshold === "number" && meta.oracle_reward_threshold < 1)
+    tags.oracle = "partial";
   return {
     id,
     dir,
@@ -478,6 +504,7 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     compose,
     hooks,
     agentTimeoutSec: num(agent.timeout_sec),
+    ...(str(agent.user) ? { agentUser: str(agent.user) as string } : {}),
     verifierTimeoutSec: num(verifier.timeout_sec),
     env: {
       ...envRes,
@@ -488,7 +515,7 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     },
     solutionEnv: vars(table(toml.solution).env),
     verifier: {
-      ...resources(verifierEnv, envRes),
+      ...verifyRes,
       network: verifierNetwork,
       vars: { ...vars(verifierEnv.env), ...vars(verifier.env) },
       mode: mode === "shared" ? "shared" : "separate",
@@ -618,6 +645,7 @@ export function harborSolveSpec(
     env,
     network: t.env.network,
     root: true,
+    ...(t.agentUser ? { commandUser: t.agentUser } : {}),
     workdir: t.env.workdir ?? c?.workdir ?? "image",
     timeoutMin: timeoutMin ?? (t.agentTimeoutSec ? t.agentTimeoutSec / 60 : undefined),
     collect: t.artifacts.filter((a) => !a.service).map((a) => a.source),
@@ -696,7 +724,25 @@ export function harborVerifySpec(
       mkdirSync(copy, { recursive: true });
     } else {
       mkdirSync(dirname(copy), { recursive: true });
-      cpSync(src, copy, { recursive: true });
+      if (a.exclude?.length && lstatSync(src).isDirectory()) {
+        // Harbor transfers exclusions through tar; filesystem globs differ for ./paths and *.
+        const temporary = mkdtempSync(join(staging, "artifact-filter-"));
+        try {
+          const archive = join(temporary, "artifact.tar");
+          execFileSync("tar", [
+            "-cf",
+            archive,
+            ...a.exclude.map((p) => `--exclude=${p}`),
+            "-C",
+            src,
+            ".",
+          ]);
+          mkdirSync(copy, { recursive: true });
+          execFileSync("tar", ["-xf", archive, "--no-same-owner", "-C", copy]);
+        } finally {
+          rmSync(temporary, { recursive: true, force: true });
+        }
+      } else cpSync(src, copy, { recursive: true });
     }
     mounts.push({ source: copy, target: a.destination, mode: "rw" });
   }
@@ -709,7 +755,12 @@ export function harborVerifySpec(
     spec: {
       ...imageFields(t.verifier.image),
       command: ["sh", "-c", VERIFY_COMMAND],
-      resources: { gpus: t.verifier.gpus, cpus: t.verifier.cpus, memGB: t.verifier.memGB },
+      resources: {
+        gpus: t.verifier.gpus,
+        cpus: t.verifier.cpus,
+        memGB: t.verifier.memGB,
+        ...(t.verifier.gpuModels?.length ? { gpuModels: t.verifier.gpuModels } : {}),
+      },
       mounts,
       env: t.verifier.vars,
       network: t.verifier.network,

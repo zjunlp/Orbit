@@ -12,6 +12,8 @@ import { modelMatches } from "../src/resources/allocate.ts";
 
 it.each([
   "posttrainbench",
+  "automationbench",
+  "chartography",
   "researchclawbench",
   "longds",
   "browsergym",

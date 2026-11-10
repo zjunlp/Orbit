@@ -270,6 +270,7 @@ function RunView({ run }: { run: Run }) {
               "",
             )}
           </span>
+          {run.spec.commandUser && <span className="chip mono">User: {run.spec.commandUser}</span>}
           {c && (
             <span
               className="chip link mono"

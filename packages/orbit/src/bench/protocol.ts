@@ -227,6 +227,12 @@ export function toRunSpec(
     spec.passEnv = b.passEnv;
     spec.priority = 1;
   }
+  // Explicit pass-through variables must not be shadowed by adapter template defaults.
+  const withoutPassed = (env: Record<string, string> | undefined, names: string[] = []) =>
+    Object.fromEntries(Object.entries(env ?? {}).filter(([name]) => !names.includes(name)));
+  spec.env = withoutPassed(spec.env, spec.passEnv);
+  if (spec.after)
+    spec.after = { ...spec.after, env: withoutPassed(spec.after.env, spec.after.passEnv) };
   const r = RunSpec.safeParse(spec);
   if (!r.success) throw new AdapterError(`invalid ${phase} run: ${describe(r.error)}`);
   return spec;

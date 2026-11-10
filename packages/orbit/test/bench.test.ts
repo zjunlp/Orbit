@@ -560,7 +560,6 @@ timeout_sec = 120
       /\[environment\] gpu_types/,
       /\[environment\] mcp_servers/,
       /\[environment\.env\] \$\{VAR\} template/,
-      /\[agent\] user/,
     ])
       expect(reason).toMatch(m);
   });

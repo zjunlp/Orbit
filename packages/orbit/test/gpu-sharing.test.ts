@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, expect, it } from "vitest";
 import { parseCompose } from "../src/bench/compose.ts";
-import { findHarborTasks, harborSolveSpec } from "../src/bench/harbor.ts";
+import { findHarborTasks, harborSolveSpec, harborVerifySpec } from "../src/bench/harbor.ts";
 import {
   Lease,
   leaseRequest,
@@ -356,6 +356,12 @@ it("matches GPU models on whole words of the card name", async () => {
   expect(modelMatches("NVIDIA L4", ["L4"])).toBe(true);
   expect(modelMatches("NVIDIA L40S", ["L4"])).toBe(false);
   expect(modelMatches("NVIDIA A100-SXM4-80GB", ["A10"])).toBe(false);
+  expect(modelMatches("NVIDIA A100-SXM4-80GB", ["A100-80GB"])).toBe(true);
+  expect(modelMatches("NVIDIA A100-PCIE-80GB", ["A100-80GB"])).toBe(true);
+  expect(modelMatches("NVIDIA A100-SXM4-40GB", ["A100-80GB"])).toBe(false);
+  expect(modelMatches("NVIDIA A100-SXM4-80GB", ["A100-PCIE-80GB"])).toBe(false);
+  expect(modelMatches("NVIDIA RTX PRO 6000 Blackwell", ["RTX 6000"])).toBe(false);
+  expect(modelMatches("NVIDIA H100 80GB HBM3", ["A100-80GB"])).toBe(false);
   expect(modelMatches("NVIDIA GeForce RTX 4090", ["RTX 4090"])).toBe(true);
   expect(modelMatches("NVIDIA RTX 6000 Ada Generation", ["RTX 6000 Ada"])).toBe(true);
   expect(modelMatches("NVIDIA GeForce RTX 3090", ["RTX 4090", "L40S"])).toBe(false);
@@ -409,4 +415,67 @@ it("tags Embodied First Exam tasks with their workspace profile by mode", async 
   });
   expect(embodiedTags("roboengineer-g1-i00-standard", task, {}).profile).toBe("embodied-program");
   expect(embodiedTags("x-standard", { name: "other/x" }, {})).toEqual({});
+});
+
+it("preserves independent verifier GPU requirements through resource admission", () => {
+  const root = join(dir, "verifier-gpu-types");
+  const make = (name: string, verifier: string, mode = "separate") => {
+    const task = join(root, name);
+    mkdirSync(join(task, "tests"), { recursive: true });
+    writeFileSync(join(task, "instruction.md"), "x");
+    writeFileSync(join(task, "tests/test.sh"), "true");
+    writeFileSync(
+      join(task, "task.toml"),
+      `[environment]
+docker_image = "python:3"
+gpus = 1
+gpu_types = ["RTX 3090"]
+[verifier]
+environment_mode = "${mode}"
+${verifier}
+`,
+    );
+  };
+  make("independent", '[verifier.environment]\ngpus = 1\ngpu_types = ["L40S"]');
+  make("inherited", "");
+  make("shared", '[verifier.environment]\ngpus = 1\ngpu_types = ["L40S"]', "shared");
+  make("unrestricted", "[verifier.environment]\ngpus = 1");
+  make("no-reservation", '[verifier.environment]\ngpus = 0\ngpu_types = ["L40S"]');
+  make("malformed", '[verifier.environment]\ngpus = 1\ngpu_types = "L40S"');
+  const tasks = Object.fromEntries(findHarborTasks(root).map((t) => [t.id, t]));
+  const task = tasks.independent;
+  if (!task) throw new Error("missing fixture");
+  expect(task.supported).toBe(true);
+  expect(task.env.gpuModels).toEqual(["RTX 3090"]);
+  const solve = RunSpec.parse(
+    harborSolveSpec(task, { name: "empty", agent: "empty" }, join(dir, "gpu-solve")),
+  );
+  const verify = RunSpec.parse(
+    harborVerifySpec(task, join(dir, "gpu-output"), join(dir, "gpu-verify")).spec,
+  );
+  expect(allocateRoles(roleRequests(solve), node, [])).toMatchObject({
+    ok: true,
+    gpuIds: ["GPU-0"],
+  });
+  expect(allocateRoles(roleRequests(verify), node, [])).toMatchObject({
+    ok: true,
+    gpuIds: ["GPU-1"],
+  });
+  expect(
+    infeasible(
+      leaseRequest(verify),
+      NodeResources.parse({ ...node, gpus: [node.gpus[0]] }),
+      roleRequests(verify),
+    ),
+  ).toMatch(/L40S/);
+  expect(tasks.inherited?.verifier.gpuModels).toEqual(["RTX 3090"]);
+  expect(tasks.shared?.reason).toContain("gpu_types requires a separate verifier");
+  expect(tasks.unrestricted?.verifier.gpuModels).toBeUndefined();
+  expect(tasks["no-reservation"]?.reason).toContain(
+    "[verifier.environment] gpu_types without a GPU reservation",
+  );
+  expect(tasks.malformed?.reason).toContain("[verifier.environment] gpu_types must be a list");
+  const any = findHarborTasks(root, { gpuTypes: "any" }).find((t) => t.id === "independent");
+  expect(any?.verifier.gpuModels).toBeUndefined();
+  expect(any?.deviations.join(" ")).toContain("verifier gpu_types L40S not enforced");
 });
