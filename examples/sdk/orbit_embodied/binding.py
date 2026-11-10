@@ -8,7 +8,8 @@ import math
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
-                          "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench")
+                          "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic",
+                          "vima-bench", "molmospaces")
 
 
 def digest(value):
@@ -30,7 +31,8 @@ def check_sample(sample, sample_ref):
 
 
 def seed_asset(reference, task):
-    assets = reference["environment"].get("assets")
+    environment = reference["environment"]
+    assets = environment.get("assets")
     if assets and not assets.get("digest"):
         raise ValueError("use the generated reference with the frozen environment asset digest")
     reset = ("layouts[task][environmentSeed][initialStateId]" if reference["environment"].get("kind") == "robodojo"
@@ -40,6 +42,10 @@ def seed_asset(reference, task):
         reset = "officialTrack[taskId][initialStateId],environmentSeed+initialStateId"
     if reference["environment"].get("protocol") == "rvt-test":
         reset = "testDemo[taskId][initialStateId]"
+    if "initialStateCounts" in environment:
+        reset = "fixedInitialState[taskId][initialStateId],environmentSeed"
+        if "initialStateDigests" in environment and task not in environment.get("unsupported", {}):
+            return environment["initialStateDigests"][task]
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
 
@@ -127,6 +133,12 @@ def reset_seed(sample, reference=None):
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
     index = int(sample["initialStateId"])
+    if "initialStateCounts" in environment:
+        seed = sample["environmentSeed"]
+        count = environment["initialStateCounts"].get(sample["taskId"], 0)
+        if not 0 <= index < count or not 0 <= seed < 2 ** 32 or seed != environment.get("environmentSeed", seed):
+            raise ValueError("sample is outside the frozen initial-state catalog or seed recipe")
+        return seed
     seed = sample["environmentSeed"] + index
     if environment.get("kind") in ("robocasa-v02", "rlbench", "robomimic", "vima-bench"):
         count = environment.get("initialStateCount")
@@ -149,6 +161,7 @@ def check_distinct_resets(samples, reference=None):
     seen = {}
     for sample in samples:
         scene = int(sample["initialStateId"]) if reference and ("simplerScenes" in reference["environment"]
+                     or "initialStateCounts" in reference["environment"]
                      or reference["environment"].get("kind") == "robodojo") else None
         key = (sample["taskId"], scene, reset_seed(sample, reference), sample["policySeed"], sample["repetition"])
         if seen.setdefault(key, sample["sampleId"]) != sample["sampleId"]:

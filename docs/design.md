@@ -950,6 +950,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **VIMA-Bench**：独立登记四档官方测试划分，保留图文提示、实例分割和原生抓放动作。变长提示资产使用显式编码字段，
   VIMA 推理由独立 Policy 服务执行，登记时核对其镜像构建清单中的 SDK 文件摘要。证据记录原生动作与终止，供 CPU 重评核对。
   [接入说明](../examples/bench-adapters/embodied/VIMA-BENCH.md)
+- **MolmoSpaces-Bench**：固定官方 MS v1 操作轨道的 episode JSON 和资源，按轨道和 episode 序号选择场景。DROID 关节命令与原生
+  `judge_success()` 构成独立的 Policy I/O 和判分契约。[接入说明](../examples/bench-adapters/embodied/MOLMOSPACES.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

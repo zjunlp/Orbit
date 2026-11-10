@@ -36,9 +36,11 @@ def main():
     kind = environment.get("kind")
     environment_seed = args.environment_seed
     if environment_seed is None:
-        environment_seed = 0 if environment.get("protocol") == "rvt-test" else {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0}.get(kind, 7)
+        defaults = {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0}
+        environment_seed = environment.get("environmentSeed", 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7))
     generated = kind in GENERATED_ENVIRONMENTS
-    uint32_seed = kind in ("robocasa365", "robotwin", "robolab", "robodojo", "robomimic", "vima-bench") or "simplerRobot" in environment
+    uint32_seed = (kind in ("robocasa365", "robotwin", "robolab", "robodojo", "robomimic", "vima-bench")
+                   or "simplerRobot" in environment or "initialStateCounts" in environment)
     if environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
     if generated:
@@ -65,6 +67,8 @@ def main():
             count = vlabench_state_count(environment, task_id)
         elif kind in ("robocasa-v02", "rlbench"):
             count = environment.get("initialStateCount")
+        elif "initialStateCounts" in environment:
+            count = environment["initialStateCounts"][task_id]
         else:
             count = initial_state_count(environment, task_id)
         if kind == "robodojo":

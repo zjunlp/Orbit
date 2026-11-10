@@ -25,6 +25,7 @@
 | [RoboLab](../../examples/bench-adapters/embodied/ROBOLAB.md) | DROID，120 个任务 | 120 个任务，可选择子目录登记 | 真实 RGB 与控制检查通过，648 步官方成功轨迹回放完成；两项完整原生保持位置对照、独立 CPU 验证和重评分已通过。[回放说明](../../examples/bench-adapters/embodied/ROBOLAB.md) · [记录](../tasks/20261109-robodojo-robolab.md) |
 | [RoboMimic](../../examples/bench-adapters/embodied/ROBOMIMIC.md) | PH v1.5.1 的 5 个仿真任务 | 5 个任务各有低维和 RGB 登记，共 10 个 | 10 个登记均通过原生检查；Lift、Transport 做过固定动作对照及 PH 示教回放；另有脚本 Lift 重评。[记录](../tasks/20261110-robomimic.md) |
 | [VIMA-Bench](../../examples/bench-adapters/embodied/VIMA-BENCH.md) | 4 个测试划分，42 个划分内条目，17 个不同任务模板 | 4 个划分全部接入 | 42 个条目均通过原生 reset、观测与控制检查。[记录](../tasks/20261110-vima-bench.md) |
+| [MolmoSpaces-Bench](../../examples/bench-adapters/embodied/MOLMOSPACES.md) | 固定 MS v1 操作轨道，Pick 1,000、PnP 1,000、Open 1,000、Close 915 个 episode | 四条轨道共 3,915 个固定场景样本，使用原生 DROID 控制与最终判定 | 完整资产包通过登记与 3,915 个样本的文件核对。四条轨道各有一组原生 reset、双相机与固定动作对照。[记录](../tasks/20261110-molmospaces.md) |
 
 ## 真实模型实测
 

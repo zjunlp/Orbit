@@ -19,6 +19,7 @@ records benchmark scope, tested model checkpoints and evidence.
 | RoboDojo and RoboLab | [RoboDojo](ROBODOJO.md) · [RoboLab](ROBOLAB.md) |
 | RoboMimic | [PH low-dimensional and RGB profiles](ROBOMIMIC.md) |
 | VIMA-Bench | [Test partitions and VIMA 20M](VIMA-BENCH.md) |
+| MolmoSpaces-Bench | [MS manipulation tracks](MOLMOSPACES.md) |
 
 The adapter lists native tasks and runs frozen samples. Orbit attaches the independently registered
 model service for Solve. A separate CPU Run verifies the saved evidence for each episode.

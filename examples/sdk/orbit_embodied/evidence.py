@@ -270,6 +270,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     kind = reference.get("environment", {}).get("kind")
     if result["valid"] and kind in ("robomimic", "vima-bench"):
         verify_manipulation_stopping(kind, controls, contract["horizon"])
+    if result["valid"] and kind == "molmospaces":
+        from .molmospaces import verify_molmospaces
+        verify_molmospaces(controls, contract["horizon"], reference["parameters"])
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     if (result["valid"] and contract.get("version") == 3

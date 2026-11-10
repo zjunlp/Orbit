@@ -101,6 +101,10 @@ def tasks(req):
             reason = environment.get("unsupported", {}).get(task["id"])
             if reason:
                 task.update(supported=False, reason=reason)
+            if "taskTitles" in environment:
+                task["title"] = environment["taskTitles"].get(task["id"], task["title"])
+            if "initialStateCounts" in environment:
+                task["tags"]["initialStateCount"] = str(environment["initialStateCounts"].get(task["id"], 0))
             if environment.get("kind") == "robodojo":
                 counts = {seed: len(rows) for seed, rows in environment["layouts"].get(task["id"], {}).items()}
                 task["tags"]["initialStateCounts"] = json.dumps(counts, sort_keys=True)
@@ -190,8 +194,10 @@ def solve_one(req):
         if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
-    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench"):
-        if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
+    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
+                                  "molmospaces"):
+        if (sample["taskId"] not in environment["tasks"]
+                or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
     if environment.get("kind") == "libero-plus":

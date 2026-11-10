@@ -19,6 +19,7 @@ import { maniskill3 } from "./maniskill3.ts";
 import { metaworld } from "./metaworld.ts";
 import { miniwob } from "./miniwob.ts";
 import { mobileworld } from "./mobileworld.ts";
+import { molmospaces } from "./molmospaces.ts";
 import { onlineMind2web } from "./online-mind2web.ts";
 import { osworld } from "./osworld.ts";
 import { posttrainbench } from "./posttrainbench.ts";
@@ -79,6 +80,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   calvin,
   robomimic,
   vimaBench,
+  molmospaces,
   robodojo,
   robolab,
 ];
@@ -90,6 +92,7 @@ const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
   "libero-plus-panda-raw/1": "libero-plus",
+  "molmospaces-franka-droid/1": "molmospaces",
   "vlabench-franka-ee/1": "vlabench",
   "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",
