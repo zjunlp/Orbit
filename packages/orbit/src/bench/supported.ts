@@ -373,7 +373,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     ],
     verification: checked(
       "sample-checked",
-      "Native empty/reference calibration passed on task08 with complete budgets. Task07 and full-suite equivalence remain unverified.",
+      "Native empty/reference calibration passed on task08; saved output from a provider-interrupted Agent run was independently graded. Task07 and full-suite equivalence remain unverified.",
       "docs/tasks/20261110-embodied-harness-benchmarks.md",
     ),
     suites: ["Robot perception", "Policy learning", "Control", "Robot design"],
