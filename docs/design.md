@@ -1488,7 +1488,7 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 实施与验收记录见 [目录任务](tasks/20261109-benchmark-library.md)，入口索引见 [catalog](catalog.md)。
 
 - 既有 `BenchCatalog` 增加 `supported[]` 产品目录，保留 `entries[]` 本地登记数据。Web 从同一个 HTTP 接口读取，
-  CLI 和旧调用方仍可使用登记数据。受控数据集中在 `bench/supported.ts`，`contracts/bench.ts` 声明
+  CLI 和旧调用方仍可使用登记数据。受控数据按 benchmark 族拆在 `bench/benchmarks/<family>.ts`，由 `bench/benchmarks/index.ts` 汇总，`contracts/bench.ts` 声明
   `SupportedBenchmark`：id/name/description、具名 taxonomyGroups、integrations、verification、suites 与 registrationNames。
 - registrationNames 只关联显式身份或代码已知的内置接入、原生语义 profile，不按登记名、文件路径或运行记录猜测。
   CUA-Lite 必须有显式 `cua-lite` 身份，且列出的精确 suite 有 `supported > 0`，才关联 MiniWoB、WebVoyager 或
