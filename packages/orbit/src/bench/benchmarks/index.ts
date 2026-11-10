@@ -39,6 +39,7 @@ import { terminalBench4 } from "./terminal-bench-4.ts";
 import { terminalBenchScience } from "./terminal-bench-science.ts";
 import { textarena } from "./textarena.ts";
 import { vimaBench } from "./vima-bench.ts";
+import { vlaArena } from "./vla-arena.ts";
 import { vlabench } from "./vlabench.ts";
 import { wandr } from "./wandr.ts";
 import { webvoyager } from "./webvoyager.ts";
@@ -83,6 +84,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   vimaBench,
   molmospaces,
   colosseumV2,
+  vlaArena,
   robodojo,
   robolab,
 ];
@@ -97,6 +99,7 @@ const nativeProfiles: Record<string, string> = {
   "molmospaces-franka-droid/1": "molmospaces",
   "colosseum-v2-single-arm/1": "colosseum-v2",
   "colosseum-v2-bimanual/1": "colosseum-v2",
+  "vla-arena-panda-raw/1": "vla-arena",
   "vlabench-franka-ee/1": "vlabench",
   "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",

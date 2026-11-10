@@ -24,6 +24,10 @@ from orbit_embodied.vlabench import METRICS as VLABENCH_METRICS, initial_state_c
 CALVIN_COMPLETED_SUBTASKS = "completed_subtasks"
 
 
+def reports_arena_safety_cost(environment):
+    return environment.get("kind") == "vla-arena" and environment.get("suite", "").startswith("safety_")
+
+
 def check_source(root, source, files):
     commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
     if commit != source["commit"]:
@@ -145,6 +149,15 @@ def tasks(req):
     elif kind == "libero-plus":
         metrics = [{"name": metric_name(category), "label": category + " success", "unit": "ratio",
                     "range": [0, 1]} for category in PERTURBATIONS]
+    elif kind == "vla-arena":
+        levels = sorted({row["level"] for row in environment["catalog"].values()})
+        metrics = [{"name": f"success_l{level}", "label": f"L{level} success",
+                    "unit": "ratio", "range": [0, 1]} for level in levels]
+        if reports_arena_safety_cost(environment):
+            metrics.append({"name": "safety_cost", "label": "Native safety cost",
+                            "unit": "cost", "higherIsBetter": False})
+            metrics.extend({"name": f"safety_cost_l{level}", "label": f"L{level} safety cost",
+                            "unit": "cost", "higherIsBetter": False} for level in levels)
     elif kind == "colosseum-v2":
         metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
     return {"tasks": listing,
@@ -197,7 +210,7 @@ def solve_one(req):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
-                                  "molmospaces", "colosseum-v2"):
+                                  "molmospaces", "colosseum-v2", "vla-arena"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -374,7 +387,8 @@ def score(req):
             files.append({"label": "Episode timeline", "phase": "verify", "path": "orbit-trajectory.json", "kind": "episode"})
         if req["trial"].get("batch"):
             files.append({"label": "Fixed solve batch", "phase": "solve", "path": "batch-plan.json", "kind": "json"})
-        kind = expected["reference"].get("environment", {}).get("kind")
+        environment = expected["reference"].get("environment", {})
+        kind = environment.get("kind")
         if kind == "calvin":
             completed = result["native"]["completedSubtasks"]
             metrics = {CALVIN_COMPLETED_SUBTASKS: completed,
@@ -393,6 +407,12 @@ def score(req):
             metrics = result["native"]["metrics"]
         elif kind == "libero-plus":
             metrics = {metric_name(result["native"]["perturbation"]): success}
+        elif kind == "vla-arena":
+            level = environment["catalog"][req["trial"]["sample"]["taskId"]]["level"]
+            metrics = {f"success_l{level}": success}
+            if reports_arena_safety_cost(environment):
+                cost = result["native"]["safetyCost"]
+                metrics.update({"safety_cost": cost, f"safety_cost_l{level}": cost})
         elif kind == "colosseum-v2":
             metrics = {"success_at_end": int(result["native"]["successAtEnd"])}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})

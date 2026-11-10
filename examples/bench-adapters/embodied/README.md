@@ -21,6 +21,7 @@ records benchmark scope, tested model checkpoints and evidence.
 | VIMA-Bench | [Test partitions and VIMA 20M](VIMA-BENCH.md) |
 | MolmoSpaces-Bench | [MS manipulation tracks](MOLMOSPACES.md) |
 | Colosseum V2 | [Single-arm and bimanual perturbation protocols](COLOSSEUM.md) |
+| VLA-Arena | [Difficulty levels and safety scoring](VLA-ARENA.md) |
 
 The adapter lists native tasks and runs frozen samples. Orbit attaches the independently registered
 model service for Solve. A separate CPU Run verifies the saved evidence for each episode.

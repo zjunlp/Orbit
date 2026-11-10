@@ -954,6 +954,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   `judge_success()` 构成独立的 Policy I/O 和判分契约。[接入说明](../examples/bench-adapters/embodied/MOLMOSPACES.md)
 - **Colosseum V2**：固定 ManiSkill 任务和原生扰动预设，分别声明单臂末端增量与双臂关节位置。执行到原生任务步数上限，分别核对
   过程内是否成功及最后一步成功状态。[接入说明](../examples/bench-adapters/embodied/COLOSSEUM.md)
+- **VLA-Arena**：固定套件、难度、初态及语言和视觉探针。安全协议保存原生逐步代价与最终修正，CPU verifier 复核累计代价和判定。
+  [接入说明](../examples/bench-adapters/embodied/VLA-ARENA.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

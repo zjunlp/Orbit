@@ -192,6 +192,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "colosseum-v2":
         from orbit_embodied.colosseum import ColosseumBenchmark
         benchmark = ColosseumBenchmark(reference, sample["taskId"])
+    elif kind == "vla-arena":
+        from orbit_embodied.vla_arena import VLAArenaBenchmark
+        benchmark = VLAArenaBenchmark(reference, sample["taskId"])
     elif kind == "rlbench":
         from orbit_embodied.rlbench import RLBenchBenchmark
         benchmark = RLBenchBenchmark(reference, sample["taskId"])
