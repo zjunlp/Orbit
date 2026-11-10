@@ -471,6 +471,123 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     suites: ["Embodied program tasks", "Embodied live tasks"],
   },
   {
+    id: "rle-bench",
+    name: "RLE-Bench",
+    description: "Evaluate coding agents on robotic engineering, control and design tasks.",
+    taxonomyGroups: [
+      group("Robotic engineering workflows", {
+        ...workspace,
+        domains: ["robotics"],
+        taskTypes: ["implementation", "experimentation", "optimization"],
+        targets: ["planning", "tool-use", "control"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        scoringEvidence: ["artifact"],
+        scoringMethods: ["execution-test"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native Harbor bridge",
+        adapter("rle-bench"),
+        "All 51 workflows remain visible; tasks 07 and 08 use the supported Harbor subset. Task 09 lacks native grader isolation; other unsupported runtime conditions remain explicit.",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "Native empty/reference calibration passed on task08; saved output from a provider-interrupted Agent run was independently graded. Task07 and full-suite equivalence remain unverified.",
+      "docs/tasks/20261110-embodied-harness-benchmarks.md",
+    ),
+    suites: ["Robot perception", "Policy learning", "Control", "Robot design"],
+  },
+  {
+    id: "embodied-clbench",
+    name: "EmbodiedCLBench",
+    description: "Evaluate embodied agents and experience reuse across native task sequences.",
+    taxonomyGroups: [
+      group("Basic and zero-shot episodes", {
+        domains: ["robotics"],
+        taskTypes: ["navigation", "manipulation"],
+        targets: ["planning", "tool-use", "perception-grounding"],
+        modalities: ["text", "image"],
+        interfaces: ["tool-api"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        feedback: ["step"],
+        participants: [],
+        scoringEvidence: ["trajectory", "final-state"],
+        scoringMethods: ["rule-check"],
+      }),
+      group("In-context continual sequences", {
+        domains: ["robotics"],
+        taskTypes: ["navigation", "manipulation"],
+        targets: [
+          "memory",
+          "learning-adaptation",
+          "generalization",
+          "planning",
+          "tool-use",
+          "perception-grounding",
+        ],
+        modalities: ["text", "image"],
+        interfaces: ["tool-api"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        feedback: ["step"],
+        participants: [],
+        scoringEvidence: ["trajectory", "final-state"],
+        scoringMethods: ["rule-check"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native sequence MCP adapter",
+        adapter("embodied-clbench"),
+        "Basic, zero-shot and complete in-context sequences preserve native images, tools and grading. Skill-summary sessions remain unsupported.",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "A native basic task and complete in-context sequence passed reference/empty and real visual CLI Agent checks. Full-suite parity is unverified.",
+      "docs/tasks/20261110-embodied-harness-benchmarks.md",
+    ),
+    suites: ["Basic", "Zero-shot", "In-context continual learning"],
+  },
+  {
+    id: "embodiedlab",
+    name: "EmbodiedLab",
+    description:
+      "Evaluate agents performing robot-controlled scientific experiments and submitting evidenced results.",
+    taxonomyGroups: [
+      group("Scientific experiments with T0 robot control", {
+        domains: ["science", "robotics"],
+        taskTypes: ["experimentation", "analysis", "manipulation"],
+        targets: ["knowledge", "tool-use", "control"],
+        modalities: ["text", "image", "structured-data"],
+        interfaces: ["terminal", "file-edit", "physical-control"],
+        platforms: ["simulation"],
+        world: ["controlled"],
+        feedback: ["step"],
+        participants: [],
+        scoringEvidence: ["artifact", "trajectory"],
+        scoringMethods: ["rule-check"],
+      }),
+    ],
+    integrations: [
+      route(
+        "Native experiment service adapter",
+        adapter("embodiedlab"),
+        "30 native experiments through the T0 public robot API and private native grader; T1 services and unreleased T2 remain unsupported. Requires Isaac Sim 6.0.1.",
+      ),
+    ],
+    verification: checked(
+      "pending-calibration",
+      "Images and native CPU dependencies were checked. Real startup detected an incompatible RTX runtime; experiment calibration requires a compatible environment.",
+      "docs/tasks/20261110-embodied-harness-benchmarks.md",
+    ),
+    suites: ["Mechanics", "Circuits", "Optics", "Thermal physics", "Chemistry"],
+  },
+  {
     id: "miniwob",
     name: "MiniWoB++",
     description:
@@ -863,6 +980,45 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   },
 
   {
+    id: "robomimic",
+    name: "RoboMimic",
+    description:
+      "Evaluate policies on the five classic proficient-human manipulation tasks in robosuite.",
+    taxonomyGroups: [group("Demonstration-conditioned manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "PH v1.5.1 environments with separate low-dimensional and RGB policy profiles.",
+        "examples/bench-adapters/embodied/ROBOMIMIC.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All five tasks passed native low-dimensional and RGB checks. Two published demonstrations replayed successfully.",
+      "docs/tasks/20261110-robomimic.md",
+    ),
+    suites: ["Proficient Human (PH)", "Low-dimensional", "RGB"],
+  },
+  {
+    id: "vima-bench",
+    name: "VIMA-Bench",
+    description:
+      "Evaluate multimodal prompt following and generalization with native PyBullet manipulation primitives.",
+    taxonomyGroups: [group("Multimodal manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "Four official test partitions with multimodal prompt assets and independently served VIMA.",
+        "examples/bench-adapters/embodied/VIMA-BENCH.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All four test partitions passed native checks. Selected VIMA 20M episodes passed independent verification.",
+      "docs/tasks/20261110-vima-bench.md",
+    ),
+    suites: ["Placement", "Combinatorial", "Novel object", "Novel task"],
+  },
+
+  {
     id: "robodojo",
     name: "RoboDojo",
     description: "Evaluate dual-arm manipulation in the official Isaac Sim task environments.",
@@ -909,6 +1065,7 @@ const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
   "libero-plus-panda-raw/1": "libero-plus",
   "vlabench-franka-ee/1": "vlabench",
+  "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
   "robocasa-v02-panda-arm/1": "robocasa-v02",
@@ -921,6 +1078,11 @@ const nativeProfiles: Record<string, string> = {
   "metaworld-native/1": "metaworld",
   "calvin-native/1": "calvin",
 };
+for (const task of ["lift", "can", "square", "transport", "tool-hang"]) {
+  for (const observation of ["low-dim", "image"]) {
+    nativeProfiles[`robomimic-${task}-${observation}/1`] = "robomimic";
+  }
+}
 for (const layout of ["panda", "panda-wrist", "panda-stick", "dual-panda", "so100"]) {
   for (const goal of ["", "-goal"])
     nativeProfiles[`maniskill3-${layout}-joint-delta${goal}/1`] = "maniskill3";

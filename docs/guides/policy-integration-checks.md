@@ -2,14 +2,16 @@
 
 Register the native benchmark and real model policy, then prepare a frozen sample plan containing
 2–5 episodes. Prefer different initial states of a representative task. See the
-[native adapter guide](../../examples/bench-adapters/embodied/README.md) for registration and planning.
+[embodied quickstart](embodied-quickstart.md) for registration and planning.
 
 ```bash
 orbit bench calibrate libero-native --policy groot-n17-libero \
   --sample-plan "$SAMPLE_PLAN" --budget 20
 ```
 
-The benchmark must support fixed batches. Calibration fixtures cannot stand in for real models in
+The benchmark must support fixed batches. For single-episode registrations such as RLBench, use
+the [ordinary evaluation and rescore procedure](embodied-onboarding.md#组合验收).
+Calibration fixtures cannot stand in for real models in
 this mode. The plan is used as supplied; task sampling and legacy seed/oracle flags do not apply.
 The existing `empty`/`oracle` calibration command is unchanged when `--policy` is absent.
 

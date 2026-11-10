@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "note": "Preserve every upstream task.toml budget. No global defaults: task07 is 4 CPU/6 GiB/240 min; task08 is 4 CPU/4 GiB/120 min; both structurally supported tasks use zero GPUs. Independent verifier resources and budgets come from each native task.toml.",
+  "default": {},
+  "tasks": {}
+}

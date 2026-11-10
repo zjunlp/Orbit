@@ -39,7 +39,7 @@ function registration(
 
 it("ships one supported family per benchmark even with no local registrations", () => {
   const supported = supportedBenchmarks([]);
-  expect(supported).toHaveLength(34);
+  expect(supported).toHaveLength(39);
   expect(new Set(supported.map((row) => row.id)).size).toBe(supported.length);
   expect(supported.every((row) => row.registrationNames.length === 0)).toBe(true);
   expect(
@@ -159,4 +159,21 @@ it("links collection registrations only to explicitly listed runnable benchmark 
   expect(supportedBenchmarks([collection]).every((row) => row.registrationNames.length === 0)).toBe(
     true,
   );
+});
+
+it("keeps embodied harness benchmark identities and learning conditions separate", () => {
+  const rows = supportedBenchmarks([]);
+  const harnesses = ["rle-bench", "embodied-clbench", "embodiedlab"].map((id) =>
+    rows.find((row) => row.id === id),
+  );
+  expect(harnesses.every(Boolean)).toBe(true);
+  expect(
+    harnesses.every((row) => row?.integrations.every((route) => !route.name.includes("Policy"))),
+  ).toBe(true);
+  const clbench = harnesses[1];
+  expect(
+    clbench?.taxonomyGroups.filter((g) => taxonomyMatches(g.taxonomy, { targets: ["memory"] })),
+  ).toHaveLength(1);
+  expect(clbench?.integrations[0]?.scope).toContain("unsupported");
+  expect(harnesses[2]?.integrations[0]?.scope).toContain("T0");
 });

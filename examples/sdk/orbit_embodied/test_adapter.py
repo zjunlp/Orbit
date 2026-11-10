@@ -55,6 +55,49 @@ class AdapterPlanningTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, "expected the pinned"):
                             native_runtime.require_image("tag", expected)
 
+    def test_vima_policy_image_requires_the_packaged_sdk_manifest(self):
+        with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
+            import configure_manipulation
+            import native_runtime
+
+        with tempfile.TemporaryDirectory() as temporary, patch.object(configure_manipulation, "SDK", Path(temporary)):
+            sdk = Path(temporary) / "orbit_embodied"
+            sdk.mkdir()
+            wire = sdk / "wire.py"
+            wire.write_text("original")
+            test = sdk / "test_wire.py"
+            test.write_text("test")
+            sources = {}
+            policy = configure_manipulation.manifest("vima-bench", sources, "policy")
+            simulator = configure_manipulation.manifest("vima-bench", sources, "simulator")
+            self.assertEqual(policy["sdk"], {"wire.py": adapter.file_digest(wire)})
+            self.assertNotIn("sdk", simulator)
+            image_id = "sha256:" + "a" * 64
+            image = json.dumps([{"Id": image_id, "Config": {
+                "Labels": {native_runtime.MANIFEST_LABEL: json.dumps(policy)},
+                "Entrypoint": policy["entrypoint"],
+            }}])
+            with patch.object(native_runtime.subprocess, "check_output", return_value=image):
+                self.assertEqual(native_runtime.require_image("tag", policy), image_id)
+                test.write_text("changed test")
+                unchanged = configure_manipulation.manifest("vima-bench", sources, "policy")
+                self.assertEqual(native_runtime.require_image("tag", unchanged), image_id)
+                for filename, content in (("wire.py", "modified"), ("codec.py", "added"), ("wire.py", None)):
+                    with self.subTest(filename=filename, content=content):
+                        path = sdk / filename
+                        if content is None:
+                            path.unlink()
+                        else:
+                            path.write_text(content)
+                        expected = configure_manipulation.manifest("vima-bench", sources, "policy")
+                        with self.assertRaisesRegex(ValueError, "matching build manifest"):
+                            native_runtime.require_image("tag", expected)
+                        self.assertEqual(configure_manipulation.manifest("vima-bench", sources, "simulator"), simulator)
+                        if path == wire:
+                            wire.write_text("original")
+                        else:
+                            path.unlink()
+
     def batch_request(self, root):
         request = self.request(root)
         first = request["trial"]

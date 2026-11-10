@@ -19,6 +19,8 @@ check disk capacity and NVIDIA's Isaac Sim driver requirements before building. 
 is required even though RoboDojo's default physics configuration uses the CPU.
 
 Set `ROBODOJO_SOURCE`, `ROBODOJO_ASSETS` and `ROBODOJO_CONFIG` to user-owned directories.
+Use a host Python 3.11 virtual environment for the configurator commands and development tests
+below. The simulator image supplies its own interpreter.
 Download the official dataset's complete `Assets` tree, including robots, objects, materials and
 replay layouts, at an explicit dataset revision. Registration hashes the actual content and
 individual layouts; the dataset revision alone is insufficient. Git LFS pointers are not assets.

@@ -1,0 +1,335 @@
+{
+  "commit": "5dd50ff33ec1211685f47ee38d9abf8db75656bf",
+  "experiments": [
+    {
+      "id": "airtrack_collision",
+      "title": "Air track: an unknown mass from a collision",
+      "tier": "basic",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 300,
+        "wall_s": 16800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "battery_emf",
+      "title": "EMF and internal resistance of a battery",
+      "tier": "basic",
+      "kit": "circuits",
+      "budget": {
+        "sim_s": 300,
+        "wall_s": 13800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "beam_compliance",
+      "title": "Cantilever: beam stiffness versus clamp compliance",
+      "tier": "advanced",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 300,
+        "wall_s": 14400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "calorimetry_specific_heat",
+      "title": "Specific heat of a metal by the method of mixtures",
+      "tier": "advanced",
+      "kit": "thermal",
+      "budget": {
+        "sim_s": 1400,
+        "wall_s": 15600,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "circuit_blackbox3",
+      "title": "Circuit black box: identify its network and component values",
+      "tier": "advanced",
+      "kit": "circuits",
+      "budget": {
+        "sim_s": 450,
+        "wall_s": 19800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "coupled_modes",
+      "title": "Coupled oscillators: the two normal-mode frequencies",
+      "tier": "basic",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 300,
+        "wall_s": 15000,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "dye_absorptivity",
+      "title": "Absorption peak and molar absorptivity of an unknown dye",
+      "tier": "basic",
+      "kit": "chemistry",
+      "budget": {
+        "sim_s": 750,
+        "wall_s": 28800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "grating_wavelength",
+      "title": "Laser wavelength with a diffraction grating",
+      "tier": "basic",
+      "kit": "optics",
+      "budget": {
+        "sim_s": 200,
+        "wall_s": 14400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "hooke_dynamic_k",
+      "title": "Spring stiffness from oscillations",
+      "tier": "basic",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 500,
+        "wall_s": 10800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "hooke_k",
+      "title": "Spring stiffness (Hooke's law)",
+      "tier": "basic",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 500,
+        "wall_s": 7200,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "incline_friction",
+      "title": "Static and kinetic friction on an incline",
+      "tier": "basic",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 600,
+        "wall_s": 9600,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "kinetics_crystal_violet",
+      "title": "Kinetics: reaction orders and rate constant of crystal violet fading",
+      "tier": "advanced",
+      "kit": "chemistry",
+      "budget": {
+        "sim_s": 800,
+        "wall_s": 21600,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "led_planck",
+      "title": "The wavelength of an unknown LED",
+      "tier": "basic",
+      "kit": "circuits",
+      "budget": {
+        "sim_s": 500,
+        "wall_s": 21000,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "lens_focal",
+      "title": "Focal length of a converging lens",
+      "tier": "basic",
+      "kit": "optics",
+      "budget": {
+        "sim_s": 500,
+        "wall_s": 14400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "optical_relay",
+      "title": "Two-lens relay: an upright real image at a set magnification",
+      "tier": "advanced",
+      "kit": "optics",
+      "budget": {
+        "sim_s": 1500,
+        "wall_s": 28800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "pendulum_g",
+      "title": "Gravitational acceleration with a simple pendulum",
+      "tier": "basic",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 200,
+        "wall_s": 7800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "plate_index",
+      "title": "Refractive index of a glass block",
+      "tier": "basic",
+      "kit": "optics",
+      "budget": {
+        "sim_s": 500,
+        "wall_s": 28800,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "projectile_landing",
+      "title": "Spring launcher: predict the landing point and catch the ball",
+      "tier": "advanced",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 650,
+        "wall_s": 7200,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "rc_capacitance",
+      "title": "An unknown capacitance in an RC circuit",
+      "tier": "basic",
+      "kit": "circuits",
+      "budget": {
+        "sim_s": 300,
+        "wall_s": 17400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "rectifier_supply",
+      "title": "Rectifier power supply: load capability and filter choice",
+      "tier": "advanced",
+      "kit": "circuits",
+      "budget": {
+        "sim_s": 350,
+        "wall_s": 16200,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "resistor_blackbox",
+      "title": "An unknown resistance in a black box",
+      "tier": "basic",
+      "kit": "circuits",
+      "budget": {
+        "sim_s": 300,
+        "wall_s": 14400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "rod_expansion",
+      "title": "Linear expansion coefficient of a metal rod",
+      "tier": "basic",
+      "kit": "thermal",
+      "budget": {
+        "sim_s": 1200,
+        "wall_s": 17400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "slit_width",
+      "title": "Slit width from single-slit diffraction",
+      "tier": "basic",
+      "kit": "optics",
+      "budget": {
+        "sim_s": 350,
+        "wall_s": 14400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "spectro_basic",
+      "title": "Spectrophotometry: concentration of an unknown dye",
+      "tier": "advanced",
+      "kit": "chemistry",
+      "budget": {
+        "sim_s": 770,
+        "wall_s": 14400,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "spectro_mixture",
+      "title": "Spectrophotometry: both concentrations in a two-dye mixture",
+      "tier": "advanced",
+      "kit": "chemistry",
+      "budget": {
+        "sim_s": 990,
+        "wall_s": 18000,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "thermistor_beta",
+      "title": "B constant of a thermistor",
+      "tier": "basic",
+      "kit": "thermal",
+      "budget": {
+        "sim_s": 1000,
+        "wall_s": 15600,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "titration_basic",
+      "title": "Acid-base titration: concentration of hydrochloric acid",
+      "tier": "advanced",
+      "kit": "chemistry",
+      "budget": {
+        "sim_s": 600,
+        "wall_s": 19200,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "titration_weak_acid",
+      "title": "Weak-acid titration: concentration and pKa",
+      "tier": "advanced",
+      "kit": "chemistry",
+      "budget": {
+        "sim_s": 850,
+        "wall_s": 22200,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "torsion_centroid",
+      "title": "Torsion pendulum: centre of mass and centroidal moment of inertia",
+      "tier": "advanced",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 550,
+        "wall_s": 25200,
+        "submissions": 1
+      }
+    },
+    {
+      "id": "torsion_inertia",
+      "title": "Torsion pendulum: moment of inertia",
+      "tier": "basic",
+      "kit": "mechanics",
+      "budget": {
+        "sim_s": 500,
+        "wall_s": 15600,
+        "submissions": 1
+      }
+    }
+  ]
+}
