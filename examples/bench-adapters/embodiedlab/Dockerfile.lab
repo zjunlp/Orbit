@@ -1,0 +1,5 @@
+# Build the pinned upstream docker/lab/Dockerfile as orbit-embodiedlab-native:5dd50ff first.
+FROM orbit-embodiedlab-native:5dd50ff
+RUN command -v openssl >/dev/null \
+    && /isaac-sim/python.sh -m pip install --no-cache-dir --target /opt/embodiedlab-python jsonschema==4.26.0
+ENTRYPOINT []
