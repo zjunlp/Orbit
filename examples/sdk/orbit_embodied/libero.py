@@ -83,6 +83,9 @@ class LiberoBenchmark:
         self.env.seed(sample["environmentSeed"])
         self.env.reset()
         raw = self.env.set_init_state(initial_state)
+        return self.settle(raw)
+
+    def settle(self, raw):
         self.reset_actions = []
         for step in range(self.settle_steps):
             action = [0.0] * 6 + [-1.0]

@@ -107,6 +107,7 @@ def tasks(req):
                 task.update(supported=False, reason=reason)
             if "taskTitles" in environment:
                 task["title"] = environment["taskTitles"].get(task["id"], task["title"])
+            task["tags"] = {**environment.get("taskTags", {}).get(task["id"], {}), **task["tags"]}
             if "initialStateCounts" in environment:
                 task["tags"]["initialStateCount"] = str(environment["initialStateCounts"].get(task["id"], 0))
             if environment.get("kind") == "robodojo":
@@ -210,7 +211,7 @@ def solve_one(req):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
-                                  "molmospaces", "colosseum-v2", "vla-arena"):
+                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -243,12 +244,13 @@ def solve_one(req):
     if environment.get("kind") in ("robolab", "robodojo"):
         resources["gpuModels"] = ["RTX", "L4", "L40", "L40S", "A10", "A40"]
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
+    libero_pro_path = "/opt/libero-pro:" if environment.get("kind") == "libero-pro" else ""
     assets = environment.get("assets")
     if assets:
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
-                     "env": {"PYTHONPATH": "/orbit-embodied/python:/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
+                     "env": {"PYTHONPATH": "/orbit-embodied/python:" + libero_pro_path + "/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
                              **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
                                 if gl_platform not in ("xvfb-glx", "pybullet-direct") else {})},
                      "resources": resources,

@@ -125,6 +125,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261110](20261110-robomimic.md) Native RoboMimic
 - [20261110](20261110-vima-bench.md) Native VIMA-Bench
 - [20261110](20261110-colosseum-v2.md) Native Colosseum V2
+- [20261110](20261110-libero-pro.md) Native LIBERO-PRO
 - [20261110](20261110-molmospaces.md) Native MolmoSpaces MS manipulation
 - [20261110](20261110-vla-arena.md) Native VLA-Arena
 

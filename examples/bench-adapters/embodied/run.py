@@ -195,6 +195,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "vla-arena":
         from orbit_embodied.vla_arena import VLAArenaBenchmark
         benchmark = VLAArenaBenchmark(reference, sample["taskId"])
+    elif kind == "libero-pro":
+        from orbit_embodied.libero_pro import LiberoProBenchmark
+        benchmark = LiberoProBenchmark(reference, sample["taskId"])
     elif kind == "rlbench":
         from orbit_embodied.rlbench import RLBenchBenchmark
         benchmark = RLBenchBenchmark(reference, sample["taskId"])

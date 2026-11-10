@@ -15,6 +15,7 @@ import { frontiersweV2 } from "./frontierswe-v2.ts";
 import { humaneval } from "./humaneval.ts";
 import { libero } from "./libero.ts";
 import { liberoPlus } from "./libero-plus.ts";
+import { liberoPro } from "./libero-pro.ts";
 import { longds } from "./longds.ts";
 import { maniskill3 } from "./maniskill3.ts";
 import { metaworld } from "./metaworld.ts";
@@ -85,6 +86,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   molmospaces,
   colosseumV2,
   vlaArena,
+  liberoPro,
   robodojo,
   robolab,
 ];
@@ -100,6 +102,7 @@ const nativeProfiles: Record<string, string> = {
   "colosseum-v2-single-arm/1": "colosseum-v2",
   "colosseum-v2-bimanual/1": "colosseum-v2",
   "vla-arena-panda-raw/1": "vla-arena",
+  "libero-pro-panda-raw/1": "libero-pro",
   "vlabench-franka-ee/1": "vlabench",
   "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",

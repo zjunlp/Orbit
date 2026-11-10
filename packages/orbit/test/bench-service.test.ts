@@ -119,7 +119,7 @@ it("serves the supported benchmark library before any local registration or run"
   expect(response.status).toBe(200);
   const catalog = BenchCatalog.parse(await response.json());
   expect(catalog.entries).toEqual([]);
-  expect(catalog.supported).toHaveLength(42);
+  expect(catalog.supported).toHaveLength(43);
   expect(catalog.supported.every((row) => row.registrationNames.length === 0)).toBe(true);
   expect(listing).not.toHaveBeenCalled();
   expect(f.submit).not.toHaveBeenCalled();

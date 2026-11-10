@@ -8,6 +8,7 @@ records benchmark scope, tested model checkpoints and evidence.
 | --- | --- |
 | LIBERO | [OpenPI π₀.₅](OPENPI-LIBERO.md) · [All suites](../../../docs/guides/libero-suites.md) · [GR00T N1.7](GR00T.md) · [OpenVLA-OFT](OPENVLA.md) · [SmolVLA and MolmoAct2](NATIVE-EXPANSION.md) |
 | LIBERO-Plus | [Perturbation suites and OFT](LIBERO-PLUS.md) |
+| LIBERO-PRO | [Original leaderboard perturbations](LIBERO-PRO.md) |
 | VLABench | [Native tracks and OpenWAM](VLABENCH.md) |
 | SimplerEnv | [Native catalogs and scene grids](SIMPLER.md) · [GR00T N1.7](GR00T.md) |
 | RoboCasa v0.2 | [Atomic-24](ROBOCASA-V02.md) |

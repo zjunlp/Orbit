@@ -489,7 +489,7 @@ class AdapterPlanningTests(unittest.TestCase):
                 self.assertEqual(outcome["metrics"], expected_metrics)
 
     def test_native_registration_help_requires_only_the_standard_library(self):
-        for script in ("configure_colosseum.py",):
+        for script in ("configure_colosseum.py", "configure_libero_pro.py"):
             with self.subTest(script=script):
                 completed = subprocess.run([sys.executable, "-S", "-B", str(ADAPTER.parent / script), "--help"],
                                            text=True, capture_output=True)

@@ -155,6 +155,56 @@ class CoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "recorded native state"):
             self.verify()
 
+    def test_libero_pro_rejects_changed_bddl_identity_after_resealing(self):
+        instruction = "place the object in the drawer"
+        reset_digest = digest([0.1, 0.2])
+
+        class PerturbedTask(SyntheticBenchmark):
+            def state(self, observation):
+                return {**super().state(observation), "instruction": instruction,
+                        "resetStateDigest": reset_digest}
+
+            def result(self):
+                return {**super().result(), "instruction": instruction, "perturbation": "task"}
+
+        reference = {"environment": {"kind": "libero-pro", "perturbation": "task",
+                                     "taskTitles": {self.sample["taskId"]: instruction}},
+                     "parameters": {"settleSteps": 0, "replanSteps": 5}}
+        result = self.run_sample(PerturbedTask(success_at=2), SyntheticPolicy(), {"reference": reference})
+        self.assertEqual(self.verify()["native"]["instruction"], instruction)
+        initial_file = self.output / "initial-state.json"
+        actions_file = self.output / "actions.jsonl"
+        initial = json.loads(initial_file.read_text())
+        actions = [json.loads(line) for line in actions_file.read_text().splitlines()]
+        for field, value in (("instruction", "another task"), ("perturbation", "lan")):
+            with self.subTest(native=field):
+                seal(self.output, {**result, "native": {**result["native"], field: value}})
+                with self.assertRaisesRegex(ValueError, "differs from the frozen BDDL"):
+                    self.verify()
+
+        for field, value, message in (
+            ("instruction", "another task", "differs from the frozen BDDL"),
+            ("resetStateDigest", "", "constructor state differs"),
+        ):
+            with self.subTest(initial=field):
+                write_json(initial_file, {**initial, "state": {**initial["state"], field: value}})
+                seal(self.output, result)
+                with self.assertRaisesRegex(ValueError, message):
+                    self.verify()
+        write_json(initial_file, initial)
+
+        for field, value, message in (
+            ("instruction", "another task", "differs from the frozen BDDL"),
+            ("resetStateDigest", digest([0.2, 0.1]), "constructor state differs"),
+        ):
+            with self.subTest(control=field):
+                changed = copy.deepcopy(actions)
+                changed[-1]["state"][field] = value
+                actions_file.write_text("".join(json.dumps(row) + "\n" for row in changed))
+                seal(self.output, result)
+                with self.assertRaisesRegex(ValueError, message):
+                    self.verify()
+
     def test_native_instability_during_control_remains_an_explicit_rejected_sample(self):
         class Unstable(SyntheticBenchmark):
             def step(self, action):

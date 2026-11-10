@@ -28,6 +28,7 @@
 | [MolmoSpaces-Bench](../../examples/bench-adapters/embodied/MOLMOSPACES.md) | 固定 MS v1 操作轨道，Pick 1,000、PnP 1,000、Open 1,000、Close 915 个 episode | 四条轨道共 3,915 个固定场景样本，使用原生 DROID 控制与最终判定 | 完整资产包通过登记与 3,915 个样本的文件核对。四条轨道各有一组原生 reset、双相机与固定动作对照。[记录](../tasks/20261110-molmospaces.md) |
 | [Colosseum V2](../../examples/bench-adapters/embodied/COLOSSEUM.md) | 16 个单臂、12 个双臂任务及 21 个原生预设（含无扰动与合并扰动） | 42 个登记共 588 个任务与预设组合，455 个可用，70 个由上游排除，63 个涉及缺资产 | 24 个可用任务通过 GPU reset、观测和一步控制检查；单臂、双臂各有全时限固定动作原生对照。另 4 个任务缺 PartNet 模型 1005 或 1027。[记录](../tasks/20261110-colosseum-v2.md) |
 | [VLA-Arena](../../examples/bench-adapters/embodied/VLA-ARENA.md) | 11 个套件、170 个 L0–L2 任务，8,500 个发布初态 | 全部任务与初态，保留原生安全计分和语言、视觉探针 | 5 组短原生对照通过。安全任务固定动作跑满 300 步并经 CPU 重评。官方 OFT 权重待校准。[记录](../tasks/20261110-vla-arena.md) |
+| [LIBERO-PRO](../../examples/bench-adapters/embodied/LIBERO-PRO.md) | 初版四个原版套件、五类排行榜扰动，共 200 个目录条目 | 20 个条件全部登记，固定 BDDL 和构造种子生成 10,000 个计划样本 | 200 个条目都通过原生 reset 和一步控制。两组短原生对照、一个 220 步固定动作 episode 和 CPU 重评通过。OFT 权重待校准。[记录](../tasks/20261110-libero-pro.md) |
 
 ## 真实模型实测
 

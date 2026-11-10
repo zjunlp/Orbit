@@ -284,6 +284,18 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
                 or native["successOnce"] is not success
                 or native["successAtEnd"] is not controls[-1]["nativeSuccess"]):
             raise ValueError("Colosseum V2 horizon or success flags differ from the controls")
+    if result["valid"] and kind == "libero-pro":
+        task = contract["sample"]["taskId"]
+        environment = reference["environment"]
+        instruction = environment["taskTitles"][task]
+        native = result["native"]
+        if (initial["state"]["instruction"] != instruction or native["instruction"] != instruction
+                or native["perturbation"] != environment["perturbation"]
+                or any(row["state"]["instruction"] != instruction for row in controls)):
+            raise ValueError("LIBERO-PRO policy instruction differs from the frozen BDDL")
+        reset_digest = initial["state"].get("resetStateDigest")
+        if not reset_digest or any(row["state"].get("resetStateDigest") != reset_digest for row in controls):
+            raise ValueError("LIBERO-PRO constructor state differs across the recorded episode")
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     if (result["valid"] and contract.get("version") == 3
