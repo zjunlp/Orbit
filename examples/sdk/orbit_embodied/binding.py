@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
-                          "metaworld", "calvin")
+                          "metaworld", "calvin", "robolab", "robodojo")
 
 
 def digest(value):
@@ -32,7 +32,8 @@ def seed_asset(reference, task):
     assets = reference["environment"].get("assets")
     if assets and not assets.get("digest"):
         raise ValueError("use the generated reference with the frozen environment asset digest")
-    reset = ("environmentSeed,sceneGrid[initialStateId]" if "simplerScenes" in reference["environment"]
+    reset = ("layouts[task][environmentSeed][initialStateId]" if reference["environment"].get("kind") == "robodojo"
+             else "environmentSeed,sceneGrid[initialStateId]" if "simplerScenes" in reference["environment"]
              else "environmentSeed+initialStateId")
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
@@ -89,9 +90,25 @@ def validate_observation(observation, descriptions):
             raise ValueError("non-finite observation: " + name)
 
 
+def robodojo_layout(reference, task, eval_seed, index):
+    environment = reference["environment"]
+    if task not in environment["tasks"] or task in environment.get("unsupported", {}):
+        raise ValueError("RoboDojo task is unavailable in the frozen catalog")
+    layouts = environment.get("layouts", {}).get(task, {}).get(str(eval_seed), [])
+    if not 0 <= index < len(layouts):
+        raise ValueError("RoboDojo layout index exceeds the frozen evaluation seed partition")
+    layout = layouts[index]
+    if layout["id"] != index:
+        raise ValueError("RoboDojo layout ordinal differs from the frozen catalog")
+    return layout
+
+
 def reset_seed(sample, reference=None):
     """Use a separate scene index and RNG seed for a fixed scene grid."""
     environment = reference["environment"] if reference else {}
+    if environment.get("kind") == "robodojo":
+        robodojo_layout(reference, sample["taskId"], sample["environmentSeed"], int(sample["initialStateId"]))
+        return sample["environmentSeed"]
     if environment.get("kind") == "calvin":
         index = int(sample["initialStateId"])
         if sample["environmentSeed"] != 0 or not 0 <= index < len(environment["catalog"]["sequences"]):
@@ -100,8 +117,8 @@ def reset_seed(sample, reference=None):
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
     seed = sample["environmentSeed"] + int(sample["initialStateId"])
-    if environment.get("kind") == "metaworld" and not 0 <= seed < 2 ** 32:
-        raise ValueError("Meta-World scene seed must fit in an unsigned 32-bit integer")
+    if environment.get("kind") in ("metaworld", "robolab", "robodojo") and not 0 <= seed < 2 ** 32:
+        raise ValueError("native scene seed must fit in an unsigned 32-bit integer")
     return seed
 
 
@@ -109,7 +126,8 @@ def check_distinct_resets(samples, reference=None):
     """Different sampleIds must not alias one native reset (e.g. seeds 7+1 and 8+0)."""
     seen = {}
     for sample in samples:
-        scene = int(sample["initialStateId"]) if reference and "simplerScenes" in reference["environment"] else None
+        scene = int(sample["initialStateId"]) if reference and ("simplerScenes" in reference["environment"]
+                     or reference["environment"].get("kind") == "robodojo") else None
         key = (sample["taskId"], scene, reset_seed(sample, reference), sample["policySeed"], sample["repetition"])
         if seen.setdefault(key, sample["sampleId"]) != sample["sampleId"]:
             raise ValueError("two planned samples resolve to the same native reset seed")

@@ -34,9 +34,9 @@ def main():
     kind = environment.get("kind")
     environment_seed = args.environment_seed
     if environment_seed is None:
-        environment_seed = 0 if kind == "calvin" else 7
+        environment_seed = 0 if kind in ("calvin", "robodojo") else 7
     generated = kind in GENERATED_ENVIRONMENTS
-    uint32_seed = kind in ("robocasa365", "robotwin") or "simplerRobot" in environment
+    uint32_seed = kind in ("robocasa365", "robotwin", "robolab", "robodojo") or "simplerRobot" in environment
     if environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
     if generated:
@@ -46,8 +46,14 @@ def main():
         tasks = {task["id"]: task for task in catalog(args.reference_source, args.suite)}
     items = []
     for task_id in tasks if args.all_tasks else args.task:
+        if task_id in environment.get("unsupported", {}):
+            raise ValueError("unsupported task " + task_id + ": " + environment["unsupported"][task_id])
         task = tasks[task_id]
         count = len(environment["catalog"]["sequences"]) if kind == "calvin" else initial_state_count(environment, task_id)
+        if kind == "robodojo":
+            count = len(environment.get("layouts", {}).get(task_id, {}).get(str(environment_seed), []))
+            if not count:
+                raise ValueError("no frozen RoboDojo layouts for the selected task and evaluation seed")
         if args.all_initial_states and count is None:
             parser.error("--all-initial-states requires a fixed native catalog")
         selected = range(count) if args.all_initial_states else args.initial_state

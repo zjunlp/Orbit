@@ -27,6 +27,9 @@ CALVIN runs the pinned scene D instruction sequences and records native per-subt
 SmolVLA and MolmoAct2 reuse native LIBERO. ManiSkill3 Plate-25 and Meta-World MT50 use native
 Gymnasium environments and separate OFT and π₀.₅ services. ManiSkill3 also exposes benchmark-only
 tabletop profiles for its native joint controllers. [Native expansion setup](NATIVE-EXPANSION.md)
+RoboDojo and RoboLab use the official Isaac Sim environments with independently registered policies.
+Their runtime preparation and validation status are separate from the existing MuJoCo/SAPIEN recipes.
+[RoboDojo setup](ROBODOJO.md) · [RoboLab setup](ROBOLAB.md)
 For new endpoints, see the [onboarding templates](../../../docs/guides/embodied-onboarding.md)
 and [compatibility matrix](../../../docs/guides/embodied-compatibility.md).
 

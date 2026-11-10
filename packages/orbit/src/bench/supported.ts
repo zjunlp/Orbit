@@ -657,6 +657,44 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
     ),
     suites: ["ABC→D"],
   },
+
+  {
+    id: "robodojo",
+    name: "RoboDojo",
+    description: "Evaluate dual-arm manipulation in the official Isaac Sim task environments.",
+    taxonomyGroups: [group("Native simulated manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "Frozen native layouts, joint controls and process scores; requires the pinned Isaac Sim runtime and assets.",
+        "examples/bench-adapters/embodied/ROBODOJO.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "Two full-horizon native hold-control episodes, CPU verification and rescore checked. Trained-policy, positive-oracle and full-suite parity are unverified.",
+      "docs/tasks/20261109-robodojo-robolab.md",
+    ),
+    suites: ["Native simulation tasks"],
+  },
+  {
+    id: "robolab",
+    name: "RoboLab",
+    description:
+      "Evaluate DROID manipulation in the official high-fidelity Isaac Lab environments.",
+    taxonomyGroups: [group("Native DROID manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "Original task catalog, joint-position actions and native termination results; requires the pinned Isaac Sim runtime and assets.",
+        "examples/bench-adapters/embodied/ROBOLAB.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "Two native hold-control episodes, CPU verification and rescore checked; an official successful replay was checked separately. Trained-policy and full-suite parity are unverified.",
+      "docs/tasks/20261109-robodojo-robolab.md",
+    ),
+    suites: ["Native DROID tasks"],
+  },
 ];
 
 const SUPPORTED = definitions.map((entry) =>

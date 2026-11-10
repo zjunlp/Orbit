@@ -168,7 +168,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
             result.update(success=bool(verdict["success"]), valid=True, native=verdict)
             completed = True
     except Exception as exc:
-        if stage == "reset_failed" and isinstance(exc, SampleRejected):
+        if isinstance(exc, SampleRejected):
             result["failure"] = SampleRejected.failure
         else:
             result["failure"] = getattr(exc, "kind", stage)
@@ -176,6 +176,14 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
         (directory / "actions.jsonl").touch(exist_ok=True)
         completed = True
     finally:
+        if completed and hasattr(benchmark, "finalize_evidence"):
+            try:
+                benchmark.finalize_evidence()
+            except Exception as exc:
+                result["valid"] = False
+                result.setdefault("failure", "scorer_error")
+                result["issues"].append("evidence finalization: " + str(exc))
+                seal_before_media = False
         if seal_before_media and completed:
             result["wallSeconds"] = time.monotonic() - start
             seal(directory, result)

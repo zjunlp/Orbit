@@ -15,7 +15,7 @@ SDK = HERE.parents[1] / "sdk"
 sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
-from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, seed_asset
+from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, reset_seed, seed_asset
 from orbit_embodied.simpler import initial_state_count, scene_at
 
 
@@ -87,10 +87,18 @@ def tasks(req):
     suite = config.get("suite", "libero_spatial")
     environment = reference.get("environment", {})
     calvin = environment.get("kind") == "calvin"
+    robodojo = environment.get("kind") == "robodojo"
     if environment.get("kind") in GENERATED_ENVIRONMENTS:
         listing = [{"id": task, "title": task.split("/")[-1].replace("_", " "),
                     "supported": True, "reason": None, "tags": {"initialStateDigest": seed_asset(reference, task)}}
                    for task in environment["tasks"]]
+        for task in listing:
+            reason = environment.get("unsupported", {}).get(task["id"])
+            if reason:
+                task.update(supported=False, reason=reason)
+            if environment.get("kind") == "robodojo":
+                counts = {seed: len(rows) for seed, rows in environment["layouts"].get(task["id"], {}).items()}
+                task["tags"]["initialStateCounts"] = json.dumps(counts, sort_keys=True)
         if "simplerScenes" in environment:
             for task in listing:
                 task["tags"]["initialStateCount"] = str(initial_state_count(environment, task["id"]))
@@ -107,15 +115,18 @@ def tasks(req):
                     "primary": True}]
         metrics.extend({"name": f"success_at_{n}", "label": f"Completed at least {n}", "unit": "ratio",
                         "range": [0, 1]} for n in range(1, 6))
+    if robodojo:
+        metrics = [{"name": "success_rate", "label": "Native success", "unit": "ratio", "range": [0, 1]},
+                   {"name": "process_score", "label": "Native process score", "range": [0, 100]}]
     return {"tasks": listing,
-            **({"metrics": metrics} if calvin else {}),
+            **({"metrics": metrics} if metrics else {}),
             "capabilities": {"category": "embodied-policy", "embodied": {"profile": reference["id"], "semanticProfile": reference["benchmarkProfile"], "observationMap": reference["observationMap"], "batch": {"maxEpisodes": 128}}, "profiles": ["sim", "sync", "step"],
                              "domains": ["embodied"], "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
-                             "scoreKind": "scalar" if calvin else "binary", "rescore": "evidence",
+                             "scoreKind": "scalar" if calvin or robodojo else "binary", "rescore": "evidence",
                              "calibration": {"oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
                                             "Source": source["commit"],
@@ -146,6 +157,13 @@ def solve_one(req):
     if "simplerScenes" in environment:
         sample = trial["sample"]
         scene_at(environment, sample["taskId"], int(sample["initialStateId"]))
+    if environment.get("kind") in ("robolab", "robodojo"):
+        sample = trial["sample"]
+        if sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {}):
+            raise ValueError("task is unavailable in the frozen native catalog")
+        if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
+            raise ValueError("sample differs from the frozen native reset recipe")
+        reset_seed(sample, reference)
     definition = trial["method"].get("policySnapshot")
     if not definition:
         raise ValueError("missing or incompatible frozen policy definition")
@@ -167,6 +185,8 @@ def solve_one(req):
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
             raise ValueError("simGpuMemGB needs a GPU simulator and a finite positive budget")
         resources["gpuMemGB"] = memory
+    if environment.get("kind") in ("robolab", "robodojo"):
+        resources["gpuModels"] = ["RTX", "L4", "L40", "L40S", "A10", "A40"]
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
     assets = environment.get("assets")
     if assets:
@@ -177,7 +197,7 @@ def solve_one(req):
                              "MUJOCO_GL": gl_platform,
                              "PYOPENGL_PLATFORM": gl_platform},
                      "resources": resources,
-                     **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") == "robotwin" else {}),
+                     **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") in ("robotwin", "robodojo") else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
                      "tags": {"embodied_evidence": "2"},
                      "mounts": mounts}}
@@ -311,6 +331,12 @@ def score(req):
             metrics = {CALVIN_COMPLETED_SUBTASKS: completed,
                        **{f"success_at_{n}": int(completed >= n) for n in range(1, 6)}}
             return valid(completed, 5, metrics=metrics,
+                         issues=result["issues"], review={"files": files})
+        if expected["reference"].get("environment", {}).get("kind") == "robodojo":
+            metrics = {"success_rate": int(result["success"])}
+            if result["native"]["processScore"] is not None:
+                metrics["process_score"] = result["native"]["processScore"]
+            return valid(result["native"]["score"], metrics=metrics,
                          issues=result["issues"], review={"files": files})
         return valid(int(result["success"]), issues=result["issues"], review={"files": files})
     except Exception as exc:
