@@ -1,8 +1,8 @@
 # Orbit 设计
 
 状态：R0 已确定的目标设计；R1–R3 已实现；R4（多节点，§8）已实现，仅在同机双 daemon 仿真上验证；
-R5（任意 Agent + 跨场景评测规范，§6、§9）中只有 Agent 注册表已实现，其余为规划。实现进度见 [status.md](status.md)。本文是架构与接口的唯一权威来源；
-改变模块边界、公共契约或关键决策时，在同一分支更新本文。
+R5（任意 Agent + 跨场景评测规范，§6、§9）部分实现，包含 Agent 注册、benchmark 目录与独立 Policy 原生具身评测。实现进度见 [status.md](status.md)。
+本文是架构与接口的唯一权威来源。改变模块边界、公共契约或关键决策时，在同一分支更新本文。
 
 ## 1. 定位
 
@@ -749,11 +749,11 @@ worker 不可达时返回 502。终态且 worker 已完成清理后同步结束�
 `orbit node rm`（此时记为 `lost`）；worker 重启并重新附着 Run 时镜像日志可能被截断重拉，以 worker 上的
 日志为准；Agent 会话与 diff 只在主节点。
 
-## 9. 跨场景评测规范（规划）
+## 9. 跨场景评测规范
 
 目标：让用户在自己的机器上**丝滑地**评测任意 Agent / Policy：bench 足够多、Web 能按场景看懂实验、轨迹形式统一、
 资源管理可靠。本节在 [docs/research](research/) 对 12 个 GUI / 具身项目的源码调研基础上修订（`gui-bench/`、`embodied-bench/`）；
-除 Agent 注册表（§6）外均为规划。
+Agent 注册表（§6）、独立 Policy 与原生具身评测（§9.4a）、轨迹产物与复盘（§9.9）和产品目录（§9.18）已有实现。其余能力按各小节的状态与 [实现进度](status.md) 查阅。
 
 ### 9.0 调研后的修正
 
@@ -907,6 +907,11 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 - **CALVIN ABC→D**：一个样本对应冻结目录的一条五指令序列。仿真仅在序列开始时重置，原生 oracle 完成一段后，driver 丢弃剩余动作并
   用下一条指令重规划。独立 verifier 从封存的动作证据核对子任务进度、重规划边界和停止条件。主分数为完成的连续子任务数。
   Scene D 的 benchmark 可独立登记，checkpoint 的训练场景属于策略来源。
+- **RoboMimic**：从 PH v1.5.1 数据集冻结五个环境的控制器、动作顺序和步数上限。低维与图像模式分别登记，Transport 使用双臂。
+  种子重置后恢复初始仿真状态，并按原生成功或终止判分。[接入说明](../examples/bench-adapters/embodied/ROBOMIMIC.md)
+- **VIMA-Bench**：独立登记四档官方测试划分，保留图文提示、实例分割和原生抓放动作。变长提示资产使用显式编码字段，
+  VIMA 推理由独立 Policy 服务执行，登记时核对其镜像构建清单中的 SDK 文件摘要。证据记录原生动作与终止，供 CPU 重评核对。
+  [接入说明](../examples/bench-adapters/embodied/VIMA-BENCH.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

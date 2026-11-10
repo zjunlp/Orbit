@@ -39,6 +39,8 @@ BrowserGym 的 **Recheck evidence** 只验证保存的奖励、轨迹和哈希�
 
 ## Embodied episodes
 
+原生具身任务从 [具身快速开始](embodied-quickstart.md#3-在-web-回看-trial) 进入 Trial。
+
 独立的 MP4、WebM 和 Ogg 视频产物可在 Trial 的文件页播放，预览上限为 64 MiB。超限文件可下载。
 
 adapter 可在 `review.files` 声明 `kind: "episode"`、`fallback: "json"`。索引为

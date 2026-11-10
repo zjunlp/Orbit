@@ -56,7 +56,7 @@ configuration, tokenizer and processor files from [SmolVLM2-500M-Video-Instruct]
 in the checkpoint's `processor/` directory. The SmolVLA checkpoint contains the model weights used at inference.
 MolmoAct2 uses the pinned model code and normalization file shipped in its checkpoint.
 
-Reuse the [native LIBERO image and its OpenPI source checkout](README.md#reference-and-assets) for
+Reuse the [native LIBERO image and its OpenPI source checkout](OPENPI-LIBERO.md#reference-and-assets) for
 SmolVLA and MolmoAct2. Build both model services from the same image.
 
 ```bash

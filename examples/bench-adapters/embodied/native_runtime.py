@@ -56,7 +56,7 @@ def require_image(image, manifest):
     except (TypeError, ValueError):
         build = None
     if build != manifest or config.get("Entrypoint") != manifest["entrypoint"]:
-        raise ValueError("expected the pinned " + manifest["kind"] + " simulator image built with native_runtime.py")
+        raise ValueError("expected the pinned " + manifest["kind"] + " image with a matching build manifest and entrypoint")
     if not pinned(record["Id"]):
         raise ValueError("runtime image must have an immutable content identity")
     return record["Id"]

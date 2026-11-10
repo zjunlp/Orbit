@@ -980,6 +980,45 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   },
 
   {
+    id: "robomimic",
+    name: "RoboMimic",
+    description:
+      "Evaluate policies on the five classic proficient-human manipulation tasks in robosuite.",
+    taxonomyGroups: [group("Demonstration-conditioned manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "PH v1.5.1 environments with separate low-dimensional and RGB policy profiles.",
+        "examples/bench-adapters/embodied/ROBOMIMIC.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All five tasks passed native low-dimensional and RGB checks. Two published demonstrations replayed successfully.",
+      "docs/tasks/20261110-robomimic.md",
+    ),
+    suites: ["Proficient Human (PH)", "Low-dimensional", "RGB"],
+  },
+  {
+    id: "vima-bench",
+    name: "VIMA-Bench",
+    description:
+      "Evaluate multimodal prompt following and generalization with native PyBullet manipulation primitives.",
+    taxonomyGroups: [group("Multimodal manipulation", native)],
+    integrations: [
+      nativeRoute(
+        "Four official test partitions with multimodal prompt assets and independently served VIMA.",
+        "examples/bench-adapters/embodied/VIMA-BENCH.md",
+      ),
+    ],
+    verification: checked(
+      "sample-checked",
+      "All four test partitions passed native checks. Selected VIMA 20M episodes passed independent verification.",
+      "docs/tasks/20261110-vima-bench.md",
+    ),
+    suites: ["Placement", "Combinatorial", "Novel object", "Novel task"],
+  },
+
+  {
     id: "robodojo",
     name: "RoboDojo",
     description: "Evaluate dual-arm manipulation in the official Isaac Sim task environments.",
@@ -1026,6 +1065,7 @@ const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
   "libero-plus-panda-raw/1": "libero-plus",
   "vlabench-franka-ee/1": "vlabench",
+  "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
   "robocasa-v02-panda-arm/1": "robocasa-v02",
@@ -1038,6 +1078,11 @@ const nativeProfiles: Record<string, string> = {
   "metaworld-native/1": "metaworld",
   "calvin-native/1": "calvin",
 };
+for (const task of ["lift", "can", "square", "transport", "tool-hang"]) {
+  for (const observation of ["low-dim", "image"]) {
+    nativeProfiles[`robomimic-${task}-${observation}/1`] = "robomimic";
+  }
+}
 for (const layout of ["panda", "panda-wrist", "panda-stick", "dual-panda", "so100"]) {
   for (const goal of ["", "-goal"])
     nativeProfiles[`maniskill3-${layout}-joint-delta${goal}/1`] = "maniskill3";

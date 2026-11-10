@@ -1,7 +1,7 @@
 # Fixed embodied solve batches
 
 Register an independent policy and native benchmark as described in the
-[native adapter guide](../../examples/bench-adapters/embodied/README.md). Regenerate benchmark
+[embodied quickstart](embodied-quickstart.md). Regenerate benchmark
 registrations after updating the adapter or SDK so their implementation digest matches.
 
 ```bash
@@ -9,9 +9,10 @@ orbit bench run libero-native --method pi05=policy,policyRef=pi05-libero \
   --sample-plan "$SAMPLE_PLAN" --batch-size 8
 ```
 
-`--batch-size` accepts 2–256; the selected benchmark also declares its own maximum (the native
-adapter accepts 128). Without the option, existing single-episode behavior is preserved. The
-daemon groups consecutive samples of one evaluation configuration with the same effective resources and timeout
+`--batch-size` accepts 2–256 and requires a registration that declares fixed batch support.
+The native embodied adapter declares a maximum of 128 where it offers batching. RLBench runs
+one episode per solve Run. Omitting the option also selects single-episode execution. The
+daemon groups consecutive samples of one method with the same effective resources and timeout
 (the job `--timeout` takes precedence over per-task timeouts), preserving sample-plan order. The
 grouping is part of the comparison conditions. Each group gets one solve Run, one model service and one resource
 lease. Every episode remains an individual Trial with its own evidence directory and CPU verify Run.
