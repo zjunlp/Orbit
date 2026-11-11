@@ -29,7 +29,7 @@ RoboDojo 配置工具使用 `Path.is_relative_to()`，需要 Python 3.9 或更�
 工具的实际构建和登记依赖按各 [benchmark 的配置指南](../../examples/bench-adapters/embodied/README.md)准备。
 
 ```bash
-"$PYTHON311" -B -m unittest discover -s examples/sdk -p 'test_*.py' -v
+PYTHONPATH=examples/sdk "$PYTHON311" -B -m unittest discover -s examples/sdk -p 'test_*.py' -v
 ```
 
 两组检查使用 NumPy、固定 OpenPI checkout 的 `openpi-client`、Pillow、`websockets==13.1`、
@@ -38,6 +38,8 @@ Python 3.11 的真实 HDF5 生命周期检查还使用 `h5py`。缺少可选依�
 导入期缺包会报 `ModuleNotFoundError`，那是环境问题而不是代码缺陷，各包对应的可选依赖见
 [SDK 说明](../../examples/sdk/README.md#optional-dependencies)。
 这些回归包括明确标注的合成策略和本地传输测试。
+
+`pnpm verify` 还会用当前虚拟环境的 `python3` 发现适配器根目录的测试。需要模拟器镜像的回归由各 benchmark 指南给出运行命令。
 
 ## 固定运行时中的原生验证
 

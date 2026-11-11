@@ -10,7 +10,7 @@ export const liberoPlus: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Four native suites, with one official initial state per perturbation variant.",
-      "examples/bench-adapters/embodied/LIBERO-PLUS.md",
+      "examples/bench-adapters/embodied/benchmarks/libero-plus/README.md",
     ),
   ],
   verification: checked(

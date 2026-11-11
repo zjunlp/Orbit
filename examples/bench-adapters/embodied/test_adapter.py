@@ -63,7 +63,7 @@ class AdapterPlanningTests(unittest.TestCase):
                             native_runtime.require_image("tag", expected)
 
     def test_vima_policy_image_requires_the_packaged_sdk_manifest(self):
-        with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
+        with patch.object(sys, "path", [str(ADAPTER.parent / "benchmarks"), *sys.path]):
             import configure_manipulation
             import native_runtime
 
@@ -489,9 +489,9 @@ class AdapterPlanningTests(unittest.TestCase):
                 self.assertEqual(outcome["metrics"], expected_metrics)
 
     def test_native_registration_help_requires_only_the_standard_library(self):
-        for script in ("configure_colosseum.py", "configure_libero_pro.py"):
+        for script in ("colosseum-v2/configure_colosseum.py", "libero-pro/configure_libero_pro.py"):
             with self.subTest(script=script):
-                completed = subprocess.run([sys.executable, "-S", "-B", str(ADAPTER.parent / script), "--help"],
+                completed = subprocess.run([sys.executable, "-S", "-B", str(ADAPTER.parent / "benchmarks" / script), "--help"],
                                            text=True, capture_output=True)
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertIn("--benchmark-image", completed.stdout)

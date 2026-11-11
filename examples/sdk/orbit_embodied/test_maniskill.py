@@ -13,7 +13,7 @@ from orbit_embodied.binding import resolve_binding, validate_observation
 from orbit_embodied.tabletop import ManiSkillTabletopBenchmark
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
-sys.path.insert(0, str(ADAPTER))
+sys.path.insert(0, str(ADAPTER / "benchmarks/tabletop"))
 from configure_maniskill import CATALOG, reference_for
 
 

@@ -50,7 +50,7 @@ class VLAArenaTests(unittest.TestCase):
             verify_arena_evidence(reference, sample, controls[:1], result)
 
     def test_frozen_language_selection_preserves_the_native_draw(self):
-        script = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/configure_vla_arena.py"
+        script = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/benchmarks/vla-arena/configure_vla_arena.py"
         spec = importlib.util.spec_from_file_location("configure_vla_arena", script)
         configure = importlib.util.module_from_spec(spec)
         with patch.object(sys, "path", [str(script.parent), *sys.path]):

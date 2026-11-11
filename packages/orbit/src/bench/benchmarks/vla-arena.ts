@@ -10,7 +10,7 @@ export const vlaArena: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Native suites with L0–L2 difficulty, frozen initial states and official safety scoring.",
-      "examples/bench-adapters/embodied/VLA-ARENA.md",
+      "examples/bench-adapters/embodied/benchmarks/vla-arena/README.md",
     ),
   ],
   verification: checked(

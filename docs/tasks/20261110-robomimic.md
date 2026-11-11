@@ -8,7 +8,7 @@ Register all five classic proficient-human (PH) simulation tasks.
 
 ## Changes
 
-Freeze PH v1.5.1 metadata and register low-dimensional and RGB profiles per task. Reuse frozen sample plans and independent CPU evidence verification. [Registration guide](../../examples/bench-adapters/embodied/ROBOMIMIC.md)
+Freeze PH v1.5.1 metadata and register low-dimensional and RGB profiles per task. Reuse frozen sample plans and independent CPU evidence verification. [Registration guide](../../examples/bench-adapters/embodied/benchmarks/robomimic/README.md)
 
 ## Validation
 

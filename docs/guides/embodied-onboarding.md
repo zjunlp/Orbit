@@ -2,9 +2,12 @@
 
 模型端和 benchmark 端分别登记，组合验收记录具体的权重、评测 recipe 和样本计划。先选一个[已实测的组合](embodied-compatibility.md#真实模型实测)做基线。新增模型优先复用 benchmark 和 connector，新增套件优先复用原生 driver。遇到新的传输协议或环境 API 时，在对应端实现适配。[配置指南索引](../../examples/bench-adapters/embodied/README.md) · [Python 环境和开发验证](embodied-development.md)
 
+模拟器配方、资产准备和登记工具放在 `embodied/benchmarks/<family>/`。模型服务、镜像和权重工具放在
+`embodied/policies/<family>/`。各家族的登记复用 `embodied/adapter.py`，评测样本由 `embodied/plan.py` 冻结。
+
 ## 模型端
 
-复制表格填写模型接入记录。生成的 `policy.json` 交给 `orbit policy add`。已有模型可直接参考对应的配置生成器。[PolicyDefinition](../../packages/orbit/src/contracts/embodied.ts) · [π₀.₅](../../examples/bench-adapters/embodied/configure.py) · [GR00T](../../examples/bench-adapters/embodied/configure_groot.py) · [OpenVLA-OFT](../../examples/bench-adapters/embodied/configure_openvla.py)
+复制表格填写模型接入记录。生成的 `policy.json` 交给 `orbit policy add`。已有模型可直接参考对应的配置生成器。[PolicyDefinition](../../packages/orbit/src/contracts/embodied.ts) · [π₀.₅](../../examples/bench-adapters/embodied/benchmarks/libero/configure.py) · [GR00T](../../examples/bench-adapters/embodied/policies/groot/configure_groot.py) · [OpenVLA-OFT](../../examples/bench-adapters/embodied/policies/openvla-oft/configure_openvla.py)
 
 | 填写项 | 记录内容 |
 | --- | --- |
@@ -48,7 +51,7 @@ python3 examples/bench-adapters/embodied/plan.py \
   --environment-seed "$ENVIRONMENT_SEED" > "$LOCAL_CONFIG/samples.json"
 ```
 
-SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。预打包任务用 `environmentSeed + initialStateId` 生成场景。固定场景网格用 `initialStateId` 选场景和位姿，`environmentSeed` 单独控制模拟器随机流。LIBERO 用 `initialStateId` 索引已固定的初态文件。[LIBERO 配置示例](libero-suites.md) · [SimplerEnv 配置示例](../../examples/bench-adapters/embodied/SIMPLER.md)
+SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。预打包任务用 `environmentSeed + initialStateId` 生成场景。固定场景网格用 `initialStateId` 选场景和位姿，`environmentSeed` 单独控制模拟器随机流。LIBERO 用 `initialStateId` 索引已固定的初态文件。[LIBERO 配置示例](libero-suites.md) · [SimplerEnv 配置示例](../../examples/bench-adapters/embodied/benchmarks/simpler-env/README.md)
 
 先选同一代表任务的 2–5 个冻结样本。支持固定批次的登记使用[有界 Policy 校准](policy-integration-checks.md)。
 例如 LIBERO 的 20 分钟预算涵盖排队、模型启动、执行、CPU 验证和默认首样本重评。

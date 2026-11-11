@@ -10,7 +10,7 @@ export const rlbench: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "MT100 with seeded variations and a separate RVT 18-task test suite with frozen initial states.",
-      "examples/bench-adapters/embodied/RLBENCH.md",
+      "examples/bench-adapters/embodied/benchmarks/rlbench/README.md",
     ),
   ],
   verification: checked(

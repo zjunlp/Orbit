@@ -16,7 +16,7 @@ from orbit_embodied import robolab
 from orbit_embodied.binding import digest, resolve_binding, seed_asset, validate_observation
 
 HERE = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
-sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE / "benchmarks/robolab"))
 import configure_robolab as configure
 
 

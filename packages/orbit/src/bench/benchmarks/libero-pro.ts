@@ -10,7 +10,7 @@ export const liberoPro: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "The initial release's twenty leaderboard conditions, with BDDL language and seeded native initial states.",
-      "examples/bench-adapters/embodied/LIBERO-PRO.md",
+      "examples/bench-adapters/embodied/benchmarks/libero-pro/README.md",
     ),
   ],
   verification: checked(

@@ -13,7 +13,7 @@ from orbit_embodied.binding import digest
 from orbit_embodied.robotwin import RoboTwinBenchmark, setup_native_scene
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
-sys.path.insert(0, str(ADAPTER))
+sys.path.insert(0, str(ADAPTER / "benchmarks/robotwin"))
 import configure_robotwin
 import plan_robotwin
 

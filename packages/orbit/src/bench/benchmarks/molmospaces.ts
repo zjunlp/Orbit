@@ -9,7 +9,7 @@ export const molmospaces: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "The four MS manipulation tracks with frozen episode specifications and an independent Policy.",
-      "examples/bench-adapters/embodied/MOLMOSPACES.md",
+      "examples/bench-adapters/embodied/benchmarks/molmospaces/README.md",
     ),
   ],
   verification: checked(

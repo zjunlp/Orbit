@@ -11,7 +11,7 @@ evaluation with X-VLA on RoboTwin Clean and π₀.₅ on CALVIN ABC→D.
 - Register the RoboTwin Clean Cartesian controller with the X-VLA camera, pose, gripper and chunk semantics.
 - Freeze the CALVIN sequence catalog and native scene resets. Verify ordered subtask progression and
   report completed length and per-prefix success.
-- [RoboTwin X-VLA setup](../../examples/bench-adapters/embodied/ROBOTWIN.md#x-vla-cartesian-evaluation) · [CALVIN setup](../../examples/bench-adapters/embodied/CALVIN.md)
+- [RoboTwin X-VLA setup](../../examples/bench-adapters/embodied/benchmarks/robotwin/README.md#x-vla-cartesian-evaluation) · [CALVIN setup](../../examples/bench-adapters/embodied/benchmarks/calvin/README.md)
 
 ## Validation
 

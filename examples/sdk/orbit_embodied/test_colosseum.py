@@ -15,7 +15,7 @@ from orbit_embodied.colosseum import ColosseumBenchmark
 class ColosseumTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        script = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/configure_colosseum.py"
+        script = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/benchmarks/colosseum-v2/configure_colosseum.py"
         spec = importlib.util.spec_from_file_location("configure_colosseum", script)
         cls.configure = importlib.util.module_from_spec(spec)
         with patch.object(sys, "path", [str(script.parent), *sys.path]):

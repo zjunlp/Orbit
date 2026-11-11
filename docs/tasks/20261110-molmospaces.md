@@ -8,7 +8,7 @@ Register the four documented MS manipulation tracks from MolmoSpaces v0.2.9. Pic
 
 ## Changes
 
-The asset preparer uses the pinned upstream resource manager and installs the scenes referenced by the four published catalogs. It selects the Objaverse archives for the 250 distinct Objaverse receptacles used by Pick and Place and includes Objathor metadata. The registration pins the source, resource versions, episode files and sample order. The simulator driver restores each native JSON episode, exposes the DROID joint and camera observation profile, and takes the native final success predicate as the episode score. [Registration guide](../../examples/bench-adapters/embodied/MOLMOSPACES.md)
+The asset preparer uses the pinned upstream resource manager and installs the scenes referenced by the four published catalogs. It selects the Objaverse archives for the 250 distinct Objaverse receptacles used by Pick and Place and includes Objathor metadata. The registration pins the source, resource versions, episode files and sample order. The simulator driver restores each native JSON episode, exposes the DROID joint and camera observation profile, and takes the native final success predicate as the episode score. [Registration guide](../../examples/bench-adapters/embodied/benchmarks/molmospaces/README.md)
 
 ## Validation
 

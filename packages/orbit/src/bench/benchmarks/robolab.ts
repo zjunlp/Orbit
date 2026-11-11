@@ -9,7 +9,7 @@ export const robolab: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Original task catalog, joint-position actions and native termination results; requires the pinned Isaac Sim runtime and assets.",
-      "examples/bench-adapters/embodied/ROBOLAB.md",
+      "examples/bench-adapters/embodied/benchmarks/robolab/README.md",
     ),
   ],
   verification: checked(

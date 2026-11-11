@@ -11,7 +11,7 @@ Add two policy families and two native benchmarks. Check each released checkpoin
 - A LeRobot image serves the published SmolVLA and MolmoAct2 checkpoints on native LIBERO. Each recipe freezes its own warmup and replanning interval.
 - Native ManiSkill3 uses the RLinf Plate-25 task on a WidowX controller. Native Meta-World exposes 50 Sawyer tasks with RLinf prompts and the matching π₀.₅ model recipe.
 - Meta-World uses the frozen sample seed for both goal construction and reset. The seeded recipe has a separate sample identity.
-- [Build and register the four recipes](../../examples/bench-adapters/embodied/NATIVE-EXPANSION.md).
+- [Build and register the four recipes](../../examples/bench-adapters/embodied/benchmarks/tabletop/README.md).
 
 ## Validation
 

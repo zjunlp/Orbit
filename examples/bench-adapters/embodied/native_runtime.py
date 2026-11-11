@@ -1,4 +1,4 @@
-"""Build and check the pinned RoboCasa v0.2 and RLBench simulator images."""
+"""Resolve immutable image IDs and build and check pinned native runtimes."""
 
 import argparse
 import json
@@ -21,6 +21,14 @@ RVT_PYREP = {**PYREP, "commit": "231a1ac6b0a179cff53c1d403d379260b9f05f2f"}
 RVT_PLANNER = "rvt/utils/rlbench_planning.py"
 COPPELIASIM_SHA256 = "sha256:512de3a7347387fcc1b12fa675195a912265753f7901808382865bbf51a2a7f8"
 MANIFEST_LABEL = "orbit.reference.native-runtime"
+RLINF_REVISION = "1bf78980d9339cbc67497eddceb9a1e3a74e2acc"
+
+
+def image_id(image):
+    value = subprocess.check_output(["docker", "image", "inspect", "--format", "{{.Id}}", image], text=True).strip()
+    if not pinned(value):
+        raise ValueError("runtime image must have an immutable content identity")
+    return value
 
 
 def robocasa_sources():
@@ -38,12 +46,12 @@ def runtime_manifest(kind, sources):
     manifest = {
         "kind": kind,
         "sources": {name: source["commit"] for name, source in sources.items()},
-        "dockerfile": file_digest(HERE / (recipe + ".Dockerfile")),
+        "dockerfile": file_digest(HERE / "benchmarks" / recipe / (recipe + ".Dockerfile")),
         "entrypoint": ["python"] if recipe == "robocasa-v02" else ["/usr/local/bin/rlbench-python"],
     }
     if recipe == "rlbench":
         manifest["coppeliasim"] = COPPELIASIM_SHA256
-        manifest["launcher"] = file_digest(HERE / "rlbench-python.sh")
+        manifest["launcher"] = file_digest(HERE / "benchmarks/rlbench/rlbench-python.sh")
     return manifest
 
 
@@ -104,7 +112,7 @@ def build(args):
             contexts += ["--build-context", "coppeliasim=" + str(simulator)]
         label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
         subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label, *target, *contexts,
-                        "-f", str(HERE / (args.recipe + ".Dockerfile")), "-t", args.tag, str(HERE.parents[2])],
+                        "-f", str(HERE / "benchmarks" / args.recipe / (args.recipe + ".Dockerfile")), "-t", args.tag, str(HERE.parents[2])],
                        check=True)
 
 

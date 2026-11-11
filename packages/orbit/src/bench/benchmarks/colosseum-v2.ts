@@ -10,7 +10,7 @@ export const colosseumV2: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Native tasks, applicable perturbation presets and separate single-arm and bimanual control profiles.",
-      "examples/bench-adapters/embodied/COLOSSEUM.md",
+      "examples/bench-adapters/embodied/benchmarks/colosseum-v2/README.md",
     ),
   ],
   verification: checked(

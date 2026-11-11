@@ -10,7 +10,7 @@ export const vimaBench: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Four official test partitions with multimodal prompt assets and independently served VIMA.",
-      "examples/bench-adapters/embodied/VIMA-BENCH.md",
+      "examples/bench-adapters/embodied/benchmarks/vima-bench/README.md",
     ),
   ],
   verification: checked(

@@ -11,7 +11,7 @@ from orbit_embodied.simpler import grid_size, initial_state_count, rt_options, s
 
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
-sys.path.insert(0, str(ADAPTER))
+sys.path.insert(0, str(ADAPTER / "benchmarks/simpler-env"))
 from configure_simpler import expand_sweeps
 
 SWEEPS = json.loads((ADAPTER / "profiles/simpler-sweeps.json").read_text())

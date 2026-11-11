@@ -9,7 +9,7 @@ export const robodojo: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Frozen native layouts, joint controls and process scores; requires the pinned Isaac Sim runtime and assets.",
-      "examples/bench-adapters/embodied/ROBODOJO.md",
+      "examples/bench-adapters/embodied/benchmarks/robodojo/README.md",
     ),
   ],
   verification: checked(
