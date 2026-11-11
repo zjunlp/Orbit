@@ -29,6 +29,6 @@ Updated 2026-11-11. Architecture: [design](design.md). Docs map: [docs/README](R
 
 ## Next
 
-1. Split the trial state machine out of `bench/service.ts` (calibration and benchmark-specific code are already out: [record](tasks/20261111-bench-core-decoupling.md)).
+1. Web layout and visual polish.
 2. EFE GPU tasks, licensed-data volumes, KVM calibration of MobileWorld / OSWorld-V2.
 3. Real Agent bench jobs (RCB first); R4 on two machines; later, official-runner comparison for a few classic benchmarks.
