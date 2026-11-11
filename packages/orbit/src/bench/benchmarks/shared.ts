@@ -1,5 +1,5 @@
 // Shared product-catalog helpers and taxonomy presets for the per-family entries.
-import type { BenchTaxonomy, SupportedBenchmark } from "../../contracts/index.ts";
+import type { BenchTaxonomy } from "../../contracts/index.ts";
 
 export const source = (path: string) => `https://github.com/zjunlp/Orbit/blob/main/${path}`;
 export const adapter = (name: string) => `examples/bench-adapters/${name}/README.md`;
@@ -8,11 +8,7 @@ export const route = (name: string, path: string, scope: string) => ({
   url: source(path),
   scope,
 });
-export const checked = (
-  level: SupportedBenchmark["verification"]["level"],
-  detail: string,
-  path: string,
-) => ({ level, detail, url: source(path) });
+export const checked = (detail: string, path: string) => ({ detail, url: source(path) });
 export const group = (label: string, taxonomy: BenchTaxonomy) => ({ label, taxonomy });
 
 export const workspace: BenchTaxonomy = {

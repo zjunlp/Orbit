@@ -27,7 +27,6 @@ export const textarena: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Four game families passed reference/empty checks under the converted protocol.",
     "docs/tasks/20261105-samples-c1-c7.md",
   ),

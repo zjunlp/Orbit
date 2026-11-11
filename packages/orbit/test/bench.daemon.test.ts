@@ -145,14 +145,11 @@ describe("bench jobs", () => {
     });
     const info = await client.benchInfo(registration.name);
     expect(info.capabilities).toEqual({
-      kind: "browser",
       methods: ["empty"],
       conditions: { actionSet: "coord" },
       scoreKind: "binary",
       rescore: "evidence",
       requires: [],
-      profiles: [],
-      domains: [],
     });
     expect(info.metrics[0]?.name).toBe("answer");
     expect(await client.benchTasks(registration.name)).toEqual(info.tasks);

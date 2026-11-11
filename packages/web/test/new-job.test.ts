@@ -19,14 +19,11 @@ import {
 } from "../src/pages/bench/new-job.ts";
 
 const caps: BenchCapabilities = {
-  kind: "browser",
   methods: ["external", "empty"],
   conditions: { observation: "screenshot", maxSteps: "20" },
   scoreKind: "binary",
   rescore: "evidence",
   requires: [],
-  profiles: [],
-  domains: [],
 };
 const tasks: BenchTask[] = [
   { id: "click", title: null, supported: true, reason: null, tags: {} },

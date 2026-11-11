@@ -93,8 +93,7 @@ def validate_turns(turns):
     return ids
 
 
-# `category` / `profiles` are deprecated compatibility fields (design §9.10).
-CAPABILITIES = {"identity": {"id": "longds", "name": "LongDS-Bench"}, "domains": ["data-analysis"], "category": "agent-workspace", "profiles": ["research-report", "judge"], "kind": "other", "methods": [*RUNNERS, "empty", "oracle"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"repeat": {"tolerance": 0.2}}, "conditions": {"Runner": "native multi-turn runner per Agent; per-turn LLM judge"}}
+CAPABILITIES = {"identity": {"id": "longds", "name": "LongDS-Bench"}, "methods": [*RUNNERS, "empty", "oracle"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"repeat": {"tolerance": 0.2}}, "conditions": {"Runner": "native multi-turn runner per Agent; per-turn LLM judge"}}
 
 
 def tasks(req):

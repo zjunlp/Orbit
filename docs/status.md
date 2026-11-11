@@ -23,13 +23,12 @@ Updated 2026-11-11. Architecture: [design](design.md). Docs map: [docs/README](R
 ## Main gaps
 
 - **Validation.** Only calibration (pipeline connected) is required now. No benchmark has been compared with its official runner; full-suite statistical equivalence is unverified.
-- **Docs ahead of code.** `category` / `profiles` and catalog `verification.level` are retired in docs but still in contracts; `category` still sets calibration defaults (design §9.10).
 - **Not run for real.** MobileWorld / OSWorld-V2 KVM calibration; EFE GPU tasks; EmbodiedLab experiments (RTX startup); WebVoyager and Web judge calibration; R4 on two machines; LongDS Claude continuation.
 - **Missing.** Environment pools and `slots`; trajectory importers beyond EFE, RoboTwin and LIBERO; licensed-data volumes (BEHAVIOR, ManiGuard); allowlist networks, multi-step Harbor tasks, Harbor MCP tool sets; MCP server; native Policy view in Agents; bundle cache eviction.
 - **Known issues.** Docker [`userns-remap`](guides/docker-userns-remap.md) breaks Run output writes and is not detected; daemons of different users on one machine can lease the same free GPU.
 
 ## Next
 
-1. Code cleanup matching design §9.10: remove `category`-based calibration defaults and `verification.level`.
+1. Split `bench/service.ts` and route benchmark-specific behavior through adapter capabilities ([audit](tasks/20261111-drop-legacy-categories.md)).
 2. EFE GPU tasks, licensed-data volumes, KVM calibration of MobileWorld / OSWorld-V2.
 3. Real Agent bench jobs (RCB first); R4 on two machines; later, official-runner comparison for a few classic benchmarks.

@@ -135,12 +135,11 @@ def tasks(req):
             for t in rows
         ],
         "capabilities": {
-            # C6: a fixed policy closes the loop with the simulator, one episode per trial.
-            "category": "embodied-policy",
-            "profiles": ["sim", "sync", "step"],
-            "domains": ["embodied"],
+            # A fixed policy closes the loop with the simulator, one episode per trial; a still
+            # policy can satisfy a goal that holds at the start.
             "identity": benchmark_identity(spec),
-            "calibration": {"oracle": "none", "seedsVary": True},
+            "taxonomy": {"domains": ["robotics"]},
+            "calibration": {"empty": "any", "oracle": "none", "seedsVary": True},
             "methods": ["external", "empty"],
             "scoreKind": "scalar",
             "rescore": "evidence",

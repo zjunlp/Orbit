@@ -21,7 +21,6 @@ export const mobileworld: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "pending-calibration",
     "Adapter fixtures exist; real native emulator calibration has not run.",
     adapter("mobileworld"),
   ),

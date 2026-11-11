@@ -14,7 +14,6 @@ export const vimaBench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "All four test partitions passed native checks. Selected VIMA 20M episodes passed independent verification.",
     "docs/tasks/20261110-vima-bench.md",
   ),

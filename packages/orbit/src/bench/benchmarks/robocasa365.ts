@@ -14,7 +14,6 @@ export const robocasa365: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Native catalog checks and selected real-policy episodes passed; full catalog model evaluation is not implied.",
     nativeDocs,
   ),

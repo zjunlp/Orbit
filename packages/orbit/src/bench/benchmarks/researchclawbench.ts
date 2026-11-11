@@ -23,7 +23,6 @@ export const researchclawbench: Omit<SupportedBenchmark, "registrationNames"> = 
     ),
   ],
   verification: checked(
-    "adapter-tested",
     "Adapter and judge failure-path fixtures passed; full real-agent evaluation is pending.",
     adapter("researchclawbench"),
   ),

@@ -29,7 +29,6 @@ import {
   withLineage,
 } from "./new-job.ts";
 import "./launch.css";
-import { categoryLabel } from "../../lib/category.ts";
 
 const TYPE_LABEL: Record<string, string> = {
   empty: "Empty baseline",
@@ -685,9 +684,6 @@ function NewJobForm({
             </p>
             {registered?.resources && (
               <p className="muted">Resource limits come from the registered per-task settings.</p>
-            )}
-            {categoryLabel(capabilities) && (
-              <span className="chip">{categoryLabel(capabilities)}</span>
             )}
             {capabilities?.rescore === "evidence" && (
               <p className="muted">

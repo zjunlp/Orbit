@@ -5,15 +5,14 @@ import {
   type BenchCapabilities,
   type BenchJob,
   type BenchTask,
+  CALIBRATION_DEFAULTS,
   type CalibrationCheck,
   type CalibrationReport,
-  calibrationDefaults,
   capabilityAllows,
   type Trial,
   taskSuite,
   trialRunIds,
 } from "./bench.ts";
-import { benchCategory } from "./categories.ts";
 import { sampleLabel } from "./naming.ts";
 import { isTerminal, type Run } from "./runs.ts";
 
@@ -53,9 +52,9 @@ export function calibrationMethods(
   return ["empty", ...(oracle ? ["oracle"] : [])].filter(allowed);
 }
 
-/** Expectations: the benchmark's declaration over its category's defaults. */
-export function expectations(caps: BenchCapabilities | undefined) {
-  return { ...calibrationDefaults(benchCategory(caps)), ...caps?.calibration };
+/** Expectations: the benchmark's declaration over the defaults (design §9.10). */
+export function expectations(caps: Pick<BenchCapabilities, "calibration"> | undefined) {
+  return { ...CALIBRATION_DEFAULTS, ...caps?.calibration };
 }
 
 type Expect = ReturnType<typeof expectations>;
@@ -125,10 +124,7 @@ export function judgeCalibration(t: Trial[], o: JudgeOptions = {}): CalibrationC
   const e = expect.empty;
   checks.push(
     e === "any"
-      ? notExpected(
-          "empty score",
-          "no expected score for doing nothing (category or benchmark rule)",
-        )
+      ? notExpected("empty score", "no expected score for doing nothing (benchmark rule)")
       : check(
           e === "min" ? "empty scores the minimum" : `empty scores ${e.min}–${e.max}`,
           empty

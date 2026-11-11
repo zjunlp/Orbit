@@ -23,7 +23,6 @@ export const cuaBench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Five basic task families passed native empty/reference checks. General agents and remaining variants are not calibrated.",
     adapter("cua-bench"),
   ),

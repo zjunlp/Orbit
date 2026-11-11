@@ -14,7 +14,6 @@ export const vlabench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "The released catalogs and samples across all six tracks were checked. An OpenWAM episode passed.",
     nativeDocs,
   ),

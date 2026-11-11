@@ -14,7 +14,6 @@ export const robomimic: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "All five tasks passed native low-dimensional and RGB checks. Two published demonstrations replayed successfully.",
     "docs/tasks/20261110-robomimic.md",
   ),

@@ -1,12 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import type { CatalogEntry } from "../src/lib/api.ts";
-import {
-  fieldValues,
-  matchesLegacyDomain,
-  matchesTaxonomy,
-  readTaxonomyFilters,
-} from "../src/lib/taxonomy.ts";
+import { fieldValues, matchesTaxonomy, readTaxonomyFilters } from "../src/lib/taxonomy.ts";
 import { CoverageMatrix } from "../src/pages/bench/Catalog.tsx";
 
 vi.mock("../src/lib/router.ts", () => ({
@@ -58,7 +53,6 @@ it("restores multi-select filters from URLs and preserves unrecognized values", 
   expect(filters.targets).toEqual(["future-target"]);
   expect(matchesTaxonomy(mixed, filters)).toBe(false);
   expect(readTaxonomyFilters(new URLSearchParams("domain=science")).domains).toEqual([]);
-  expect(matchesLegacyDomain({ ...mixed, domains: ["embodied"] }, "embodied")).toBe(true);
 });
 
 it("does not create matrix cells from labels on different task profiles", () => {

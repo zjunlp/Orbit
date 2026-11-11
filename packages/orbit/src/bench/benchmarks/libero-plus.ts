@@ -14,7 +14,6 @@ export const liberoPlus: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "The full reset catalog was checked. Native samples span all seven perturbations, and two OFT episodes passed.",
     nativeDocs,
   ),

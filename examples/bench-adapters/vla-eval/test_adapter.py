@@ -109,14 +109,14 @@ class AdapterTests(unittest.TestCase):
         forged = dict(adapter.summarize(other), success=0.0)
         self.assertEqual(self.scored(aggregate(True, episode=2), check=forged)["invalid"], True)
 
-    def test_capabilities_declare_the_embodied_policy_category(self):
+    def test_capabilities_declare_embodied_policy_calibration(self):
         rows = [{"id": "0", "name": "pick up the bowl", "suite": "libero_spatial"}]
         with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows):
             caps = adapter.tasks(self.req)["capabilities"]
-        self.assertEqual(caps["category"], "embodied-policy")
-        self.assertEqual(caps["domains"], ["embodied"])
+        self.assertNotIn("category", caps)
+        self.assertEqual(caps["taxonomy"], {"domains": ["robotics"]})
         self.assertEqual(caps["identity"]["id"], "libero")
-        self.assertEqual(caps["calibration"], {"oracle": "none", "seedsVary": True})
+        self.assertEqual(caps["calibration"], {"empty": "any", "oracle": "none", "seedsVary": True})
 
     def test_configured_benchmarks_do_not_share_libero_identity(self):
         config = self.req["benchmark"]["config"]

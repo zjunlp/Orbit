@@ -145,8 +145,7 @@ def tasks(req):
                           "description": "Official verifier reward; 1 is the maximum"}]
     reply["capabilities"] = {
         "identity": {"id": "rle-bench", "name": "RLE-Bench"},
-        "domains": ["embodied"], "category": "agent-workspace", "kind": "other",
-        "taxonomy": TAXONOMY, "profiles": ["embodied-program"],
+        "taxonomy": TAXONOMY,
         "methods": ["cli", "empty", "oracle"], "scoreKind": "scalar", "rescore": "evidence",
         "calibration": {"oracle": {"min": 0.64, "max": 1}},
         "conditions": {

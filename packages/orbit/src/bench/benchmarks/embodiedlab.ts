@@ -29,7 +29,6 @@ export const embodiedlab: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "pending-calibration",
     "Images and native CPU dependencies were checked. Real startup detected an incompatible RTX runtime; experiment calibration requires a compatible environment.",
     "docs/tasks/20261110-embodied-harness-benchmarks.md",
   ),

@@ -230,9 +230,12 @@ GUI 轨迹使用 `GuiTrajectory` 版本 1：`{ version: 1, goal, steps, stopReas
 每步包含 `step`、相对输出目录的 `screenshot`、`action`、`reward`，可带 `actionError`、`terminated`、`truncated`、`observation`。
 step 从 0 连续递增；第 0 行的 action 必须为 null，后续行保存动作执行后的截图。Web 负责前后帧配对；不接受外部 URL 或向上跳转的截图路径。
 
-`tasks` 回复还可带 `capabilities: { kind, methods, conditions, scoreKind, rescore }`。
-kind 为 browser/desktop/mobile/other，methods 为支持的执行类型数组，conditions 为非敏感字符串字典，scoreKind 为 binary/scalar，rescore 为 evidence/score/none。
+`tasks` 回复还可带 `capabilities: { identity, taxonomy, methods, conditions, scoreKind, rescore, requires, calibration }`。
+methods 为支持的执行类型数组，conditions 为非敏感字符串字典，scoreKind 为 binary/scalar，rescore 为 evidence/score/none；
+taxonomy 为六维分类（design §9.17）。calibration 只声明与默认（empty 最低分、oracle 满分、重复一致）不同的期望，
+如静止策略也可能成功时写 `{"empty": "any"}`，没有参考解时写 `{"oracle": "none"}`（design §9.10）。
 它决定 Web 的配置选择、条件展示、二元任务筛选和重查文案；未声明时使用通用界面。该信息不是环境或模型连通性检查。
+旧的 `category` / `profiles` / `domains` / `kind` 键会被忽略。
 
 ### 指标（`metrics`，可选）
 

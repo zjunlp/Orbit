@@ -1,9 +1,4 @@
 import { z } from "zod";
-import {
-  BENCH_CATEGORIES,
-  CATEGORY_PROFILES,
-  type BenchCategory as Category,
-} from "./categories.ts";
 import { EnvName, ProfileName } from "./common.ts";
 import {
   BatchEpisode,
@@ -53,10 +48,6 @@ export type BenchTaxonomy = z.infer<typeof BenchTaxonomy>;
 export const BenchLabels = z.object({
   identity: BenchIdentity.optional(),
   taxonomy: BenchTaxonomy.optional(),
-  domains: z
-    .array(z.string().regex(/^[a-z][a-z0-9-]{0,30}$/))
-    .max(6)
-    .optional(),
 });
 export type BenchLabels = z.infer<typeof BenchLabels>;
 
@@ -216,14 +207,11 @@ export function capabilityAllows(methods: readonly string[], agent: string): boo
   return methods.includes(agent) || (methods.includes("cli") && isCliMethod({ agent }));
 }
 
-export const BenchCategory = z.enum(BENCH_CATEGORIES);
-export type BenchCategory = Category;
-
 const Range = z.object({ min: z.number(), max: z.number() }).refine((r) => r.max >= r.min);
 /**
- * What calibration may expect of a benchmark (`orbit bench calibrate`). Categories have defaults
- * (`calibrationDefaults`); a benchmark overrides them where its rules differ (e.g. a do-nothing
- * policy that can already satisfy a goal, or a judge that is not exactly repeatable).
+ * What calibration may expect of a benchmark (`orbit bench calibrate`, design §9.10). A benchmark
+ * declares what differs from `CALIBRATION_DEFAULTS` (e.g. a do-nothing policy that can already
+ * satisfy a goal, no reference solution, or a judge that is not exactly repeatable).
  */
 export const CalibrationExpect = z.object({
   /** `min`: 0; `any`: no expectation; or a range. */
@@ -239,73 +227,38 @@ export const CalibrationExpect = z.object({
 });
 export type CalibrationExpect = z.infer<typeof CalibrationExpect>;
 
-export function calibrationDefaults(
-  category: Category | null,
-): Required<Pick<CalibrationExpect, "empty" | "oracle" | "repeat">> & { seedsVary: boolean } {
-  switch (category) {
-    case "embodied-policy":
-      // A still policy can satisfy a goal that holds at the start; seeds pick initial states.
-      return { empty: "any", oracle: "max", repeat: "exact", seedsVary: true };
-    case "fixed-input":
-      return { empty: "any", oracle: "max", repeat: "exact", seedsVary: false };
-    case "user-session":
-    case "game":
-      return { empty: "min", oracle: "none", repeat: { tolerance: 1 }, seedsVary: false };
-    default:
-      return { empty: "min", oracle: "max", repeat: "exact", seedsVary: false };
-  }
-}
+/** Empty scores the minimum, oracle full marks, repeated seeds agree exactly. */
+export const CALIBRATION_DEFAULTS = {
+  empty: "min",
+  oracle: "max",
+  repeat: "exact",
+  seedsVary: false,
+} as const satisfies CalibrationExpect;
 
-export const BenchCapabilities = z
-  .object({
-    category: BenchCategory.optional(),
-    embodied: EmbodiedCapabilities.optional(),
-    profiles: z.array(z.string().max(40)).max(12).default([]),
-    /** What the benchmark is (source, version); registrations with the same id are one benchmark. */
-    identity: BenchIdentity.optional(),
-    /** Discovery metadata; it does not grant capabilities or change execution conditions. */
-    taxonomy: BenchTaxonomy.optional(),
-    /**
-     * Subject domains (`BENCH_DOMAINS`, e.g. `embodied`), independent of the category; other values
-     * are kept as tags.
-     */
-    domains: z
-      .array(z.string().regex(/^[a-z][a-z0-9-]{0,30}$/))
-      .max(6)
-      .default([]),
-    /** Kept for older adapters; a GUI platform when the category is `gui`. */
-    kind: z.enum(["browser", "desktop", "mobile", "other"]).default("other"),
-    methods: z.array(CapabilityMethod).min(1),
-    conditions: z.record(z.string().max(80), z.string().max(2000)),
-    scoreKind: z.enum(["binary", "scalar"]),
-    rescore: z.enum(["evidence", "score", "none"]),
-    /** Agent capabilities (registry `capabilities`) a CLI method needs; checked on submission. */
-    requires: z.array(z.enum(["oneShot", "multiTurn", "mcp", "gui"])).default([]),
-    calibration: CalibrationExpect.optional(),
-    /**
-     * Comparison with the benchmark's own runner or published results (design §9.10), which Orbit
-     * cannot establish by itself: `sample-aligned` (native runner on sampled tasks agrees) or
-     * `agent-compared` (a real Agent / policy scored as officially reported), with its evidence.
-     */
-    parity: z
-      .object({
-        level: z.enum(["sample-aligned", "agent-compared"]),
-        evidence: z.string().max(2000),
-        checkedAt: z.string().max(40).optional(),
-      })
-      .optional(),
-  })
-  .superRefine((c, ctx) => {
-    if (!c.category) return;
-    const allowed = CATEGORY_PROFILES[c.category];
-    for (const p of c.profiles)
-      if (!allowed.includes(p))
-        ctx.addIssue({
-          code: "custom",
-          path: ["profiles"],
-          message: `${c.category} has no profile ${p} (one of ${allowed.join(", ")})`,
-        });
-  });
+export const BenchCapabilities = z.object({
+  embodied: EmbodiedCapabilities.optional(),
+  /** What the benchmark is (source, version); registrations with the same id are one benchmark. */
+  identity: BenchIdentity.optional(),
+  /** Discovery metadata; it does not grant capabilities or change execution conditions. */
+  taxonomy: BenchTaxonomy.optional(),
+  methods: z.array(CapabilityMethod).min(1),
+  conditions: z.record(z.string().max(80), z.string().max(2000)),
+  scoreKind: z.enum(["binary", "scalar"]),
+  rescore: z.enum(["evidence", "score", "none"]),
+  /** Agent capabilities (registry `capabilities`) a CLI method needs; checked on submission. */
+  requires: z.array(z.enum(["oneShot", "multiTurn", "mcp", "gui"])).default([]),
+  calibration: CalibrationExpect.optional(),
+  /**
+   * Evidence of a comparison with the benchmark's own runner or published results, which Orbit
+   * cannot establish by itself (design §9.10). Recorded as a fact, not a grade.
+   */
+  parity: z
+    .object({
+      evidence: z.string().max(2000),
+      checkedAt: z.string().max(40).optional(),
+    })
+    .optional(),
+});
 export type BenchCapabilities = z.infer<typeof BenchCapabilities>;
 
 /**
@@ -1030,7 +983,7 @@ export type CatalogMethod = z.infer<typeof CatalogMethod>;
 
 /**
  * One registered benchmark on the catalog page (design §9.15): what it is and can run, whether its
- * integration was calibrated, which real methods ran, and its parity with the original.
+ * integration was calibrated and which real methods ran.
  */
 export const CatalogEntry = z.object({
   benchmark: Benchmark,
@@ -1055,7 +1008,7 @@ export const CatalogEntry = z.object({
       oracleTasks: z.number().int().nullable(),
     })
     .nullable(),
-  /** The listing's capabilities, else those of the newest job (so a row has a category early). */
+  /** The listing's capabilities, else those of the newest job (so a row has them early). */
   capabilities: BenchCapabilities.nullable(),
   /**
    * What benchmark this registration is: its labels, else the adapter's declaration, else derived
@@ -1063,9 +1016,6 @@ export const CatalogEntry = z.object({
    */
   identity: BenchIdentity,
   identitySource: z.enum(["label", "adapter", "derived"]),
-  /** Vocabulary domains (`BENCH_DOMAINS`) and the other declared tags, from labels else adapter. */
-  domains: z.array(z.string()),
-  tags: z.array(z.string()),
   /** Display union only; conjunctive filtering must use taxonomyGroups. */
   taxonomy: BenchTaxonomy.optional(),
   /** One group per identical resolved task descriptor; null counts are registration-only facts. */
@@ -1083,13 +1033,11 @@ export const CatalogEntry = z.object({
   refreshing: z.boolean(),
   /** Calibration jobs, newest first (at most five). */
   calibrations: z.array(CalibrationReport),
-  /** Model-path checks are separate from benchmark semantic calibration and fidelity. */
+  /** Model-path checks are separate from benchmark calibration. */
   policyChecks: z.array(CalibrationReport).optional(),
   /** Jobs of this benchmark (all methods). */
   jobs: z.number().int(),
   methods: z.array(CatalogMethod),
-  /** Highest fidelity level with evidence (design §9.10). */
-  fidelity: z.enum(["experimental", "calibrated", "sample-aligned", "agent-compared"]),
 });
 export type CatalogEntry = z.infer<typeof CatalogEntry>;
 /** Product integrations shipped or documented by Orbit, independent of local runs and setup. */
@@ -1099,8 +1047,8 @@ export const SupportedBenchmark = z.object({
   description: z.string(),
   taxonomyGroups: z.array(z.object({ label: z.string(), taxonomy: BenchTaxonomy })).min(1),
   integrations: z.array(z.object({ name: z.string(), url: z.url(), scope: z.string() })).min(1),
+  /** What was checked, on what scope, with a link to the evidence (facts, not a grade). */
   verification: z.object({
-    level: z.enum(["sample-checked", "adapter-tested", "pending-calibration"]),
     detail: z.string(),
     url: z.url(),
   }),

@@ -15,7 +15,6 @@ export const terminalBench4: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Reference/empty samples checked. Coverage is partial and official-runner score parity is unverified.",
     "docs/tasks/20261010-harbor-sidecars.md",
   ),

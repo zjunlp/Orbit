@@ -43,8 +43,8 @@ def tasks(req):
                       for e in data["tasks"]], "capabilities": {
         "identity": {"id": "chartography", "name": "Chartography", "version": REVISION,
                      "variant": cfg.get("variant", "task-pack")},
-        "category": "fixed-input", "profiles": ["generate", "image", "judge"], "domains": ["visual-reasoning"],
         "methods": ["external", "empty", "oracle"], "scoreKind": "binary", "rescore": "evidence",
+        "calibration": {"empty": "any"},
         "conditions": {"Source": REVISION, "Solver": "Original Inspect generate() with chart attached inline; no tools",
                        "Judge": cfg.get("judgeModel", "google/gemini-3.5-flash"),
                        "Dataset": cfg.get("variant", "task-pack") + "; two bundled dummy samples are not the released set",

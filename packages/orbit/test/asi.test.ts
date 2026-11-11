@@ -194,6 +194,6 @@ it("declares its identity and the native runner's actual Agent admission", () =>
   const info = asiAdapter.info?.(req, []);
   const caps = BenchCapabilities.parse(info?.capabilities);
   expect(caps.identity?.id).toBe("asi-bench");
-  expect(caps.domains).toContain("science");
+  expect(caps.taxonomy?.domains).toContain("science");
   expect(caps.methods).toEqual(["oracle", "empty", "codex", "claude-code"]);
 });

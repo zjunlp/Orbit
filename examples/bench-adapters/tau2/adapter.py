@@ -112,9 +112,8 @@ def tasks(req):
     return {
         "tasks": rows,
         "capabilities": {
-            "category": "user-session", "profiles": ["text", "single-control"],
             "identity": {"id": "tau2-bench", "name": "τ²-bench", "version": COMMIT[:10]},
-            "domains": ["conversation", *DOMAINS], "methods": ["oracle", "empty"],
+            "methods": ["oracle", "empty"],
             "scoreKind": "binary", "rescore": "score",
             "calibration": {"oracle": "max", "empty": "any", "repeat": "exact", "seedsVary": False},
             "conditions": {

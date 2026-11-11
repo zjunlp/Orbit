@@ -968,7 +968,10 @@ process.stdin.on("end", () => {
   });
   expect(f.store.trials(job.id).map((t) => t.history.length)).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
   // The catalog lists in the background; once listed it shows coverage and the calibration.
-  expect(f.bench.catalog().entries[0]).toMatchObject({ fidelity: "calibrated", jobs: 1 });
+  expect(f.bench.catalog().entries[0]).toMatchObject({
+    calibrations: [{ job: job.id, calibrated: true }],
+    jobs: 1,
+  });
   await expect.poll(() => f.bench.catalog().entries[0]?.listing?.coverage.supported).toBe(2);
   const entry = f.bench.catalog().entries[0];
   expect(entry).toMatchObject({ listingError: null, methods: [] });
@@ -1043,15 +1046,9 @@ process.stdin.on("end", () => {
   });
   expect(c.revisions.pol?.revision).not.toBe(rev);
   expect(c.spec.lineage.pol).toMatchObject({ parent: rev, note: "new k", informedBy: [] });
-  f.bench.label("fixture", { identity: { id: "fx", name: "Fixture" }, domains: ["games", "x"] });
-  expect(f.registry.get("fixture")?.labels?.domains).toEqual(["games", "x"]);
+  f.bench.label("fixture", { identity: { id: "fx", name: "Fixture" } });
   const entry = f.bench.catalog().entries[0];
-  expect(entry).toMatchObject({
-    identity: { id: "fx" },
-    identitySource: "label",
-    domains: ["games"],
-    tags: ["x"],
-  });
+  expect(entry).toMatchObject({ identity: { id: "fx" }, identitySource: "label" });
 });
 
 it("persists taxonomy through the labels API and clears it without changing execution settings", async () => {

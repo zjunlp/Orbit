@@ -13,7 +13,6 @@ export const robocasaV02: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "All 24 tasks passed native CPU checks. A fixed-action replay matched the v0.2 environment.",
     "docs/tasks/20261109-robocasa-v02.md",
   ),

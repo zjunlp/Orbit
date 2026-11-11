@@ -27,7 +27,6 @@ export const humaneval: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Reference and empty checks passed; this is integration validation, not a model leaderboard result.",
     "docs/tasks/20261105-samples-c1-c7.md",
   ),

@@ -12,7 +12,6 @@ export const metaworld: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "All MT50 tasks passed native reset/render/control checks; selected π₀.₅ episodes passed independent verification.",
     "docs/tasks/20261108-embodied-native-expansion.md",
   ),

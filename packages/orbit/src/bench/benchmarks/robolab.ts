@@ -13,7 +13,6 @@ export const robolab: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Two native hold-control episodes, CPU verification and rescore checked; an official successful replay was checked separately. Trained-policy and full-suite parity are unverified.",
     "docs/tasks/20261109-robodojo-robolab.md",
   ),

@@ -26,7 +26,6 @@ export const miniwob: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Native empty checks and selected screenshot-only agent tasks passed. Recipes and step budgets remain separate.",
     "docs/tasks/20261104-p6-cli-agent-bridge.md",
   ),

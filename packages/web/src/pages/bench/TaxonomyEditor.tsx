@@ -301,18 +301,11 @@ export function TaxonomyEditor({
               );
             })}
           </div>
-          {own?.domains && (
-            <p className="faint taxonomy-editor-legacy">
-              Legacy domain labels are preserved:{" "}
-              {own.domains.length ? own.domains.join(", ") : "none"}. These labels also supply
-              inherited domain defaults.
-            </p>
-          )}
           {confirmRemove && (
             <div className="warnbox taxonomy-editor-remove">
               <p>
-                Remove all registration labels, including identity, taxonomy defaults and legacy
-                domains? Adapter metadata and task declarations will remain.
+                Remove all registration labels, including identity and taxonomy defaults? Adapter
+                metadata and task declarations will remain.
               </p>
               <div className="row">
                 <button

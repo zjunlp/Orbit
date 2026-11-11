@@ -26,7 +26,6 @@ export const tau2Bench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Offline environment and scorer calibration passed; no live simulated-user or model quality claim.",
     "docs/tasks/20261105-sample-tau2.md",
   ),

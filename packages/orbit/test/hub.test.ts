@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { benchDomains, benchIdentity } from "../src/bench/catalog.ts";
+import { benchIdentity } from "../src/bench/catalog.ts";
 import {
   agentBlocker,
   agentCatalog,
@@ -28,14 +28,7 @@ import {
 } from "../src/bench/hub.ts";
 import { bundleDigest, methodBasis, revisionOf } from "../src/bench/revision.ts";
 import { buildReport, summarize } from "../src/bench/summary.ts";
-import {
-  type AuthProfile,
-  type Benchmark,
-  type CatalogEntry,
-  type Run,
-  splitDomains,
-  type Trial,
-} from "../src/contracts/index.ts";
+import type { AuthProfile, Benchmark, CatalogEntry, Run, Trial } from "../src/contracts/index.ts";
 import { builtinRegistry } from "../src/harness/registry.ts";
 
 const dirs: string[] = [];
@@ -62,10 +55,7 @@ const bench = (name: string, labels?: object) =>
   }) as unknown as Benchmark;
 
 it("resolves identity from labels, then the adapter, then the registration", () => {
-  const caps = {
-    identity: { id: "asi-bench", name: "ASI-Bench" },
-    domains: ["science", "seed31415"],
-  } as never;
+  const caps = { identity: { id: "asi-bench", name: "ASI-Bench" } } as never;
   expect(benchIdentity(bench("asi-b2"), caps)).toEqual({
     identity: { id: "asi-bench", name: "ASI-Bench" },
     source: "adapter",
@@ -80,16 +70,6 @@ it("resolves identity from labels, then the adapter, then the registration", () 
   expect(benchIdentity({ ...bench("tb-sci"), path: "/other" }, null).identity.id).not.toBe(
     fallback.identity.id,
   );
-  // Labels replace the adapter's domains; values outside the vocabulary are tags.
-  expect(benchDomains(bench("x"), caps)).toEqual({ domains: ["science"], tags: ["seed31415"] });
-  expect(benchDomains(bench("x", { domains: ["games"] }), caps)).toEqual({
-    domains: ["games"],
-    tags: [],
-  });
-  expect(splitDomains(["airline", "conversation", "airline"])).toEqual({
-    domains: ["conversation"],
-    tags: ["airline"],
-  });
 });
 
 it("hashes what a method is made of, not its name or credentials", () => {
