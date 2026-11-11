@@ -2,6 +2,23 @@
 
 适用版本：`refactor/ts-rewrite`（adapter 协议、资源文件、实测用量）。Agent 用的 skill：`plugin/skills/orbit-bench`。模型、判定规则与协议定义见 [design §7](../design.md#7-刷榜bench)。
 
+## 0. 仓库内适配器的目录契约
+
+本仓库自带的适配器放在 `examples/bench-adapters/<name>/`，一个 benchmark 一个目录。目录名就是产品目录里 `adapter("<name>")` 引用的名字。
+
+| 文件 | 要求 |
+| --- | --- |
+| `adapter.py` 或 `adapter.ts` | 必须。协议入口，实现 `tasks` / `solve` / `verify` / `score` |
+| `README.md` | 必须。写明上游版本、计数单位、输入可见性、资源、评分与信任边界 |
+| `test_adapter.py`（或 `*.test.ts`） | 必须。默认在本目录独立跑 `python3 -m unittest discover` |
+| `Dockerfile` / `resources.json` / `profiles/` / `fixtures/` | 可选，按需 |
+
+`packages/orbit/test/adapter-directory-contract.test.ts` 强制以上三条：每个目录都要有入口、README 和测试；每个目录都要被产品目录（`packages/orbit/src/bench/benchmarks/`）引用；产品目录不能指向不存在的目录。测试不在本目录时，在该测试文件的 `TESTS_ELSEWHERE` 里登记实际位置——登记的文件不存在也算失败。
+
+产品目录按族拆成 `packages/orbit/src/bench/benchmarks/<family>.ts`，新增 benchmark 时新建一个文件并在 `index.ts` 里加一行 import。不要改动其他族。
+
+`packages/orbit/test/example-adapters.test.ts` 会扫描所有带 `adapter.py` 且自带 `test_*.py` 的目录并逐个运行，新增适配器无需修改测试列表。
+
 ## 1. 先选路线
 
 | benchmark 的形态 | 路线 | 要改 Orbit 吗 |

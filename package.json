@@ -7,8 +7,8 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
-    "check": "biome check . && tsc -p . && pnpm -r typecheck && node scripts/boundaries.ts",
-    "check:boundaries": "node scripts/boundaries.ts",
+    "check": "biome check . && tsc -p . && tsc -p tsconfig.examples.json && pnpm -r typecheck && node scripts/boundaries.ts && node scripts/python-syntax.ts",
+    "check:boundaries": "node scripts/boundaries.ts && node scripts/python-syntax.ts",
     "format": "biome check --write .",
     "test": "vitest run --dir scripts && pnpm -r test",
     "build": "pnpm --filter @zjunlp/orbit-web build && pnpm --filter @zjunlp/orbit build",

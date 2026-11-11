@@ -121,11 +121,14 @@ export function taskSuite(t: Pick<BenchTask, "id" | "tags">): string {
 
 /** One reason without the parts that name a single task (service names, variable help texts). */
 export function normalizeReason(reason: string): string {
-  return reason
-    .trim()
-    .replace(/^compose service (?!main:)[\w.-]+:/, "compose service <service>:")
-    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}/g, "${$1}")
-    .slice(0, 240);
+  return (
+    reason
+      .trim()
+      .replace(/^compose service (?!main:)[\w.-]+:/, "compose service <service>:")
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: rewrites compose's ${VAR:?msg} form
+      .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}/g, "${$1}")
+      .slice(0, 240)
+  );
 }
 
 export function benchCoverage(tasks: Pick<BenchTask, "id" | "tags" | "supported" | "reason">[]) {

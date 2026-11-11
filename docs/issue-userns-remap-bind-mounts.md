@@ -23,11 +23,11 @@ Run 在实验第一行有效输出之前就 exit 1。**产物收集和指标收�
 ## 根因
 
 1. Orbit 把 run 目录 `<dataDir>/runs/<id>/orbit` bind mount 到容器的 `/orbit`（rw）用于收集指标/产物
-   （[`packages/orbit/src/runs/service.ts:1339`](packages/orbit/src/runs/service.ts#L1339)）。
+   （[`packages/orbit/src/runs/service.ts:1339`](../packages/orbit/src/runs/service.ts#L1339)）。
    这些目录是 **daemon** 在提交时用普通 `mkdirSync` 创建的，属主是 daemon 自己的 uid:gid
-   （[`service.ts:280-283`](packages/orbit/src/runs/service.ts#L280-L283)）。
+   （[`service.ts:280-283`](../packages/orbit/src/runs/service.ts#L280-L283)）。
 2. Orbit 默认给容器传 `--user <daemon uid>:<daemon gid>`，取自 `userInfo()`
-   （[`service.ts:1362-1366`](packages/orbit/src/runs/service.ts#L1362-L1366)）——文档化的意图是"以
+   （[`service.ts:1362-1366`](../packages/orbit/src/runs/service.ts#L1362-L1366)）——文档化的意图是"以
    daemon 用户运行，产物文件归你所有"（README："默认以宿主用户的 uid:gid 运行，产物文件归你所有"）。
 3. 但在 userns-remap 下，重映射**叠加在**任何 `--user` 之上：容器里的 uid 0 / 任何 uid 都被解析为
    daemon 的 **remap 池在宿主上的 uid**（本机：165536——`default` remap 条目，可通过 `docker inspect` /

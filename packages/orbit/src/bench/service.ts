@@ -77,6 +77,7 @@ import { AUTH_TEST_GROUP, NotFoundError, type RunService, UserError } from "../r
 import { type AgentFailure, loadRunAgentTranscript, runAgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
 import { gitSource } from "../workspace/snapshot.ts";
+import { supportedBenchmarks } from "./benchmarks/index.ts";
 import { catalogEntry, type Listing } from "./catalog.ts";
 import { classify, cleanupOf, shouldCheckAgentFailure, solveVerdict } from "./classify.ts";
 import {
@@ -95,7 +96,6 @@ import {
 } from "./hub.ts";
 import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
-import { supportedBenchmarks } from "./supported.ts";
 
 export { benchGroup } from "./consolidate.ts";
 export { compareJobs, summarize } from "./summary.ts";
@@ -107,7 +107,13 @@ import { PolicyRegistry } from "./policies.ts";
 import { AdapterClient, type TrialInput, toRunSpec } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { applyOverride, loadResources, resolveResources, usageRows } from "./resources.ts";
-import { checkSamplePlan, resolveBinding } from "./samples.ts";
+import { resolveBinding } from "./samples.ts";
+import {
+  checkPlanAgainstBenchmark,
+  checkTasksExist,
+  resolveTaskSelection,
+  trialSlots,
+} from "./submit-validation.ts";
 import { buildReport, sameReport } from "./summary.ts";
 import { addEfeTrajectory } from "./trajectory-artifacts.ts";
 
@@ -326,41 +332,9 @@ export class BenchService {
         }
       }
     }
-    if (spec.tasks.length === 0)
-      spec.tasks = spec.samplePlan
-        ? [...new Set(spec.samplePlan.items.map((sample) => sample.taskId))]
-        : all.filter((t) => t.supported).map((t) => t.id);
-    for (const id of spec.tasks) {
-      const t = all.find((x) => x.id === id);
-      if (!t) throw new UserError(`task not found in ${b.name}: ${id}`);
-      if (!t.supported) throw new UserError(`task ${id} is not supported: ${t.reason}`);
-    }
-    if (spec.tasks.length === 0) throw new UserError(`${b.name} has no supported tasks`);
-    if (spec.samplePlan) {
-      try {
-        checkSamplePlan(spec.samplePlan);
-      } catch (e) {
-        throw new UserError((e as Error).message);
-      }
-      if (spec.methods.some((m) => m.agent !== "policy"))
-        throw new UserError("planned C6 jobs currently require independent policy methods");
-      for (const sample of spec.samplePlan.items) {
-        if (sample.benchmarkProfile !== info.capabilities?.embodied?.profile)
-          throw new UserError("sample evaluation profile does not match the benchmark");
-        if (!spec.tasks.includes(sample.taskId))
-          throw new UserError(`sample task is not selected: ${sample.taskId}`);
-        const expectedAsset = all.find((task) => task.id === sample.taskId)?.tags
-          .initialStateDigest;
-        if (expectedAsset && expectedAsset !== sample.initialStateDigest)
-          throw new UserError(`initial-state asset differs from the benchmark: ${sample.taskId}`);
-      }
-      if (spec.tasks.some((task) => !spec.samplePlan?.items.some((s) => s.taskId === task)))
-        throw new UserError("every selected task needs at least one planned sample");
-    } else if (spec.methods.some((m) => m.agent === "policy")) {
-      throw new UserError(
-        "policy methods require a frozen samplePlan; legacy seeds cannot identify their samples",
-      );
-    }
+    resolveTaskSelection(spec, all);
+    checkTasksExist(spec, all, b.name);
+    checkPlanAgainstBenchmark(spec, all, info.capabilities);
     this.checkLineage(spec);
     const revisions = await this.revisions(spec.methods);
     for (const [name, lineage] of Object.entries(spec.lineage))
@@ -401,21 +375,7 @@ export class BenchService {
     const created: Trial[] = [];
     this.deps.store.tx(() => {
       this.deps.store.putJob(job);
-      const slots = spec.samplePlan
-        ? spec.samplePlan.items.flatMap((sample) =>
-            spec.methods.map((method) => ({
-              method,
-              sample: { task: sample.taskId, sampleRef: sample.sampleId },
-            })),
-          )
-        : spec.tasks.flatMap((task) =>
-            spec.methods.flatMap((method) =>
-              Array.from({ length: spec.seeds ?? 1 }, (_, index) => ({
-                method,
-                sample: { task, seed: index + 1 },
-              })),
-            ),
-          );
+      const slots = trialSlots(spec);
       for (const { sample, method } of slots) {
         const t: Trial = {
           ...sample,

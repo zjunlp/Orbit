@@ -5,7 +5,7 @@ the current machine has no registrations or evaluation history. A family appears
 integration routes, suites, recipes and validation limits appear in the details. Local registrations
 remain a separate view, and execution history belongs in Evaluations and Runs.
 
-The authoritative product data is [bench/supported.ts](../packages/orbit/src/bench/supported.ts),
+The authoritative product data is [bench/benchmarks/](../packages/orbit/src/bench/benchmarks/),
 with the shared response shape in [contracts/bench.ts](../packages/orbit/src/contracts/bench.ts).
 This document links the supported routes and explains how to read the catalog. [Six dimensions](design.md#917-benchmark-六维分类-v12026-11-09)
 · [Catalog contract and behavior](design.md#918-已适配-benchmark-产品目录2026-11-09)

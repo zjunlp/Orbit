@@ -34,7 +34,9 @@ RoboDojo 配置工具使用 `Path.is_relative_to()`，需要 Python 3.9 或更�
 
 两组检查使用 NumPy、固定 OpenPI checkout 的 `openpi-client`、Pillow、`websockets==13.1`、
 `pyzmq==26.2.0`、`msgpack==1.1.0` 和 `msgpack-numpy==0.4.8`。
-Python 3.11 的真实 HDF5 生命周期检查还使用 `h5py`。缺少可选依赖时检查输出中的 skip。
+Python 3.11 的真实 HDF5 生命周期检查还使用 `h5py`。缺少可选依赖时检查输出中的 skip；
+导入期缺包会报 `ModuleNotFoundError`，那是环境问题而不是代码缺陷，各包对应的可选依赖见
+[SDK 说明](../../examples/sdk/README.md#optional-dependencies)。
 这些回归包括明确标注的合成策略和本地传输测试。
 
 ## 固定运行时中的原生验证

@@ -115,7 +115,11 @@ export function ConversationViewer({ c }: { c: Conversation }) {
               aria-label="Search the conversation"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && (setQ(""), e.currentTarget.blur())}
+              onKeyDown={(e) => {
+                if (e.key !== "Escape") return;
+                setQ("");
+                e.currentTarget.blur();
+              }}
             />
           </div>
           {hits !== null && <div className="faint conv-hits">{hits} matching events</div>}
