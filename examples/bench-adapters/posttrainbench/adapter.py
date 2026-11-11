@@ -99,7 +99,7 @@ def collected_model_dir(req):
                         workspace.lstrip("/"), "final_model")
 
 
-# Integration category (docs/integration-categories.md).
+# `category` / `profiles` are deprecated compatibility fields (design §9.10).
 CAPABILITIES = {"identity": {"id": "posttrainbench", "name": "PostTrainBench"}, "domains": ["machine-learning"], "category": "agent-workspace", "profiles": ["ml-experiment"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none"}, "conditions": {"Scoring": "evaluate.py on the final_model the Agent trained"}}
 
 

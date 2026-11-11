@@ -41,11 +41,10 @@ profiles, and one profile must satisfy all selected fields. A shared adapter or 
 make the contained benchmark families interchangeable: Harbor is a task format, while BrowserGym,
 CUA-Lite and vla-eval are integration routes.
 
-Validation is deliberately scoped. `sample-checked` records bounded real integration checks;
-`adapter-tested` records adapter tests; `pending-calibration` marks outstanding real calibration.
-Each product entry links its evidence and limits. None of these labels promises local installation,
-every task being runnable, compatibility with every model, or full-suite statistical equivalence.
-Local registrations and their calibration or Agent/Policy evaluation evidence remain independent of these product labels.
+Each product entry carries a short validation note: which calibration or checks were run, on what
+scope, with a link to the evidence. It records facts, not grades (design §9.10). It does not promise
+local installation, every task being runnable, compatibility with every model, or results equal to
+the official runner. Local registrations keep their own calibration and Agent/Policy evidence.
 
 VLA models are evaluated **Policies**, not benchmark environments. Their concrete weights,
 normalization and serving configuration belong to Policy definitions; an evaluation configuration selects one policy
@@ -54,9 +53,8 @@ the supported suite/recipe combinations, including GR00T N1.7 for LIBERO/Simpler
 RoboCasa365. The current Agents page does not yet provide a native Policy catalog; its historical
 external-entrypoint list is a different view.
 
-Historical task and research records may use C1–C7, including C6 for native policy evaluation.
-These are [legacy integration prototypes](integration-categories.md), not public product categories.
-They remain in old records and compatibility fields; their presence does not define six-dimensional
-labels or imply seven-category coverage. Historical validation results retain their original scope.
+Each benchmark is described by three things only: its six-dimensional classification, how Orbit
+integrates it (`harbor`, `manifest`, `sdk` or `native`, plus the concrete adapter), and its calibration
+record. Older records may mention the retired C1–C7 categories; they are compatibility fields only.
 
 [New native integrations](tasks/20261110-benchmark-gaps.md) · [Original-suite availability and protocol gaps](guides/benchmark-availability.md)

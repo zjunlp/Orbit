@@ -55,7 +55,7 @@ def task_dir(req, task):
     return os.path.join(req["benchmark"]["path"], "tasks", task)
 
 
-# Integration category (docs/integration-categories.md).
+# `category` / `profiles` are deprecated compatibility fields (design §9.10).
 CAPABILITIES = {"identity": {"id": "researchclawbench", "name": "ResearchClawBench"}, "domains": ["science"], "category": "agent-workspace", "profiles": ["research-report", "judge"], "kind": "other", "methods": ["cli", "empty"], "scoreKind": "scalar", "rescore": "evidence", "calibration": {"oracle": "none", "repeat": {"tolerance": 5}}, "conditions": {"Scoring": "rubric items judged by an LLM against the reference"}}
 
 

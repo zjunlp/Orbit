@@ -81,7 +81,7 @@ const Manifest = z.object({
   version: z.literal(1),
   /** Default image of every run (a digest pins the conditions; a tag is recorded as mutable). */
   image: z.string().min(1),
-  /** Integration category and profiles (docs/integration-categories.md). */
+  /** Deprecated integration category and profiles (design §9.10), kept for compatibility. */
   category: BenchCategory.optional(),
   profiles: z.array(z.string()).default([]),
   domains: z.array(z.string()).default([]),

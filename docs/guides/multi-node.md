@@ -1,6 +1,6 @@
 # 多节点
 
-适用版本：`refactor/ts-rewrite` R4。模型与规则见 [design §8](../design.md#8-多节点r4)。
+模型与规则见 [design §8](../design.md#8-多节点r4)。
 
 前提：每台机器装好 Orbit、Docker（GPU 机器需 NVIDIA 容器运行时），`orbit doctor` 通过；
 **主节点能连到 worker 的一个端口**（单向即可，不需要互相 SSH 或共享存储；推荐 Tailscale，或内网、SSH 隧道）。

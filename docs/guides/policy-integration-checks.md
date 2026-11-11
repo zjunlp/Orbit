@@ -20,8 +20,8 @@ their solve Run and model service. Each episode independently verifies its saved
 by default, the first episode is also rescored without rerunning the model. A valid native failure
 score can pass the integration check: model task success and integration validity are separate.
 The report checks frozen identity, shared execution, trusted scores, CPU verification, rescore and
-cleanup. A successful policy check does not raise the benchmark's semantic-calibration or fidelity
-status. CLI and Web identify the scope as sampled policy integration.
+cleanup. A successful policy check does not count as calibration of the benchmark
+itself. CLI and Web identify the scope as sampled policy integration.
 
 `--budget` defaults to 20 minutes and accepts a positive value up to 30. This is the total wall-clock
 budget from job creation, including queueing, model startup, solve, verification and automatic
