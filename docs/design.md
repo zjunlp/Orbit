@@ -113,7 +113,9 @@ examples/      bench-adapters/<benchmark>/: external bench adapters (not part of
 bench、adapter、cluster、records 和 folders；`RunService` 保留公共 API、调度与共享状态，远端放置/镜像、启动、服务、
 阶段/hooks、process 后端、清理、采样与日志收集由 `runs/` 内函数接收所需依赖。`bench/consolidate.ts` 计算纯归并计划，
 service 负责读取、await 后重新校验、单次 store 事务和清理；汇总/对比在 `bench/summary.ts`，用量行在 `bench/resources.ts`，
-校准 job 提交后的生命周期（一次重查、policy 检查的预算计时与执行结束判定）在 `bench/calibration.ts` 的 `CalibrationLifecycle`。
+校准 job 提交后的生命周期（一次重查、policy 检查的预算计时与执行结束判定）在 `bench/calibration.ts` 的 `CalibrationLifecycle`；
+trial 状态机（推进、提交 solve/verify、评分、取消与重启认领）在 `bench/trials.ts` 的 `TrialMachine`，`BenchService` 只做 job 级操作，
+经 `isBusy`、`advanceAll`、`stopRuns` 等公开方法触及 trial。
 某个 benchmark 专有的行为放在它的 adapter 内（如 Harbor 的 EFE 轨迹导入），service 只依据 adapter 声明的 `capabilities` 判定，不按 adapter 名分支。
 `daemon/routes/` 按 runs、bench、settings、cluster/datasets、folders 注册，鉴权仍在 `createApp`，错误映射共用 `daemon/http.ts`。
 CLI 的运行/试跑/等待共用 `cli/run.ts`，表格与选项解析共用 format/options；私有 JSON 的临时文件、0600 权限和 rename
