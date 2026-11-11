@@ -227,6 +227,16 @@ describe("bench jobs", () => {
         methods: [{ name: "c", agent: "codex", auth: "nope" }],
       }),
     ).rejects.toThrow(/auth profile not found/);
+    // ASI's native runner launches only the Agents it declares.
+    for (const agent of ["kimi-cli", "external"] as const)
+      await expect(
+        client.benchSubmit({
+          benchmark: "asi",
+          methods: [
+            { name: "x", agent, ...(agent === "external" ? { entrypoint: "a:b" } : { auth: "p" }) },
+          ],
+        }),
+      ).rejects.toThrow(`asi does not support ${agent} methods`);
   });
 
   // Four solve/verify pairs need the full 30 s job wait on slower CI runners.

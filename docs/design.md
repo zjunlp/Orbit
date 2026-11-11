@@ -112,10 +112,13 @@ examples/      bench-adapters/<benchmark>/: external bench adapters (not part of
 模块内按职责拆分，以上依赖方向不变：`contracts/index.ts` 保留统一导出，schema 分入 runs、resources、auth/notify、
 bench、adapter、cluster、records 和 folders；`RunService` 保留公共 API、调度与共享状态，远端放置/镜像、启动、服务、
 阶段/hooks、process 后端、清理、采样与日志收集由 `runs/` 内函数接收所需依赖。`bench/consolidate.ts` 计算纯归并计划，
-service 负责读取、await 后重新校验、单次 store 事务和清理；汇总/对比在 `bench/summary.ts`，用量行在 `bench/resources.ts`。
+service 负责读取、await 后重新校验、单次 store 事务和清理；汇总/对比在 `bench/summary.ts`，用量行在 `bench/resources.ts`，
+校准 job 提交后的生命周期（一次重查、policy 检查的预算计时与执行结束判定）在 `bench/calibration.ts` 的 `CalibrationLifecycle`。
+某个 benchmark 专有的行为放在它的 adapter 内（如 Harbor 的 EFE 轨迹导入），service 只依据 adapter 声明的 `capabilities` 判定，不按 adapter 名分支。
 `daemon/routes/` 按 runs、bench、settings、cluster/datasets、folders 注册，鉴权仍在 `createApp`，错误映射共用 `daemon/http.ts`。
 CLI 的运行/试跑/等待共用 `cli/run.ts`，表格与选项解析共用 format/options；私有 JSON 的临时文件、0600 权限和 rename
-统一由 `lib/private-json.ts` 的 `writePrivateJson` 处理。Web 的 Runs / Bench 子组件分别放在 `pages/runs/` 和 `pages/bench/`。
+统一由 `lib/private-json.ts` 的 `writePrivateJson` 处理。Web 的 Runs / Bench / Trial 子组件分别放在 `pages/runs/`、`pages/bench/` 和 `pages/trial/`；
+全部页面的地址、侧栏、`g x` 快捷键与命令面板条目只在 `packages/web/src/routes.ts` 定义一次。
 
 - **源码文档与个人使用记录分开**：`docs/` 只记录通用架构、功能、问题和开发验证。个人实验成绩、批次进度、
   重跑/归并过程、私有资源配置及账号或机器清单放在源码仓库外的用户侧笔记中，不进入任务文档、提交说明或 PR。
@@ -334,7 +337,8 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   状态、分数、有效性，点击进入 trial 页）。顶部按 All / Experiments / Benchmarks 筛选。首次加载及 SSE 重连时逐页加载全部 Run；
   加载期间的 SSE 更新和删除覆盖快照，加载途中断线重连会再取一遍，文件夹计数与筛选不再受 1000 条上限影响。
 - **Trial**（`/bench/<job>/trials/<trial>`）：结果与 issues、solve → verify 时间线与实测用量、重新评分前的历次结果；标签由 adapter 的
-  `review` 决定（每个声明的文件一个标签，按 kind 渲染；Grader 来自 `items`；Details 来自 `details` 与未知字段），
+  `review` 决定（每个声明的文件一个标签，按 kind 由 `pages/trial/Review.tsx` 的 `FILE_VIEWS` 渲染，新增 kind 时类型检查要求补齐；
+  文件读取共用 `lib/run-file.ts`，各视图保留自己的预览上限；Grader 来自 `items`；Details 来自 `details` 与未知字段），
   之后固定有 Agent session 与 Outputs（两个 Run 的全部文件）。Markdown 只生成 React 元素，不渲染 HTML、不加载外部图片，
   图片按相对路径取同一 Run 的文件。bench 的 solve / verify Run 页面包屑为 `Bench / job / trial / phase`，带 “← Trial”。
   Runs 页选中整个 job 行可删除该 job。
@@ -347,6 +351,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 - **Bench**：job 列表、job 详情（分数矩阵，格子进入 trial 页）、配置对比（§7）。Merge retries 对话框提供来源 ID 和选项解释，
   先预览 adopted、reclassified（task/kind）、removed runs/jobs，再输入目标 job ID 并携带 digest 应用；改选项后必须重新预览。
   使用原生 modal dialog 管理焦点与 Esc，关闭后恢复入口焦点。
+- **地址**：旧地址先由 `legacyHref` 重定向；`routes.ts` 之外的路径显示 “Page not found”，不再回落到 Overview。
 - **轮询**：`useAsync` 与 Logs 在隐藏标签页暂停轮询，重新可见时刷新一次后恢复；进行中的请求仍可完成，SSE 继续接收。
 - **删除**（不可恢复）：`POST runs/delete` 只删已终态且清理完成、不属于 bench trial 的 Run（远端 Run 须镜像同步结束）；
   全部校验通过才动手，删除记录、事件、租约与 Run 目录（容器以 root 写下的文件用该镜像的临时容器清掉；仍删不掉的
@@ -487,7 +492,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   `policy` 通过 `policyRef` 选择已登记定义，提交时保存 `policySnapshot`；不接收 CLI 的 auth、model 或 bundle。
   提交 job 前检查 Agent 已注册、auth profile 的 harness 与之一致且 kind 受该 Agent 支持；`agentCommand` 由定义的模板渲染。
   `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`），安装失败记为环境失败、不 verify；
-  process Run 拒绝 `install` 型 Agent。ASI 与 LongDS 的原生 runner 只启动 codex / claude-code，其他 Agent 明确拒绝。
+  process Run 拒绝 `install` 型 Agent。ASI 与 LongDS 的原生 runner 只启动 codex / claude-code，由 adapter 在 `capabilities.methods` 中声明，
+  提交与兼容矩阵按同一声明拒绝其他 Agent（`<benchmark> does not support <agent> methods`）。
   `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；Agent 版本由 Run 的
   `harness` 事件记录。`external` 必须有 adapter 解释的 `entrypoint`，可带非密钥 `config`、`model`、`effort`，
   不接受 CLI 的 auth/bundle；其 `passEnv` 只把 daemon 环境中的指定变量注入 solve，变量值不进入 Method。
@@ -524,6 +530,7 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
 | solve 内的 Agent 从未产生成功模型回复，且最后一轮以明确的认证、额度、模型不可用或连接错误结束，或未结束但可信 CLI 日志尾部明确停在模型重连/认证刷新拒绝（`sessions.runAgentFailure` 读 Run 的 Agent home 与日志尾；`harness.agentErrorKind` 先看结构化错误码——Codex `codex_error_info` 及其 HTTP 状态码、Claude Code 的 `error`——再看文本；对所有适配器生效）：不提交 verify，记 `verify skipped` 并保留 OOM、服务失败等问题；显式 rescore 时照常评分并保留分数 | invalid |
 | Codex 在 session 创建前因无法读取 Run 私有 `config.toml` 而退出；仅在无 Codex/Claude transcript 时识别日志头前 16 KiB 内完整的原生权限错误，允许已知 PATH 提示与 Orbit after 阶段边界；不从普通工具权限错误推断 | invalid / `infra`（`agent_configuration_failed`），保留 shared verifier 的原始分数 |
 | verify 未启动、超时、内存不足，没有分数，或适配器判为无效（无 reward、scorer 内部错误、judge 不可用、模型不可用且 0 分） | invalid |
+| 调用 adapter `score` 失败：adapter 进程出错或回复无效（`AdapterError`）记 `scorer_error`；Orbit 自身在评分路径上的异常记 `infra`，issue 写 `score: Orbit error: …` 并写入 daemon 日志 | invalid |
 | 其余 | valid |
 
   只有 `valid` 的分数进入均分；无效或未知单独列出，不静默计入。清理状态按 failed > pending > done 汇总 Run 的 `cleanup`。
@@ -1088,7 +1095,8 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
 - 完整度标注：会话完整 / 只有环境记录 / 只有原生日志 / 截断；现有 `GuiTrajectory` 作为 GUI 视图的输入之一。
 
 P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE MetaWorld+ standard/2.1 的 journal、已执行动作矩阵、最终奖励与 render 视频，
-产出既有 `EpisodeTrajectory`。daemon 在评分后写 solve 的 `orbit-trajectory.json` 并追加 episode review；导入失败只加 issue，不改分数或有效性。
+产出既有 `EpisodeTrajectory`。Harbor adapter 的 `score` 对 `metaworldplus-*` 任务读取 solve 的 Agent 会话、写 solve 的 `orbit-trajectory.json`
+并追加 episode review（按需加载导入器，其他 adapter 调用不受影响）；导入失败只加 issue，不改分数或有效性。
 原始 NumPy 数据仍保留；预览抽样保留调用边界，未保存的 proprioception 不补造。新增可选 `completeness`（complete/environment-only/truncated）、
 sample 的 `sessionMessageIndexes`（引用同一 Run 会话）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
 Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目录归还 daemon 用户，再运行 adapter hooks，保证会话可读与凭据清理；不改变模拟器评分。

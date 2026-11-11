@@ -42,6 +42,9 @@ export function resolveKind(f: Pick<ReviewFile, "kind" | "fallback" | "path">): 
   return { kind: "text", note: unknown && `${unknown}, shown as text` };
 }
 
+/** Review fields this UI renders; any other field is listed under Details. */
+export const REVIEW_FIELDS = ["files", "items", "details"] as const;
+
 /** Fields of an object outside `known`: kept from newer adapters and listed, never dropped. */
 export function extraFields(obj: object, known: readonly string[]): [string, unknown][] {
   return Object.entries(obj).filter(([k, v]) => !known.includes(k) && v !== undefined);

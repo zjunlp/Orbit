@@ -263,18 +263,24 @@ export interface RunDirs {
   agent: string;
 }
 
+/** The Agent home of a run, from its output directory (both under `<run>/orbit/`). */
+export function runAgentDir(output: string): string {
+  return join(dirname(output), "agent");
+}
+
 export function runDirs(paths: OrbitPaths, runId: string): RunDirs {
   const root = join(paths.runs, runId);
   const orbit = join(root, "orbit");
+  const output = join(orbit, "output");
   return {
     root,
     workspace: join(root, "workspace"),
     orbit,
-    output: join(orbit, "output"),
+    output,
     metrics: join(orbit, "metrics.jsonl"),
     log: join(root, "log.txt"),
     diff: join(root, "code.diff"),
-    agent: join(orbit, "agent"),
+    agent: runAgentDir(output),
   };
 }
 

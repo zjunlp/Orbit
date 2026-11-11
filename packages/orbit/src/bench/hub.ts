@@ -23,7 +23,6 @@ import {
   type Trial,
 } from "../contracts/index.ts";
 import { pairedDiff, primaryMetric, resolveMetrics, taskMeans } from "../contracts/metrics.ts";
-import { asiMethodProblem } from "./asi.ts";
 import { executionCapabilities, methodBasis, revisionOf, stableDigest } from "./revision.ts";
 import { planDigest } from "./summary.ts";
 
@@ -218,10 +217,7 @@ export function compatibility(
               job: latest?.j.id,
             }
           : {};
-      const native = e.benchmark.adapter === "asi" ? asiMethodProblem({ agent: def.name }) : null;
-      if (native) {
-        cells[def.name] = { ...evidence, state: "blocked", reason: native };
-      } else if (!caps) {
+      if (!caps) {
         cells[def.name] = {
           ...evidence,
           state: "unknown",

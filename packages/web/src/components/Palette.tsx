@@ -2,17 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { runPath, runTitle } from "../lib/format.ts";
 import { navigate } from "../lib/router.ts";
 import { useRuns } from "../lib/runs-store.ts";
-import {
-  IconBot,
-  IconChip,
-  IconCompare,
-  IconDashboard,
-  IconFlask,
-  IconLayers,
-  IconLibrary,
-  IconRuns,
-  IconSettings,
-} from "./icons.tsx";
+import { PAGES, type PageDef } from "../routes.ts";
+import { IconLayers } from "./icons.tsx";
 import { StateIcon } from "./ui.tsx";
 
 interface Item {
@@ -31,80 +22,14 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const [cur, setCur] = useState(0);
 
   const items = useMemo(() => {
-    const pages: Item[] = [
-      {
-        key: "p-home",
-        group: "Pages",
-        label: "Overview",
-        icon: <IconDashboard size={15} />,
-        text: "overview home",
-        go: "/",
-      },
-      {
-        key: "p-benchmarks",
-        group: "Pages",
-        label: "Benchmarks",
-        icon: <IconLibrary size={15} />,
-        text: "benchmarks catalog domains categories",
-        go: "/benchmarks",
-      },
-      {
-        key: "p-agents",
-        group: "Pages",
-        label: "Agents",
-        icon: <IconBot size={15} />,
-        text: "agents harness codex claude",
-        go: "/agents",
-      },
-      {
-        key: "p-configurations",
-        group: "Pages",
-        label: "Evaluation configurations",
-        icon: <IconLayers size={15} />,
-        text: "evaluation configurations models reasoning effort versions",
-        go: "/configurations",
-      },
-      {
-        key: "p-bench",
-        group: "Pages",
-        label: "Evaluations",
-        icon: <IconFlask size={15} />,
-        text: "evaluations bench jobs trials",
-        go: "/bench",
-      },
-      {
-        key: "p-runs",
-        group: "Pages",
-        label: "Runs",
-        icon: <IconRuns size={15} />,
-        text: "runs",
-        go: "/runs",
-      },
-      {
-        key: "p-cmp",
-        group: "Pages",
-        label: "Compare runs",
-        icon: <IconCompare size={15} />,
-        text: "compare",
-        go: "/compare",
-      },
-      {
-        key: "p-res",
-        group: "Pages",
-        label: "Resources",
-        icon: <IconChip size={15} />,
-        text: "resources gpu",
-        go: "/resources",
-      },
-      {
-        key: "p-set",
-        group: "Pages",
-        label: "Settings",
-        icon: <IconSettings size={15} />,
-        text: "settings auth profiles notifications",
-        go: "/settings",
-      },
-    ];
+    const pages: Item[] = PAGES.map((p: PageDef) => ({
+      key: `p-${p.name}`,
+      group: "Pages",
+      label: p.title ?? p.label,
+      icon: <p.icon size={15} />,
+      text: `${p.label} ${p.title ?? ""} ${p.terms}`,
+      go: p.path,
+    }));
     const groups = [...new Set(runs.map((r) => r.spec.group).filter(Boolean))] as string[];
     const g: Item[] = groups.map((name) => ({
       key: `g-${name}`,

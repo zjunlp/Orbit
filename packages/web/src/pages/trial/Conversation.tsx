@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { IconAlert, IconBan, IconCheck, IconSearch, IconX } from "../../components/icons.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
-import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
+import type { ReviewFile, Run } from "../../lib/api.ts";
 import {
   brief,
   type Conversation,
@@ -21,25 +21,21 @@ import {
 import { bytes } from "../../lib/format.ts";
 import { overlayOpen, useHotkeys } from "../../lib/hotkeys.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
-import { useAsync } from "../../lib/use.ts";
+import { useRunFile } from "../../lib/run-file.ts";
 import "./conversation.css";
 
 const MAX_BYTES = 16 * 1024 * 1024;
 
 export function ConversationFile({ run, file }: { run: Run; file: ReviewFile }) {
-  const a = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
-  const entry = a.data?.files.find((f) => f.path === file.path);
-  const source = useAsync(async () => {
-    if (!entry || entry.bytes > MAX_BYTES) return null;
-    const r = await fetch(fileUrl(run.id, file.path));
-    if (!r.ok) throw new Error(`Could not read the conversation (${r.status}).`);
-    return parseConversation(await r.text());
-  }, [run.id, file.path, entry?.bytes, entry?.mtime]);
+  const source = useRunFile(run, file.path, {
+    what: "the conversation",
+    maxBytes: MAX_BYTES,
+    parse: parseConversation,
+  });
   const problem =
-    a.error ??
-    (a.data && !entry ? "The verifier did not save the declared conversation file." : null) ??
-    (entry && entry.bytes > MAX_BYTES
-      ? `${bytes(entry.bytes)} exceeds the preview limit; download ${file.path} from Outputs.`
+    (source.missing ? "The verifier did not save the declared conversation file." : null) ??
+    (source.tooLarge && source.entry
+      ? `${bytes(source.entry.bytes)} exceeds the preview limit; download ${file.path} from Outputs.`
       : null) ??
     source.error;
   if (problem) return <Empty title="Conversation unavailable">{problem}</Empty>;

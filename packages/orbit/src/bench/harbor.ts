@@ -17,7 +17,8 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { parse as parseToml } from "smol-toml";
-import type { BenchTask, FailureKind, Method } from "../contracts/index.ts";
+import { runAgentDir } from "../config/paths.ts";
+import type { BenchTask, FailureKind, Method, ScoreResult } from "../contracts/index.ts";
 import type { AdapterHandlers, RunDescription, ScoreReply } from "./adapter.ts";
 import { type ComposePlan, composeFile, parseCompose } from "./compose.ts";
 
@@ -965,14 +966,32 @@ export const harborAdapter: AdapterHandlers = {
     const { spec, missing } = harborVerifySpec(t, solve.output, trial.staging);
     return { spec, issues: missing.map((m) => `artifact not produced: ${m}`) };
   },
-  score: ({ verify }) => {
+  score: async ({ trial, solve, verify }) => {
     // Shared mode: the solve run's after phase collected /logs/verifier into output/after/.
     const sub = verify.run.spec.after ? "after" : "collected";
     const r = harborReward(join(verify.output, sub, "logs", "verifier"));
-    return {
+    const reply: ScoreResult = {
       ...r,
+      maxScore: r.maxScore ?? 1,
+      invalid: r.invalid ?? false,
+      issues: r.issues ?? [],
       ...(r.score === null ? {} : { metrics: { resolved: r.score >= 1 ? 100 : 0 } }),
       review: harborReview(verify.output, sub),
     };
+    // EFE MetaWorld+ tasks keep a simulator journal; index it with the Agent session for review.
+    // Loaded on demand so other adapter calls stay light.
+    if (trial.task.startsWith("metaworldplus-")) {
+      const { loadRunAgentTranscript } = await import("../sessions/index.ts");
+      const { addEfeTrajectory } = await import("./trajectory-artifacts.ts");
+      const transcript = await loadRunAgentTranscript(runAgentDir(solve.output)).catch(() => null);
+      await addEfeTrajectory(
+        solve.output,
+        solve.run,
+        reply,
+        transcript?.messages ?? [],
+        trial.task,
+      );
+    }
+    return reply;
   },
 };

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { asiMethodProblem } from "../src/bench/asi.ts";
+import { asiAdapter } from "../src/bench/asi.ts";
 import { solveVerdict } from "../src/bench/classify.ts";
 import { parseCompose } from "../src/bench/compose.ts";
 import { harborReward } from "../src/bench/harbor.ts";
@@ -88,11 +88,12 @@ describe("bench methods name registered Agents", () => {
   });
 
   it("refuses Agents ASI's native runner does not launch instead of routing them to Claude", () => {
-    expect(asiMethodProblem({ agent: "codex" })).toBeNull();
-    expect(asiMethodProblem({ agent: "claude-code" })).toBeNull();
-    expect(asiMethodProblem({ agent: "oracle" })).toBeNull();
-    expect(asiMethodProblem({ agent: "kimi-cli" })).toMatch(/not adapted/);
-    expect(asiMethodProblem({ agent: "external" })).toMatch(/external/);
+    const req = { protocol: 1, op: "tasks", benchmark: { name: "a", path: "/a", config: {} } };
+    const methods = asiAdapter.info?.(req as never, [])?.capabilities?.methods ?? [];
+    for (const agent of ["codex", "claude-code", "oracle", "empty"])
+      expect(capabilityAllows(methods, agent)).toBe(true);
+    for (const agent of ["kimi-cli", "external", "policy"])
+      expect(capabilityAllows(methods, agent)).toBe(false);
   });
 });
 

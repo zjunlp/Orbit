@@ -35,7 +35,7 @@ export interface AdapterHandlers {
   tasks(req: AdapterRequest): BenchTask[];
   solve(req: TrialRequest): SpecReply;
   verify(req: VerifyRequest): SpecReply;
-  score(req: ScoreRequest): ScoreReply;
+  score(req: ScoreRequest): ScoreReply | Promise<ScoreReply>;
 }
 
 /** Dispatch one request; throws when it lacks what the op needs. */
@@ -68,7 +68,7 @@ export async function adapterMain(name: string, op: string): Promise<void> {
     const req = AdapterRequest.parse(JSON.parse(await readStdin()));
     if (req.op !== AdapterOp.parse(op))
       throw new Error(`op ${op} does not match request ${req.op}`);
-    process.stdout.write(`${JSON.stringify(handle(handlers, req))}\n`);
+    process.stdout.write(`${JSON.stringify(await handle(handlers, req))}\n`);
   } catch (e) {
     process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
     process.exitCode = 1;

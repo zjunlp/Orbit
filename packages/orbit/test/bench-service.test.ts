@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthStore } from "../src/auth/index.ts";
 import { jobRevision } from "../src/bench/hub.ts";
-import { AdapterClient } from "../src/bench/protocol.ts";
+import { AdapterClient, AdapterError } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { BenchService, summarize } from "../src/bench/service.ts";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
@@ -53,12 +53,14 @@ function fixture(adapter = "harbor") {
   const source = join(home, "checkout");
   mkdirSync(source);
   registry.put({ name: "fixture", path: source, adapter });
+  const log = vi.fn<(msg: string) => void>();
   const bench = new BenchService({
     store,
     paths,
     runs,
     registry,
     auth,
+    log,
     self: [process.execPath, fileURLToPath(new URL("../src/bin.ts", import.meta.url))],
   });
   const run = Run.parse({
@@ -103,7 +105,7 @@ function fixture(adapter = "harbor") {
     store.putRun(queued);
     return queued;
   });
-  return { home, paths, source, store, runs, registry, bench, run, job, trial, submit, auth };
+  return { home, paths, source, store, runs, registry, bench, run, job, trial, submit, auth, log };
 }
 
 it("serves the supported benchmark library before any local registration or run", async () => {
@@ -759,6 +761,27 @@ it.each([false, true])("scores an Agent failure with an after phase: %s", async 
     score: 0.5,
     issues: [agentIssue],
   });
+});
+
+it.each([
+  { thrown: new AdapterError("adapter score: exit 1"), failure: "scorer_error", own: false },
+  { thrown: new TypeError("cannot read properties of undefined"), failure: "infra", own: true },
+])("tells scorer failures from Orbit errors while scoring ($failure)", async (c) => {
+  const f = fixture();
+  f.store.putJob(f.job);
+  f.store.putRun(f.run);
+  f.store.putRun({ ...f.run, id: "verify" });
+  f.store.putTrial({ ...f.trial, state: "verifying", solveRunId: f.run.id, verifyRunId: "verify" });
+  vi.spyOn(AdapterClient.prototype, "score").mockRejectedValue(c.thrown);
+  f.bench.start();
+  await expect.poll(() => f.store.getTrial(f.trial.id)?.state).toBe("done");
+  const outcome = f.store.getTrial(f.trial.id)?.outcome;
+  expect(outcome).toMatchObject({ evaluation: "invalid", failure: c.failure, score: null });
+  expect(outcome?.issues).toEqual([`score: ${c.own ? "Orbit error: " : ""}${c.thrown.message}`]);
+  const logged = f.log.mock.calls
+    .map(([line]) => String(line))
+    .filter((l) => l.includes("scoring"));
+  expect(logged).toHaveLength(c.own ? 1 : 0);
 });
 
 it.each([

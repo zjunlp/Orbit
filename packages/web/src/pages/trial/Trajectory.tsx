@@ -6,6 +6,7 @@ import { bytes, runPath } from "../../lib/format.ts";
 import { actionOverlay, stepMessages } from "../../lib/gui-action.ts";
 import { overlayOpen, useHotkeys } from "../../lib/hotkeys.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
+import { useRunFile } from "../../lib/run-file.ts";
 import { parseTrajectory, trajectoryFrame, trajectoryStep } from "../../lib/trajectory.ts";
 import { useAsync } from "../../lib/use.ts";
 import "./trajectory.css";
@@ -23,27 +24,22 @@ export function TrajectoryFile({
   fallback?: string;
   note?: string | null;
 }) {
-  const a = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
+  const source = useRunFile(run, file.path, {
+    what: "the trajectory",
+    maxBytes: MAX_BYTES,
+    parse: parseTrajectory,
+  });
+  const a = source.listing;
   const session = useAsync(() => api.session(run.id), [run.id, run.state]);
-  const entry = a.data?.files.find((item) => item.path === file.path);
-  const source = useAsync(async () => {
-    if (!entry || entry.bytes > MAX_BYTES) return null;
-    const response = await fetch(fileUrl(run.id, file.path));
-    if (!response.ok) throw new Error(`Could not read the trajectory (${response.status}).`);
-    const text = await response.text();
-    if (text.length > MAX_BYTES) throw new Error("The trajectory is too large to preview.");
-    return parseTrajectory(text);
-  }, [run.id, file.path, entry?.bytes, entry?.mtime]);
   const files = useMemo(() => new Set(a.data?.files.map((f) => f.path) ?? []), [a.data]);
   const problem =
-    a.error ??
-    (a.data && !entry
-      ? a.data.truncated
+    (source.missing
+      ? a.data?.truncated
         ? "The output listing is truncated; the trajectory was not listed."
         : "The run did not save the declared trajectory file."
       : null) ??
-    (entry && entry.bytes > MAX_BYTES
-      ? `${bytes(entry.bytes)} exceeds the preview limit. Download the original file.`
+    (source.tooLarge && source.entry
+      ? `${bytes(source.entry.bytes)} exceeds the preview limit. Download the original file.`
       : null) ??
     source.error;
   return (
