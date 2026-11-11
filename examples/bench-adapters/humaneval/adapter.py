@@ -27,9 +27,7 @@ IMAGE = "python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc53
 TIMEOUT_SEC = 3.0
 
 CAPABILITIES = {
-    "category": "fixed-input",
     "identity": {"id": "humaneval", "name": "HumanEval", "version": "312c5e5"},
-    "domains": ["software"],
     "taxonomy": {
         "domains": ["software"], "taskTypes": ["implementation"],
         "modalities": ["text"], "interfaces": ["response"],
@@ -37,7 +35,6 @@ CAPABILITIES = {
         "feedback": ["none"], "participants": [],
         "scoringEvidence": ["artifact"], "scoringMethods": ["execution-test"],
     },
-    "profiles": ["generate", "exec-test"],
     "methods": ["oracle", "empty", "external"],
     "scoreKind": "binary",
     "rescore": "evidence",

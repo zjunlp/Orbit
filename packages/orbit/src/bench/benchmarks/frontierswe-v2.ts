@@ -23,7 +23,6 @@ export const frontiersweV2: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Original reference/empty calibration and a real CLI auth check under the task account passed. Allowlist-as-public is an explicit network deviation; full-suite model parity is unverified.",
     "docs/tasks/20261110-benchmark-gaps.md",
   ),

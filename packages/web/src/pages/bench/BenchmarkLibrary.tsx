@@ -4,7 +4,6 @@ import { Fragment, useState } from "react";
 import {
   IconBox,
   IconBrain,
-  IconCheck,
   IconChevron,
   IconChevronDown,
   IconDashboard,
@@ -31,12 +30,6 @@ import { useAsync } from "../../lib/use.ts";
 import { CoverageMatrix, TaxonomyTags } from "./Catalog.tsx";
 import { TaxonomyFacets } from "./TaxonomyFacets.tsx";
 
-const VERIFICATION = {
-  "sample-checked": "Sample checked",
-  "adapter-tested": "Adapter tested",
-  "pending-calibration": "Calibration pending",
-} as const;
-
 /** Display labels are a union; filtering always uses the original protocol groups. */
 export function libraryEntry(benchmark: SupportedBenchmark) {
   const taxonomy: BenchTaxonomy = Object.fromEntries(
@@ -58,23 +51,20 @@ export function BenchmarkLibrary() {
     (filters[field] ?? []).map((value) => ({ field, value })),
   );
   const q = (query.get("q") ?? "").trim().toLowerCase();
-  const status = query.get("support") ?? "all";
   const view = query.get("view") ?? "grid";
-  const base = entries.filter(
-    (entry) =>
-      (status === "all" || entry.verification.level === status) &&
-      [
-        entry.name,
-        entry.description,
-        ...entry.suites,
-        ...entry.integrations.map((route) => route.name),
-        ...taxonomyFields.flatMap((field) =>
-          (entry.taxonomy[field] ?? []).map((value) => taxonomyLabel(field, value)),
-        ),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
+  const base = entries.filter((entry) =>
+    [
+      entry.name,
+      entry.description,
+      ...entry.suites,
+      ...entry.integrations.map((route) => route.name),
+      ...taxonomyFields.flatMap((field) =>
+        (entry.taxonomy[field] ?? []).map((value) => taxonomyLabel(field, value)),
+      ),
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(q),
   );
   const shown = base
     .filter((entry) => matchesTaxonomy(entry, filters))
@@ -85,7 +75,6 @@ export function BenchmarkLibrary() {
     setQuery({
       ...Object.fromEntries(taxonomyFields.map((field) => [field, null])),
       q: null,
-      support: null,
     });
   if (!catalog.data)
     return catalog.error ? (
@@ -151,7 +140,7 @@ export function BenchmarkLibrary() {
         </button>
       </div>
       <TaxonomyFacets entries={base} filters={filters} toggle={toggle} />
-      {(active.length > 0 || q || status !== "all") && (
+      {(active.length > 0 || q) && (
         <section className="library-active-filters" aria-label="Active filters">
           <IconFilter size={14} />
           {active.map(({ field, value }) => (
@@ -172,16 +161,6 @@ export function BenchmarkLibrary() {
               <IconX size={11} />
             </button>
           )}
-          {status !== "all" && (
-            <button
-              type="button"
-              className="filter-token"
-              onClick={() => setQuery({ support: null })}
-            >
-              {VERIFICATION[status as keyof typeof VERIFICATION] ?? status}
-              <IconX size={11} />
-            </button>
-          )}
           <button type="button" className="filter-clear" onClick={clear}>
             Clear all
           </button>
@@ -193,21 +172,6 @@ export function BenchmarkLibrary() {
           <span>One card per benchmark</span>
         </div>
         <div className="library-display-options">
-          <select
-            className="library-select"
-            aria-label="Filter by integration verification"
-            value={status}
-            onChange={(event) =>
-              setQuery({ support: event.target.value === "all" ? null : event.target.value })
-            }
-          >
-            <option value="all">All integrations</option>
-            {Object.entries(VERIFICATION).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
           <section className="library-view-toggle" aria-label="Catalog layout">
             {[
               { key: "grid", label: "Cards", Icon: IconDashboard },
@@ -326,13 +290,9 @@ export function SupportedCard({
           <TaxonomyTags e={entry} field="platforms" limit={2} />
         </div>
         <div className="benchmark-card-footer">
-          <span className={`integration-verification verification-${entry.verification.level}`}>
-            {entry.verification.level === "sample-checked" ? (
-              <IconCheck size={12} />
-            ) : (
-              <IconLayers size={12} />
-            )}{" "}
-            {VERIFICATION[entry.verification.level]}
+          <span className="integration-verification" title={entry.verification.detail}>
+            <IconLayers size={12} /> {entry.integrations.length}{" "}
+            {entry.integrations.length === 1 ? "integration" : "integrations"}
           </span>
           <button type="button" className="supported-details-button" onClick={toggle}>
             {open ? "Close details" : "View supported scope"}
@@ -364,7 +324,7 @@ function SupportedDetail({ entry }: { entry: ReturnType<typeof libraryEntry> }) 
           ))}
         </section>
         <section>
-          <h3>Integration verification</h3>
+          <h3>What was checked</h3>
           <p>{entry.verification.detail}</p>
           <a href={entry.verification.url} target="_blank" rel="noreferrer">
             Validation notes <span aria-hidden="true">↗</span>

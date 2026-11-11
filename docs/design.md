@@ -107,7 +107,7 @@ examples/      bench-adapters/<benchmark>/: external bench adapters (not part of
 | daemon | 除 cli/mcp/client 外全部 |
 | client | contracts, lib, config |
 | cli, mcp | client, contracts, lib, config |
-| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）、`@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化）、`@zjunlp/orbit/categories`（已废弃的兼容词表，见 §9.10）与 `@zjunlp/orbit/taxonomy`（六维词表与匹配） |
+| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）、`@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化）与 `@zjunlp/orbit/taxonomy`（六维词表与匹配） |
 
 模块内按职责拆分，以上依赖方向不变：`contracts/index.ts` 保留统一导出，schema 分入 runs、resources、auth/notify、
 bench、adapter、cluster、records 和 folders；`RunService` 保留公共 API、调度与共享状态，远端放置/镜像、启动、服务、
@@ -583,7 +583,7 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
-- `capabilities` 描述身份、六维分类（`taxonomy`）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。`category` / `profiles` / `domains` / `kind` 是废弃的兼容字段（§9.10）；分类标签不替代准入检查。
+- `capabilities` 描述身份、六维分类（`taxonomy`）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。旧 adapter 回复中的 `category` / `profiles` / `domains` / `kind` 被忽略（§9.10）；分类标签不替代准入检查。
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - `contracts/trajectory.ts`：`GuiStepContext`（step 的 `actionId` / `at`，用于把 Agent 会话中的工具调用与 GUI step 精确对齐，不按时钟猜）与
   `EpisodeTrajectory`（版本 1、`kind: "episode"`：多相机帧/视频、动作与本体感知曲线、奖励；只含保存的媒体和数值，不含可执行动作）。
@@ -696,8 +696,7 @@ Web `/bench/new` 支持环境/任务选择、评测配置编辑或导入、复�
   `home/ben/task/final_model` 验证和评分，其他方法使用 `task/final_model`；仅 `native=empty` 挂载完整 checkout
   和 dotenv 并设置 `AGENT_ENV`，其他方法只挂载 `src/`，避免通过 `/repo/.env` 暴露凭据。
 - **接入验收（任意新 benchmark）**：oracle 满分（没有参考解时省略）、空答案零分、抽样与原版结果一致。
-- **BFCL multi-turn 示例**（[adapter](../examples/bench-adapters/bfcl-multiturn/)）：直接登记工具工作流，兼容字段为
-  `category: tool-workflow` 与 `profiles: [local-state]`，一 trial 一完整会话。独立离线 verify 从保存的调用文本重建原版 Python 工具环境，调用固定版本的
+- **BFCL multi-turn 示例**（[adapter](../examples/bench-adapters/bfcl-multiturn/)）：直接登记工具工作流，一 trial 一完整会话。独立离线 verify 从保存的调用文本重建原版 Python 工具环境，调用固定版本的
   状态/响应 checker；不采用 solve 写出的分数、返回值或状态。包与数据固定，参考序列自检失败及环境异常为 invalid，
   不能按工具开放顺序执行的上游参考任务显式 unsupported；沿用现有 Run、SDK 与 JSON review，无新增执行路径。
 - **GUI 第一阶段**（[BrowserGym/MiniWoB](../examples/bench-adapters/browsergym/README.md)）：外部 Python adapter/runtime，
@@ -1138,10 +1137,11 @@ trajectory   原生格式 + 统一索引映射 + 完整度 + 产生者与信任�
 calibration  empty / oracle / 重复的期望，及其依据
 ```
 
-**兼容字段**：早期的 C1–C7 接入类别（`capabilities.category` / `profiles` / `kind`）、旧 `domains` 词表与产品目录的
-`verification.level` 已废弃，只为旧 adapter 与旧作业兼容读取，文档和界面不再使用。代码中 `category` 目前仍决定校准默认值
-（`embodied-policy`、`fixed-input` 的 empty 不要求最低分；`user-session`、`game` 不要求 oracle、重复允许误差）；
-后续改为由 benchmark 显式声明 `calibration` 后移除。
+**已移除的旧字段**：早期的 C1–C7 接入类别（`capabilities.category` / `profiles` / `kind`）、旧 `domains` 词表、产品目录的
+`verification.level` 与登记的 `fidelity` 已从契约中删除。旧 adapter 回复里的这些键被忽略；校准期望只来自 `CALIBRATION_DEFAULTS`
+与 benchmark 的 `calibration` 声明（原来按类别给的宽松默认值已写入各 adapter）。数据库迁移把旧类别隐含的期望冻结进已有校准作业，
+旧报告结果不变；读取旧登记时，登记标签的 `domains` 按精确对应转为 taxonomy 领域。Harbor 登记的 `-c category` / `profiles`
+仍被接受，`category` 只作为条件记录。
 
 ### 9.11 具身两阶段
 
@@ -1239,7 +1239,7 @@ JSON 是辅助；"能跑 / 校准通过 / 真实 Agent 或 Policy 跑过 / 与�
   报告按需从 trial 计算，不另建账本。`orbit bench calibrate` 改为调用这个 API，输出不变。
 - `GET /api/v1/bench/catalog` 的 `entries[]`：每个已登记 benchmark 一行——登记信息、任务列表摘要（六维分类、supported/listed、按 suite
   的覆盖与原因；daemon 内存缓存、后台刷新，列表失败保留错误和上次成功时间）、最近 5 次校准（离散记录，不画连续健康条）、
-  实际评测配置最近一次的主指标与 valid/total（配置版本按 §9.16 区分）。验证按 §9.10 只列事实：校准由报告算出；
+  实际评测配置最近一次的主指标与 valid/total（配置版本按 §9.16 区分）。验证按 §9.10 只列事实：最近 5 次校准报告；
   与官方的对照由 adapter 在 `capabilities.parity` 写明证据，未声明显示"未验证"。另有 §9.18 的 `supported[]` 产品目录，与本地登记证据分开。
 
 **工具与模拟用户对话轨迹**：新增 review kind `conversation`，契约 `ConversationTrajectory`（`contracts/trajectory.ts`）：
@@ -1300,7 +1300,7 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   联合筛选在同一个目录 profile 或本地 task 描述上判断，不能用集合并集制造交叉命中。
   [六维分类任务](tasks/20261109-benchmark-taxonomy.md) · [产品目录修正](tasks/20261109-benchmark-library.md)。
 - 产品卡详情展开接入路径、suite/recipe、验收范围和来源。本地详情按六组展示任务分类；未标注与明确空集合分别显示
-  “Not annotated” 与 “None”。旧 `category` / `domains` / `profiles` 和 category/domain URL 保留在本地登记兼容视图。
+  “Not annotated” 与 “None”。
 - `capabilities.identity`（`id`、`name`、可选 `version`、`variant`）声明 benchmark 身份。Catalog 按 `id` 归并登记；
   无声明时按 adapter 与数据路径派生稳定 ID，不以登记名猜测。标签优先于 adapter 声明，可通过 Web 或 `orbit bench label` 修改。
   `PATCH /benchmarks/:name/labels` 只改变展示标签，不改变执行；重新登记默认保留标签，清空后回退声明。
@@ -1488,8 +1488,8 @@ Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包�
 
 - 分类单位是具体 task/variant。benchmark 身份的汇总只表达包含哪些任务，不把所有子集标签并集作为每题默认值。
   统一适用的登记/variant 声明可作为默认；task 按字段替换，不能通过自动并集保留错误的父级标签。
-- `BenchCapabilities.taxonomy`、`BenchLabels.taxonomy`、`BenchTask.taxonomy` 均可选。生效顺序为 adapter 旧 domains
-  → adapter taxonomy → 登记旧 domains → 登记 taxonomy → task 的旧 `tags.domain` → task taxonomy；后项按字段覆盖前项。
+- `BenchCapabilities.taxonomy`、`BenchLabels.taxonomy`、`BenchTask.taxonomy` 均可选。生效顺序为 adapter taxonomy
+  → 登记 taxonomy → task 的 `tags.domain`（仅精确对应的词）→ task taxonomy；后项按字段覆盖前项。
   字段缺省继承、`null` 明确未知并阻断继承、`[]` 明确空集合，均不扩展受控词表。
 - `CatalogEntry.taxonomy` 仅是展示并集；`taxonomyGroups[{taxonomy, taskCount}]` 合并描述相同的任务，供联合筛选使用。
   尚无 listing 时用登记默认值并令 `taskCount: null`；它只表示已声明条件，不证明任务数量或任务覆盖。
@@ -1504,10 +1504,9 @@ Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包�
 - benchmark 来源与版本沿用现有身份。作业保留已有 benchmark/capabilities 快照，当前标签修改不重写历史报告；
   本轮未新增逐 task 的完整历史 taxonomy 快照或独立分类修订。分类元数据不进入配置可比性与重试兼容指纹。
   模型、harness、权重与工具配置属于评测配置（兼容类型 `Method`）；Run 记录执行设施，均不由分类代替。
-- 废弃的 `category`、旧 `domains` / `profiles` 与旧作业保持兼容读取（§9.10）。只迁移有明确语义对应的值，
-  当前精确回退仅为 `software`、`machine-learning`、`science`、`games` 同值和 `embodied` → `robotics`；
-  `knowledge`、`gui-web`、`data-analysis` 等保留原标签，不猜新字段，也不从旧类别推断任何六维取值。分类不改变现有准入、Policy binding、校准或评分行为。
-- `orbit bench label --taxonomy '<JSON>'` 或 `--taxonomy-file <file>` 替换登记的 taxonomy 部分，保留已有 identity 与旧 domains；
+- 旧领域词只迁移有明确语义对应的值：`software`、`machine-learning`、`science`、`games` 同值和 `embodied` → `robotics`；
+  `knowledge`、`gui-web`、`data-analysis` 等不猜新字段，也不从旧类别推断任何六维取值（§9.10）。分类不改变准入、Policy binding、校准或评分行为。
+- `orbit bench label --taxonomy '<JSON>'` 或 `--taxonomy-file <file>` 替换登记的 taxonomy 部分，保留已有 identity；
   `--clear` 清除全部 labels。HumanEval 与原生 embodied adapter 已声明可核实的协议事实，未指定的评测目标保持未知；
   其他适配器逐步补充，未标注不等于不具备该条件。
 
@@ -1535,7 +1534,6 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
   包装改变题目或被测对象时保留独立身份，如 EFE coding-agent 任务与原生 Policy benchmark。
 - 每个产品条目附一段验证说明（做过哪些校准或检查、范围与来源链接），只列事实（§9.10）；不等于本机资源已准备、
   全部任务可运行、任意模型都兼容或完整套件成绩已与官方等价。不能把本机某次运行证据推广到整个产品家族。
-  契约中的 `verification.level` 是待移除的兼容字段，界面与文档不再据此分级。
 - 六维词表复用 §9.17。每个字段只填源码协议或文档明确支持的值；多个 profile 的展示可以汇总，
   联合筛选和矩阵必须由同一 profile 满足。同字段 OR、不同字段 AND；计数按产品 ID 去重。
 - 本地登记、安装和运行证据继续独立呈现。目录的接入说明说明如何准备环境；启动评测仍需要明确选择现有登记，

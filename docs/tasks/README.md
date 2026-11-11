@@ -57,6 +57,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261103](20261103-eval-identity.md) 评测身份、官方口径与报告修订（P2）
 - [20261104](20261104-p65-integration.md) P6.5：接入层（覆盖盘点、自动校准、Harbor GPU 补全、L1 清单、L2 SDK）
 - [20261110](20261110-bench-adapter-organization.md) Bench adapter organization
+- [20261111](20261111-drop-legacy-categories.md) Drop legacy categories from code, and audit hotspots
 
 ## Harbor and code / research benchmarks
 

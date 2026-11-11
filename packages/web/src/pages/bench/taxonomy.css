@@ -920,8 +920,7 @@ dialog.taxonomy-editor {
   color: var(--text-2);
   font-size: 12px;
 }
-.taxonomy-editor-help,
-.taxonomy-editor-legacy {
+.taxonomy-editor-help {
   color: var(--text-3);
   font-size: 12px;
   line-height: 1.6;
@@ -1129,12 +1128,6 @@ dialog.taxonomy-editor {
   gap: 5px;
   color: var(--text-3);
   font-size: 11px;
-}
-.verification-sample-checked {
-  color: var(--st-succeeded);
-}
-.verification-pending-calibration {
-  color: var(--text-3);
 }
 .supported-details-button {
   display: inline-flex;

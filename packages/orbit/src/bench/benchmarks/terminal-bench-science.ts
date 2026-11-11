@@ -22,7 +22,6 @@ export const terminalBenchScience: Omit<SupportedBenchmark, "registrationNames">
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Reference/empty samples checked. Score parity with official Harbor execution remains unverified.",
     "docs/tasks/20261010-harbor-verifier-modes.md",
   ),

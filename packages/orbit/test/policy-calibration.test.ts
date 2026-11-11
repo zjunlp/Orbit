@@ -218,7 +218,7 @@ it("bounds policy requests and rejects mixing legacy calibration fields or overs
   ).toBe(false);
 });
 
-it("accepts valid zero native scores, shares a solve, rescores one episode and separates catalog fidelity", async () => {
+it("accepts valid zero native scores, shares a solve, rescores one episode and keeps policy checks apart", async () => {
   const f = fixture();
   const job = await f.bench.calibrate(f.request);
   await f.firstScores(job.id);
@@ -242,7 +242,6 @@ it("accepts valid zero native scores, shares a solve, rescores one episode and s
   const entry = f.bench.catalog().entries[0];
   expect(entry).toMatchObject({
     calibrations: [],
-    fidelity: "experimental",
     policyChecks: [{ job: job.id, calibrated: true }],
   });
   expect(formatCalibration(report as NonNullable<typeof report>)).toContain(

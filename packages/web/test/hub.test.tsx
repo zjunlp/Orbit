@@ -15,18 +15,13 @@ vi.mock("../src/lib/router.ts", () => ({
   onLinkClick: vi.fn(),
 }));
 
-const entry = (name: string, id: string, category: string, domains: string[], calibrated = false) =>
+const entry = (name: string, id: string, taskType: string, domains: string[], calibrated = false) =>
   ({
     benchmark: { name },
     identity: { id, name: id },
     identitySource: "adapter",
-    domains,
-    taxonomy: {
-      domains: domains.map((d) => (d === "embodied" ? "robotics" : d)),
-      taskTypes: [category === "embodied-policy" ? "manipulation" : "analysis"],
-    },
-    tags: [],
-    capabilities: { category },
+    taxonomy: { domains, taskTypes: [taskType] },
+    capabilities: {},
     listing: {},
     listingError: null,
     calibrations: calibrated ? [{ phase: "done", calibrated: true, checks: [] }] : [],
@@ -35,11 +30,11 @@ const entry = (name: string, id: string, category: string, domains: string[], ca
 
 it("counts distinct benchmarks and lays them out by domain and task type", () => {
   const es = [
-    entry("asi-a", "asi-bench", "agent-workspace", ["science"]),
-    entry("asi-b", "asi-bench", "agent-workspace", ["science"]),
-    entry("efe", "efe", "agent-workspace", ["embodied"], true),
-    entry("libero", "libero", "embodied-policy", ["embodied"]),
-    entry("x", "x", "game", []),
+    entry("asi-a", "asi-bench", "analysis", ["science"]),
+    entry("asi-b", "asi-bench", "analysis", ["science"]),
+    entry("efe", "efe", "analysis", ["robotics"], true),
+    entry("libero", "libero", "manipulation", ["robotics"]),
+    entry("x", "x", "analysis", []),
   ];
   expect(distinct(es)).toBe(4);
   const html = renderToStaticMarkup(<CoverageMatrix entries={es} />);

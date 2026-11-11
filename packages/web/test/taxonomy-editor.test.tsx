@@ -11,10 +11,9 @@ vi.mock("../src/components/ui.tsx", () => ({ toast: vi.fn() }));
 
 const identity = { id: "example", name: "Example", version: "1.0", variant: "executable" };
 
-it("round trips inherited, unknown, empty and custom fields without losing legacy labels", () => {
+it("round trips inherited, unknown, empty and custom fields without losing the identity", () => {
   const own: BenchLabels = {
     identity,
-    domains: ["legacy-domain"],
     taxonomy: { domains: ["software"], targets: null, participants: [] },
   };
   const draft = taxonomyEditorDraft(own.taxonomy);
@@ -55,7 +54,7 @@ it("requires an explicit None choice instead of silently converting an empty Cus
 
 it("edits registration defaults without turning the catalog task union into selected defaults", () => {
   const entry = {
-    benchmark: { name: "example-registration", labels: { domains: ["legacy-domain"] } },
+    benchmark: { name: "example-registration", labels: {} },
     identity,
     taxonomy: { domains: ["software", "robotics"], participants: ["human-user"] },
   } as CatalogEntry;
@@ -71,14 +70,5 @@ it("edits registration defaults without turning the catalog task union into sele
   expect(html).not.toContain('type="checkbox"');
   expect(html).toContain('value="executable"');
   expect(html).toContain("Each task’s own declarations take priority");
-  expect(html).toContain("Legacy domain labels are preserved: legacy-domain");
-  expect(html).toContain("These labels also supply inherited domain defaults");
-  const withoutLegacyLabels = renderToStaticMarkup(
-    <TaxonomyEditor
-      e={{ ...entry, benchmark: { ...entry.benchmark, labels: undefined } }}
-      onClose={() => {}}
-      onSaved={() => {}}
-    />,
-  );
-  expect(withoutLegacyLabels).not.toContain("Legacy domain labels");
+  expect(html).not.toContain("Legacy domain");
 });

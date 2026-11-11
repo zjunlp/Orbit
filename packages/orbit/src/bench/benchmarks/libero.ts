@@ -18,7 +18,6 @@ export const libero: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Native task catalogs and selected real-policy episodes checked; full-suite statistical equivalence remains unverified.",
     nativeDocs,
   ),

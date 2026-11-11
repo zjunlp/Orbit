@@ -20,7 +20,6 @@ export const asiBench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Native runner compatibility and failure handling checked. Official-runner score parity remains unverified.",
     "docs/tasks/20261009-asi-runner-timeouts.md",
   ),

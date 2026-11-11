@@ -1,16 +1,14 @@
-# vla-eval LIBERO (libero_spatial) as a declarative Orbit benchmark (design §9.14, L1).
+# vla-eval LIBERO (libero_spatial) as a declarative Orbit benchmark (design §9.14, manifest).
 # The same conditions as examples/bench-adapters/vla-eval: the benchmark image runs the upstream
 # `vla-eval run --no-docker` entry, the policy is the `policy` service, scoring is vla-eval's own
 # mean_success. Register with: orbit bench add libero <this directory> --adapter manifest
 version: 1
 image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
-# C6: a fixed policy closes the loop with the simulator; one trial is one episode, seed n runs
-# LIBERO's initial state n-1 (50 per task).
-category: embodied-policy
-profiles: [sim, sync, step]
-domains: [embodied]
+# A fixed policy closes the loop with the simulator; one trial is one episode, seed n runs
+# LIBERO's initial state n-1 (50 per task). A still policy can satisfy a goal that holds at the start.
 identity: { id: libero, name: LIBERO, variant: vla-eval }
-calibration: { oracle: none, seedsVary: true }
+taxonomy: { domains: [robotics] }
+calibration: { empty: any, oracle: none, seedsVary: true }
 episodes: 50
 scoreKind: scalar
 conditions:

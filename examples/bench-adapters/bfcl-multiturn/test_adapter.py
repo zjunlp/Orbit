@@ -63,15 +63,14 @@ class ProtocolTests(unittest.TestCase):
                     "solve": {"output": str(self.root / "solve")},
                     "verify": {"output": str(self.root / "verify")}}
 
-    def test_protocol_category_and_calibration(self):
+    def test_protocol_capabilities_and_calibration(self):
         request = {**self.req, "protocol": 1, "op": "tasks"}
         out = io.StringIO()
         self.assertEqual(main(adapter.tasks, adapter.solve, adapter.verify, adapter.score,
                               ["tasks"], io.StringIO(json.dumps(request)), out), 0)
         result = json.loads(out.getvalue())
         self.assertEqual(len(result["tasks"]), 1)
-        self.assertEqual(result["capabilities"]["profiles"], ["local-state"])
-        self.assertEqual(result["capabilities"]["category"], "tool-workflow")
+        self.assertEqual(result["capabilities"]["taxonomy"], {"domains": ["software"]})
         self.assertEqual(result["capabilities"]["methods"], ["oracle", "empty", "cli"])
         self.assertEqual(result["capabilities"]["requires"], ["mcp"])
 

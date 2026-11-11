@@ -3,16 +3,6 @@ export * from "./agent.ts";
 export * from "./auth.ts";
 export * from "./bench.ts";
 export * from "./calibration.ts";
-export {
-  BENCH_CATEGORIES,
-  BENCH_DOMAINS,
-  type BenchDomain,
-  benchCategory,
-  CATEGORY_LABELS,
-  CATEGORY_PROFILES,
-  DOMAIN_LABELS,
-  splitDomains,
-} from "./categories.ts";
 export * from "./cluster.ts";
 export { API_PREFIX, ApiError, Health, LoginCode, ProfileName } from "./common.ts";
 export * from "./embodied.ts";

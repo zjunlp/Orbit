@@ -143,18 +143,18 @@ def tasks(req):
                     "range": [0, 1]} for category in PERTURBATIONS]
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
-            "capabilities": {"category": "embodied-policy", "embodied": {
+            "capabilities": {"embodied": {
                                  "profile": reference["id"], "semanticProfile": reference["benchmarkProfile"],
                                  "observationMap": reference["observationMap"],
                                  **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
-                             }, "profiles": ["sim", "sync", "step"],
-                             "domains": ["embodied"], "methods": ["policy"],
+                             }, "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
                              "scoreKind": "scalar" if calvin or robodojo else "binary", "rescore": "evidence",
-                             "calibration": {"oracle": "none", "seedsVary": True},
+                             # A still policy can satisfy a goal that holds at the start.
+                             "calibration": {"empty": "any", "oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
                                             "Source": source["commit"],
                                             "Environment": config["image"], "Renderer": config.get("renderer", "osmesa"),

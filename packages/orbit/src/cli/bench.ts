@@ -3,8 +3,6 @@ import { resolve } from "node:path";
 import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
 import {
-  BENCH_DOMAINS,
-  type BenchCapabilities,
   type BenchCompare,
   type BenchCoverage,
   type BenchJobDetail,
@@ -16,9 +14,7 @@ import {
   type BenchTask,
   BenchTaxonomy,
   type BenchUsage,
-  benchCategory,
   benchCoverage,
-  CATEGORY_LABELS,
   formatCalibration,
   type MethodSummary,
   type MetricSpec,
@@ -85,13 +81,6 @@ function formatTasks(ts: BenchTask[]): string {
   for (const t of ts)
     rows.push([t.id, t.supported ? "yes" : "no", (t.supported ? t.title : t.reason) ?? ""]);
   return `${table(rows)}\n${ok}/${ts.length} supported`;
-}
-
-function categoryText(c: BenchCapabilities): string {
-  const cat = benchCategory(c);
-  if (!cat) return "undeclared";
-  const extra = [...c.profiles, ...c.domains];
-  return `${CATEGORY_LABELS[cat]}${extra.length ? ` (${extra.join(", ")})` : ""}`;
 }
 
 function formatCoverage(c: BenchCoverage, all: boolean): string {
@@ -194,7 +183,7 @@ function formatJob(d: BenchJobDetail): string {
       : []),
     ...(job.capabilities
       ? [
-          `category: ${categoryText(job.capabilities)} · recheck: ${job.capabilities.rescore}`,
+          `score: ${job.capabilities.scoreKind} · recheck: ${job.capabilities.rescore}`,
           ...Object.entries(job.capabilities.conditions).map(([key, value]) => `${key}: ${value}`),
         ]
       : []),
@@ -673,18 +662,12 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
   bench
     .command("label <benchmark>")
     .description(
-      "set what benchmark a registration is and its domains (labels do not change how it runs)",
+      "set what benchmark a registration is and its taxonomy (labels do not change how it runs)",
     )
     .option("--id <id>", "benchmark identity; registrations with the same id are one benchmark")
     .option("--title <name>", "display name of the benchmark (default: the id)")
     .option("--version <version>", "benchmark version")
     .option("--variant <variant>", "protocol variant")
-    .option(
-      "--domain <domain>",
-      `domain (repeatable): ${BENCH_DOMAINS.join(", ")}; other values are kept as tags`,
-      (v, p: string[]) => [...p, v],
-      [],
-    )
     .option("--clear", "remove the labels")
     .option("--taxonomy <json>", "replace six-axis taxonomy defaults with a JSON object")
     .option("--taxonomy-file <path>", "read six-axis taxonomy defaults from a JSON file")
@@ -697,7 +680,6 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           title?: string;
           version?: string;
           variant?: string;
-          domain: string[];
           taxonomy?: string;
           taxonomyFile?: string;
           clear?: boolean;
@@ -731,13 +713,12 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
                     },
                   }
                 : {}),
-              ...(o.domain.length ? { domains: o.domain } : {}),
               ...(taxonomy !== undefined ? { taxonomy } : {}),
             };
         const b = await c.benchLabel(name, labels);
         print(o.json, b, () => {
           const l = b.labels ?? {};
-          return `${b.name}: ${l.identity ? `identity ${l.identity.id}` : "no identity label"}${l.domains?.length ? ` · domains ${l.domains.join(", ")}` : ""}${l.taxonomy ? ` · taxonomy ${Object.keys(l.taxonomy).length} fields` : ""}`;
+          return `${b.name}: ${l.identity ? `identity ${l.identity.id}` : "no identity label"}${l.taxonomy ? ` · taxonomy ${Object.keys(l.taxonomy).length} fields` : ""}`;
         });
       },
     );

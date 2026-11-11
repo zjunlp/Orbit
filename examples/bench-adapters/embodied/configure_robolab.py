@@ -105,7 +105,7 @@ def main():
     benchmark = {
         "name": "robolab-native", "path": str(args.robolab_source.resolve()),
         "adapter": str(HERE / "adapter.py"), "resources": str(output / "resources.json"),
-        "labels": {"identity": {"id": "robolab", "name": "RoboLab"}, "domains": ["embodied"]},
+        "labels": {"identity": {"id": "robolab", "name": "RoboLab"}, "taxonomy": {"domains": ["robotics"]}},
         "config": {"image": image_id(args.benchmark_image),
                    "python": "/workspace/isaaclab/_isaac_sim/python.sh",
                    "reference": json.dumps(reference), "profileDigest": digest(reference),

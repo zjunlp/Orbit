@@ -141,7 +141,7 @@ it("passes a well-behaved integration and names what fails", () => {
   expect(by["rescore reproduces scores"]?.result).toBe("not_run");
 });
 
-it("judges against the category's and benchmark's expectations", async () => {
+it("judges against the defaults and what the benchmark declares", async () => {
   const runs = detail([
     trial("t", "empty", 1, 1),
     trial("t", "empty", 2, 0),
@@ -150,19 +150,17 @@ it("judges against the category's and benchmark's expectations", async () => {
   const by = (exp: ReturnType<typeof expectations>) =>
     Object.fromEntries(judgeCalibration(runs, { expect: exp }).map((c) => [c.name, c.result]));
   // Embodied policy: a still policy may succeed, and seeds are different initial states.
-  const policy = by(expectations({ category: "embodied-policy" } as never));
+  const policy = by(expectations({ calibration: { empty: "any", seedsVary: true } }));
   expect(policy["empty score"]).toBe("not_run");
   expect(policy["repeated seeds agree"]).toBe("not_run");
-  // Workspace default: empty must be 0, seeds must agree.
-  const ws = by(expectations({ category: "agent-workspace" } as never));
-  expect(ws["empty scores the minimum"]).toBe("failed");
-  expect(ws["repeated seeds agree"]).toBe("failed");
+  // Defaults: empty must be 0, seeds must agree; a retired category changes nothing.
+  for (const ws of [by(expectations(undefined)), by(expectations({ category: "game" } as never))]) {
+    expect(ws["empty scores the minimum"]).toBe("failed");
+    expect(ws["repeated seeds agree"]).toBe("failed");
+  }
   // A benchmark may widen it (StrongReject-style: an empty answer is safe, score 1).
   const declared = by(
-    expectations({
-      category: "fixed-input",
-      calibration: { empty: { min: 0, max: 1 }, repeat: { tolerance: 1 } },
-    } as never),
+    expectations({ calibration: { empty: { min: 0, max: 1 }, repeat: { tolerance: 1 } } }),
   );
   expect(declared["empty scores 0–1"]).toBe("passed");
   expect(declared["repeated seeds within 1"]).toBe("passed");

@@ -26,14 +26,11 @@ function registration(
     identitySource: source,
     listing: null,
     capabilities: null,
-    domains: [],
-    tags: [],
     listingError: null,
     refreshing: false,
     calibrations: [],
     jobs: 0,
     methods: [],
-    fidelity: "experimental",
   });
 }
 
@@ -59,7 +56,6 @@ it("ships one supported family per benchmark even with no local registrations", 
 it("groups explicit identities without changing the support facts or inventing name matches", () => {
   const first = registration("asi-run-a", "asi-bench");
   first.jobs = 90;
-  first.fidelity = "calibrated";
   first.taxonomy = { domains: ["finance"] };
   const second = registration("asi-run-b", "asi-bench", "label");
   const misleadingName = registration("libero", "derived-local", "derived");
@@ -73,7 +69,6 @@ it("groups explicit identities without changing the support facts or inventing n
   expect(entries.find((row) => row.id === "libero")?.registrationNames).toEqual([]);
   expect(asi[0]).not.toHaveProperty("jobs");
   expect(asi[0]).not.toHaveProperty("calibrations");
-  expect(asi[0]).not.toHaveProperty("fidelity");
 });
 
 it("links known built-in adapters and exact native semantic profiles only", () => {
@@ -99,14 +94,14 @@ it("links known built-in adapters and exact native semantic profiles only", () =
 
 it("retains profile boundaries and keeps limited integrations visibly limited", () => {
   const rows = supportedBenchmarks([]);
-  expect(rows.find((row) => row.id === "robodojo")?.verification.level).toBe("sample-checked");
-  expect(rows.find((row) => row.id === "robolab")?.verification.level).toBe("sample-checked");
+  expect(rows.find((row) => row.id === "robodojo")?.verification.detail).toMatch(/checked/);
+  expect(rows.find((row) => row.id === "robolab")?.verification.detail).toMatch(/checked/);
   const miniwob = rows.find((row) => row.id === "miniwob");
   expect(miniwob?.integrations).toHaveLength(2);
   const webvoyager = rows.find((row) => row.id === "webvoyager");
   const live = rows.find((row) => row.id === "online-mind2web");
-  expect(webvoyager?.verification.level).toBe("pending-calibration");
-  expect(live?.verification.level).toBe("pending-calibration");
+  expect(webvoyager?.verification.detail).toMatch(/pending/);
+  expect(live?.verification.detail).toMatch(/pending/);
   expect(
     webvoyager?.taxonomyGroups.some((g) => taxonomyMatches(g.taxonomy, { world: ["live"] })),
   ).toBe(false);

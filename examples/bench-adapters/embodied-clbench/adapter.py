@@ -106,9 +106,8 @@ def tasks(req):
             *(["memory", "learning-adaptation", "generalization"] if row["mode"] in SETTINGS[2:] else [])]}}
         for key, row in entries.items()], "capabilities": {
         "identity": {"id": "embodied-clbench", "name": "EmbodiedCLBench", "version": REVISION},
-        "category": "tool-workflow", "profiles": ["local-state", "mcp"], "domains": ["embodied"],
         "methods": ["codex", "claude-code", "empty", "oracle"], "requires": ["mcp"],
-        "kind": "other", "scoreKind": "binary", "rescore": "evidence",
+        "scoreKind": "binary", "rescore": "evidence",
         "taxonomy": {"domains": ["robotics"], "taskTypes": ["navigation", "manipulation"],
             "targets": ["planning", "tool-use", "perception-grounding"],
             "modalities": ["text", "image"], "interfaces": ["tool-api"], "platforms": ["simulation"],

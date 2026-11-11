@@ -27,7 +27,6 @@ export const chartography: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "adapter-tested",
     "Protocol, original dummy sample loader, real vision generation and an explicitly alternate judge checked. Released-data and default-judge calibration remain pending; ten-epoch leaderboard reducers are not implemented.",
     "docs/tasks/20261110-benchmark-gaps.md",
   ),

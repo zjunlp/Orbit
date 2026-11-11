@@ -12,7 +12,6 @@ export const calvin: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Selected real π₀.₅ sequences, per-subtask scoring and independent verification checked; full-suite evaluation remains unverified.",
     "docs/tasks/20261108-embodied-calvin-xvla.md",
   ),

@@ -14,7 +14,6 @@ export const simplerEnv: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Native reset/render/control checks and selected GR00T episodes passed. Not every grid has real-model validation.",
     nativeDocs,
   ),

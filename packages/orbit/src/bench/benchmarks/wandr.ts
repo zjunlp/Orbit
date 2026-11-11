@@ -24,7 +24,6 @@ export const wandr: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "pending-calibration",
     "Original empty calibration passed with all twelve native metrics. Nonempty grading and model calibration still require the original judge and page-fetch services; full-suite parity is unverified.",
     "docs/tasks/20261110-benchmark-gaps.md",
   ),

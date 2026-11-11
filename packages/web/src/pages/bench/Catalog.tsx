@@ -1,4 +1,3 @@
-import { benchCategory } from "@zjunlp/orbit/categories";
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { TAXONOMY_FIELDS, TAXONOMY_GROUPS, type TaxonomyField } from "@zjunlp/orbit/taxonomy";
 import { Fragment, useState } from "react";
@@ -28,12 +27,10 @@ import {
   type CalibrationReport,
   type CatalogEntry,
 } from "../../lib/api.ts";
-import { CATEGORY_LABELS, DOMAIN_LABELS } from "../../lib/category.ts";
 import { ago, dateTime, jobPath, trialPath } from "../../lib/format.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import {
   fieldValues,
-  matchesLegacyDomain,
   matchesTaxonomy,
   readTaxonomyFilters,
   type TaxonomyFilters,
@@ -58,27 +55,11 @@ export function calState(e: CatalogEntry): CalState {
   return r.calibrated ? "passed" : "failed";
 }
 
-const FIDELITY: Record<CatalogEntry["fidelity"], { label: string; title: string }> = {
-  experimental: { label: "Experimental", title: "No passed calibration recorded" },
-  calibrated: { label: "Sample calibrated", title: "The latest sample calibration passed" },
-  "sample-aligned": {
-    label: "Sample aligned",
-    title: "Adapter-declared agreement with the native runner on sampled tasks",
-  },
-  "agent-compared": {
-    label: "Agent compared",
-    title: "Adapter-declared comparison with officially reported results",
-  },
-};
-
 const identity = (e: CatalogEntry) =>
   e.capabilities?.conditions.Identity ?? e.capabilities?.conditions.Benchmark;
 export const benchmarkKey = (e: { identity: { id: string } }) => e.identity.id;
 export const distinct = (entries: { identity: { id: string } }[]) =>
   new Set(entries.map(benchmarkKey)).size;
-const legacyCategory = (e: CatalogEntry) =>
-  benchCategory(e.capabilities ?? undefined) ??
-  (e.listing ? "none" : e.listingError ? "failed" : "listing");
 
 const EVIDENCE = [
   {
@@ -133,8 +114,6 @@ export function BenchCatalogView() {
   );
   const q = (loc.query.get("q") ?? "").trim().toLowerCase();
   const ev = loc.query.get("ev") ?? "all";
-  const category = loc.query.get("category") ?? "all";
-  const legacyDomain = loc.query.get("domain") ?? "all";
   const view = loc.query.get("view") ?? "grid";
   const order = loc.query.get("sort") ?? "name";
   const open = loc.query.get("open");
@@ -143,15 +122,12 @@ export function BenchCatalogView() {
     const labels = taxonomyFields.flatMap((field) =>
       (e.taxonomy?.[field] ?? []).map((v) => taxonomyLabel(field, v)),
     );
-    return `${e.benchmark.name} ${e.identity.name} ${e.identity.id} ${identity(e) ?? ""} ${e.benchmark.adapter} ${e.tags.join(" ")} ${labels.join(" ")}`
+    return `${e.benchmark.name} ${e.identity.name} ${e.identity.id} ${identity(e) ?? ""} ${e.benchmark.adapter} ${labels.join(" ")}`
       .toLowerCase()
       .includes(q);
   });
   const base = searched.filter(
-    (e) =>
-      (category === "all" || legacyCategory(e) === category) &&
-      matchesLegacyDomain(e, legacyDomain) &&
-      (ev === "all" || (EVIDENCE.find((f) => f.key === ev)?.test(e) ?? false)),
+    (e) => ev === "all" || (EVIDENCE.find((f) => f.key === ev)?.test(e) ?? false),
   );
   const shown = base
     .filter((e) => matchesTaxonomy(e, filters))
@@ -169,14 +145,11 @@ export function BenchCatalogView() {
   const toggle = (field: TaxonomyField, value: string) =>
     setQuery({
       [field]: toggleTaxonomyValue(filters, field, value).join(",") || null,
-      ...(field === "domains" ? { domain: null } : {}),
     });
   const clear = () =>
     setQuery({
       ...Object.fromEntries(taxonomyFields.map((f) => [f, null])),
       q: null,
-      domain: null,
-      category: null,
       ev: null,
     });
   const refresh = async () => {
@@ -261,7 +234,7 @@ export function BenchCatalogView() {
         </button>
       </div>
       <TaxonomyFacets entries={base} filters={filters} toggle={toggle} />
-      {(active.length > 0 || category !== "all" || legacyDomain !== "all" || q || ev !== "all") && (
+      {(active.length > 0 || q || ev !== "all") && (
         <section className="library-active-filters" aria-label="Active filters">
           <IconFilter size={14} />
           {active.map(({ field, value }) => (
@@ -276,27 +249,6 @@ export function BenchCatalogView() {
               <IconX size={11} />
             </button>
           ))}
-          {category !== "all" && (
-            <button
-              type="button"
-              className="filter-token"
-              onClick={() => setQuery({ category: null })}
-            >
-              Legacy: {CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] ?? category}
-              <IconX size={11} />
-            </button>
-          )}
-          {legacyDomain !== "all" && (
-            <button
-              type="button"
-              className="filter-token"
-              onClick={() => setQuery({ domain: null })}
-            >
-              Legacy domain:{" "}
-              {DOMAIN_LABELS[legacyDomain as keyof typeof DOMAIN_LABELS] ?? legacyDomain}
-              <IconX size={11} />
-            </button>
-          )}
           {q && (
             <button type="button" className="filter-token" onClick={() => setQuery({ q: null })}>
               Search: {loc.query.get("q")}
@@ -756,11 +708,7 @@ function ClassificationDetail({ e }: { e: CatalogEntry }) {
               ? "Manifest adapter"
               : "Native adapter"}
         </b>
-        {e.capabilities?.category && (
-          <span>{CATEGORY_LABELS[e.capabilities.category]} · legacy integration category</span>
-        )}
       </div>
-      {e.tags.length > 0 && <p className="faint">Source tags: {e.tags.join(" · ")}</p>}
     </div>
   );
 }
@@ -1137,7 +1085,7 @@ function ConditionsDetail({ e }: { e: CatalogEntry }) {
           <>
             <dt>Parity evidence</dt>
             <dd>
-              {FIDELITY[caps.parity.level].label}: {caps.parity.evidence}
+              {caps.parity.evidence}
               {caps.parity.checkedAt ? ` (${caps.parity.checkedAt})` : ""}
             </dd>
           </>

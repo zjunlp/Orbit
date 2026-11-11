@@ -551,9 +551,7 @@ export const asiAdapter: AdapterHandlers = {
   info: () => ({
     capabilities: {
       identity: { id: "asi-bench", name: "ASI-Bench" },
-      category: "agent-workspace",
-      profiles: ["ml-experiment"],
-      domains: ["science"],
+      taxonomy: { domains: ["science"] },
       methods: ["oracle", "empty", "codex", "claude-code"],
       conditions: { Runner: "Native ASI runner and scorer" },
       scoreKind: "scalar",

@@ -21,7 +21,6 @@ export const longds: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "A complete native Codex task was checked. Real Claude execution and continuation remain unverified.",
     "docs/tasks/20260930-r3-bench.md",
   ),

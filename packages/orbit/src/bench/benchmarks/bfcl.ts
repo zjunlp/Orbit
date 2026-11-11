@@ -26,7 +26,6 @@ export const bfcl: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Reference, empty and sampled CLI checks passed. Orbit's scaffold is not the native leaderboard prompting protocol.",
     "docs/tasks/20261105-sample-bfcl-multiturn.md",
   ),

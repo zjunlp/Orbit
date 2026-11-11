@@ -21,7 +21,6 @@ export const embodiedFirstExam: Omit<SupportedBenchmark, "registrationNames"> = 
     ),
   ],
   verification: checked(
-    "sample-checked",
     "MetaWorld+ sample calibration and a CLI-agent sample were checked; this does not validate every included suite.",
     "docs/tasks/20261104-p6-mainline.md",
   ),

@@ -17,13 +17,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { parse as parseToml } from "smol-toml";
-import {
-  BENCH_CATEGORIES,
-  type BenchCategory,
-  type BenchTask,
-  type FailureKind,
-  type Method,
-} from "../contracts/index.ts";
+import type { BenchTask, FailureKind, Method } from "../contracts/index.ts";
 import type { AdapterHandlers, RunDescription, ScoreReply } from "./adapter.ts";
 import { type ComposePlan, composeFile, parseCompose } from "./compose.ts";
 
@@ -99,8 +93,8 @@ export interface HarborOptions {
   /** `any`: do not enforce solve/verifier `gpu_types` (a recorded deviation for each phase). */
   gpuTypes?: string;
   /**
-   * The integration category of the tasks (default agent-workspace); Harbor is only the format, so a
-   * dataset of games or tool workflows declares its own. `profiles` is a comma-separated list.
+   * Deprecated (design §9.10): accepted so older registrations keep working; `category` stays a
+   * recorded condition so their jobs remain comparable, but neither changes what Orbit does.
    */
   category?: string;
   profiles?: string;
@@ -122,8 +116,6 @@ export function harborOptions(config: Record<string, string>): HarborOptions {
   if (config.allowlistNetwork && config.allowlistNetwork !== "public")
     throw new Error("allowlistNetwork must be public");
   if (config.gpuTypes && config.gpuTypes !== "any") throw new Error("gpuTypes must be any");
-  if (config.category && !(BENCH_CATEGORIES as readonly string[]).includes(config.category))
-    throw new Error(`category must be one of ${BENCH_CATEGORIES.join(", ")}`);
   return config;
 }
 
@@ -940,20 +932,14 @@ export const harborAdapter: AdapterHandlers = {
     findHarborTasks(req.benchmark.path, harborOptions(req.benchmark.config)).map(toBenchTask),
   info: (req, tasks) => {
     const opts = harborOptions(req.benchmark.config);
-    const declared = opts.profiles
-      ?.split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
-    const profiles =
-      declared ?? [...new Set(tasks.map((t) => t.tags.profile ?? "terminal"))].sort();
     const embodied = tasks.some((t) => t.tags.domain === "embodied");
     return {
       capabilities: {
-        category: (opts.category ?? "agent-workspace") as BenchCategory,
-        profiles,
-        domains: embodied ? ["embodied"] : [],
         ...(embodied
-          ? { identity: { id: "embodied-first-exam", name: "Embodied First Exam" } }
+          ? {
+              identity: { id: "embodied-first-exam", name: "Embodied First Exam" },
+              taxonomy: { domains: ["robotics"] },
+            }
           : {}),
         methods: ["oracle", "empty", "cli"],
         conditions: {

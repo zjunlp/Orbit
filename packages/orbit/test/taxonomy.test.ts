@@ -1,8 +1,12 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
 import { expect, it, vi } from "vitest";
 import { catalogTaxonomy, resolveTaxonomy } from "../src/bench/catalog.ts";
 import { sameMethodSetup } from "../src/bench/consolidate.ts";
 import { comparisonCondition } from "../src/bench/hub.ts";
+import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { registerBench } from "../src/cli/bench.ts";
 import { OrbitClient } from "../src/client/index.ts";
 import {
@@ -22,9 +26,7 @@ const benchmark = Benchmark.parse({
   updatedAt: "",
 });
 const capabilities = BenchCapabilities.parse({
-  category: "agent-workspace",
-  profiles: ["terminal"],
-  domains: ["science"],
+  taxonomy: { domains: ["science"] },
   methods: ["empty"],
   conditions: {},
   scoreKind: "scalar",
@@ -101,27 +103,49 @@ it("lets task fields replace registration defaults without inheriting null or em
   });
 });
 
-it("does not guess targets, task types or modalities from legacy integration categories", () => {
-  expect(
-    catalogTaxonomy(benchmark, { ...capabilities, domains: [] }, [task("a")]).taxonomy,
-  ).toEqual({});
-  expect(
-    catalogTaxonomy(benchmark, { ...capabilities, domains: ["embodied", "knowledge", "gui-web"] }, [
-      task("a"),
-    ]).taxonomy,
-  ).toEqual({ domains: ["robotics"] });
-  expect(
-    catalogTaxonomy(
-      benchmark,
-      { ...capabilities, domains: ["knowledge", "data-analysis", "constructor"] },
-      [task("a")],
-    ).taxonomy,
-  ).toEqual({});
+it("ignores retired category, profile and domain fields of older adapters", () => {
+  const old = BenchCapabilities.parse({
+    category: "gui",
+    profiles: ["browser"],
+    domains: ["embodied", "gui-web"],
+    kind: "browser",
+    methods: ["empty"],
+    conditions: {},
+    scoreKind: "binary",
+    rescore: "evidence",
+  });
+  expect(old).not.toHaveProperty("category");
+  expect(old).not.toHaveProperty("domains");
+  expect(catalogTaxonomy(benchmark, old, [task("a")]).taxonomy).toEqual({});
 });
 
-it("updates taxonomy through the CLI without dropping identity or legacy domain labels", async () => {
+it("keeps legacy label domains as taxonomy domains when reading older registrations", () => {
+  const home = mkdtempSync(join(tmpdir(), "orbit-registry-"));
+  try {
+    const file = join(home, "benchmarks.json");
+    const entry = (labels: object) => ({ ...benchmark, labels });
+    writeFileSync(
+      file,
+      JSON.stringify({
+        benchmarks: [
+          entry({ domains: ["science", "seed31415"] }),
+          { ...entry({ domains: ["embodied"], taxonomy: { domains: ["games"] } }), name: "b" },
+          { ...entry({ identity: { id: "x", name: "X" }, domains: ["knowledge"] }), name: "c" },
+        ],
+      }),
+    );
+    const [a, b, c] = new BenchmarkRegistry(file).list();
+    expect(a?.labels).toEqual({ taxonomy: { domains: ["science"] } });
+    expect(b?.labels).toEqual({ taxonomy: { domains: ["games"] } });
+    expect(c?.labels).toEqual({ identity: { id: "x", name: "X" } });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+it("updates taxonomy through the CLI without dropping the identity label", async () => {
   const client = new OrbitClient({ url: "http://unused", token: "fixture", pid: 0 });
-  const labels = { identity: { id: "fx", name: "Fixture" }, domains: ["science"] };
+  const labels = { identity: { id: "fx", name: "Fixture" } };
   vi.spyOn(client, "benchmarks").mockResolvedValue([{ ...benchmark, labels }]);
   const update = vi.spyOn(client, "benchLabel").mockResolvedValue(benchmark);
   const program = new Command();

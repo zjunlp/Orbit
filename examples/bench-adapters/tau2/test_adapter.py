@@ -50,15 +50,14 @@ class ProtocolTests(unittest.TestCase):
         adapter.write_json(self.root / "verify/result.json", body)
         return body
 
-    def test_sdk_protocol_and_category(self):
+    def test_sdk_protocol_and_calibration(self):
         out = io.StringIO()
         code = adapter.main(adapter.tasks, adapter.solve, adapter.verify, adapter.score,
                             argv=["tasks"], stdin=io.StringIO(json.dumps(self.req)), stdout=out)
         self.assertEqual(code, 0)
         body = json.loads(out.getvalue())
         caps = body["capabilities"]
-        self.assertEqual(caps["category"], "user-session")
-        self.assertEqual(caps["profiles"], ["text", "single-control"])
+        self.assertNotIn("category", caps)
         self.assertEqual(caps["calibration"], {"oracle": "max", "empty": "any", "repeat": "exact", "seedsVary": False})
         self.assertEqual(len(body["tasks"]), 4)
         for row in body["tasks"]:

@@ -90,7 +90,7 @@ class AdapterTests(unittest.TestCase):
         caps = adapter.tasks(self.req)["capabilities"]
         self.assertEqual(caps["identity"]["version"], evidence.MINIWOB_COMMIT)
         self.assertEqual(caps["identity"]["variant"], "browsergym")
-        self.assertEqual(caps["domains"], ["gui-web"])
+        self.assertNotIn("domains", caps)
         self.assertEqual(caps["methods"], ["external", "empty", "cli"])
         self.assertEqual(caps["rescore"], "evidence")
         self.assertEqual(caps["conditions"]["Step limit"], "7")

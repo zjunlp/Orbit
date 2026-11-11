@@ -55,6 +55,6 @@ external-entrypoint list is a different view.
 
 Each benchmark is described by three things only: its six-dimensional classification, how Orbit
 integrates it (`harbor`, `manifest`, `sdk` or `native`, plus the concrete adapter), and its calibration
-record. Older records may mention the retired C1–C7 categories; they are compatibility fields only.
+record. Older records may mention the retired C1–C7 categories; those fields are no longer part of the contracts.
 
 [New native integrations](tasks/20261110-benchmark-gaps.md) · [Original-suite availability and protocol gaps](guides/benchmark-availability.md)

@@ -39,7 +39,6 @@
     "./contracts": "./src/contracts/index.ts",
     "./naming": "./src/contracts/naming.ts",
     "./metrics": "./src/contracts/metrics.ts",
-    "./categories": "./src/contracts/categories.ts",
     "./taxonomy": "./src/contracts/taxonomy.ts"
   },
   "publishConfig": {
@@ -57,10 +56,6 @@
       "./metrics": {
         "types": "./dist/metrics.d.mts",
         "import": "./dist/metrics.mjs"
-      },
-      "./categories": {
-        "types": "./dist/categories.d.mts",
-        "import": "./dist/categories.mjs"
       },
       "./taxonomy": {
         "types": "./dist/taxonomy.d.mts",

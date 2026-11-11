@@ -23,7 +23,6 @@ export const onlineMind2web: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "pending-calibration",
     "Subset and evaluator boundaries reviewed; positive model calibration is still pending.",
     adapter("cua-lite"),
   ),

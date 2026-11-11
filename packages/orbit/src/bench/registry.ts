@@ -8,13 +8,35 @@ import {
 } from "../contracts/index.ts";
 import { nowIso } from "../lib/ids.ts";
 import { writePrivateJson } from "../lib/private-json.ts";
+import { legacyTaxonomy } from "./catalog.ts";
 
-/** Entries written before adapter settings moved into `config` (asi `python`, `instances`). */
+/**
+ * Entries written by older versions: adapter settings before they moved into `config` (asi
+ * `python`, `instances`), and label `domains` before the taxonomy (kept as taxonomy domains).
+ */
 function upgrade(v: unknown): unknown {
   if (!v || typeof v !== "object") return v;
-  const { python, instances, ...rest } = v as Record<string, unknown> & { config?: object };
+  const { python, instances, ...rest } = v as Record<string, unknown> & {
+    config?: object;
+    labels?: { domains?: unknown; taxonomy?: { domains?: unknown } };
+  };
   const old = Object.entries({ python, instances }).filter(([, x]) => typeof x === "string");
-  return old.length ? { ...rest, config: { ...Object.fromEntries(old), ...rest.config } } : rest;
+  const out = old.length
+    ? { ...rest, config: { ...Object.fromEntries(old), ...rest.config } }
+    : rest;
+  const labels = rest.labels;
+  if (!labels || !Array.isArray(labels.domains)) return out;
+  const { domains, ...kept } = labels;
+  const words = domains.filter((d): d is string => typeof d === "string");
+  const taxonomy =
+    labels.taxonomy?.domains === undefined ? legacyTaxonomy(words, true) : { domains: undefined };
+  return {
+    ...out,
+    labels: {
+      ...kept,
+      ...(taxonomy.domains ? { taxonomy: { ...labels.taxonomy, domains: taxonomy.domains } } : {}),
+    },
+  };
 }
 
 export class BenchmarkRegistry {

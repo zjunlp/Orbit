@@ -1,10 +1,8 @@
-import { benchCategory } from "@zjunlp/orbit/categories";
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { IconCompare, IconFlask } from "../../components/icons.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { Empty, Link, Loading } from "../../components/ui.tsx";
 import { api, type BenchJobList } from "../../lib/api.ts";
-import { BENCH_CATEGORIES, CATEGORY_LABELS, categoryLabel } from "../../lib/category.ts";
 import { ago, jobPath } from "../../lib/format.ts";
 import { navigate, onLinkClick, setQuery, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
@@ -21,7 +19,6 @@ export function BenchJobs() {
   const tab = "jobs" as "jobs" | "catalog";
   const query = loc.query.get("q") ?? "";
   const status = loc.query.get("state") ?? "all";
-  const category = loc.query.get("category") ?? "all";
   const toggle = (id: string) => {
     const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
     setQuery({ sel: next.join(",") || null });
@@ -31,7 +28,6 @@ export function BenchJobs() {
     const state = verifying ? "verifying" : j.state;
     return (
       (status === "all" || state === status) &&
-      (category === "all" || benchCategory(j.capabilities) === category) &&
       `${jobLabel(j)} ${j.id} ${j.spec.benchmark} ${j.spec.methods.map((m) => m.name).join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase())
@@ -89,21 +85,6 @@ export function BenchJobs() {
                   <option value="verifying">Verification in progress</option>
                   <option value="done">Ended</option>
                   <option value="cancelled">Cancelled</option>
-                </select>
-                <select
-                  className="input"
-                  aria-label="Filter by category"
-                  value={category}
-                  onChange={(e) =>
-                    setQuery({ category: e.target.value === "all" ? null : e.target.value })
-                  }
-                >
-                  <option value="all">All categories</option>
-                  {BENCH_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {CATEGORY_LABELS[c]}
-                    </option>
-                  ))}
                 </select>
               </div>
               {jobs.error && (
@@ -205,8 +186,8 @@ function JobTable({
               </td>
               <td>
                 {j.spec.benchmark}
-                {categoryLabel(j.capabilities) && (
-                  <div className="faint">{categoryLabel(j.capabilities)}</div>
+                {j.capabilities?.identity && j.capabilities.identity.id !== j.spec.benchmark && (
+                  <div className="faint">{j.capabilities.identity.name}</div>
                 )}
               </td>
               <td>

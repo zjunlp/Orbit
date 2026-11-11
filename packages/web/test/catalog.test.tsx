@@ -36,7 +36,6 @@ const entry = (calibrations: CalibrationReport[]) =>
     calibrations,
     jobs: 1,
     methods: [],
-    fidelity: "experimental",
   }) as unknown as CatalogEntry;
 
 it("tells passed, failed, running and missing calibrations apart", () => {

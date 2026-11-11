@@ -18,7 +18,6 @@ import {
   isAgentMethod,
   type Method,
   type MethodSummary,
-  splitDomains,
   TAXONOMY_VALUES,
   type TaxonomyField,
 } from "../contracts/index.ts";
@@ -74,11 +73,7 @@ export function benchIdentity(
   };
 }
 
-/** Domains and tags: the registration's labels replace the adapter's declaration. */
-export function benchDomains(b: Benchmark, caps: BenchCapabilities | null) {
-  return splitDomains(b.labels?.domains ?? caps?.domains ?? []);
-}
-
+/** Old free-form domain words with an exact taxonomy domain; other words carry no taxonomy. */
 const LEGACY_DOMAINS: Record<string, NonNullable<BenchTaxonomy["domains"]>[number]> = {
   software: "software",
   "machine-learning": "machine-learning",
@@ -87,7 +82,11 @@ const LEGACY_DOMAINS: Record<string, NonNullable<BenchTaxonomy["domains"]>[numbe
   games: "games",
 };
 
-function legacyTaxonomy(domains: string[] | undefined, explicit = false): BenchTaxonomy {
+/**
+ * Taxonomy domains of old domain words (task `domain` tags, labels written before the taxonomy).
+ * `explicit`: an empty list is a known empty set rather than nothing said.
+ */
+export function legacyTaxonomy(domains: string[] | undefined, explicit = false): BenchTaxonomy {
   if (!domains) return {};
   const values = domains.flatMap((d) => {
     const value = Object.hasOwn(LEGACY_DOMAINS, d) ? LEGACY_DOMAINS[d] : undefined;
@@ -117,12 +116,7 @@ export function catalogTaxonomy(
   capabilities: BenchCapabilities | null,
   tasks: BenchTask[] | null,
 ): Pick<CatalogEntry, "taxonomy" | "taxonomyGroups"> {
-  const defaults = resolveTaxonomy(
-    legacyTaxonomy(capabilities?.domains),
-    capabilities?.taxonomy,
-    legacyTaxonomy(benchmark.labels?.domains, true),
-    benchmark.labels?.taxonomy,
-  );
+  const defaults = resolveTaxonomy(capabilities?.taxonomy, benchmark.labels?.taxonomy);
   if (tasks === null)
     return { taxonomy: defaults, taxonomyGroups: [{ taxonomy: defaults, taskCount: null }] };
   const groups = new Map<string, { taxonomy: BenchTaxonomy; taskCount: number }>();
@@ -184,21 +178,16 @@ export function catalogEntry(
     }
   }
   const view = listing.data && listing.at ? catalogListing(listing.at, listing.data) : null;
-  const parity = view?.capabilities?.parity?.level;
   const benchmarkChecks = calibrations.filter((c) => c.mode !== "policy");
   const policyChecks = calibrations.filter((c) => c.mode === "policy");
-  const lastDone = benchmarkChecks.find((c) => c.phase === "done");
   const capabilities = view?.capabilities ?? jobs.find((j) => j.capabilities)?.capabilities ?? null;
   const { identity, source } = benchIdentity(benchmark, capabilities);
-  const { domains, tags } = benchDomains(benchmark, capabilities);
   return {
     benchmark,
     listing: view,
     capabilities,
     identity,
     identitySource: source,
-    domains,
-    tags,
     ...catalogTaxonomy(benchmark, capabilities, listing.data?.tasks ?? null),
     listingError: listing.error,
     refreshing: listing.refreshing,
@@ -206,6 +195,5 @@ export function catalogEntry(
     ...(policyChecks.length ? { policyChecks: policyChecks.slice(0, 5) } : {}),
     jobs: jobs.length,
     methods: [...methods.values()],
-    fidelity: parity ?? (lastDone?.calibrated ? "calibrated" : "experimental"),
   };
 }

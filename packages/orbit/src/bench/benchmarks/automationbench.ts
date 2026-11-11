@@ -28,7 +28,6 @@ export const automationbench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Original empty scoring and a real model rollout checked. Full-suite model evaluation and private leaderboard parity are unverified.",
     "docs/tasks/20261110-benchmark-gaps.md",
   ),

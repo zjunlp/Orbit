@@ -14,7 +14,6 @@ export const rlbench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "MT100 and RVT both ran with native CPU rendering. A fixed RVT replay matched the upstream environment.",
     "docs/tasks/20261109-rlbench.md",
   ),

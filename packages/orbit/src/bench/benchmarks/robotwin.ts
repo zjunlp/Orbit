@@ -14,7 +14,6 @@ export const robotwin: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Native catalog/control checks and selected π₀.₅ / X-VLA episodes passed. Full-suite score equivalence remains unverified.",
     nativeDocs,
   ),

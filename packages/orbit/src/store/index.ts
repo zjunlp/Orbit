@@ -100,6 +100,18 @@ const MIGRATIONS = [
        CASE WHEN r.run_id = t.solve_run THEN 'solve' ELSE 'verify' END
      FROM trial_runs_legacy r JOIN trials t ON t.id = r.trial_id;
    DROP TABLE trial_runs_legacy;`,
+  // Calibration expectations no longer come from the retired integration category (design §9.10):
+  // freeze what each category implied into earlier calibration jobs, so their reports stay the same.
+  `UPDATE bench_jobs SET doc = json_set(doc, '$.capabilities.calibration', json(json_patch(
+     CASE json_extract(doc, '$.capabilities.category')
+       WHEN 'embodied-policy' THEN '{"empty":"any","oracle":"max","repeat":"exact","seedsVary":true}'
+       WHEN 'fixed-input' THEN '{"empty":"any","oracle":"max","repeat":"exact","seedsVary":false}'
+       ELSE '{"empty":"min","oracle":"none","repeat":{"tolerance":1},"seedsVary":false}'
+     END,
+     COALESCE(json_extract(doc, '$.capabilities.calibration'), '{}'))))
+   WHERE json_extract(doc, '$.spec.calibration') IS NOT NULL
+     AND json_extract(doc, '$.capabilities.category')
+       IN ('embodied-policy', 'fixed-input', 'user-session', 'game');`,
 ];
 
 /** Mirroring progress of a run placed on another node (primary only). */

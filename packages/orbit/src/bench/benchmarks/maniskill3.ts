@@ -15,7 +15,6 @@ export const maniskill3: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "Native tabletop checks and selected OFT Plate-25 episodes passed. AssemblingKits and TurnFaucet still require asset validation.",
     "docs/tasks/20261109-embodied-benchmark-coverage.md",
   ),

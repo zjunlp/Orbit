@@ -18,9 +18,9 @@ import { z } from "zod";
 import {
   type AdapterRequest,
   BenchCapabilities,
-  BenchCategory,
   BenchIdentity,
   BenchTask,
+  BenchTaxonomy,
   CalibrationExpect,
   FailureKind,
   legacySeed,
@@ -81,18 +81,14 @@ const Manifest = z.object({
   version: z.literal(1),
   /** Default image of every run (a digest pins the conditions; a tag is recorded as mutable). */
   image: z.string().min(1),
-  /** Deprecated integration category and profiles (design §9.10), kept for compatibility. */
-  category: BenchCategory.optional(),
-  profiles: z.array(z.string()).default([]),
-  domains: z.array(z.string()).default([]),
   identity: BenchIdentity.optional(),
+  taxonomy: BenchTaxonomy.optional(),
   calibration: CalibrationExpect.optional(),
   /**
    * Initial states (episodes) per task: a trial runs one, seed n is episode n-1 (`{{episode}}`), and
    * seeds beyond it are refused. Without it, seeds are repeats of the same task.
    */
   episodes: z.number().int().positive().max(100_000).optional(),
-  kind: z.enum(["browser", "desktop", "mobile", "other"]).default("other"),
   scoreKind: BenchCapabilities.shape.scoreKind.default("scalar"),
   conditions: z.record(z.string().max(80), z.string().max(2000)).default({}),
   official: OfficialRule.optional(),
@@ -330,12 +326,9 @@ export function episodeOf(m: Manifest, seed: number): number {
 
 function capabilities(m: Manifest) {
   return {
-    ...(m.category ? { category: m.category } : {}),
-    profiles: m.profiles,
-    domains: m.domains,
     ...(m.identity ? { identity: m.identity } : {}),
+    ...(m.taxonomy ? { taxonomy: m.taxonomy } : {}),
     ...(m.calibration ? { calibration: m.calibration } : {}),
-    kind: m.kind,
     methods: Object.keys(m.methods),
     scoreKind: m.scoreKind,
     rescore: "evidence" as const,

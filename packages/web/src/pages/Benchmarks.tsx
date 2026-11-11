@@ -7,8 +7,7 @@ import { BenchCatalogView } from "./bench/Catalog.tsx";
 
 export function BenchmarksPage() {
   const { query } = useLocation();
-  const local =
-    query.get("mode") === "local" || ["category", "domain", "ev"].some((key) => query.has(key));
+  const local = query.get("mode") === "local" || query.has("ev");
   return (
     <>
       <TopBar crumbs={[{ label: "Benchmarks" }]}>

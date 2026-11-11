@@ -22,7 +22,6 @@ export const posttrainbench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "adapter-tested",
     "Adapter fixtures checked. A full training run is not implied by adapter availability.",
     "docs/tasks/20261015-bench-adapters.md",
   ),

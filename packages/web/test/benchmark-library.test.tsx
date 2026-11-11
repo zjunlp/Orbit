@@ -47,7 +47,6 @@ const definition: SupportedBenchmark = {
     { name: "Fixture adapter", url: "https://example.test/guide", scope: "A bounded test subset." },
   ],
   verification: {
-    level: "pending-calibration",
     detail: "The adapter exists; real environment calibration remains pending.",
     url: "https://example.test/validation",
   },
@@ -71,14 +70,11 @@ function registration(name: string): CatalogEntry {
     capabilities: null,
     identity: { id: definition.id, name: definition.name },
     identitySource: "adapter",
-    domains: ["science"],
-    tags: [],
     listingError: null,
     refreshing: false,
     calibrations: [],
     jobs: 9876,
     methods: [],
-    fidelity: "experimental",
   };
 }
 
@@ -130,12 +126,12 @@ it("filters one protocol at a time instead of combining a family display union",
   expect(renderToStaticMarkup(<BenchmarkLibrary />)).toContain("<h2>Fixture Benchmark</h2>");
 });
 
-it("shows pending verification honestly and keeps setup links inside expanded details", () => {
+it("shows what was checked as facts and keeps setup links inside expanded details", () => {
   const entry = libraryEntry({ ...definition, registrationNames: ["fixture-local"] });
   const closed = renderToStaticMarkup(
     <SupportedCard entry={entry} open={false} toggle={vi.fn()} />,
   );
-  expect(closed).toContain("Calibration pending");
+  expect(closed).toContain("1 integration");
   expect(closed).not.toContain("Sample checked");
   expect(closed).not.toContain("fixture-local");
   const opened = renderToStaticMarkup(<SupportedCard entry={entry} open toggle={vi.fn()} />);

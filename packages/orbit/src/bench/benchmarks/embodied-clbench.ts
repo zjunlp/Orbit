@@ -48,7 +48,6 @@ export const embodiedClbench: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "sample-checked",
     "A native basic task and complete in-context sequence passed reference/empty and real visual CLI Agent checks. Full-suite parity is unverified.",
     "docs/tasks/20261110-embodied-harness-benchmarks.md",
   ),

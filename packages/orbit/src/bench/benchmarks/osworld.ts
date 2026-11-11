@@ -21,7 +21,6 @@ export const osworld: Omit<SupportedBenchmark, "registrationNames"> = {
     ),
   ],
   verification: checked(
-    "pending-calibration",
     "Adapter fixtures exist; real KVM-backed calibration has not run.",
     adapter("osworld-v2"),
   ),

@@ -47,7 +47,6 @@ def tasks(req):
             "capabilities": {
                 "identity": {"id": "automationbench", "name": "AutomationBench", "version": "1.0.6",
                              "variant": cfg.get("split", "public")},
-                "category": "tool-workflow", "profiles": ["local-state"], "domains": ["business"],
                 "methods": ["empty", "external"], "scoreKind": "binary", "rescore": "score",
                 "conditions": {"Source": REVISION, "Agent": "Unmodified auto-bench native tool agent; API toolset",
                                "Score": "Original strict task_completed_correctly; partial_credit reported separately",
