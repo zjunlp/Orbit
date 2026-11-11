@@ -1,29 +1,25 @@
 // One bench trial (task × method × seed) on one page: its outcome and issues, the solve → verify
 // timeline with measured use, then tabs. The adapter's `review` decides the content tabs (one per
-// declared file, rendered by kind; Grader from its items; Details for its facts and any fields this
-// UI does not know). Without a review (older trials and adapters) the page guesses: the solve's
-// Markdown report and the verifier's JSON. The Agent session and all outputs are always there.
+// declared file, rendered by kind through `FILE_VIEWS`; Grader from its items; Details for its facts
+// and any fields this UI does not know). Without a review (older trials and adapters) the page
+// guesses: the solve's Markdown report and the verifier's JSON (trial/Legacy.tsx). The Agent
+// session and all outputs are always there.
 import { fmtMetric, type MetricDef, metricValue, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { planRank, sampleLabel, sampleOrder } from "@zjunlp/orbit/naming";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { IconAlert, IconFile, IconFlask } from "../components/icons.tsx";
-import { joinPath, Markdown } from "../components/Markdown.tsx";
+import { IconAlert, IconFlask } from "../components/icons.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { Empty, Link, Loading, StateBadge, toast, useNow } from "../components/ui.tsx";
 import {
   api,
   type BenchJob,
-  fileUrl,
   type Outcome,
   type Review,
-  type ReviewFile,
-  type ReviewItem,
   type Run,
   type Scoring,
   type Trial,
 } from "../lib/api.ts";
 import {
-  bytes,
   dateTime,
   duration,
   fmtScore,
@@ -34,16 +30,14 @@ import {
   trialPath,
 } from "../lib/format.ts";
 import { useHotkeys } from "../lib/hotkeys.ts";
-import { reportCandidates } from "../lib/report.ts";
-import { extraFields, resolveKind, showValue } from "../lib/review.ts";
+import { extraFields, REVIEW_FIELDS, resolveKind } from "../lib/review.ts";
 import { navigate, setQuery, useLocation } from "../lib/router.ts";
 import { upsertRun, useRun } from "../lib/runs-store.ts";
 import { useAsync } from "../lib/use.ts";
-import { ArtifactsTab, Csv } from "./run/Artifacts.tsx";
+import { ArtifactsTab } from "./run/Artifacts.tsx";
 import { SessionTab } from "./run/Session.tsx";
-import { ConversationFile } from "./trial/Conversation.tsx";
-import { EpisodeFile, VideoPreview } from "./trial/Episode.tsx";
-import { TrajectoryFile } from "./trial/Trajectory.tsx";
+import { GraderView, ReportView } from "./trial/Legacy.tsx";
+import { DetailsView, FILE_VIEWS, GraderItems, isInteractive } from "./trial/Review.tsx";
 
 interface TabDef {
   key: string;
@@ -96,12 +90,8 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const tabs: TabDef[] = useMemo(() => {
     if (!review) return LEGACY_TABS;
     const out: TabDef[] = review.files
-      .map((f, i) => ({
-        key: `f${i}`,
-        label: f.label,
-        trajectory: f.kind === "trajectory" || f.kind === "conversation",
-      }))
-      .sort((a, b) => Number(b.trajectory) - Number(a.trajectory));
+      .map((f, i) => ({ key: `f${i}`, label: f.label, interactive: isInteractive(f) }))
+      .sort((a, b) => Number(b.interactive) - Number(a.interactive));
     if (review.items.length) out.push({ key: "grader", label: "Grader" });
     if (Object.keys(review.details).length || extraFields(review, REVIEW_FIELDS).length)
       out.push({ key: "details", label: "Details" });
@@ -150,8 +140,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const o = trial.outcome;
   const method = job.spec.methods.find((m) => m.name === trial.method);
   const evidence = job.capabilities?.rescore === "evidence";
-  const gui =
-    review?.files.some((f) => f.kind === "trajectory" || f.kind === "conversation") ?? false;
+  const gui = review?.files.some(isInteractive) ?? false;
   const nav = neighbours(d.data.trials, trial, job.spec.samplePlan);
   const rescoreLabel = evidence ? "Recheck evidence" : "Rescore";
   const rescore = async () => {
@@ -331,8 +320,6 @@ const LEGACY_TABS: TabDef[] = [
   { key: "judge", label: "Grader" },
   ...ALWAYS_TABS,
 ];
-const REVIEW_FIELDS = ["files", "items", "details"] as const;
-
 function TabBody(props: {
   tab: string;
   trial: Trial;
@@ -352,26 +339,11 @@ function TabBody(props: {
     const f = review.files[Number(file[1])];
     if (!f) return <Empty title="No such file" />;
     const run = f.phase === "solve" ? solve : verify;
-    const resolved = resolveKind(f);
-    if (resolved.kind === "trajectory" && run) {
-      const fallback = review.files.findIndex(
-        (item) => item.phase === f.phase && resolveKind(item).kind === "markdown",
-      );
-      return (
-        <TrajectoryFile
-          key={`${run.id}/${f.path}`}
-          run={run}
-          file={f}
-          note={resolved.note}
-          fallback={fallback >= 0 ? `?tab=f${fallback}` : undefined}
-        />
-      );
-    }
-    if (resolved.kind === "episode" && run)
-      return <EpisodeFile key={`${run.id}/${f.path}`} run={run} file={f} solve={solve} />;
-    if (resolved.kind === "conversation" && run)
-      return <ConversationFile key={`${run.id}/${f.path}`} run={run} file={f} />;
-    return run ? <ReviewFileView key={tab} run={run} f={f} /> : notStarted(f.phase);
+    if (!run) return notStarted(f.phase);
+    const View = FILE_VIEWS[resolveKind(f).kind];
+    return (
+      <View key={`${tab}/${run.id}/${f.path}`} run={run} file={f} review={review} solve={solve} />
+    );
   }
   if (tab === "grader" && review) return <GraderItems items={review.items} />;
   if (tab === "details" && review) return <DetailsView review={review} />;
@@ -565,362 +537,6 @@ function PhaseCard(props: { label: string; run: Run | undefined; id: string | nu
         {run.reason ? ` · ${run.reason}` : ""}
       </div>
     </Link>
-  );
-}
-
-// ---- report ----
-
-function useText(runId: string, path: string | undefined) {
-  return useAsync(
-    () =>
-      path
-        ? fetch(fileUrl(runId, path)).then(async (r) => {
-            if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-            return r.text();
-          })
-        : Promise.resolve(null),
-    [runId, path],
-  );
-}
-
-function ReportView({ run }: { run: Run }) {
-  const a = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
-  const candidates = useMemo(() => reportCandidates(a.data), [a.data]);
-  const loc = useLocation();
-  const chosen = loc.query.get("file") ?? candidates[0];
-  const text = useText(run.id, chosen);
-  const files = useMemo(() => new Set((a.data?.files ?? []).map((f) => f.path)), [a.data]);
-
-  if (!a.data) return <Loading what="Loading outputs" />;
-  if (!candidates.length)
-    return (
-      <Empty title="No report" icon={<IconFile size={30} />}>
-        The solve run left no Markdown file in its outputs.{" "}
-        <Link href={`${runPath(run.id)}?tab=artifacts`}>All outputs →</Link>
-      </Empty>
-    );
-  const dir = chosen?.includes("/") ? chosen.slice(0, chosen.lastIndexOf("/")) : "";
-  const resolve = (rel: string) => {
-    const p = joinPath(dir, rel.split("#")[0] ?? "");
-    return p && files.has(p) ? fileUrl(run.id, p) : null;
-  };
-  return (
-    <div className="report">
-      <div className="toolbar">
-        <select
-          className="input"
-          value={chosen}
-          onChange={(e) => setQuery({ file: e.target.value }, { hash: "" })}
-          aria-label="Markdown file"
-        >
-          {candidates.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-        <div className="spacer" />
-        <Link className="btn sm" href={`${runPath(run.id)}?tab=artifacts`}>
-          All outputs
-        </Link>
-      </div>
-      <div className="report-body">
-        {text.error ? (
-          <Empty title="Could not load the report">{text.error}</Empty>
-        ) : text.data == null ? (
-          <Loading />
-        ) : (
-          <Markdown text={text.data} resolve={resolve} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---- grader ----
-
-interface GraderItem {
-  index?: number | string;
-  type?: string;
-  content?: string;
-  weight?: number | string;
-  score?: number | string;
-  reasoning?: string;
-}
-
-/** A grader result with per-item scores (e.g. ResearchClawBench `_score.json`), when present. */
-function itemsOf(v: unknown): { items: GraderItem[]; total: unknown } | null {
-  if (!v || typeof v !== "object") return null;
-  const o = v as { items?: unknown; total_score?: unknown; score?: unknown };
-  if (!Array.isArray(o.items) || !o.items.every((x) => x && typeof x === "object")) return null;
-  return { items: o.items as GraderItem[], total: o.total_score ?? o.score };
-}
-
-function GraderView({ run }: { run: Run }) {
-  const a = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
-  const jsons = useMemo(
-    () =>
-      (a.data?.files ?? [])
-        .map((f) => f.path)
-        .filter((p) => /\.json$/i.test(p) && !/(^|\/)(code|outputs|report)\//.test(p))
-        .sort(
-          (x, y) => Number(!/score/i.test(x)) - Number(!/score/i.test(y)) || x.length - y.length,
-        )
-        .slice(0, 6),
-    [a.data],
-  );
-  if (!a.data) return <Loading what="Loading grader output" />;
-  if (!jsons.length)
-    return (
-      <Empty title="No grader output">
-        The verify run wrote no JSON result.{" "}
-        <Link href={`${runPath(run.id)}?tab=logs`}>Logs →</Link>
-      </Empty>
-    );
-  return (
-    <div className="page-pad col" style={{ gap: 16 }}>
-      {jsons.map((p) => (
-        <GraderFile key={p} run={run} path={p} />
-      ))}
-    </div>
-  );
-}
-
-function GraderFile({ run, path }: { run: Run; path: string }) {
-  const t = useText(run.id, path);
-  const parsed = useMemo(() => {
-    try {
-      return t.data ? (JSON.parse(t.data) as unknown) : null;
-    } catch {
-      return null;
-    }
-  }, [t.data]);
-  const scored = itemsOf(parsed);
-  return (
-    <section className="card">
-      <div className="card-h">
-        <span className="mono">{path}</span>
-        {scored && scored.total !== undefined && (
-          <span className="sub">total {String(scored.total)}</span>
-        )}
-      </div>
-      {t.data == null ? (
-        <div className="card-b">{t.error ?? <Loading />}</div>
-      ) : scored ? (
-        <table className="table">
-          <thead>
-            <tr>
-              <th style={{ width: 36 }}>#</th>
-              <th>Criterion</th>
-              <th className="r" style={{ width: 70 }}>
-                Weight
-              </th>
-              <th className="r" style={{ width: 70 }}>
-                Score
-              </th>
-              <th>Reasoning</th>
-            </tr>
-          </thead>
-          <tbody>
-            {scored.items.map((it, i) => (
-              <tr key={String(i)} style={{ verticalAlign: "top" }}>
-                <td className="faint num">{String(it.index ?? i)}</td>
-                <td style={{ whiteSpace: "normal", maxWidth: 380 }}>
-                  {it.type && <span className="chip mono">{it.type}</span>} {it.content}
-                </td>
-                <td className="r num muted">{it.weight ?? "—"}</td>
-                <td className="r num">
-                  <b>{it.score ?? "—"}</b>
-                </td>
-                <td className="muted" style={{ whiteSpace: "normal" }}>
-                  <Reasoning text={it.reasoning ?? ""} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <pre className="card-b mono" style={{ maxHeight: 420, overflow: "auto", margin: 0 }}>
-          {parsed ? JSON.stringify(parsed, null, 2) : t.data}
-        </pre>
-      )}
-    </section>
-  );
-}
-
-function Reasoning({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  if (text.length <= 320) return <>{text}</>;
-  return (
-    <>
-      {open ? text : `${text.slice(0, 320)}… `}
-      <button type="button" className="btn ghost sm" onClick={() => setOpen(!open)}>
-        {open ? "less" : "more"}
-      </button>
-    </>
-  );
-}
-
-// ---- declared review ----
-
-const MAX_PREVIEW = 2 * 1024 * 1024;
-
-/** One declared file, rendered by its kind with Orbit's styles. */
-function ReviewFileView({ run, f }: { run: Run; f: ReviewFile }) {
-  const a = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
-  const { kind, note } = resolveKind(f);
-  const entry = a.data?.files.find((x) => x.path === f.path);
-  const text = useText(
-    run.id,
-    kind !== "image" && kind !== "video" && entry && entry.bytes <= MAX_PREVIEW
-      ? f.path
-      : undefined,
-  );
-  const files = useMemo(() => new Set((a.data?.files ?? []).map((x) => x.path)), [a.data]);
-  const extras = extraFields(f, ["label", "phase", "path", "kind", "fallback"]);
-  const head = (
-    <div className="toolbar">
-      <span className="mono ellipsis">{f.path}</span>
-      <span className="chip mono">{kind}</span>
-      {entry && <span className="faint">{bytes(entry.bytes)}</span>}
-      {note && <span className="chip warn">{note}</span>}
-      {extras.map(([k, v]) => (
-        <span key={k} className="chip mono" title={showValue(v)}>
-          {k}: {showValue(v).slice(0, 40)}
-        </span>
-      ))}
-      <div className="spacer" />
-      <a className="btn sm" href={fileUrl(run.id, f.path, true)}>
-        Download
-      </a>
-    </div>
-  );
-  let body: React.ReactNode;
-  if (!a.data) body = <Loading />;
-  else if (!entry)
-    body = (
-      <Empty title="File not found">
-        The {f.phase} run has no <code>{f.path}</code>.{" "}
-        <Link href={`${runPath(run.id)}?tab=artifacts`}>Outputs →</Link>
-      </Empty>
-    );
-  else if (kind === "image")
-    body = <img className="review-img" src={fileUrl(run.id, f.path)} alt={f.label} />;
-  else if (kind === "video")
-    body = <VideoPreview key={`${run.id}/${f.path}`} runId={run.id} path={f.path} name={f.label} />;
-  else if (entry.bytes > MAX_PREVIEW)
-    body = <Empty title="Too large to preview">{bytes(entry.bytes)} — use Download.</Empty>;
-  else if (text.error) body = <Empty title="Could not load the file">{text.error}</Empty>;
-  else if (text.data == null) body = <Loading />;
-  else if (kind === "markdown") {
-    const dir = f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/")) : "";
-    const resolve = (rel: string) => {
-      const p = joinPath(dir, rel.split("#")[0] ?? "");
-      return p && files.has(p) ? fileUrl(run.id, p) : null;
-    };
-    body = <Markdown text={text.data} resolve={resolve} />;
-  } else if (kind === "json") {
-    let shown = text.data;
-    try {
-      shown = JSON.stringify(JSON.parse(text.data), null, 2);
-    } catch {}
-    body = <pre className="review-pre">{shown}</pre>;
-  } else if (kind === "table")
-    body = <Csv text={text.data} sep={/\.tsv$/i.test(f.path) ? "\t" : ","} />;
-  else body = <pre className="review-pre">{text.data}</pre>;
-  return (
-    <div className="report">
-      {head}
-      <div className="report-body">{body}</div>
-    </div>
-  );
-}
-
-const ITEM_FIELDS = ["criterion", "score", "maxScore", "weight", "type", "reasoning"] as const;
-
-function GraderItems({ items }: { items: ReviewItem[] }) {
-  const total = items.reduce((a, it) => a + (it.weight ?? 0), 0);
-  return (
-    <div className="page-pad">
-      <section className="card">
-        <div className="card-h">
-          Graded items <span className="sub">{items.length}</span>
-          {total > 0 && <span className="sub">total weight {fmtScore(total)}</span>}
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th style={{ width: 36 }}>#</th>
-              <th>Criterion</th>
-              <th className="r" style={{ width: 70 }}>
-                Weight
-              </th>
-              <th className="r" style={{ width: 90 }}>
-                Score
-              </th>
-              <th>Reasoning</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it, i) => {
-              const extras = extraFields(it, ITEM_FIELDS);
-              return (
-                <tr key={String(i)} style={{ verticalAlign: "top" }}>
-                  <td className="faint num">{i + 1}</td>
-                  <td style={{ whiteSpace: "normal", maxWidth: 420 }}>
-                    {it.type && <span className="chip mono">{it.type}</span>} {it.criterion}
-                    {extras.length > 0 && (
-                      <div className="faint mono" style={{ fontSize: 11, marginTop: 4 }}>
-                        {extras.map(([k, v]) => `${k}: ${showValue(v)}`).join(" · ")}
-                      </div>
-                    )}
-                  </td>
-                  <td className="r num muted">
-                    {it.weight === undefined ? "—" : fmtScore(it.weight)}
-                  </td>
-                  <td className="r num">
-                    <b>{it.score == null ? "—" : fmtScore(it.score)}</b>
-                    {it.maxScore !== undefined && (
-                      <span className="faint"> / {fmtScore(it.maxScore)}</span>
-                    )}
-                  </td>
-                  <td className="muted" style={{ whiteSpace: "normal" }}>
-                    <Reasoning text={it.reasoning ?? ""} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
-    </div>
-  );
-}
-
-/** The adapter's facts, plus any review fields this UI does not know, as key / value rows. */
-function DetailsView({ review }: { review: Review }) {
-  const rows: [string, unknown][] = [
-    ...Object.entries(review.details),
-    ...extraFields(review, REVIEW_FIELDS),
-  ];
-  return (
-    <div className="page-pad">
-      <section className="card">
-        <div className="card-h">Details</div>
-        <div className="card-b">
-          <dl className="kv">
-            {rows.map(([k, v]) => (
-              <Fragment key={k}>
-                <dt>{k}</dt>
-                <dd className="mono" style={{ whiteSpace: "pre-wrap" }}>
-                  {showValue(v)}
-                </dd>
-              </Fragment>
-            ))}
-          </dl>
-        </div>
-      </section>
-    </div>
   );
 }
 

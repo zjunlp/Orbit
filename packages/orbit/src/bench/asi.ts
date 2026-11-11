@@ -141,16 +141,11 @@ export function oracleTemplate(instances: string, outputs: string[]): string {
   ].join(" ");
 }
 
-/** Agents ASI's own runner can launch; others are refused rather than mapped to one of these. */
+/**
+ * Agents ASI's own runner can launch; others are refused rather than mapped to one of these. The
+ * same set is declared in `capabilities.methods`, so submission and the Agents matrix refuse them.
+ */
 const ASI_AGENTS: Record<string, string> = { codex: "codex_cli", "claude-code": "claude_code_cli" };
-
-/** Why ASI cannot run a method, or null; checked when a job is submitted. */
-export function asiMethodProblem(method: Pick<Method, "agent">): string | null {
-  if (method.agent === "external") return "ASI does not support external methods";
-  if (isCliMethod(method) && !ASI_AGENTS[method.agent])
-    return `ASI runs only codex and claude-code through its native runner; ${method.agent} is not adapted`;
-  return null;
-}
 
 function asiAgent(method: Method): string {
   const a = ASI_AGENTS[method.agent];
@@ -552,7 +547,7 @@ export const asiAdapter: AdapterHandlers = {
     capabilities: {
       identity: { id: "asi-bench", name: "ASI-Bench" },
       taxonomy: { domains: ["science"] },
-      methods: ["oracle", "empty", "codex", "claude-code"],
+      methods: ["oracle", "empty", ...Object.keys(ASI_AGENTS)],
       conditions: { Runner: "Native ASI runner and scorer" },
       scoreKind: "scalar",
       rescore: "evidence",

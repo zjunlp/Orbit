@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { handle } from "../src/bench/adapter.ts";
+import { harborAdapter } from "../src/bench/harbor.ts";
 import { efeActions, importEfeTrajectory } from "../src/bench/trajectory.ts";
 import { addEfeTrajectory } from "../src/bench/trajectory-artifacts.ts";
 import {
@@ -164,5 +166,57 @@ describe("EFE trajectory import", () => {
     await addEfeTrajectory(output, run, score, messages, "fixture");
     expect(score).toMatchObject({ score: 0, invalid: false });
     expect(score.issues?.at(-1)).toContain("trajectory import:");
+  });
+});
+
+describe("Harbor scoring of EFE tasks", () => {
+  it("imports the trajectory with the Agent session from the solve run, other tasks untouched", async () => {
+    const root = await mkdtemp(join(tmpdir(), "orbit-efe-harbor-"));
+    const solveOut = join(root, "solve", "orbit", "output");
+    const data = join(solveOut, "services/sim/data");
+    await mkdir(data, { recursive: true });
+    await writeFile(join(data, "episode.jsonl"), journal);
+    await writeFile(join(data, "final.json"), JSON.stringify(final));
+    await writeFile(join(data, "trajectory.npz"), archive());
+    const sessions = join(root, "solve", "orbit", "agent", "claude", "projects", "p");
+    await mkdir(sessions, { recursive: true });
+    await writeFile(
+      join(sessions, "s.jsonl"),
+      `${JSON.stringify({
+        type: "assistant",
+        timestamp: new Date(1001_000).toISOString(),
+        message: { content: [{ type: "tool_use", id: "t", name: "Bash", input: {} }] },
+      })}\n`,
+    );
+    const verifyOut = join(root, "verify", "orbit", "output");
+    await mkdir(join(verifyOut, "collected/logs/verifier"), { recursive: true });
+    await writeFile(join(verifyOut, "collected/logs/verifier/reward.txt"), "1\n");
+    const solveRun = {
+      spec: RunSpec.parse({
+        image: "fixture",
+        command: ["true"],
+        services: [{ name: "sim", image: "fixture", collect: ["/data/episode.jsonl"] }],
+      }),
+    } as Run;
+    const verifyRun = { spec: RunSpec.parse({ image: "fixture", command: ["true"] }) } as Run;
+    const request = (task: string) =>
+      ({
+        protocol: 1,
+        op: "score",
+        benchmark: { name: "efe", path: root, config: {} },
+        trial: { id: "t", task, method: { name: "e", agent: "empty" }, options: {} },
+        solve: { run: solveRun, output: solveOut },
+        verify: { run: verifyRun, output: verifyOut },
+      }) as never;
+    const efe = (await handle(harborAdapter, request("metaworldplus-reach"))) as ScoreResult;
+    expect(efe).toMatchObject({ score: 1, invalid: false });
+    expect(efe.review?.files.at(-1)).toMatchObject({ kind: "episode", phase: "solve" });
+    const trace = JSON.parse(await readFile(join(solveOut, "orbit-trajectory.json"), "utf8"));
+    expect(trace.completeness).toBe("complete");
+    expect(
+      trace.samples.some((s: { sessionMessageIndexes?: number[] }) => s.sessionMessageIndexes),
+    ).toBe(true);
+    const other = (await handle(harborAdapter, request("terminal-task"))) as ScoreResult;
+    expect(other.review?.files.some((f) => f.kind === "episode")).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import { Empty, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
 import { episodeVideoTime, parseEpisode, sampleAt } from "../../lib/episode.ts";
 import { episodeVideo, MAX_VIDEO_BYTES } from "../../lib/episode-video.ts";
+import { useRunFile } from "../../lib/run-file.ts";
 import { useAsync } from "../../lib/use.ts";
 import "./episode.css";
 
@@ -13,17 +14,12 @@ const seconds = (value: number) => Number(value.toFixed(4)).toString();
 
 export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; solve?: Run }) {
   const session = useAsync(() => api.session(run.id), [run.id, run.state]);
-  const artifacts = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
-  const entry = artifacts.data?.files.find((item) => item.path === file.path);
-  const source = useAsync(async () => {
-    if (!entry) return null;
-    if (entry.bytes > MAX_BYTES) throw new Error("Episode index exceeds the 2 MiB preview limit.");
-    const response = await fetch(fileUrl(run.id, file.path));
-    if (!response.ok) throw new Error(`Could not read episode (${response.status}).`);
-    const text = await response.text();
-    if (text.length > MAX_BYTES) throw new Error("Episode index exceeds the preview limit.");
-    return parseEpisode(text);
-  }, [run.id, file.path, entry?.bytes, entry?.mtime]);
+  const source = useRunFile(run, file.path, {
+    what: "the episode index",
+    maxBytes: MAX_BYTES,
+    parse: parseEpisode,
+  });
+  const artifacts = source.listing;
   const mediaRun = source.data?.mediaPhase === "solve" ? solve : run;
   const separateMedia = !!mediaRun && mediaRun.id !== run.id;
   const media = useAsync(
@@ -36,9 +32,9 @@ export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; 
     [mediaEntries],
   );
   const error =
-    artifacts.error ??
     source.error ??
-    (artifacts.data && !entry ? "Episode index is missing from the saved outputs." : null);
+    (source.tooLarge ? "Episode index exceeds the 2 MiB preview limit." : null) ??
+    (source.missing ? "Episode index is missing from the saved outputs." : null);
   return (
     <div className="episode-review">
       <div className="toolbar">

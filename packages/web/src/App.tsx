@@ -1,19 +1,5 @@
 import { Component, useEffect, useState, useSyncExternalStore } from "react";
-import {
-  IconBot,
-  IconChip,
-  IconDashboard,
-  IconFlask,
-  IconKeyboard,
-  IconLayers,
-  IconLibrary,
-  IconLogo,
-  IconMoon,
-  IconRuns,
-  IconSettings,
-  IconSidebar,
-  IconSun,
-} from "./components/icons.tsx";
+import { IconKeyboard, IconLogo, IconMoon, IconSidebar, IconSun } from "./components/icons.tsx";
 import { Palette } from "./components/Palette.tsx";
 import { Empty, Kbd, Link, Toaster } from "./components/ui.tsx";
 import { authState } from "./lib/api.ts";
@@ -31,6 +17,34 @@ import { RunDetail } from "./pages/RunDetail.tsx";
 import { Runs } from "./pages/Runs.tsx";
 import { Settings } from "./pages/Settings.tsx";
 import { TrialPage } from "./pages/Trial.tsx";
+import {
+  matchRoute,
+  PAGES,
+  type PageDef,
+  pageShortcuts,
+  type RouteName,
+  railActive,
+} from "./routes.ts";
+
+/** The component of every route; `params` are the decoded path parameters. */
+const VIEWS: Record<RouteName, (params: string[]) => React.ReactNode> = {
+  overview: () => <Overview />,
+  benchmarks: () => <BenchmarksPage />,
+  agents: () => <AgentsPage />,
+  configurations: () => <ConfigurationsPage />,
+  bench: () => <BenchJobs />,
+  runs: () => <Runs />,
+  compare: () => <Compare />,
+  resources: () => <Resources />,
+  settings: () => <Settings />,
+  run: ([id]) => <RunDetail key={id} id={id as string} />,
+  trial: ([job, trial]) => (
+    <TrialPage key={trial} jobId={job as string} trialId={trial as string} />
+  ),
+  benchCompare: () => <BenchComparePage />,
+  benchNew: () => <NewBenchJob />,
+  benchJob: ([id]) => <BenchJobDetail key={id} id={id as string} />,
+};
 
 function useUnauthorized() {
   return useSyncExternalStore(
@@ -92,67 +106,38 @@ export function App() {
   useHotkeys({
     "mod+k": () => setPalette(true),
     "?": () => setHelp((h) => !h),
-    "g o": () => navigate("/"),
-    "g b": () => navigate("/benchmarks"),
-    "g a": () => navigate("/agents"),
-    "g m": () => navigate("/configurations"),
-    "g e": () => navigate("/bench"),
-    "g r": () => navigate("/runs"),
-    "g c": () => navigate("/compare"),
-    "g s": () => navigate("/resources"),
-    "g p": () => navigate("/settings"),
+    ...Object.fromEntries(PAGES.map((p) => [`g ${p.key}`, () => navigate(p.path)])),
     Escape: () => {
       setHelp(false);
       setPalette(false);
     },
   });
 
-  let page: React.ReactNode;
-  const m = /^\/runs\/([^/]+)\/?$/.exec(loc.path);
-  const bj = /^\/bench\/([^/]+)\/?$/.exec(loc.path);
-  const bt = /^\/bench\/([^/]+)\/trials\/([^/]+)\/?$/.exec(loc.path);
   const redirect = legacyHref(loc.path, loc.query, loc.hash);
-  if (redirect) page = <Redirect to={redirect} />;
-  else if (m) page = <RunDetail key={m[1]} id={safeDecode(m[1] as string)} />;
-  else if (bt)
-    page = (
-      <TrialPage
-        key={bt[2]}
-        jobId={safeDecode(bt[1] as string)}
-        trialId={safeDecode(bt[2] as string)}
-      />
-    );
-  else if (loc.path === "/bench/compare") page = <BenchComparePage />;
-  else if (loc.path === "/bench/new") page = <NewBenchJob />;
-  else if (bj) page = <BenchJobDetail key={bj[1]} id={safeDecode(bj[1] as string)} />;
-  else if (loc.path === "/bench" || loc.path === "/bench/") page = <BenchJobs />;
-  else if (loc.path === "/benchmarks") page = <BenchmarksPage />;
-  else if (loc.path === "/agents") page = <AgentsPage />;
-  else if (loc.path === "/configurations") page = <ConfigurationsPage />;
-  else if (loc.path === "/runs") page = <Runs />;
-  else if (loc.path === "/compare") page = <Compare />;
-  else if (loc.path === "/resources") page = <Resources />;
-  else if (loc.path === "/settings") page = <Settings />;
-  else page = <Overview />;
+  const route = matchRoute(loc.path);
+  const page = redirect ? (
+    <Redirect to={redirect} />
+  ) : route ? (
+    VIEWS[route.name](route.params.map(safeDecode))
+  ) : (
+    <NotFound path={loc.path} />
+  );
 
-  const nav = (
-    href: string,
-    label: string,
-    icon: React.ReactNode,
-    active: boolean,
-    key: string,
-  ) => (
-    <Link href={href} className={active ? "active" : ""} aria-label={label}>
-      {icon}
-      <span className="label">{label}</span>
+  const nav = (p: PageDef) => (
+    <Link
+      key={p.name}
+      href={p.path}
+      className={railActive(p, loc.path) ? "active" : ""}
+      aria-label={p.label}
+    >
+      <p.icon />
+      <span className="label">{p.label}</span>
       <span className="tip">
-        {label} <span className="faint">g {key}</span>
+        {p.label} <span className="faint">g {p.key}</span>
       </span>
     </Link>
   );
-  const path = loc.path;
-  const runsActive = path === "/runs" || path.startsWith("/runs/") || path === "/compare";
-  const evalActive = path === "/bench" || path.startsWith("/bench/");
+  const rail = (group: PageDef["rail"]) => PAGES.filter((p: PageDef) => p.rail === group).map(nav);
 
   if (unauthorized)
     return (
@@ -184,17 +169,13 @@ export function App() {
           <IconLogo size={28} />
           <span className="label brand">Orbit</span>
         </div>
-        {nav("/", "Overview", <IconDashboard />, path === "/", "o")}
+        {rail("top")}
         <div className="rail-group">Evaluate</div>
-        {nav("/benchmarks", "Benchmarks", <IconLibrary />, path === "/benchmarks", "b")}
-        {nav("/agents", "Agents", <IconBot />, path === "/agents", "a")}
-        {nav("/configurations", "Configurations", <IconLayers />, path === "/configurations", "m")}
-        {nav("/bench", "Evaluations", <IconFlask />, evalActive, "e")}
+        {rail("Evaluate")}
         <div className="rail-group">Operate</div>
-        {nav("/runs", "Runs", <IconRuns />, runsActive, "r")}
-        {nav("/resources", "Resources", <IconChip />, path === "/resources", "s")}
+        {rail("Operate")}
         <div className="spacer" />
-        {nav("/settings", "Settings", <IconSettings />, path === "/settings", "p")}
+        {rail("bottom")}
         <button type="button" onClick={() => setHelp(true)} aria-label="Keyboard shortcuts">
           <IconKeyboard />
           <span className="label">Shortcuts</span>
@@ -276,11 +257,7 @@ class PageBoundary extends Component<{ children: React.ReactNode }, { error: Err
 
 const SHORTCUTS: [string, string][] = [
   ["⌘K / Ctrl K", "Command palette: jump to any run or page"],
-  [
-    "g o · g b · g a · g m · g e",
-    "Go to Overview · Benchmarks · Agents · Configurations · Evaluations",
-  ],
-  ["g r · g c · g s · g p", "Go to Runs · Compare · Resources · Settings"],
+  ...pageShortcuts(),
   ["j / k", "Move down / up in lists"],
   ["Enter / o", "Open the selected run"],
   ["x", "Select run (for compare)"],
@@ -321,6 +298,19 @@ function Help({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function NotFound({ path }: { path: string }) {
+  return (
+    <Empty title="Page not found">
+      <p>
+        Nothing lives at <code>{path}</code>.
+      </p>
+      <p>
+        <Link href="/">Go to Overview →</Link>
+      </p>
+    </Empty>
   );
 }
 

@@ -224,6 +224,7 @@ it("answers which Agent can take which benchmark by the submission checks", () =
     entry("bfcl", { methods: ["cli", "oracle"], requires: ["mcp"] }),
     entry("miniwob", { methods: ["cli", "empty"], requires: ["gui"] }),
     entry("humaneval", { methods: ["oracle", "empty", "external"], requires: [] }),
+    entry("asi", { methods: ["oracle", "empty", "codex", "claude-code"], requires: [] }),
     entry("new", null),
   ];
   const jobs = [
@@ -247,6 +248,9 @@ it("answers which Agent can take which benchmark by the submission checks", () =
     reason: expect.stringMatching(/gui/),
   });
   expect(cell("humaneval", "codex")?.reason).toMatch(/does not admit/);
+  // A native runner that names its Agents admits only those.
+  expect(cell("asi", "codex")?.state).toBe("allowed");
+  expect(cell("asi", "opencode")).toMatchObject({ state: "blocked", reason: /does not admit/ });
   expect(cell("new", "codex")?.state).toBe("unknown");
 });
 

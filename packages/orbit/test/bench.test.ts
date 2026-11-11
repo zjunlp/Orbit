@@ -349,7 +349,7 @@ command = "true"
     ).toThrow(/solve request without trial/);
   });
 
-  it("verifies shared-mode tasks in the solve container, after the method", () => {
+  it("verifies shared-mode tasks in the solve container, after the method", async () => {
     const t = findHarborTasks(root).find((x) => x.id === "shared");
     if (!t) throw new Error("task missing");
     const staging = join(tmp, "shared-solve");
@@ -385,14 +385,14 @@ command = "true"
     const out = join(tmp, "shared-out");
     write(join(out, "after", "logs", "verifier", "reward.txt"), "1\n");
     const solveRun = { spec: { after: spec.after } } as unknown as Run;
-    const reply = handle(harborAdapter, {
+    const reply = (await handle(harborAdapter, {
       protocol: 1,
       op: "score",
       benchmark: { name: "t", path: root, config: {} },
       trial: { id: "t1", task: "shared", method: { name: "e", agent: "empty" }, seed: 1, staging },
       solve: { run: solveRun, output: out },
       verify: { run: solveRun, output: out },
-    } as never) as { score: number };
+    } as never)) as { score: number };
     expect(reply.score).toBe(1);
   });
 
