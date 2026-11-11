@@ -73,15 +73,17 @@ export function App() {
   const { connected, loaded } = useRunsState();
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
-  const [railTip, setRailTip] = useState<{ text: string; top: number } | null>(null);
+  const [railTip, setRailTip] = useState<{ text: string; top: number; left: number } | null>(null);
+  // Names show beside the item when the rail is an icon bar, and always for the footer tools.
   const showRailTip = (e: React.MouseEvent<HTMLElement> | React.FocusEvent<HTMLElement>) => {
-    if (e.currentTarget.getBoundingClientRect().width > 60 || !(e.target instanceof Element))
-      return;
-    const item = e.target.closest("a, button");
+    if (!(e.target instanceof Element)) return;
+    const item = e.target.closest("a, button, .rail-status");
+    const iconOnly =
+      e.currentTarget.getBoundingClientRect().width <= 60 || item?.closest(".rail-tools");
     const text = item?.querySelector(".tip")?.textContent;
-    if (!item || !text) return;
+    if (!item || !text || !iconOnly) return;
     const rect = item.getBoundingClientRect();
-    setRailTip({ text, top: rect.top + rect.height / 2 });
+    setRailTip({ text, top: rect.top + rect.height / 2, left: rect.right + 8 });
   };
   useEffect(() => {
     const hide = () => setRailTip(null);
@@ -175,51 +177,58 @@ export function App() {
         <div className="rail-group">Operate</div>
         {rail("Operate")}
         <div className="spacer" />
-        {rail("bottom")}
-        <button type="button" onClick={() => setHelp(true)} aria-label="Keyboard shortcuts">
-          <IconKeyboard />
-          <span className="label">Shortcuts</span>
-          <span className="tip">
-            Shortcuts <span className="faint">?</span>
-          </span>
-        </button>
-        <button type="button" onClick={toggleTheme} aria-label="Toggle theme">
-          {theme === "dark" ? <IconSun /> : <IconMoon />}
-          <span className="label">{theme === "dark" ? "Light theme" : "Dark theme"}</span>
-          <span className="tip">{theme === "dark" ? "Light theme" : "Dark theme"}</span>
-        </button>
-        <button
-          type="button"
-          onClick={toggleRail}
-          className="rail-toggle"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-        >
-          <IconSidebar />
-          <span className="label">Collapse</span>
-          <span className="tip">{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
-        </button>
-        <button type="button" aria-label="Daemon connection" style={{ cursor: "default" }}>
-          <span
-            className={`dot${connected ? " pulse" : ""}`}
-            style={
-              {
-                "--c": connected
-                  ? "var(--st-succeeded)"
-                  : loaded
-                    ? "var(--st-failed)"
-                    : "var(--st-queued)",
-              } as React.CSSProperties
-            }
-          />
-          <span className="label">{connected ? "Connected" : "Disconnected"}</span>
-          <span className="tip">
-            {connected ? "Live — connected to daemon" : "Disconnected — retrying"}
-          </span>
-        </button>
+        <div className="rail-footer">
+          {rail("bottom")}
+          <div className="rail-tools">
+            <div className="rail-status" role="status" aria-label="Daemon connection">
+              <span
+                className={`dot${connected ? " pulse" : ""}`}
+                style={
+                  {
+                    "--c": connected
+                      ? "var(--st-succeeded)"
+                      : loaded
+                        ? "var(--st-failed)"
+                        : "var(--st-queued)",
+                  } as React.CSSProperties
+                }
+              />
+              <span className="label">
+                {connected ? "Live" : loaded ? "Offline" : "Connecting"}
+              </span>
+              <span className="tip">
+                {connected ? "Live — connected to daemon" : "Disconnected — retrying"}
+              </span>
+            </div>
+            <button type="button" onClick={() => setHelp(true)} aria-label="Keyboard shortcuts">
+              <IconKeyboard />
+              <span className="tip">
+                Shortcuts <span className="faint">?</span>
+              </span>
+            </button>
+            <button type="button" onClick={toggleTheme} aria-label="Toggle theme">
+              {theme === "dark" ? <IconSun /> : <IconMoon />}
+              <span className="tip">{theme === "dark" ? "Light theme" : "Dark theme"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleRail}
+              className="rail-toggle"
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+            >
+              <IconSidebar />
+              <span className="tip">{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
+            </button>
+          </div>
+        </div>
       </nav>
       {railTip && (
-        <span className="rail-tooltip" role="tooltip" style={{ top: railTip.top }}>
+        <span
+          className="rail-tooltip"
+          role="tooltip"
+          style={{ top: railTip.top, left: railTip.left }}
+        >
           {railTip.text}
         </span>
       )}

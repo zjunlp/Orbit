@@ -1,5 +1,6 @@
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { IconCompare, IconFlask } from "../../components/icons.tsx";
+import { PageHeader } from "../../components/PageHeader.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { Empty, Link, Loading } from "../../components/ui.tsx";
 import { api, type BenchJobList } from "../../lib/api.ts";
@@ -55,12 +56,19 @@ export function BenchJobs() {
       </TopBar>
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
-          <p className="muted" style={{ margin: 0 }}>
-            Every evaluation of a benchmark: configurations × tasks × seeds, each trial solved and
-            then verified. Browse what can be evaluated under{" "}
-            <Link href="/benchmarks">Benchmarks ({benchmarks.data?.length ?? "…"} registered)</Link>
-            .
-          </p>
+          <PageHeader
+            title="Evaluations"
+            description={
+              <>
+                Every evaluation of a benchmark: configurations × tasks × seeds, each trial solved
+                and then verified. Browse what can be evaluated under{" "}
+                <Link href="/benchmarks">
+                  Benchmarks ({benchmarks.data?.length ?? "…"} registered)
+                </Link>
+                .
+              </>
+            }
+          />
           {tab === "jobs" ? (
             <>
               <div className="bench-home-toolbar">
@@ -147,7 +155,9 @@ function JobTable({
           <th>Job</th>
           <th>Benchmark</th>
           <th>Execution</th>
-          <th>Configurations (primary metric ± 95% CI · valid/total)</th>
+          <th title="Primary metric ± 95% CI over valid trials · valid/total trials">
+            Results by configuration
+          </th>
           <th className="r">Created</th>
         </tr>
       </thead>
@@ -205,7 +215,7 @@ function JobTable({
                   aria-label={`${total - pending} of ${total} trials finished`}
                 />
               </td>
-              <td>
+              <td className="wrap">
                 <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                   <span className="faint">{m.label}</span>
                   {j.summary.map((s) => (

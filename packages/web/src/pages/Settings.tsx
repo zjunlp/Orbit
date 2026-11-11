@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { IconBell, IconBot, IconCheck, IconKey, IconLoader, IconX } from "../components/icons.tsx";
+import { PageHeader } from "../components/PageHeader.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { CopyButton, Link, toast } from "../components/ui.tsx";
 import { type AuthProfile, api, type NotifyTarget } from "../lib/api.ts";
@@ -31,7 +32,11 @@ export function Settings() {
     <>
       <TopBar crumbs={[{ label: "Settings" }]} />
       <div className="page">
-        <div className="page-pad col" style={{ gap: 16, maxWidth: 1100 }}>
+        <div className="page-pad col" style={{ gap: 16 }}>
+          <PageHeader
+            title="Settings"
+            description="Storage, credential profiles and notifications of this daemon. Secrets are added from the CLI and never shown here."
+          />
           <section className="card">
             <div className="card-h">
               <IconBot size={14} /> Agents

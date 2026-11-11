@@ -1,5 +1,6 @@
 import { PALETTE } from "../components/Chart.tsx";
 import { IconAlert, IconChip } from "../components/icons.tsx";
+import { PageHeader } from "../components/PageHeader.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { Empty, Link, Loading, StateIcon } from "../components/ui.tsx";
 import {
@@ -73,6 +74,10 @@ export function Resources() {
       </TopBar>
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
+          <PageHeader
+            title={worker ? `Resources · ${worker.name}` : "Resources"}
+            description="GPUs, CPUs, memory, disk and devices Orbit can lease, who holds them and what is waiting."
+          />
           {worker ? (
             <WorkerDetail n={worker} runs={runs} byId={byId} />
           ) : (

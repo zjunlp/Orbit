@@ -105,7 +105,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
     Boolean((solve && isActive(solve.state)) || (verify && isActive(verify.state))),
   );
   const crumbs = [
-    { label: "Bench", href: "/bench" },
+    { label: "Evaluations", href: "/bench" },
     { label: job?.spec.name ?? jobId, href: jobPath(jobId) },
     { label: trial ? `${trial.task} · ${trial.method}` : trialId },
   ];
@@ -277,7 +277,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
             <span>{(o?.issues ?? trial.issues).join(" · ")}</span>
           </div>
         )}
-        <details open={!gui}>
+        <details className="disclosure" open={!gui}>
           <summary>Execution details</summary>
           <div className="trial-timeline">
             <PhaseCard label="Solve" run={solve} id={trial.solveRunId} now={now} />

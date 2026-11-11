@@ -151,7 +151,7 @@ function RunView({ run }: { run: Run }) {
         crumbs={
           bench
             ? [
-                { label: "Bench", href: "/bench" },
+                { label: "Evaluations", href: "/bench" },
                 { label: bench.job, href: jobPath(bench.job) },
                 { label: bench.title, href: trialPath(bench.job, bench.trial) },
                 { label: bench.phase },

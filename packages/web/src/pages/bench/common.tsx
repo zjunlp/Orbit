@@ -2,9 +2,20 @@ import type { BenchJob, MethodSummary } from "../../lib/api.ts";
 
 export const jobLabel = (j: BenchJob) => j.spec.name ?? j.id;
 
+const JOB_STATE: Record<BenchJob["state"], { label: string; color: string }> = {
+  running: { label: "Running", color: "var(--st-running)" },
+  done: { label: "Done", color: "var(--st-succeeded)" },
+  cancelled: { label: "Cancelled", color: "var(--st-cancelled)" },
+};
+
 export function JobState({ state }: { state: BenchJob["state"] }) {
-  const cls = state === "cancelled" ? "warn" : "";
-  return <span className={`chip ${cls}`}>{state}</span>;
+  const s = JOB_STATE[state];
+  return (
+    <span className="badge" style={{ "--c": s.color } as React.CSSProperties}>
+      {state === "running" && <span className="dot pulse" />}
+      {s.label}
+    </span>
+  );
 }
 
 /** Stacked valid / invalid / unknown / pending bar. */

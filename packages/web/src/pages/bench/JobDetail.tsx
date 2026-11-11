@@ -28,14 +28,14 @@ export function BenchJobDetail({ id }: { id: string }) {
   if (d.error && !d.data)
     return (
       <>
-        <TopBar crumbs={[{ label: "Bench", href: "/bench" }, { label: id }]} />
+        <TopBar crumbs={[{ label: "Evaluations", href: "/bench" }, { label: id }]} />
         <Empty title="Bench job not found">{d.error}</Empty>
       </>
     );
   if (!d.data || !job)
     return (
       <>
-        <TopBar crumbs={[{ label: "Bench", href: "/bench" }, { label: id }]} />
+        <TopBar crumbs={[{ label: "Evaluations", href: "/bench" }, { label: id }]} />
         <Loading />
       </>
     );
@@ -75,7 +75,7 @@ export function BenchJobDetail({ id }: { id: string }) {
     <>
       <TopBar
         className="topbar-wrap"
-        crumbs={[{ label: "Bench", href: "/bench" }, { label: jobLabel(job) }]}
+        crumbs={[{ label: "Evaluations", href: "/bench" }, { label: jobLabel(job) }]}
       >
         <Link className="btn sm ghost" href={`/runs?q=bench-${job.id}`}>
           Runs
@@ -152,7 +152,8 @@ export function BenchJobDetail({ id }: { id: string }) {
       )}
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
-          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+          <h1 className="page-title">{jobLabel(job)}</h1>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: -8 }}>
             <JobState state={job.state} />
             <span className="chip mono">{job.spec.benchmark}</span>
             {job.folder && (
