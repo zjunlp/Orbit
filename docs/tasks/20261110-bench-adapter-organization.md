@@ -64,7 +64,7 @@ every check in `pnpm verify`.
 | Python adapter run | `4388a22` | passed | Scanned discovery; every adapter directory with its own tests passes `unittest discover` standalone. |
 | Moved embodied tests | `4388a22` | passed | 16 tests from the new location; previously unreachable by any runner. |
 | Moved WANDR test | `4388a22` | passed | 1 test, now collected through the adapter directory patterns. |
-| Docs links | `0fa9d83` | passed | 398 relative links across 136 navigation docs resolve; three dead links in `docs/issue-userns-remap-bind-mounts.md` were fixed. |
+| Docs links | `0fa9d83` | passed | 398 relative links across 136 navigation docs resolve; three dead links in the userns issue report were fixed (now `docs/guides/docker-userns-remap.md`). |
 | Python syntax | `bd85e0c` | passed | 189 files parsed. |
 
 Test counts reconcile across the moves: `benchmark-gaps` 6→5, `example-adapters` 24→25, new

@@ -50,7 +50,7 @@ Agent 走同一套安装、认证、argv 与会话路径。
 
 ## Correction (fix/agent-bench-contract)
 
-Review ([design-review.md](../design-review.md) R1) found the first change incomplete: `Method.agent` and
+Review (design review R1, retired `docs/design-review.md` in Git history) found the first change incomplete: `Method.agent` and
 `BenchCapabilities.methods` were still a five-value enum, so bench jobs rejected every new Agent; the install
 script returned by `prepareAgent` was never executed; and ASI mapped every non-Codex CLI to Claude. The earlier
 claim that bench methods could name any registered Agent was wrong. Fixed:

@@ -468,7 +468,7 @@ Orbit is in early development (0.1.1). See [project status](docs/status.md) for 
 | Run and review an embodied evaluation | [Quickstart](docs/guides/embodied-quickstart.md) · [Benchmark coverage and verified policies](docs/guides/embodied-compatibility.md) |
 | Add an embodied policy or native benchmark | [Onboarding templates](docs/guides/embodied-onboarding.md) |
 | Connect several machines | [Multi-node guide](docs/guides/multi-node.md) |
-| Understand architecture and support | [Design](docs/design.md) · [Project status](docs/status.md) |
+| Understand architecture and support | [Design](docs/design.md) · [Project status](docs/status.md) · [Docs map](docs/README.md) |
 | Build and publish a package | [Release guide](docs/guides/releasing.md) |
 | Present Orbit | [Offline slides (Chinese)](docs/ppt/README.md) |
 
@@ -483,6 +483,7 @@ Orbit is in early development (0.1.1). See [project status](docs/status.md) for 
 | A run stays `queued` | `orbit ps` shows the reason (GPUs busy, CPUs busy outside Orbit, memory, pinned node offline, …) |
 | An agent cannot reach Orbit | `orbit` is on its `PATH`; Codex sandbox allows network access |
 | Snapshot too large | Add data and weights to `.gitignore` and mount them with `-m` or `orbit data` |
+| Runs fail writing `$ORBIT_OUTPUT` / `$ORBIT_METRICS` with permission denied | Docker uses `userns-remap`; see [the workaround](docs/guides/docker-userns-remap.md) |
 
 <a id="development"></a>
 

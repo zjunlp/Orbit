@@ -1,7 +1,7 @@
 # Orbit 设计
 
 状态：R0 已确定的目标设计；R1–R3 已实现；R4（多节点，§8）已实现，仅在同机双 daemon 仿真上验证；
-R5（任意 Agent + 跨场景评测规范，§6、§9）部分实现，包含 Agent 注册、benchmark 目录与独立 Policy 原生具身评测。实现进度见 [status.md](status.md)。
+R5（任意 Agent + 跨场景评测规范，§6、§9）部分实现，包含 Agent 注册、benchmark 目录与独立 Policy 原生具身评测。实现进度见 [status.md](status.md)，文档分工见 [docs/README](README.md)。
 本文是架构与接口的唯一权威来源。改变模块边界、公共契约或关键决策时，在同一分支更新本文。
 
 ## 1. 定位
@@ -107,7 +107,7 @@ examples/      bench-adapters/<benchmark>/: external bench adapters (not part of
 | daemon | 除 cli/mcp/client 外全部 |
 | client | contracts, lib, config |
 | cli, mcp | client, contracts, lib, config |
-| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）、`@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化）、`@zjunlp/orbit/categories`（旧类别和领域词表）与 `@zjunlp/orbit/taxonomy`（六维词表与匹配） |
+| web (`packages/web/src`) | 自身文件；`@zjunlp/orbit` 只能 `import type` 自 `@zjunlp/orbit/contracts`，另可在运行时使用无依赖的 `@zjunlp/orbit/naming`（Run 显示名规则）、`@zjunlp/orbit/metrics`（bench 指标的取值、聚合与格式化）、`@zjunlp/orbit/categories`（已废弃的兼容词表，见 §9.10）与 `@zjunlp/orbit/taxonomy`（六维词表与匹配） |
 
 模块内按职责拆分，以上依赖方向不变：`contracts/index.ts` 保留统一导出，schema 分入 runs、resources、auth/notify、
 bench、adapter、cluster、records 和 folders；`RunService` 保留公共 API、调度与共享状态，远端放置/镜像、启动、服务、
@@ -583,7 +583,7 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
-- `capabilities` 描述接入大类与 profile（`category` / `profiles` / `domains`，见 integration-categories.md；旧的 `kind` 仅作 GUI 平台兼容）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。六维分类与接入兼容字段的边界见 §9.17；分类标签不替代准入检查。
+- `capabilities` 描述身份、六维分类（`taxonomy`）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。`category` / `profiles` / `domains` / `kind` 是废弃的兼容字段（§9.10）；分类标签不替代准入检查。
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - `contracts/trajectory.ts`：`GuiStepContext`（step 的 `actionId` / `at`，用于把 Agent 会话中的工具调用与 GUI step 精确对齐，不按时钟猜）与
   `EpisodeTrajectory`（版本 1、`kind: "episode"`：多相机帧/视频、动作与本体感知曲线、奖励；只含保存的媒体和数值，不含可执行动作）。
@@ -762,7 +762,7 @@ Agent 注册表（§6）、独立 Policy 与原生具身评测（§9.4a）、轨
 | Harbor 形状"在具身上根本不适用" | Embodied First Exam（EFE）用 Harbor task + 可信仿真 sidecar 承载 35 个 benchmark / 1,154 个任务，评测 coding agent | 错误判断。**workspace + 可信 sidecar** 是"CLI Agent × 交互环境"的主路径，不需要先造新环境协议 |
 | 先定义 Orbit 自己的 HTTP+JSON 环境协议 | 已有成熟协议：CUA-Lite `LiteBaseEnv`（GUI，canonical tool call，坐标 `[0,1000]`）、vla-eval WebSocket+MsgPack（policy，sync/live，action chunk）、EFE `eai-standard/2.x` + RCB1 二进制封包、BrowserGym Gymnasium | Orbit 只管生命周期、资源、证据与轨迹索引；**episode 内语义透传原生协议**，按需写桥，不再造轮子 |
 | 被评测对象 = Agent | 具身有两类对象：会写代码的 coding agent（EFE）与逐帧出动作的 VLA policy（vla-eval、Isaac Lab-Arena） | Method 增加 **policy**：一个 GPU 模型服务，与仿真共同调度（Arena 的 evaluator + server 同组） |
-| 一个个写 adapter 扩充数量 | Hub 已聚合大量 bench：CUA-Lite 18 套、Cua Bench 11、BrowserGym/AgentLab 10–12、vla-eval 20+ 目录、EFE 35、Harbor 80+ | 先接 **hub**，一次得到一族 bench；每条按保真度如实标注（hub 声称 ≠ 本机验证） |
+| 一个个写 adapter 扩充数量 | Hub 已聚合大量 bench：CUA-Lite 18 套、Cua Bench 11、BrowserGym/AgentLab 10–12、vla-eval 20+ 目录、EFE 35、Harbor 80+ | 先接 **hub**，一次得到一族 bench；每条按本机校准如实标注（hub 声称 ≠ 本机验证） |
 | valid-only 均值是唯一口径 | vla-eval 把基础设施 error 计入成功率分母；Gym-Anything 的 reward 尺度随 `reward_type` 变化；OSWorld 部分 evaluator 异常转 0 | 同时保存**官方原始指标与官方聚合**和 Orbit 有效性口径，命名区分，不以重算值冒充官方 |
 | 环境资源 ≈ 暖池 | 需分层准入（CUA-Lite）、能力探测与创建中预留（Gym-Anything）、setup 前标脏（OSWorld）、设备/后端/任务对象三层复位（MobileWorld）、实际资源对账回收（CUA-Lite reaper）、非幂等 step（CUA-Lite、EFE operation id） | 见 §9.6 |
 | — | hub 自带内部并发（shard、Ray、多进程队列、`-n`），与 Orbit 各自扩张会超卖 | 内部并发必须由 Orbit 预算：一个 trial 一个 episode，或 adapter 声明 `slots` 由 Orbit 一次租齐 |
@@ -772,7 +772,7 @@ Agent 注册表（§6）、独立 Policy 与原生具身评测（§9.4a）、轨
 资源分配与清理的唯一权威**；runner 可以在 Orbit 给定的租约和固定样本清单内维护私有执行记录（如 vla-eval 的 SQLite），
 作为产物单向导入，不成为第二个状态源。每个样本的分派与重试由谁负责必须明确，避免双重调度。
 
-本节经过一轮设计审查（[design-review.md](design-review.md)，R1–R8 及复审）后修订。
+本节经过一轮设计审查（R1–R8 及复审，记录见 Git 历史中的 `docs/design-review.md`）后修订。
 
 ### 9.1 三层职责
 
@@ -816,7 +816,23 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
 | **Isaac Lab-Arena** | Isaac Lab 生态任务 | VLA policy（OpenPI / GR00T 等） | native 包装 Experiment Runner；不引入 OSMO/K8s | RTX GPU，evaluator + server 两张卡 |
 | 科研 / 代码 / 答题 | ASI、LongDS、RCB、HarnessGrad 59 个数据集… | CLI Agent | 现有 native / external；answer kind | CPU 为主 |
 
-"规模"是上游声明的口径（套件数 ≠ 任务数 ≠ 已验证数），Web 与 CLI 显示时必须带保真度级别（§9.10）。
+"规模"是上游声明的口径（套件数 ≠ 任务数 ≠ 已验证数），Web 与 CLI 显示时必须同时给出本机校准情况（§9.10）。
+
+### 9.2a 专用原生 adapter
+
+AutomationBench uses its native tool agent and an independent original rubric over saved world state;
+public and simple splits remain separate. Chartography uses the original no-tools Inspect solver and
+an independent native judge; its dummy sample pack is never represented as the released dataset.
+Their images pin upstream code/dependencies; read-only runtime wrappers remain external-adapter code.
+FrontierSWE/WANDR wrappers reuse Harbor rather than adding an executor: frozen catalogs, task-account
+execution, native tar artifact exclusions, oracle-only release flags, native invalid markers and WANDR's
+12 metrics. All four routes preserve API/scorer failures as invalid and keep evidence for review.
+Separate Harbor verifiers preserve their own GPU model restrictions, including when they reuse the
+solve environment. Independent verifier environments do not inherit solver model choices. Shared
+verifiers cannot replace their running GPU allocation with a separate environment declaration.
+GPU model matching uses whole name tokens in order, allowing form-factor tokens between model and
+memory variants (for example A100-SXM4-80GB for A100-80GB); different memory variants remain distinct.
+Unavailable originals and exact protocol gaps are recorded in [availability](guides/benchmark-availability.md).
 
 ### 9.3 任务形态（kind）
 
@@ -917,7 +933,7 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。
   CPU verifier 核对布局身份、动作计数、终止记录和过程分数。RoboLab 保留 DROID 绝对关节与夹爪控制、双重 reset、
   每任务原生时限以及 `get_env_results` 的终止结果；初始物理异常产生的 Gym 标记不直接算成功。
-  两者的源码/资产检查与实际 GPU 任务校准分别记录，接入配置不自动提升保真等级。
+  两者的源码/资产检查与实际 GPU 任务校准分别记录，接入配置不代表已校准。
   Isaac 启动器只在 Linux 查询到一致的实际 R535.256+ 驱动时，采用 NVIDIA 公布的 Vulkan 版本误报兼容参数，并记录版本与处理原因；
   其他版本或查询失败保留原生驱动检查。该处理不修改主机驱动、原生场景或成功判定。
 - **证据封存**：benchmark 可在 `finalize_evidence` 中关闭原生写入器，再计算必需证据摘要；例如 HDF5 的 close 会改变文件，flush 不能替代。
@@ -933,8 +949,38 @@ Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和�
   做初始化、控制步、原生判定与正负例；新模型优先复用已校准 benchmark。`bench calibrate --policy --sample-plan --budget` 只接受
   真实模型、2–5 个冻结样本与固定批次，默认 20 分钟、最多 30 分钟，覆盖排队、启动、求解、逐 episode CPU 验证与首次重评。
   预算到期持久记录并取消（含未关联的所属 Run），`calibrationExecutionEndedAt` 冻结评分工作完成时间，预算只到这里；`endedAt`
-  在全部所属 Run 清理、租约释放后写入。报告标为 policy 接入，不提升 benchmark fidelity。完整统计对照是单独的研究任务。
+  在全部所属 Run 清理、租约释放后写入。报告标为 policy 接入，不代表 benchmark 本身已校准。完整统计对照是单独的研究任务。
 - **后置**：跨 Run 模型池、共享 verify、通用语义直连、独立进程逐位可复现与完整 suite 统计等价。
+
+### 9.4b 具身 harness benchmark（Agent 评测）
+
+RLE-Bench, EmbodiedCLBench and EmbodiedLab evaluate an Agent together with its harness,
+tools and task conditions. They use the existing external adapter protocol and `agentTask`
+CLI launch path; they do not register an independent VLA Policy or introduce an Agent loop.
+Model selection and credentials remain Method/auth configuration, including Ark Agent Plan.
+
+- **RLE-Bench** delegates planning to the built-in Harbor adapter and retains native task
+  instructions, budgets and independent verifier images. Its wrapper preserves the complete
+  task catalog. Native infrastructure/scorer failures invalidate evaluation; proven submission
+  format or size rejections remain valid failures. Tasks whose submitted code can modify the
+  native grader and unsupported Harbor runtime conditions remain explicitly unsupported.
+- **EmbodiedCLBench** runs the native graph environment and image-producing MCP tools in a
+  private service. One in-context learning trial contains the complete ordered prerequisite
+  and target sequence in one CLI session. Basic and zero-shot trials retain their own native
+  conditions. Skill-summary evaluation is unsupported until its fresh-session boundary can
+  be preserved. An independent verifier replays native action evidence with the native grader.
+- **EmbodiedLab** runs Isaac Sim and the native experiment worker in an Orbit-managed GPU
+  service. The Agent receives the public T0 robot API, task card and writable submission
+  workspace; private instance state and scoring evidence stay inside the service. The
+  independent verifier consumes sealed service evidence and the submitted experiment result,
+  using the native experiment evaluator. T1's additional services and unreleased T2 are
+  explicitly unsupported.
+
+Native images, datasets, instance state and run evidence stay outside the source checkout.
+Readiness, execution outcome, cleanup and evaluation validity remain separate. Unusable
+model backends and missing or untrustworthy environment evidence are invalid evaluations. Discovery metadata uses §9.17 and
+retains per-profile support limits; sampled checks do not establish full-suite parity.
+Implementation and validation: [task record](tasks/20261110-embodied-harness-benchmarks.md).
 
 ### 9.5 Agent 与环境的桥
 
@@ -1061,15 +1107,41 @@ Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目�
   - 具身：多相机同步时间轴、动作/关节曲线、action chunk 边界、实时模式的迟到与 stall 标记、在线判定与证据信任徽章；
   - 文本环境 / 多轮：对话视图；代码：diff 与终端（已有）。
 - **实时画面**：运行中的 noVNC / 视频流（只读默认），与历史回放分开。
-- **对比与榜单**：同指纹的方法比较、官方与 Orbit 两种口径、保真度与条件徽章；跨条件比较给出警告。
+- **对比与榜单**：同指纹的方法比较、官方与 Orbit 两种口径、校准与条件徽章；跨条件比较给出警告。
 - **静态导出**：一个 job 或 trial 导出为自包含 HTML（MobileWorld），用于论文附录、分享和社区传播。
 
-### 9.10 保真度与 catalog
+### 9.10 描述一个 benchmark：分类、接入与验证
 
-级别：`L0 实验性` → `L1 校准通过`（benchmark 声明的正负校准符合预期：可以是 oracle、官方 baseline、脚本正例或固定证据，
-期望值或范围由 benchmark 指定；脚本正例只算校准，不冒充通用 oracle 或真实模型；是否存在 oracle 单独记录）→ `L2 样例对齐`（与原生 runner 抽样一致）→ `L3 真实 Agent/Policy 对照` →
-`L4 持续维护`。另记 `hub-claimed`（上游矩阵声称复现，本机未验证）。`deviations` 列出所有改动；不可复现就 `refused`。
-独立公开 catalog 仓库与 `orbit bench search` 是后续规划；当前产品目录随 Orbit 源码发布，由现有 HTTP API 提供（§9.18）。
+每个 benchmark 只用三件事描述，不再叠加其他分级或类别：
+
+| 问题 | 概念 | 位置 |
+| --- | --- | --- |
+| 它是什么 | **六维分类**（领域、任务类型、评测目标、接口与模态、环境与交互条件、评分方式） | §9.17，`contracts/taxonomy.ts` |
+| Orbit 怎么接入、怎么执行 | **接入方式**（`harbor`、`manifest`、`sdk`、`native`，见 §9.14）与**执行形态** kind（§9.3），以及具体 adapter 文件 | adapter 的 `capabilities`；产品目录的 `integrations` |
+| 验证过什么 | **校准记录**：empty / oracle 的实际结果、重复一致性、清理与重评，绑定作业与时间 | `orbit bench calibrate` 生成的报告（§9.14、§9.15） |
+
+验证只列事实，不分级。当前阶段只要求**校准**，即确认管线接通：empty 得最低分、oracle 得满分（没有参考解时省略）、
+重复 seed 一致、清理确认、从保存证据重评分数不变。期望值可由 benchmark 声明（`calibration`）；脚本正例只算校准，
+不冒充真实模型。与官方 runner 或官方公布结果的对照（判分逐题对照、真实 Agent 端到端对照）是后续按需对经典 benchmark
+人工进行的工作；有结果时作为证据说明记入 `capabilities.parity`，不作为等级。条件改动列入 `deviations`，无法按原条件运行的任务显式 unsupported。
+
+接入新 benchmark 时需要说清（与接入方式无关）：
+
+```text
+identity     原始任务来源 + 版本 + 任务/实例 digest；包装改变了考题时，包装本身是 identity
+io           输入输出、可见信息、工具与动作权限、结束信号
+environment  组件及归属、就绪 / 复位 / 停止 / 清理、隔离范围
+resources    按角色的 CPU / 内存 / GPU（型号、显存）/ 磁盘 / 设备 / API 配额 / 时钟预算
+scoring      原版 scorer + 版本 + 输入证据 + 指标单位与方向 + 官方聚合与缺项规则
+validity     原版错误 → 封闭失败类型；任务失败与设施故障的边界（设施故障不得记 0 分）
+trajectory   原生格式 + 统一索引映射 + 完整度 + 产生者与信任级
+calibration  empty / oracle / 重复的期望，及其依据
+```
+
+**兼容字段**：早期的 C1–C7 接入类别（`capabilities.category` / `profiles` / `kind`）、旧 `domains` 词表与产品目录的
+`verification.level` 已废弃，只为旧 adapter 与旧作业兼容读取，文档和界面不再使用。代码中 `category` 目前仍决定校准默认值
+（`embodied-policy`、`fixed-input` 的 empty 不要求最低分；`user-session`、`game` 不要求 oracle、重复允许误差）；
+后续改为由 benchmark 显式声明 `calibration` 后移除。
 
 ### 9.11 具身两阶段
 
@@ -1094,20 +1166,15 @@ Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目�
 | P2 样本身份与官方聚合 | 已实现：failure / episode、OfficialRule 与官方值、报告修订；attempt/retry 计数与批量 Run 后置 | 契约与统计测试；fixture adapter 真实 job 与重新评分验证 |
 | P3 两个小而完整的接入 | 已完成：MiniWoB++ 全量 125；EFE MetaWorld+ standard（compose 卷、restart、偏差登记） | empty 125/125；EFE oracle 1 / empty 0 |
 | P4 Policy 路线 | 已完成：`Lease.roles` 按角色分配、service GPU 与 `entrypoint`、vla-eval 适配器（LIBERO 真实任务） | 角色独占卡、整组排队；LIBERO empty 0 分 valid |
-| P5 扩大覆盖（核心能力与 GUI hub 适配器已完成；EFE GPU 原版校准、Arena 未做；见 tasks/20261104-p5-core、p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个 L1、一个 L2 |
+| P5 扩大覆盖（核心能力与 GUI hub 适配器已完成；EFE GPU 原版校准、Arena 未做；见 tasks/20261104-p5-core、p5a） | 用已验证模板增加同家族 bench：CUA-Lite、Cua Bench、OSWorld（KVM + 缓存卷）、MobileWorld、EFE GPU 任务、Arena；结束阶段持久化；GUI / 具身 trial 视图 | 新接入主要是配置与少量适配；每家族至少一个任务校准通过 |
 | P6 CLI Agent 桥（已完成；见 tasks/20261104-p6-mainline） | 共享 GUI 服务、BrowserGym / CUA-Lite MiniWoB、MCP 接线、模型故障识别、EFE CPU 与统一轨迹 | Claude Code 两个浏览器后端与 EFE CPU 真实检查；Codex 经 MiniWoB 截图/CLI 开发校准启用 GUI；OSWorld 等 KVM 后端后置 |
-| P6.5 接入层（§9.14，已完成；见 tasks/20261104-p65-integration） | calibrate / coverage、L2 SDK、L1 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按层级接入成本达标；迁移前后校准一致 |
+| P6.5 接入层（§9.14，已完成；见 tasks/20261104-p65-integration） | calibrate / coverage、SDK、manifest 清单、Harbor 能力补全 | EFE 35 套件覆盖报告；新 bench 按接入方式的成本达标；迁移前后校准一致 |
 | P7 规模优化（对账回收、主机保护与启动限流、能力路由、[catalog](catalog.md) 已完成；暖池/实例账本、slots、导出、两台真机后置，见 §9.6 P7 实现） | 暖池、pooled/singleton、分层准入、对账回收、多节点能力路由、批量 rollout、高级回放与导出、catalog | 吞吐、恢复、资源对账分别验收；两台真机 |
 | P8 真机 | 设备提供者 | 需合作方、设备与安全流程才启动 |
 
 ### 9.14 后续改进方向：接入层（2026-11-04 复盘）
 
-> **2026-11-05 已采纳**：本节"跟随 hub"的组织方式由 [按大类的接入规范](integration-categories.md) 取代——按被评测对象与
-> 交互契约分 7 个大类（`BenchCapabilities.category` + 受控 `profiles` + `domains`），benchmark 以原始来源直接登记，hub 只作
-> 实现手段；L0/L1/L2 保留为实现成本维度。校准期望按类别给默认值、benchmark 可覆盖（`calibration`）。
-
-> **2026-11-09 范围调整**：C1–C7 保留为接入原型与兼容元数据。面向用户的分类采用 §9.17 六维 v1；
-> 下文的接入成本、校准与执行职责继续适用，不把七类覆盖当作能力或领域的完整覆盖。
+benchmark 以原始来源直接登记，hub 只是实现手段（§9.18）；描述 benchmark 的三个概念见 §9.10。
 
 **判断**：§9.1–§9.7 的核心不变——成功判据沿用上游（分数可与官方对比），Orbit 统一执行、资源、有效性、聚合、
 可信证据与对比视图。问题在接入层：除 Harbor 格式外，每个 hub 都是手写 adapter（几百到上千行），重复实现镜像固定、
@@ -1118,30 +1185,31 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
 不自造协议：任务格式 → Harbor（EFE、Cua Bench、TB 系列）；GUI 交互 → CUA-Lite canonical tool call 与 MCP computer-use；
 具身 Policy → 独立语义契约与模型原生 connector（首个为 OpenPI WebSocket，可选 vla-eval-ws）；具身 coding agent → EFE `/spec /observe /submit`。
 
-**三层接入**（新 bench 优先落到最低层）：
+**接入方式**（新 bench 优先选靠前的方式）：
 
-| 层 | 适用 | 新 bench 需要做的事 | 目标成本 |
+| 方式 | 适用 | 新 bench 需要做的事 | 目标成本 |
 | --- | --- | --- | --- |
-| L0 零代码 | 已是 Harbor 格式，或 hub 可导出 Harbor | `orbit bench add`；缺的 compose 能力补进核心（惠及整类） | 分钟级 |
-| L1 声明式清单 | 有镜像、入口命令、结果文件的 bench | `orbit-bench.yaml`：镜像 digest、任务枚举命令、运行命令、角色资源、结果文件与指标解析、上游错误 → `FailureKind` 映射、官方聚合规则；由 Orbit 内置的通用 adapter 执行 | 半天内 |
-| L2 SDK | 需要交互桥或特殊流程（GUI 环境服务、可信 sidecar） | 基于共享 Python SDK（`orbit_bench`：环境 service 框架、证据签名与复核、失败映射、评分回读、readiness），只写启动环境、reset/step、读结果 | 约 1 天、几十行 |
+| `harbor` | 已是 Harbor 格式，或 hub 可导出 Harbor | `orbit bench add --adapter harbor`；缺的 compose 能力补进核心（惠及整类） | 分钟级 |
+| `manifest` | 有镜像、入口命令、结果文件的 bench | `orbit-bench.yaml`：镜像 digest、任务枚举命令、运行命令、角色资源、结果文件与指标解析、上游错误 → `FailureKind` 映射、官方聚合规则；由 Orbit 内置的通用 adapter 执行 | 半天内 |
+| `sdk` | 需要交互桥或特殊流程（GUI 环境服务、可信 sidecar） | 基于共享 Python SDK（`orbit_bench`：环境 service 框架、证据签名与复核、失败映射、评分回读、readiness），只写启动环境、reset/step、读结果 | 约 1 天、几十行 |
+| `native` | 必须保留上游 runner 或原生仿真协议 | 内置包装（ASI）或原生具身 adapter（`examples/bench-adapters/embodied` + `orbit_embodied`，§9.4a） | 按 benchmark |
 
-清单与 SDK 都编译成现有 adapter 协议 1（§7）的四个操作，不新增执行路径；SDK 的签名与证据格式沿用 §7 已实现的规则，
+所有方式都编译成现有 adapter 协议 1（§7）的四个操作，不新增执行路径；SDK 的签名与证据格式沿用 §7 已实现的规则，
 旧 trial 的 rescore 必须保持有效。
 
 **接入的验收与盘点**：
 
 - `orbit bench calibrate <bench> [--sample N] [-t task…]`（已实现，`cli/calibrate.ts`）：抽样任务（按 suite 轮转）
   跑 empty 与 oracle（benchmark 允许时）× 2 seed，逐项判 passed / failed / not_run：全部完成、全部 valid、empty 为 0、
-  oracle 满分、重复 seed 一致、清理确认、从保存证据重评分数不变。只用公开 client API，作业照常留在 Orbit 里；
-  "已接入"以该报告为准。正向的方法（真实 Agent / Policy）与原版分数对比仍需人工完成。
+  oracle 满分、重复 seed 一致、清理确认、从保存证据重评分数不变（期望可按 §9.10 由 benchmark 声明）。只用公开 client API，
+  作业照常留在 Orbit 里；"已接入"以该报告为准。与原版分数的对照不在当前要求内，需要时人工完成。
 - `orbit bench coverage <bench>`（已实现，纯函数 `contracts.benchCoverage`）：按 suite（task 的 `suite` tag，Harbor
   取 `tasks/<suite>/<task>` 目录；否则 id 前缀）统计 supported，原因去掉服务名与变量说明后计数排序。
   supported 只表示能在其条件下运行，不等于已校准，也不表示本机有对应 GPU 型号。
 
-**已实现（P6.5）**：L1 内置 `manifest` 适配器（`bench/manifest.ts`，`orbit-bench.yaml`；结果按路径选取上游写出的值，
+**已实现（P6.5）**：内置 `manifest` 适配器（`bench/manifest.ts`，`orbit-bench.yaml`；结果按路径选取上游写出的值，
 `invalid` 规则映射到封闭失败类型；`examples/bench-manifests/vla-eval-libero` 与 Python 版 vla-eval 适配器条件相同）；
-L2 Python SDK `examples/sdk/orbit_bench`（协议入口、`valid/invalid`、`pinned`，失败类型由 TS 测试核对一致），
+Python SDK `examples/sdk/orbit_bench`（协议入口、`valid/invalid`、`pinned`，失败类型由 TS 测试核对一致），
 仓库内 9 个 Python 适配器改用它（顺带修复 vla-eval 出错仍以 0 退出）；GUI 共享服务仍在 `examples/tools/orbit-gui-service`。
 Harbor 补全：共享 GPU 组、`gpu_types`、main `shm_size`、服务 `entrypoint`。未做：授权数据卷（BEHAVIOR 等，需用户数据目录
 登记）、main 的 `cap_drop`/`healthcheck`、跨 bench 汇总视图。
@@ -1149,10 +1217,10 @@ Harbor 补全：共享 GPU 组、`gpu_types`、main `shm_size`、服务 `entrypo
 **顺序**（取代 §9.13 中 P6 之后的排序，P7 规模优化在其后）：
 
 1. `calibrate` 与 `coverage`，用它们盘点 EFE 35 个套件，确定 Harbor 能力缺口排名。
-2. P6 主线第 1 项（共享 GUI service）扩展为 L2 SDK；现有 6 个 adapter 逐步迁移，迁移前后校准结果一致。
-3. L1 清单与通用 adapter，以 vla-eval 改写为样板。
+2. P6 主线第 1 项（共享 GUI service）扩展为 SDK；现有 6 个 adapter 逐步迁移，迁移前后校准结果一致。
+3. manifest 清单与通用 adapter，以 vla-eval 改写为样板。
 4. 按 coverage 排名补全 Harbor 能力：allowlist 网络、GPU 共享语义（EFE abc-sim）、`mcp_servers`、多步任务。
-5. 跨 bench 汇总视图：各 bench 分数尺度不同，只并列"有效样本数、官方值、Orbit 值、保真度"，不做跨 bench 平均。
+5. 跨 bench 汇总视图：各 bench 分数尺度不同，只并列"有效样本数、官方值、Orbit 值、最近校准"，不做跨 bench 平均。
 
 **仍未统一、需要正视的**：轨迹（Agent 会话与环境记录合成一份，§9.8，P6 主线第 4 项）；具身 bench 尚无真实
 coding agent / VLA 正向校准；覆盖数字在 `coverage` 落地前不对外宣称。
@@ -1169,11 +1237,10 @@ JSON 是辅助；"能跑 / 校准通过 / 真实 Agent 或 Policy 跑过 / 与�
 - `POST /api/v1/bench/calibrations`：daemon 抽样、建作业；作业结束后若需重评，daemon 自动发起一次（重评前的分数留在 trial
   `history`），全部结束后由 `GET /bench/jobs/:id` 的 `calibration` 字段给出报告（`running` / `rescoring` / `done` + 检查列表）。
   报告按需从 trial 计算，不另建账本。`orbit bench calibrate` 改为调用这个 API，输出不变。
-- `GET /api/v1/bench/catalog` 的 `entries[]`：每个已登记 benchmark 一行——登记信息、任务列表摘要（类别、profile、supported/listed、按 suite
+- `GET /api/v1/bench/catalog` 的 `entries[]`：每个已登记 benchmark 一行——登记信息、任务列表摘要（六维分类、supported/listed、按 suite
   的覆盖与原因；daemon 内存缓存、后台刷新，列表失败保留错误和上次成功时间）、最近 5 次校准（离散记录，不画连续健康条）、
-  实际评测配置最近一次的主指标与 valid/total、保真度（配置版本按 §9.16 区分）。保真度级别沿用 §9.10，Web 显示名称而不是
-  `L*`（避免与接入层级 L0–L2 混淆）：校准通过由报告算出；样例对齐与真实对照由 adapter 在 `capabilities.parity` 声明证据，
-  未声明显示"未验证"。另有 §9.18 的 `supported[]` 产品目录，与本地登记证据分开。
+  实际评测配置最近一次的主指标与 valid/total（配置版本按 §9.16 区分）。验证按 §9.10 只列事实：校准由报告算出；
+  与官方的对照由 adapter 在 `capabilities.parity` 写明证据，未声明显示"未验证"。另有 §9.18 的 `supported[]` 产品目录，与本地登记证据分开。
 
 **工具与模拟用户对话轨迹**：新增 review kind `conversation`，契约 `ConversationTrajectory`（`contracts/trajectory.ts`）：
 
@@ -1223,7 +1290,7 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
 点击取值进入 `/benchmarks?dimension=<group>&<field>=<value>`，展开对应维度并筛选；未知与明确空集合仍区分为
 “Not annotated”与“None”。保留运行中的作业、排队原因、待复盘失败和同一评测条件下配置版本的配对比较。
 即使本地没有登记，仍可浏览已适配产品；本地首次使用步骤为登记 benchmark → 配置凭据 → 校准 → 选兼容组合运行。
-读取失败显示错误与重试，避免永久加载。旧 C1–C7 编号与七类覆盖比例不再出现在首页。
+读取失败显示错误与重试，避免永久加载。
 
 **Benchmarks**：
 
@@ -1286,36 +1353,6 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
 
 **不做**：跨 benchmark 总分或总榜；单一 Ready 徽章合并安装、凭据、能力、校准与有效性；按 hub 声称的套件数宣传接入量；
 独立 Method 系统或方法进化声明；Web 内的科研编排。
-
-### Embodied harness benchmark adapters
-
-RLE-Bench, EmbodiedCLBench and EmbodiedLab evaluate an Agent together with its harness,
-tools and task conditions. They use the existing external adapter protocol and `agentTask`
-CLI launch path; they do not register an independent VLA Policy or introduce an Agent loop.
-Model selection and credentials remain Method/auth configuration, including Ark Agent Plan.
-
-- **RLE-Bench** delegates planning to the built-in Harbor adapter and retains native task
-  instructions, budgets and independent verifier images. Its wrapper preserves the complete
-  task catalog. Native infrastructure/scorer failures invalidate evaluation; proven submission
-  format or size rejections remain valid failures. Tasks whose submitted code can modify the
-  native grader and unsupported Harbor runtime conditions remain explicitly unsupported.
-- **EmbodiedCLBench** runs the native graph environment and image-producing MCP tools in a
-  private service. One in-context learning trial contains the complete ordered prerequisite
-  and target sequence in one CLI session. Basic and zero-shot trials retain their own native
-  conditions. Skill-summary evaluation is unsupported until its fresh-session boundary can
-  be preserved. An independent verifier replays native action evidence with the native grader.
-- **EmbodiedLab** runs Isaac Sim and the native experiment worker in an Orbit-managed GPU
-  service. The Agent receives the public T0 robot API, task card and writable submission
-  workspace; private instance state and scoring evidence stay inside the service. The
-  independent verifier consumes sealed service evidence and the submitted experiment result,
-  using the native experiment evaluator. T1's additional services and unreleased T2 are
-  explicitly unsupported.
-
-Native images, datasets, instance state and run evidence stay outside the source checkout.
-Readiness, execution outcome, cleanup and evaluation validity remain separate. Unusable
-model backends and missing or untrustworthy environment evidence are invalid evaluations. Discovery metadata uses §9.17 and
-retains per-profile support limits; sampled checks do not establish full-suite parity.
-Implementation and validation: [task record](tasks/20261110-embodied-harness-benchmarks.md).
 
 ### 9.17 Benchmark 六维分类 v1（2026-11-09）
 
@@ -1467,10 +1504,9 @@ Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包�
 - benchmark 来源与版本沿用现有身份。作业保留已有 benchmark/capabilities 快照，当前标签修改不重写历史报告；
   本轮未新增逐 task 的完整历史 taxonomy 快照或独立分类修订。分类元数据不进入配置可比性与重试兼容指纹。
   模型、harness、权重与工具配置属于评测配置（兼容类型 `Method`）；Run 记录执行设施，均不由分类代替。
-- C1–C7、旧 `domains` / `profiles` 与旧作业保持兼容，作为工程元数据或旧记录展示。只迁移有明确语义对应的值，
+- 废弃的 `category`、旧 `domains` / `profiles` 与旧作业保持兼容读取（§9.10）。只迁移有明确语义对应的值，
   当前精确回退仅为 `software`、`machine-learning`、`science`、`games` 同值和 `embodied` → `robotics`；
-  `knowledge`、`gui-web`、`data-analysis` 等保留原标签，不猜新字段。不从 C2 猜软件领域、从 C5 猜感知能力、
-  从 C6 猜推理能力。分类不改变现有准入、Policy binding、校准或评分行为。
+  `knowledge`、`gui-web`、`data-analysis` 等保留原标签，不猜新字段，也不从旧类别推断任何六维取值。分类不改变现有准入、Policy binding、校准或评分行为。
 - `orbit bench label --taxonomy '<JSON>'` 或 `--taxonomy-file <file>` 替换登记的 taxonomy 部分，保留已有 identity 与旧 domains；
   `--clear` 清除全部 labels。HumanEval 与原生 embodied adapter 已声明可核实的协议事实，未指定的评测目标保持未知；
   其他适配器逐步补充，未标注不等于不具备该条件。
@@ -1478,7 +1514,7 @@ Docker 或 CLI Agent 推导任务领域、允许接口与评分方法。若包�
 **Benchmarks 页面**：六张维度卡分别提供领域、任务类型、评测目标、接口与模态、环境与交互条件、评分方式的取值筛选；
 后三组按子字段组织，计数属于具体取值命中的 benchmark 家族，不表示某个维度已完成校准或已被能力覆盖。
 默认以 §9.18 产品目录展示已适配 benchmark 家族；本地登记视图保留证据、覆盖、运行入口与条件详情。未知值明确显示。
-C1–C7 仅用于历史接入原型和兼容信息，不再作为产品分类；Harbor 等保留为接入方式。不得以“7/7”表达评测生态完整覆盖。
+Harbor 等是接入方式，不是分类。
 本轮首页与维度卡调整见 [任务记录](tasks/20261109-benchmark-category-cards.md)。
 
 ### 9.18 已适配 benchmark 产品目录（2026-11-09）
@@ -1497,9 +1533,9 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 - 一条产品记录代表一个 benchmark 家族；接入框架、启动格式、suite、recipe 和本地登记不重复占主卡片。
   多条接入路径与可核实的任务 profile 放在详情，Harbor、BrowserGym、CUA-Lite、vla-eval 等只解释如何接入。
   包装改变题目或被测对象时保留独立身份，如 EFE coding-agent 任务与原生 Policy benchmark。
-- 产品支持状态区分 `sample-checked`（指定抽样接入验收）、`adapter-tested`（适配器测试）和
-  `pending-calibration`（真实校准尚待完成）。状态随来源与限定范围展示；不等于本机资源已准备、全部任务可运行、
-  任意模型都兼容或完整套件成绩已与官方等价。不能把本机某次运行证据推广到整个产品家族。
+- 每个产品条目附一段验证说明（做过哪些校准或检查、范围与来源链接），只列事实（§9.10）；不等于本机资源已准备、
+  全部任务可运行、任意模型都兼容或完整套件成绩已与官方等价。不能把本机某次运行证据推广到整个产品家族。
+  契约中的 `verification.level` 是待移除的兼容字段，界面与文档不再据此分级。
 - 六维词表复用 §9.17。每个字段只填源码协议或文档明确支持的值；多个 profile 的展示可以汇总，
   联合筛选和矩阵必须由同一 profile 满足。同字段 OR、不同字段 AND；计数按产品 ID 去重。
 - 本地登记、安装和运行证据继续独立呈现。目录的接入说明说明如何准备环境；启动评测仍需要明确选择现有登记，
@@ -1533,20 +1569,3 @@ v0 的代码、文档与任务记录保留在标签 `v0-python-final`。
 - ASI 容器内旧版 Codex CLI 导致模型拒绝；harness 版本必须固定并在 doctor 中检查。
 - GPU 映射：Docker `--gpus device=<UUID>` 或 CDI `--device nvidia.com/gpu=<UUID>`，启动后核对实际映射与租约一致。
 - 文档与流程记录量接近代码量，拖慢迭代。只保留本文、status 与必要的任务记录。
-
-### Benchmark-specific native adapters (2026-11-10)
-
-AutomationBench uses its native tool agent and an independent original rubric over saved world state;
-public and simple splits remain separate. Chartography uses the original no-tools Inspect solver and
-an independent native judge; its dummy sample pack is never represented as the released dataset.
-Their images pin upstream code/dependencies; read-only runtime wrappers remain external-adapter code.
-FrontierSWE/WANDR wrappers reuse Harbor rather than adding an executor: frozen catalogs, task-account
-execution, native tar artifact exclusions, oracle-only release flags, native invalid markers and WANDR's
-12 metrics. All four routes preserve API/scorer failures as invalid and keep evidence for review.
-Separate Harbor verifiers preserve their own GPU model restrictions, including when they reuse the
-solve environment. Independent verifier environments do not inherit solver model choices. Shared
-verifiers cannot replace their running GPU allocation with a separate environment declaration.
-GPU model matching uses whole name tokens in order, allowing form-factor tokens between model and
-memory variants (for example A100-SXM4-80GB for A100-80GB); different memory variants remain distinct.
-The product library has 34 families with per-route validation limits; unavailable originals and exact
-protocol gaps are recorded in [availability](guides/benchmark-availability.md).

@@ -435,8 +435,10 @@ Orbit 目前处于早期开发阶段（0.1.1）。已验证范围、限制和近
 | --- | --- |
 | 接入 Agent 与更新插件 | [插件指南](plugin/README.md) |
 | 适配 benchmark、配置任务资源 | [Benchmark 适配指南](docs/guides/bench-adapter.md) |
+| 运行与复盘具身评测 | [快速开始](docs/guides/embodied-quickstart.md) · [Benchmark 覆盖与模型实测](docs/guides/embodied-compatibility.md) |
+| 接入具身 Policy 或原生 benchmark | [接入模板](docs/guides/embodied-onboarding.md) |
 | 连接多台机器 | [多节点指南](docs/guides/multi-node.md) |
-| 理解架构与当前支持范围 | [设计](docs/design.md) · [项目状态](docs/status.md) |
+| 理解架构与当前支持范围 | [设计](docs/design.md) · [项目状态](docs/status.md) · [文档地图](docs/README.md) |
 | 构建与发布安装包 | [发布指南](docs/guides/releasing.md) |
 | 演示 Orbit | [离线演示稿](docs/ppt/README.md) |
 
@@ -452,6 +454,7 @@ Orbit 目前处于早期开发阶段（0.1.1）。已验证范围、限制和近
 | Run 一直 `queued` | `orbit ps` 会显示原因（GPU 被占用、CPU 被其他进程占满、内存不足、指定节点离线等） |
 | Agent 连不上 Orbit | `orbit` 在其 `PATH` 上；Codex 沙箱已允许网络 |
 | 快照过大 | 把数据和权重加入 `.gitignore`，用 `-m` 或 `orbit data` 挂载 |
+| Run 写 `$ORBIT_OUTPUT` / `$ORBIT_METRICS` 报权限错误 | Docker 启用了 `userns-remap`，见[规避方法](docs/guides/docker-userns-remap.md) |
 
 <a id="开发"></a>
 <a id="development"></a>

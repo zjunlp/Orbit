@@ -1,8 +1,8 @@
-// Benchmark integration categories (docs/integration-categories.md). No imports, so the Web bundle
+// Deprecated benchmark integration categories (design §9.10), read for compatibility. No imports, so the Web bundle
 // can use them at runtime (`@zjunlp/orbit/categories`); the zod schemas live in bench.ts.
 
 /**
- * Integration categories (docs/integration-categories.md): what the evaluated subject is and how it
+ * Deprecated integration categories (design §9.10): what the evaluated subject is and how it
  * interacts with the task. Environment, scoring and world are profiles within a category.
  */
 export const BENCH_CATEGORIES = [

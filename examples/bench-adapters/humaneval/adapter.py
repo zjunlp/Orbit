@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -B
-"""HumanEval through Orbit adapter protocol 1 (C1 fixed input; docs/integration-categories.md).
+"""HumanEval through Orbit adapter protocol 1 (fixed input; design §9.10).
 
 Identity: openai/human-eval commit 312c5e5 data `HumanEval.jsonl.gz` (sha256 below), 164 problems. A trial is one
 problem: the subject sees only the prompt (signature + docstring) and returns a completion; the verify Run executes

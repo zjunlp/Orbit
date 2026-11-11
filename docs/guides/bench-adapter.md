@@ -1,6 +1,6 @@
 # 接入新 benchmark
 
-适用版本：`refactor/ts-rewrite`（adapter 协议、资源文件、实测用量）。Agent 用的 skill：`plugin/skills/orbit-bench`。模型、判定规则与协议定义见 [design §7](../design.md#7-刷榜bench)。
+接入方式（`harbor`、`manifest`、`sdk`、`native`）与校准要求见 [design §9.10](../design.md)、§9.14。Agent 用的 skill：`plugin/skills/orbit-bench`。模型、判定规则与协议定义见 [design §7](../design.md#7-刷榜bench)。
 
 ## 0. 仓库内适配器的目录契约
 
@@ -102,7 +102,7 @@ main 租用，否则由第一个非监控服务租用；监控服务看到同一
 verifier 必须把分数写到 `/logs/verifier/reward.txt`（一个数）或 `reward.json`（`reward` 键或唯一键），满分为 1。
 `environment/docker-compose.yaml` 中的其他服务作为服务容器与 solve Run 一起启动（就绪后才启动 Agent），`service = "<名>"` 的 artifacts 从该服务采集；服务日志在 solve Run 的 `output/services/<名>/log`。shared 模式（默认）的 verifier 在 solve Run 的同一容器里、求解结束后运行（after 阶段），这类 trial 不能 `bench rescore`。
 
-## 2a. 声明式清单（L1）
+## 2a. 声明式清单（manifest）
 
 ```bash
 orbit bench add libero examples/bench-manifests/vla-eval-libero --adapter manifest

@@ -12,8 +12,8 @@ returns a completion; tests and the canonical solution stay hidden.
 | Field | Contract |
 | --- | --- |
 | Identity | Upstream commit above and `HumanEval.jsonl.gz` pinned by SHA256. A mismatch fails the task listing instead of grading different problems. |
-| Category | `fixed-input`; profiles `generate` and `exec-test`. One trial = one problem. |
-| Input / visibility | Prompt only. `oracle` receives `canonical_solution` deliberately; `empty` submits an empty completion and `external` an OpenAI-compatible chat model. CLI Agents are refused: C1 grades a single completion, not a session. |
+| Unit | One trial = one problem; scored by executing the original tests. |
+| Input / visibility | Prompt only. `oracle` receives `canonical_solution` deliberately; `empty` submits an empty completion and `external` an OpenAI-compatible chat model. CLI Agents are refused: the benchmark grades a single completion, not a session. |
 | Output / stop | One completion per trial. No environment, no multi-turn loop. |
 | Resources | `python:3.11-slim` by digest, no GPU, no devices, no network in verify. |
 | Scoring | The upstream check program runs `prompt + completion + test + check(entry_point)` with a 3 s limit per problem, matching `evaluate_functional_correctness`. Binary pass@1; seeds are repeated samples. |

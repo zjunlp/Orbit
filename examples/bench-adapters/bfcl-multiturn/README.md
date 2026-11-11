@@ -1,4 +1,4 @@
-# BFCL multi-turn — C3 tool workflow
+# BFCL multi-turn — tool workflow
 
 Direct external Python SDK adapter for the **Berkeley Function Calling Leaderboard**, using
 [`bfcl-eval==2026.3.23`](https://pypi.org/project/bfcl-eval/2026.3.23/) from
@@ -24,7 +24,7 @@ The adapter does not silently remove the task or change its tool availability.
 | Validity | Normal tool-domain errors, unavailable tools, wrong arguments, invalid call syntax and unsuccessful states are behavior, judged using upstream checks. Missing package/version → `env_start`; initialization failure → `reset_failed`; unexpected execution errors (including upstream's swallowed exception strings) or failed fixed solve driver → `env_step`; broken reference, corrupt evidence, checker exception or missing/malformed verdict → `scorer_error`. Orbit owns timeout, cancellation, OOM and cleanup outcomes. |
 | Trajectory | Solve `evidence.json`: original schemas, messages, available tools, call IDs, source, decoded name/arguments, result, action errors, initial and per-turn before/after public state. Python filesystem objects use upstream string representations; private RNG internals and file timestamps are not exported. `replay.json` contains independent verifier states/results. `verdict.json` contains upstream checker details. Verify also writes `conversation.json` (review kind `conversation`): per turn the user messages, the replayed calls and results, the agent's replies, before / after / reference states and the reference calls; the checker's first failing turn (found by running the unmodified checker on growing prefixes), later turns `unchecked`. |
 | Trust | Solve evidence is self-reported. Verify accepts only call text as the proposed action sequence, regenerates results/states, and runs the original checker in fresh namespaces. It never consumes solve-written scores, verdicts, results or states as scoring authority. Its own verdict is the only score source. |
-| Calibration | Default C3 expectations fit: empty = 0, oracle = 1, exact repeatability, rescore unchanged. BFCL fixture seeds are preserved; Orbit seeds label repeated runs rather than changing the question or initial state. Positive/negative, missing-tool, schema-error, malicious-expression and infrastructure-failure cases have explicit tests. |
+| Calibration | Default calibration expectations fit: empty = 0, oracle = 1, exact repeatability, rescore unchanged. BFCL fixture seeds are preserved; Orbit seeds label repeated runs rather than changing the question or initial state. Positive/negative, missing-tool, schema-error, malicious-expression and infrastructure-failure cases have explicit tests. |
 
 The image uses the pinned Python base, the pinned BFCL wheel installed with `--no-deps`, and
 `mpmath==1.3.0`. This is the complete dependency set for these local classes; model backends, web

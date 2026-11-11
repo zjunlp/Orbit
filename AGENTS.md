@@ -55,8 +55,8 @@ These rules apply to every change, including this file. `CLAUDE.md` imports this
 | --- | --- | --- |
 | `docs/design.md` | Architecture, contracts, decisions | Update in the same branch when a boundary, contract or decision changes |
 | `docs/status.md` | What works now, gaps, next steps | ≤ 40 lines; replace outdated text, never append history |
-| `docs/tasks/<YYYYMMDD-slug>.md` | One per feature, substantive fix or design change | Use the template below; small fixes need only a good commit message |
-| `docs/guides/` | How to use a feature | Only for implemented behavior |
+| `docs/tasks/<YYYYMMDD-slug>.md` | One per feature, substantive fix or design change | Use the template below and add a line to `docs/tasks/README.md`; small fixes need only a good commit message |
+| `docs/guides/` | How to use a feature | Only for implemented behavior; list new guides in `docs/README.md` |
 
 Source-controlled records describe reusable product behavior, design decisions, bugs and development
 validation. Keep personal experiment results, batch progress, scores, retry/consolidation histories,
