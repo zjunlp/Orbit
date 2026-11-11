@@ -60,7 +60,7 @@ export function NewBenchJob() {
 
   return (
     <>
-      <TopBar crumbs={[{ label: "Bench", href: "/bench" }, { label: "New evaluation" }]} />
+      <TopBar crumbs={[{ label: "Evaluations", href: "/bench" }, { label: "New evaluation" }]} />
       <div className="page">
         <div className="page-pad bench-launch">
           {benchmarks.error ? (

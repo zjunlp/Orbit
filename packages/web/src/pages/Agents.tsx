@@ -2,6 +2,7 @@
 // containers / shown by a real run), its credentials and evidence, and which benchmark it can take.
 import { Fragment, useState } from "react";
 import { IconBot, IconCheck, IconChevron, IconChevronDown, IconX } from "../components/icons.tsx";
+import { PageHeader } from "../components/PageHeader.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { Empty, Link, Loading } from "../components/ui.tsx";
 import {
@@ -55,14 +56,16 @@ export function AgentsPage() {
   const mcp = agents.filter((a) => a.capabilities.mcp.wired).length;
   const gui = agents.filter((a) => a.capabilities.gui.wired).length;
   const withAuth = agents.filter((a) => a.profiles.length).length;
-  const tabBtn = (t: typeof tab, label: string) => (
+  const tabBtn = (t: typeof tab, label: string, count?: number) => (
     <button
       type="button"
-      className={`btn sm${tab === t ? " on" : " ghost"}`}
-      aria-pressed={tab === t}
+      role="tab"
+      className={tab === t ? "on" : ""}
+      aria-selected={tab === t}
       onClick={() => setQuery({ tab: t === "agents" ? null : t, open: null })}
     >
       {label}
+      {count !== undefined && <span className="count">{count}</span>}
     </button>
   );
   return (
@@ -77,6 +80,10 @@ export function AgentsPage() {
       </TopBar>
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
+          <PageHeader
+            title="Agents"
+            description="Agent harnesses Orbit can run, what they support, their credentials on this node and the evidence that they work here."
+          />
           {cat.error && !cat.data ? (
             <div className="callout" role="alert">
               {cat.error}
@@ -117,10 +124,10 @@ export function AgentsPage() {
                   <small className="faint">auth profiles on this node</small>
                 </div>
               </div>
-              <div className="row bench-wrap">
-                {tabBtn("agents", `Agents ${agents.length}`)}
+              <div className="subtabs" role="tablist" aria-label="Agents view">
+                {tabBtn("agents", "Agents", agents.length)}
                 {tabBtn("compatibility", "Agent × benchmark")}
-                {tabBtn("external", `External policies ${cat.data.external.length}`)}
+                {tabBtn("external", "External policies", cat.data.external.length)}
               </div>
               {tab === "agents" && <AgentTable agents={agents} />}
               {tab === "compatibility" && <Compatibility />}

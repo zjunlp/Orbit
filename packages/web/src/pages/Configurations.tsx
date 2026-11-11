@@ -6,6 +6,7 @@ import {
   resolveMetrics,
 } from "@zjunlp/orbit/metrics";
 import { IconLayers } from "../components/icons.tsx";
+import { PageHeader } from "../components/PageHeader.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { CopyButton, Empty, Link, Loading } from "../components/ui.tsx";
 import { api, type MethodLine, type MethodRevisionEntry } from "../lib/api.ts";
@@ -85,11 +86,10 @@ export function ConfigurationsPage() {
       </TopBar>
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
-          <p className="faint">
-            Review the Agent or policy, model, reasoning effort and optional instructions or skills
-            used in your evaluations. Configurations are grouped by name, with versions for changes
-            to their recorded settings.
-          </p>
+          <PageHeader
+            title="Evaluation configurations"
+            description="The Agent or policy, model, reasoning effort and optional instructions or skills used in your evaluations, grouped by name, with a version for each change to their recorded settings."
+          />
           {methods.error && !methods.data ? (
             <div className="callout" role="alert">
               {methods.error}

@@ -353,6 +353,8 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 - **Bench**：job 列表、job 详情（分数矩阵，格子进入 trial 页）、配置对比（§7）。Merge retries 对话框提供来源 ID 和选项解释，
   先预览 adopted、reclassified（task/kind）、removed runs/jobs，再输入目标 job ID 并携带 digest 应用；改选项后必须重新预览。
   使用原生 modal dialog 管理焦点与 Esc，关闭后恢复入口焦点。
+- **页面框架**：一级页面在面包屑下有统一的 `PageHeader`（标题 + 一句说明），内容区最宽 `--content-max`（1600px）居中；
+  侧栏底部为连接状态与快捷键 / 主题 / 折叠三个图标；job 状态用彩色徽标，`<details class="card">` 统一带折叠箭头。
 - **地址**：旧地址先由 `legacyHref` 重定向；`routes.ts` 之外的路径显示 “Page not found”，不再回落到 Overview。
 - **轮询**：`useAsync` 与 Logs 在隐藏标签页暂停轮询，重新可见时刷新一次后恢复；进行中的请求仍可完成，SSE 继续接收。
 - **删除**（不可恢复）：`POST runs/delete` 只删已终态且清理完成、不属于 bench trial 的 Run（远端 Run 须镜像同步结束）；

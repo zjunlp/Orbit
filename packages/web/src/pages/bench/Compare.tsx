@@ -39,7 +39,9 @@ export function BenchComparePage() {
 
   return (
     <>
-      <TopBar crumbs={[{ label: "Bench", href: "/bench" }, { label: "Compare configurations" }]} />
+      <TopBar
+        crumbs={[{ label: "Evaluations", href: "/bench" }, { label: "Compare configurations" }]}
+      />
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
           <section className="col" style={{ gap: 8 }}>
