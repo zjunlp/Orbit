@@ -13,10 +13,10 @@ Orbit 是让验收有据可依的实验室，位于做决策的 Agent 与负责�
 标题中的 Evolve 需要证据证明进化是真的，Any Environment 是证明的方式：
 跨多类 benchmark 与多种 Agent 是进化门的前提，只在诞生地测过的改进不算验证。
 
-前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）仅有部分导入器；进化门仍在设计中、尚未写入本文，
+前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 纯转换器及部分环境导入器，尚未接入 Run 生命周期；进化门仍在设计中、尚未写入本文，
 目前只有配置版本、血缘与配对统计（§9.16）。在进化门的设计写入本文之前，§9.16 的"不做方法进化声明"继续有效。
 统一轨迹、导出、分叉、进化门与进化实验的分步计划见 [evolution-plan.md](evolution-plan.md)；它是计划而不是设计，
-各工作包落地时把定稿写回本文（其中 §9.8 将由"自定义 events.jsonl"改为"Agent 侧采用 ATIF、环境侧按引用对齐"）。
+各工作包落地时把定稿写回本文；§9.8 已采用 ATIF，生成、存储与 API 留在 T2。
 具身设备后端是未来方向。规划、分析与迭代仍由 Agent 主导，Orbit 不提出改动，只提供执行、证据与判定依据。
 
 > Orbit 让 Codex / Claude Code 等 Agent 在隔离的 Docker 中按资源规则运行实验，
@@ -1103,12 +1103,32 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
 
 ### 9.8 统一轨迹
 
-- 一个 trial 一份 `trajectory/` 索引：`events.jsonl`（事件类型封闭：message、thinking、tool_call、tool_result、observation、action、reward、
-  turn、usage、error、operator）+ `media/` + 原始文件引用。Agent 侧与 **ATIF 兼容**（Cua Bench、Harbor 已采用，可直接导入导出），
-  环境侧按 step 与时间对齐；具身高频数据保留原格式（RCB1、npz、视频）并导出 LeRobotDataset，不进 sqlite。
-- **导入器**（每个 hub 一个，纯函数、带测试）：Codex/Claude 会话、Harbor/Cua ATIF、CUA-Lite sample、vla-eval SQLite/JSONL、EFE journal、
-  MobileWorld `traj.json`、AgentLab step、OSWorld `traj.jsonl`、BrowserGym JSONL。
-- 完整度标注：会话完整 / 只有环境记录 / 只有原生日志 / 截断；现有 `GuiTrajectory` 作为 GUI 视图的输入之一。
+Agent 侧直接采用 Harbor 的 **ATIF**，不再另建封闭的 `events.jsonl` 事件格式。`contracts/atif.ts`
+定义严格的 zod 契约：读取 v1.5–v1.8，转换器写 v1.7，未知版本或未知标准字段报错。
+校验连续 step_id、Agent 专属字段、同一步的工具结果引用、嵌入子轨迹 ID 与多模态内容；旧版子轨迹引用兼容其 session_id 语义。
+Orbit 扩展放在 `extra.orbit`，包含来源文件摘要、导入器版本、CLI 版本、完整度以及步骤的原生游标、思考类别、环境和检查点引用。
+标准规定的 `extra.context_management` 记录压缩边界；原生用量保留在 `metrics.extra`。
+
+**T1 已实现的边界**：`sessions/codex.ts` 与 `sessions/claude.ts` 提供同步纯转换器，输入原生 JSONL 字符串，
+返回 `{ trajectory, media }`；`sessions/atif.ts` 共用 JSONL 解析和媒体抽取，`sessions/index.ts` 保持公开入口。
+转换器不读写文件、不启动 Agent、不依赖 Python。现有 `SessionTranscript` 路径保持兼容，T2 接入轨迹后才改为投影视图。
+
+- Codex 按模型调用合并 message / reasoning / function 或 custom tool call，用 call_id 将结果归回发起步骤。
+  重复 token_count 去重，逐次 last_token_usage 求和，原生累计总量保留供核对；compacted 写成压缩边界。
+  输入一个 rollout；已标注 ordinal 的子会话跳过复制的父上下文，不自动发现或聚合其他 rollout。未知事件保留并标记截断。
+- Claude 沿 uuid / parentUuid / logicalParentUuid 选择活跃分支，同一个 message.id 的分块合并并补齐并行工具结果，用量取最后值。
+  压缩记录若指向缺失的历史父消息，保留诊断并标截断，不推测拼接遗失分支。
+  prompt_tokens 包含 input、cache read 与 cache creation；主文件 sidechain 和调用者提供的 subagent JSONL 嵌入子轨迹，
+  主轨迹合计只覆盖本身的调用。缺失用量不冒充零用量。
+- 原生会话始终是真源。加密或签名思考只标记 opaque；轨迹不携带其密文或签名，续跑仍依赖原生文件。
+  图片在轨迹内用 `media/` 相对路径，返回独立的 base64 资产或来源文件引用供调用者物化，不内嵌到轨迹正文。
+- 完整的 Agent 转换标 `agent-only`，损坏记录、未知事件、缺失工具结果等标 `truncated` 并保留诊断，不静默跳过。
+  `complete` 与 `environment-only` 留给组合证据；GUI、Episode、Conversation 保留各自 schema，通过步骤引用对齐，
+  高频动作、视频和数组仍用原格式，不进 sqlite。
+
+**后续接入**：T2 在 Run 收集 Agent home 后生成 `<run>/orbit/trajectory/trajectory.json`，提供存储、重建、API 与 CLI；
+T3 从轨迹记账；T4 对齐环境引用；T5 增加 Harbor / Cua 直通及其他来源。转换失败只记录事件，不改变执行结果、分数或有效性。
+开发期可用隔离环境中的 Harbor validator 校验输出；它不进入 daemon 或 CI 依赖。
 
 P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE MetaWorld+ standard/2.1 的 journal、已执行动作矩阵、最终奖励与 render 视频，
 产出既有 `EpisodeTrajectory`。Harbor adapter 的 `score` 对 `metaworldplus-*` 任务读取 solve 的 Agent 会话、写 solve 的 `orbit-trajectory.json`

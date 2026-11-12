@@ -1,0 +1,286 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "fixture-session",
+  "trajectory_id": "fixture-session",
+  "agent": {
+    "name": "claude-code",
+    "version": "2.1.319"
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "user",
+      "message": "Fixture text",
+      "timestamp": "2026-01-01T00:00:02Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-1",
+            "line": 1
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 2,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:03Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-2",
+            "line": 2
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 3,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:04Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-3",
+            "line": 3
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 4,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:05Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-4",
+            "line": 4
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 5,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:06Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-5",
+            "line": 5
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 6,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:07Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-6",
+            "line": 6
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 7,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:09Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-7",
+            "line": 7
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 8,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:10Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-8",
+            "line": 8
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 9,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:11Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-9",
+            "line": 9
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 10,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:12Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-10",
+            "line": 10
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 11,
+      "source": "agent",
+      "message": "",
+      "timestamp": "2026-01-01T00:00:20Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-11",
+            "line": 11
+          },
+          "reasoning": "raw",
+          "metadata": {
+            "stop_reason": "tool_use"
+          }
+        }
+      },
+      "llm_call_count": 1,
+      "model_name": "fixture-model",
+      "metrics": {
+        "prompt_tokens": 15,
+        "completion_tokens": 4,
+        "cached_tokens": 3,
+        "extra": {
+          "native_usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "cache_read_input_tokens": 3,
+            "cache_creation_input_tokens": 2
+          }
+        }
+      },
+      "reasoning_content": "Fixture thought",
+      "tool_calls": [
+        {
+          "tool_call_id": "fixture-id-14",
+          "function_name": "Read",
+          "arguments": {
+            "value": "fixture"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "fixture-id-14",
+            "content": "Fixture result"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 12,
+      "source": "system",
+      "message": "Fixture attachment",
+      "timestamp": "2026-01-01T00:00:23Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-16",
+            "line": 14
+          },
+          "reasoning": "none"
+        }
+      }
+    },
+    {
+      "step_id": 13,
+      "source": "agent",
+      "message": "Fixture text",
+      "timestamp": "2026-01-01T00:00:27Z",
+      "extra": {
+        "orbit": {
+          "native": {
+            "id": "fixture-id-17",
+            "line": 15
+          },
+          "reasoning": "raw",
+          "metadata": {
+            "stop_reason": "end_turn"
+          }
+        }
+      },
+      "llm_call_count": 1,
+      "model_name": "fixture-model",
+      "metrics": {
+        "prompt_tokens": 15,
+        "completion_tokens": 4,
+        "cached_tokens": 3,
+        "extra": {
+          "native_usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "cache_read_input_tokens": 3,
+            "cache_creation_input_tokens": 2
+          }
+        }
+      },
+      "reasoning_content": "Fixture thought"
+    }
+  ],
+  "final_metrics": {
+    "total_steps": 13,
+    "total_prompt_tokens": 30,
+    "total_completion_tokens": 8,
+    "total_cached_tokens": 6
+  },
+  "extra": {
+    "orbit": {
+      "version": 1,
+      "importer": {
+        "name": "claude-jsonl",
+        "version": 1
+      },
+      "sources": [
+        {
+          "path": "claude.jsonl",
+          "sha256": "9c42c15526e7f0e7560d9de341b895942179bd6ea5dcaf13b340c643269b2db8",
+          "bytes": 4855
+        }
+      ],
+      "completeness": "agent-only",
+      "cli_version": "2.1.319",
+      "metadata": {}
+    }
+  }
+}

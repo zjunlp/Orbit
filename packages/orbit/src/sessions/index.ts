@@ -578,3 +578,9 @@ async function codexFailureAtEnd(log: string): Promise<AgentFailure | null> {
     message: `stopped while reconnecting to the model: ${last}`,
   };
 }
+
+export type { TrajectoryConversion, TrajectoryMedia, TrajectoryOptions } from "./atif.ts";
+export type { ClaudeTrajectoryOptions } from "./claude.ts";
+export { convertClaudeTrajectory } from "./claude.ts";
+export type { CodexTrajectoryOptions } from "./codex.ts";
+export { convertCodexTrajectory } from "./codex.ts";
