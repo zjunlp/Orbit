@@ -145,4 +145,20 @@ describe("records", () => {
     }
     await expect.poll(openCount).toBe(0);
   });
+
+  it("serves nothing for a request aborted before the file is opened", async () => {
+    writeFileSync(join(dir, "aborted-early"), Buffer.alloc(1024));
+    const abort = new AbortController();
+    abort.abort();
+    const errors: unknown[] = [];
+    const onError = (e: unknown) => errors.push(e);
+    process.on("uncaughtException", onError);
+    try {
+      expect(await outputFile(dir, "aborted-early", abort.signal)).toBeNull();
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      process.off("uncaughtException", onError);
+    }
+    expect(errors).toEqual([]);
+  });
 });

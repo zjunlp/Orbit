@@ -173,6 +173,9 @@ export async function outputFile(
   try {
     const [st, real] = await Promise.all([fh.stat(), realpath(`/proc/self/fd/${fh.fd}`)]);
     if (!st.isFile() || !real.startsWith(root + sep)) return null;
+    // A stream created with an already aborted signal is destroyed before anything listens for
+    // its error, which would take the process down.
+    if (signal?.aborted) return null;
     const stream =
       st.size === 0
         ? Readable.from([])
