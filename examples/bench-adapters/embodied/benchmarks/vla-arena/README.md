@@ -26,6 +26,7 @@ CPU OSMesa is the default renderer. Use `--renderer egl` to register a GPU simul
 Use an independently registered Policy with the raw Panda profile and eight-action replanning.
 The upstream Arena OFT checkpoint uses FiLM without a proprioception projector and needs a
 compatible Policy server. [Official OFT configuration](https://github.com/PKU-Alignment/VLA-Arena/blob/babe582ebffc82b979b77964a7e56417d02f63a4/vla_arena/configs/evaluation/openvla_oft.yaml)
+Use [the DM0.5 recipe](../../policies/dm05/README.md) for ten-action replanning and OpenDM scoring.
 
 ```bash
 benchmark=vla-arena-safety-static-obstacles-native

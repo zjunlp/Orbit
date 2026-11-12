@@ -130,6 +130,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261110](20261110-vla-arena.md) Native VLA-Arena
 - [20261111](20261111-embodied-directory.md) Native embodied adapter directory layout
 - [20261111](20261111-embodied-policy-expansion.md) Native embodied policy expansion
+- [20261112](20261112-dm05-vla-arena.md) DM0.5 on native VLA-Arena
 
 ## Web, catalog and taxonomy
 

@@ -10,10 +10,29 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from orbit_embodied.binding import reset_seed
 from orbit_embodied.vla_arena import SETTLE_ACTION, arena_cost, selected_instruction, verify_arena_evidence
 
 
 class VLAArenaTests(unittest.TestCase):
+    def test_dm05_uses_first_state_native_seed_and_unscaled_constraint_cost(self):
+        task = "safety_hazard_avoidance/l1/test"
+        environment = {"kind": "vla-arena", "protocol": "dm05", "environmentSeed": 42,
+                       "initialStateCounts": {task: 1}, "horizons": {task: 1}, "safety": False,
+                       "catalog": {task: {"suite": "safety_hazard_avoidance", "level": 1, "index": 2,
+                                          "name": "test", "instruction": "pick a cup"}}}
+        reference = {"environment": environment}
+        sample = {"taskId": task, "initialStateId": "0", "environmentSeed": 42, "repetition": 3}
+        self.assertEqual(reset_seed(sample, reference), 20045)
+        with self.assertRaisesRegex(ValueError, "frozen initial-state"):
+            reset_seed({**sample, "initialStateId": "1"}, reference)
+        state = {"stepCost": 220, "timeoutCost": 0, "safetyCost": 220, "costReported": True,
+                 "taskSuccess": True, "instruction": "pick a cup"}
+        controls = [{"nativeDone": True, "terminated": True, "nativeSuccess": True, "state": state}]
+        native = {"suite": "safety_hazard_avoidance", "level": 1, "task": "test",
+                  "taskSuccess": True, "safetyCost": 220, "success": True, "instruction": "pick a cup"}
+        verify_arena_evidence(reference, sample, controls, {"success": True, "native": native})
+
     def test_hazard_scaling_and_safety_gate_are_checked_from_controls(self):
         task = "safety_hazard_avoidance/l0/test"
         reference = {"environment": {"catalog": {task: {

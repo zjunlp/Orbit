@@ -25,6 +25,25 @@ def load(relative):
 
 
 class PolicyExpansionTests(unittest.TestCase):
+    def test_dm05_registration_checks_its_fixed_quaternion_and_action_semantics(self):
+        config = load("policies/dm05/configure_dm05.py")
+        reference = json.loads((ADAPTER / "profiles/openvla-libero.json").read_text())
+        reference["benchmarkProfile"]["id"] = "vla-arena-panda-raw/1"
+        reference["environment"] = {"kind": "vla-arena", "protocol": "dm05"}
+        reference["parameters"]["replanSteps"] = 10
+        profile = config.policy_profile(reference)
+        self.assertEqual(profile["id"], "dm05-vla-arena-input/1")
+
+        reference["benchmarkProfile"]["observations"]["eef_quaternion"]["format"] = "wxyz"
+        self.assertEqual(profile["observations"]["eef_quaternion"]["format"], "xyzw")
+        with self.assertRaisesRegex(ValueError, "incompatible semantics for eef_quaternion"):
+            config.policy_profile(reference)
+
+        reference["benchmarkProfile"]["observations"]["eef_quaternion"]["format"] = "xyzw"
+        reference["benchmarkProfile"]["action"]["rotation"] = "quaternion"
+        with self.assertRaisesRegex(ValueError, "action semantics differ"):
+            config.policy_profile(reference)
+
     def test_droid_registration_requires_its_build_manifest_and_entrypoint(self):
         config = load("policies/openpi/configure_droid.py")
         from native_runtime import MANIFEST_LABEL

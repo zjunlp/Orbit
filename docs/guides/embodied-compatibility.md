@@ -35,7 +35,7 @@
 | [VIMA-Bench](../../examples/bench-adapters/embodied/benchmarks/vima-bench/README.md) | 4 个测试划分，42 个划分内条目，17 个不同任务模板 | 4 个划分全部接入 | 42 个条目均通过原生 reset、观测与控制检查。[记录](../tasks/20261110-vima-bench.md) |
 | [MolmoSpaces-Bench](../../examples/bench-adapters/embodied/benchmarks/molmospaces/README.md) | 固定 MS v1 操作轨道，Pick 1,000、PnP 1,000、Open 1,000、Close 915 个 episode | 四条轨道共 3,915 个固定场景样本，使用原生 DROID 控制与最终判定 | 完整资产包通过登记与 3,915 个样本的文件核对。四条轨道各有一组原生 reset、双相机与固定动作对照。[记录](../tasks/20261110-molmospaces.md) |
 | [Colosseum V2](../../examples/bench-adapters/embodied/benchmarks/colosseum-v2/README.md) | 16 个单臂、12 个双臂任务及 21 个原生预设（含无扰动与合并扰动） | 42 个登记共 588 个任务与预设组合，455 个可用，70 个由上游排除，63 个涉及缺资产 | 24 个可用任务通过 GPU reset、观测和一步控制检查；单臂、双臂各有全时限固定动作原生对照。另 4 个任务缺 PartNet 模型 1005 或 1027。[记录](../tasks/20261110-colosseum-v2.md) |
-| [VLA-Arena](../../examples/bench-adapters/embodied/benchmarks/vla-arena/README.md) | 11 个套件、170 个 L0–L2 任务，8,500 个发布初态 | 全部任务与初态，保留原生安全计分和语言、视觉探针 | 5 组短原生对照通过。安全任务固定动作跑满 300 步并经 CPU 重评。官方 OFT 权重待校准。[记录](../tasks/20261110-vla-arena.md) |
+| [VLA-Arena](../../examples/bench-adapters/embodied/benchmarks/vla-arena/README.md) | 11 个套件、170 个 L0–L2 任务，8,500 个发布初态 | 全部任务与初态，保留原生安全计分和语言、视觉探针 | 5 组短原生对照通过。安全任务固定动作跑满 300 步并经 CPU 重评。DM0.5 完成两个真实样本。官方 OFT 权重待校准。[原生接入](../tasks/20261110-vla-arena.md) · [DM0.5](../tasks/20261112-dm05-vla-arena.md) |
 | [LIBERO-PRO](../../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md) | 初版四个原版套件、五类排行榜扰动，共 200 个目录条目 | 20 个条件全部登记，固定 BDDL 和构造种子生成 10,000 个计划样本 | 200 个条目都通过原生 reset 和一步控制。两组短原生对照、一个 220 步固定动作 episode 和 CPU 重评通过。OpenVLA-OFT 在 Spatial Language 和 Spatial Task 各完成一条有效短测，CPU 重评一致。[原生接入](../tasks/20261110-libero-pro.md) · [模型短测](../tasks/20261111-embodied-policy-expansion.md) |
 
 ## 真实模型实测
@@ -55,6 +55,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | OpenVLA-OFT Spatial，`openvla-oft-libero-spatial` | LIBERO-PRO Spatial Language、Spatial Task | 两种扰动各完成一条有效样本，CPU 重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | OpenPI π₀.₅ DROID，`pi05-droid-molmospaces` | MolmoSpaces Pick、Pick-and-Place，DROID 关节控制 | 两条轨道各有一个固定样本使用本地 EGL 开发配置完成，CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | OpenWAM，`openwam-alpha-sim-vlabench` | VLABench Track 1 | 一个真实 episode 与独立 CPU 验证；另做了参考客户端 I/O 和动作转换对照。[记录](../tasks/20261109-openwam.md) |
+| DM0.5 Arena，`dm05-vla-arena` | VLA-Arena Static Obstacles L0、L1，10 步重规划与原始约束代价 | 两个冻结样本通过真实批次和 CPU 重评。双相机、状态、指令及预热后动作与上游一致。[记录](../tasks/20261112-dm05-vla-arena.md) |
 | GR00T N1.7 Bridge / Fractal，`groot-n17-widowx` / `groot-n17-google` | SimplerEnv WidowX / Google Robot 的 GR00T recipe | 两套均有真实抽样、批次和独立验证；WidowX 有参考边界抽查，Google 有固定动作对照。[WidowX](../tasks/20261106-embodied-batches.md) · [参考边界](../tasks/20261106-embodied-endpoints.md) · [Google](../tasks/20261107-groot-google.md) |
 | StarVLA QwenGR00T 20K，`starvla-qwen3vl-groot-widowx` | SimplerEnv WidowX Visual Matching，224×224 RGB 配方 | Carrot on Plate 完成一条真实样本，独立 CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | RoboCasa365 π₀.₅，`pi05-robocasa365-shared` | RoboCasa365 Atomic-Seen，OpenPI recipe | 两个冻结样本通过真实批次及 CPU 验证，另有短原生状态与动作对照。[记录](../tasks/20261107-robocasa365.md) |

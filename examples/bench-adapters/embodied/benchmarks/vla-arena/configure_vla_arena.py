@@ -127,28 +127,33 @@ def freeze_replacements(path, catalog):
 
 def registration(args, image, catalog, source_files, base, suite, paraphrases):
     raw_profile = json.loads((HERE / "profiles/openvla-libero.json").read_text())
+    dm05 = args.recipe == "dm05"
     suffix = f"-v{args.visual_level}" if args.visual_level else ""
     if args.language_level:
         suffix += f"-w{args.language_level}"
-    safety = suite.startswith("safety_") and not args.task_success_only
-    if args.task_success_only and suite.startswith("safety_"):
+    safety = suite.startswith("safety_") and not args.task_success_only and not dm05
+    if dm05:
+        suffix += f"-dm05-seed{args.environment_seed}"
+    elif args.task_success_only and suite.startswith("safety_"):
         suffix += "-task-success"
     name = "vla-arena-" + suite.replace("_", "-") + suffix + "-native"
     tasks = {task: row for task, row in catalog.items() if row["suite"] == suite}
     environment = {
-        "kind": "vla-arena", "suite": suite, "safety": safety, "controlHz": 20, "environmentSeed": 7,
+        "kind": "vla-arena", "suite": suite, "safety": safety, "controlHz": 20,
+        "environmentSeed": args.environment_seed if dm05 else 7,
+        **({"protocol": "dm05"} if dm05 else {}),
         "visualLevel": args.visual_level, "languageLevel": args.language_level,
         "visualProbe": {key: index < args.visual_level for index, key in enumerate(VISUAL_PROBES)},
         **({"languageReplacements": {task: paraphrases[task] for task in tasks if task in paraphrases}}
            if args.language_level else {}),
         "tasks": list(tasks), "catalog": tasks,
         "horizons": {task: row["horizon"] for task, row in tasks.items()},
-        "initialStateCounts": {task: row["initialStateCount"] for task, row in tasks.items()},
+        "initialStateCounts": {task: 1 if dm05 else row["initialStateCount"] for task, row in tasks.items()},
         "initialStateDigests": {task: row["initialStateDigest"] for task, row in tasks.items()},
     }
     reference = {
         "id": name + "/1", "environment": environment,
-        "parameters": {"replanSteps": 8, "settleSteps": 10, "renderSize": 256, "resizeSize": 224},
+        "parameters": {"replanSteps": 10 if dm05 else 8, "settleSteps": 10, "renderSize": 256, "resizeSize": 224},
         "reference": {"evaluation": SOURCE, "files": source_files, "simulatorBase": base,
                       **({"languageRelease": LANGUAGE_RELEASE,
                           "languageDigest": "sha256:" + LANGUAGE_FILES[args.language_level]}
@@ -180,11 +185,15 @@ def main():
     mode.add_argument("--benchmark-image")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--renderer", choices=("osmesa", "egl"), default="osmesa")
+    parser.add_argument("--recipe", choices=("oft", "dm05"), default="oft")
+    parser.add_argument("--environment-seed", type=int, choices=(7, 42, 1000), default=7)
     parser.add_argument("--visual-level", choices=range(5), type=int, default=0)
     parser.add_argument("--language-level", choices=range(5), type=int, default=0)
     parser.add_argument("--language-dir", type=Path)
     parser.add_argument("--task-success-only", action="store_true")
     args = parser.parse_args()
+    if args.recipe != "dm05" and args.environment_seed != 7:
+        parser.error("--environment-seed is only supported by the DM0.5 recipe")
     if args.benchmark_image and args.output_dir is None:
         parser.error("registration requires --output-dir")
     if args.language_level and args.language_dir is None:

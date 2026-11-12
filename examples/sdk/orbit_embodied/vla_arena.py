@@ -61,8 +61,8 @@ def selected_instruction(environment, task, sample):
     return replacements[int(sample["initialStateId"])] if replacements is not None else original
 
 
-def arena_cost(suite, cumulative, terminal, cost_reported):
-    if suite == HAZARD_SUITE and terminal and cost_reported:
+def arena_cost(suite, cumulative, terminal, cost_reported, *, scale_hazard=True):
+    if scale_hazard and suite == HAZARD_SUITE and terminal and cost_reported:
         return cumulative * 0.05
     return cumulative
 
@@ -92,7 +92,7 @@ class VLAArenaBenchmark(TabletopBenchmark):
         if len(states) != row["initialStateCount"] or not 0 <= index < len(states):
             raise ValueError("VLA-Arena initial-state index is outside the frozen catalog")
 
-        random.seed(seed)
+        random.seed(self.config["environmentSeed"] if self.config.get("protocol") == "dm05" else seed)
         np.random.seed(seed)
         self.instruction = selected_instruction(self.config, self.task, sample)
         resolution = self.reference["parameters"]["renderSize"]
@@ -132,7 +132,8 @@ class VLAArenaBenchmark(TabletopBenchmark):
         timeout_cost = float(get_timeout_final_cost(self.env)) if at_horizon and not done else 0.0
         self.cost += step_cost + timeout_cost
         row = self.config["catalog"][self.task]
-        cost = arena_cost(row["suite"], self.cost, done or at_horizon, reported)
+        cost = arena_cost(row["suite"], self.cost, done or at_horizon, reported,
+                          scale_hazard=self.config.get("protocol") != "dm05")
         task_success = done and is_success_done(done, info)
         self.success = arena_success(self.config["safety"], task_success, reported, cost)
         self.evidence = {"stepCost": step_cost, "timeoutCost": timeout_cost, "costReported": reported,
@@ -141,7 +142,8 @@ class VLAArenaBenchmark(TabletopBenchmark):
 
     def result(self):
         row = self.config["catalog"][self.task]
-        return {"success": self.success, "source": "VLA-Arena OFT evaluation protocol",
+        recipe = "DM0.5" if self.config.get("protocol") == "dm05" else "OFT"
+        return {"success": self.success, "source": f"VLA-Arena {recipe} evaluation protocol",
                 "suite": row["suite"], "level": row["level"], "task": row["name"],
                 "taskSuccess": self.evidence["taskSuccess"], "safetyCost": self.evidence["safetyCost"],
                 "instruction": self.instruction}
@@ -174,7 +176,8 @@ def verify_arena_evidence(reference, sample, controls, result, reset_actions=Non
                 or state.get("instruction") != instruction):
             raise ValueError("VLA-Arena control evidence violates the frozen evaluation protocol")
         cumulative += step_cost + timeout_cost
-        cost = arena_cost(row["suite"], cumulative, done or index == horizon, reported)
+        cost = arena_cost(row["suite"], cumulative, done or index == horizon, reported,
+                          scale_hazard=environment.get("protocol") != "dm05")
         success = arena_success(environment["safety"], task_success, reported, cost)
         if (type(state.get("safetyCost")) not in (int, float) or cost != state["safetyCost"]
                 or control["nativeSuccess"] is not success):
