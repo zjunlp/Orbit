@@ -4,7 +4,7 @@
 
 <h1 align="center">Orbit: Learn and Evolve in Any Environment.</h1>
 
-<p align="center">Give agents a place to experiment — and experience to learn from.</p>
+<p align="center">The lab where self-improving agents run experiments, keep evidence and earn their upgrades.</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@zjunlp/orbit"><img src="https://img.shields.io/npm/v/%40zjunlp%2Forbit" alt="npm version"></a>
@@ -17,18 +17,25 @@
 
 ---
 
-**Orbit is experiment infrastructure for agents.** Our vision is to let agents run experiments
-across environments — from code, training and evaluation in the digital world to simulation and
-embodied experiments in the physical world. By collecting trajectories and analyzing actions,
-outcomes and failures, agents can refine their methods and capabilities over time.
-**Every experiment should become experience for the next.**
+**Orbit is the lab for agents that work and improve on their own.** Agents now run long tasks and
+rewrite their own prompts, skills and memory, while people step back to review. Two questions follow:
+**was this piece of work done right, and did that change really make the agent better?** An agent's
+own report answers neither. Orbit sits between the agent that decides and the sandbox that isolates,
+and makes both answers checkable.
 
-Today, Orbit gives agents such as Codex and Claude Code Docker execution, GPU / CPU / memory
-scheduling, and records of code, logs, metrics, outputs and agent sessions. The agent plans,
-analyzes and iterates; Orbit provides execution and evidence. Embodied device support and
-automated trajectory learning are future directions; see the [roadmap](#roadmap).
+| Orbit provides | What it means | Status |
+| --- | --- | --- |
+| **Hands** | Isolated Docker runs under GPU / CPU / memory leases | Implemented |
+| **Evidence** | Code snapshot, logs, metrics, outputs and agent sessions for every run | Implemented |
+| **Acceptance** | Independent verification, validity kept apart from execution, paired comparison with confidence intervals | Implemented |
+| **Evolution gate** | Each change to an agent is a version with lineage, accepted only if it beats its parent on unseen tasks and does not regress in other environments | Versions and lineage implemented; the gate is in design |
 
-<p align="center"><strong>Run → Capture trajectories → Analyze → Improve → Run again</strong></p>
+A change tested only where it was made has not been tested. That is why Orbit spans code, science,
+GUI, tool-use and embodied benchmarks, and more than one agent. Today it runs agents such as Codex
+and Claude Code; most benchmark families are validated on small calibration samples only. The agent
+plans, analyzes and iterates; Orbit provides execution and evidence. See the [roadmap](#roadmap).
+
+<p align="center"><strong>Run → Keep evidence → Verify independently → Accept or reject the change → Run again</strong></p>
 
 <a id="features"></a>
 
@@ -38,9 +45,10 @@ automated trajectory learning are future directions; see the [roadmap](#roadmap)
 | --- | --- |
 | 🧪 **Reproducible execution** | Docker isolation, code snapshots and resource limits for experiments you can inspect. [Runs & sweeps](#usage) |
 | ⚙️ **Shared resource scheduling** | GPU, CPU and memory leases that account for external use, with clear queue reasons. [Multiple machines](#several-machines) |
-| 🧭 **Trajectories for review** | Agent sessions alongside code diffs, logs, metrics, artifacts and notes to inform the next iteration. [Web UI](#web-ui) |
+| 🧭 **Evidence for review** | Agent sessions alongside code diffs, logs, metrics, artifacts and notes, so a result can be checked instead of taken on trust. [Web UI](#web-ui) |
 | 🤖 **Your existing agents** | Shared skills for Codex, Claude Code, dsh and pi; in-container agents for Codex / Claude Code. [Agent integration](#agent-integration) |
-| 📊 **Verifiable evaluation** | Task × method × seed jobs with execution and score validity tracked separately; Harbor, ASI and external adapters. [Benchmarks](#benchmarks) |
+| 📊 **Independent acceptance** | Task × method × seed jobs verified apart from the agent, with execution and score validity tracked separately; Harbor, ASI and external adapters. [Benchmarks](#benchmarks) |
+| 🧬 **Versioned changes** | Evaluation configurations are versioned by content and record their parent, a note and the trials that informed the change; versions are compared on paired tasks. [Benchmarks](#benchmarks) |
 | 📱 **Progress wherever you are** | Local Web review, Feishu cards and read-only queries, plus DingTalk, WeCom, Slack and webhooks. [Notifications](#notifications) |
 
 <a id="quickstart"></a>
@@ -453,7 +461,7 @@ space. Folders organize runs and bench jobs without moving files: `orbit run --f
 | **Digital experiments** | Docker execution, resource scheduling, sweeps, trajectory records and local Web review are implemented; single-machine workflows are validated. |
 | **Benchmarks & multiple machines** | Benchmarks have integration-specific validation records. Multi-node validation uses two daemons on one host. |
 | **Embodied environments** | Native simulation, independent policies, evidence verification and Trial review are implemented. Physical device backends are a future direction. |
-| **Learning and evolution from trajectories** | Records and review are available for agents to analyze and refine the next experiment. Automated learning, policy updates and evaluation feedback loops are future research directions. |
+| **Evolution gate and unified trajectories** | Configuration versions, lineage (`--parent`, `--informed-by`) and paired statistics are implemented. The gate that accepts or rejects a change, one trajectory format across agents and benchmarks, and cross-benchmark / cross-agent transfer studies are in design and not yet validated. |
 
 Orbit is in early development (0.1.1). See [project status](docs/status.md) for validation limits and near-term work, and [design](docs/design.md) for the architecture.
 

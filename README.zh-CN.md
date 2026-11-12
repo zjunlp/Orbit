@@ -4,7 +4,7 @@
 
 <h1 align="center">Orbit: Learn and Evolve in Any Environment.</h1>
 
-<p align="center">让 Agent 在实验中行动，在轨迹中学习。</p>
+<p align="center">让 Agent 的每一次进化，都有据可依。</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@zjunlp/orbit"><img src="https://img.shields.io/npm/v/%40zjunlp%2Forbit" alt="npm version"></a>
@@ -17,13 +17,22 @@
 
 ---
 
-**Orbit 是面向 Agent 的实验基础设施。** 我们的愿景是连接数字与具身实验，让 Agent 在任何环境中运行任务、
-收集轨迹，并通过分析行动、结果与失败，持续改进自己的方法与能力。**让每一次实验，成为下一次进化的起点。**
+**Orbit 是自进化 Agent 的实验室。** Agent 开始自己干活、自己改进自己：长时间执行任务，改写自己的提示词、技能和记忆，
+人退到验收的位置。随之而来两个问题：**这件活干对了吗？这次改动真的让它变强了吗？** Agent 的自述回答不了。
+Orbit 位于做决策的 Agent 与负责隔离的沙箱之间，让这两个问题有据可依。
 
-今天，Orbit 为 Codex、Claude Code 等 Agent 提供 Docker 实验执行、资源调度，以及代码、日志、指标、产物和会话的记录与复盘。
-Agent 负责规划、分析和迭代，Orbit 提供执行与证据。具身设备与自动化轨迹学习是[后续方向](#roadmap)。
+| Orbit 提供 | 含义 | 状态 |
+| --- | --- | --- |
+| **手** | 隔离的 Docker 运行，按 GPU / CPU / 内存租约分配资源 | 已实现 |
+| **证据** | 每次运行的代码快照、日志、指标、产物与 Agent 会话 | 已实现 |
+| **验收** | 独立评测，评分有效性与执行结果分开，带置信区间的配对比较 | 已实现 |
+| **进化门** | Agent 的每次改动都是一个带血缘的版本；在没见过的任务上胜过父版本、在其他环境不退步，才被接受 | 版本与血缘已实现；准入判定在设计中 |
 
-<p align="center"><strong>运行实验 → 收集轨迹 → 分析经验 → 改进方法 → 再次运行</strong></p>
+只在诞生地测过的改进，等于没测。所以 Orbit 覆盖代码、科学、GUI、工具调用与具身等多类 benchmark，并接入不止一种 Agent。
+今天，Orbit 可运行 Codex、Claude Code 等 Agent；多数 benchmark 族目前只做过小样本校准。
+Agent 负责规划、分析和迭代，Orbit 提供执行与证据。详见[愿景与进展](#roadmap)。
+
+<p align="center"><strong>运行实验 → 留下证据 → 独立验收 → 接受或拒绝改动 → 再次运行</strong></p>
 
 <a id="功能"></a>
 <a id="features"></a>
@@ -34,9 +43,10 @@ Agent 负责规划、分析和迭代，Orbit 提供执行与证据。具身设�
 | --- | --- |
 | 🧪 **可复现的执行** | Docker 隔离、代码快照与资源限制，让实验有据可查。[运行与 Sweep](#usage) |
 | ⚙️ **统一资源调度** | 按需分配 GPU、CPU 和内存，考虑外部占用，排队时说明原因。[多机运行](#several-machines) |
-| 🧭 **轨迹与复盘** | 关联 Agent 会话、代码 diff、日志、指标、产物和笔记，支持分析与下一轮迭代。[Web 界面](#web-ui) |
+| 🧭 **可复核的证据** | 关联 Agent 会话、代码 diff、日志、指标、产物和笔记，结果可以核对，不必只听自述。[Web 界面](#web-ui) |
 | 🤖 **接入已有 Agent** | Codex、Claude Code、dsh、pi 共享实验 skills；Codex / Claude Code 也可在容器内运行。[Agent 接入](#agent-integration) |
-| 📊 **可验证的评测** | 任务 × 方法 × 种子，执行状态与评分有效性分开；支持 Harbor 格式、ASI 与外部适配器。[基准评测](#benchmarks) |
+| 📊 **独立验收** | 任务 × 方法 × 种子，评测独立于 Agent 进行，执行状态与评分有效性分开；支持 Harbor 格式、ASI 与外部适配器。[基准评测](#benchmarks) |
+| 🧬 **带版本的改动** | 评测配置按内容区分版本，记录父版本、说明和促成改动的 trial；版本之间按配对任务比较。[基准评测](#benchmarks) |
 | 📱 **随时了解进度** | 本地 Web、飞书结果卡片与只读查询，以及钉钉、企业微信、Slack 和 webhook 通知。[通知设置](#notifications) |
 
 <a id="quickstart"></a>
@@ -423,7 +433,7 @@ daemon 是 Orbit 状态的唯一写者；CLI、Web 和 Agent 都通过它的本�
 | **数字实验** | 已实现 Docker 执行、资源调度、Sweep、轨迹记录与本地 Web 复盘；单机流程已验证。 |
 | **基准评测与多机** | 已实现；benchmark 验证以 oracle / empty 为主，多机目前完成同机双 daemon 验证。 |
 | **具身实验环境** | 愿景方向：把执行与资源抽象扩展到仿真、机器人和实验设备；设备后端尚未实现。 |
-| **从轨迹中学习与进化** | 已支持记录与复盘，由 Agent 分析并调整下一轮实验；自动化学习、策略更新与评测反馈闭环属于后续研究方向。 |
+| **进化门与统一轨迹** | 已实现配置版本、血缘（`--parent`、`--informed-by`）与配对统计。对改动给出接受或拒绝的准入判定、跨 Agent 与 benchmark 的统一轨迹格式，以及跨 benchmark / 跨 Agent 的迁移研究仍在设计中，尚未验证。 |
 
 Orbit 目前处于早期开发阶段（0.1.1）。已验证范围、限制和近期工作以[项目状态](docs/status.md)为准，架构见[设计文档](docs/design.md)。
 
