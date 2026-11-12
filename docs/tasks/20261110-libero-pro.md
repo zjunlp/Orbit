@@ -27,4 +27,7 @@ Evaluate independently registered Policies on all 20 conditions from the initial
 
 ## Next / open issues
 
-- Calibrate the existing Spatial OFT Policy on the generated conditions. The seeded BDDLs and reset states define Orbit's reproducible run conditions.
+- Follow-up tests with the existing Spatial OFT Policy covered one Spatial Language sample and one
+  Spatial Task sample. [Policy validation record](20261111-embodied-policy-expansion.md#validation)
+- The seeded BDDLs and reset states define Orbit's reproducible run conditions. Full-suite model
+  evaluation remains open.

@@ -25,3 +25,6 @@ The asset preparer uses the pinned upstream resource manager and installs the sc
 | Complete resource staging and registration | Passed | The prepared bundle generated four registrations and all 3,915 sample IDs. Checked the scene XML and every added object referenced by each episode, covering 937 scene XMLs and 280 object files. The PnP reference check also passed with the complete bundle mounted read-only. |
 | Full simulation sweep | Pending | Native rollout coverage consists of one reference sample per track. |
 | Model rollout | Pending | Requires a compatible DROID joint-position Policy and its checkpoint. The published Pi baseline uses `pi05_droid_jointpos`. |
+
+Follow-up tests with the released `pi05_droid_jointpos` checkpoint covered one Pick sample and one
+Pick-and-Place sample. [Policy validation record](20261111-embodied-policy-expansion.md#validation)

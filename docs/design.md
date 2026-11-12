@@ -1257,8 +1257,8 @@ Harbor 补全：共享 GPU 组、`gpu_types`、main `shm_size`、服务 `entrypo
 4. 按 coverage 排名补全 Harbor 能力：allowlist 网络、GPU 共享语义（EFE abc-sim）、`mcp_servers`、多步任务。
 5. 跨 bench 汇总视图：各 bench 分数尺度不同，只并列"有效样本数、官方值、Orbit 值、最近校准"，不做跨 bench 平均。
 
-**仍未统一、需要正视的**：轨迹（Agent 会话与环境记录合成一份，§9.8，P6 主线第 4 项）；具身 bench 尚无真实
-coding agent / VLA 正向校准；覆盖数字在 `coverage` 落地前不对外宣称。
+统一 Agent 会话与环境轨迹是 §9.8 所列的后续工作。原生具身 Policy 的抽样校准、短上游对照及其适用范围见
+[具身兼容矩阵](guides/embodied-compatibility.md)。
 
 ### 9.15 Web：Catalog 与工具和模拟用户对话视图（2026-11-05）
 

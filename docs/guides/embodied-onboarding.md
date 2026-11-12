@@ -19,6 +19,10 @@
 
 先用固定观测和动作检查客户端、服务握手及输出转换，覆盖错误身份、错误形状、非有限值和超时。模型端负责自身的输入处理和动作转换，环境端负责原生控制器的执行与判定。新增传输时参考 `LazyPolicy` 的客户端选择和身份校验。共享 GPU 时使用 `gpusOf: main`，由模拟器持有主角色 GPU，并把两端的显存预算相加。[模型接入入口](../../examples/bench-adapters/embodied/run.py)
 
+### 复用已登记的 benchmark
+
+用现有 benchmark 的 reference 核对观测字段、动作语义和 `replanSteps`。使用 `policy-ws` 接入时，模型服务负责把观测转成模型输入，再把模型输出转成该 benchmark 的原生动作。完成后登记 Policy，并用现有 benchmark 和对应的冻结样本计划提交。MolmoSpaces 的 DROID 基线提供独立的模型构建和登记命令。 [DROID 登记示例](../../examples/bench-adapters/embodied/benchmarks/molmospaces/README.md#register-the-openpi-droid-baseline)
+
 ## Benchmark 端
 
 生成 `benchmark.json` 交给 `orbit bench add-file`。原生路径把评测条件放进 `reference`，通过 `profileDigest` 和 `implementationDigest` 校验 recipe 与实现。[适配器协议](bench-adapter.md) · [LIBERO reference 示例](../../examples/bench-adapters/embodied/reference.json) · [原生 Gym reference 示例](../../examples/bench-adapters/embodied/profiles/groot-google.json)
@@ -36,6 +40,7 @@
 提交时 Orbit 校验映射和语义，再冻结 `ResolvedBinding`。维度相同的字段仍须匹配相机、单位和坐标系。
 一维动作的显式分量顺序须与动作维数一致，分量名须唯一。原生 adapter 会从冻结的 recipe 声明重规划步数，
 Orbit 会在提交时核对它与 Policy 的配置。
+升级 adapter 或共享 SDK 后，如果提交提示实现摘要变化，用对应的配置生成器刷新 `benchmark.json` 的 `implementationDigest`，再执行 `orbit bench add-file` 更新登记。
 
 ## 组合验收
 

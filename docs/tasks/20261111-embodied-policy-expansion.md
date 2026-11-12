@@ -1,6 +1,6 @@
 # Native embodied policy expansion
 
-branch: feat/embodied-policy-expansion · status: completed · updated: 2026-11-12
+branch: feat/embodied-eval · status: completed · updated: 2026-11-12
 
 ## Goal
 
@@ -22,20 +22,22 @@ LingBot-VLA × RoboTwin and StarVLA QwenGR00T × SimplerEnv WidowX registrations
   The driver validates the recipe's camera size and passes writable action buffers to the
   native controller.
   The selected 20K QwenGR00T checkpoint is independent of the earlier QwenOFT artifact.
+- Build the DROID, LingBot and StarVLA policy images from pinned source revisions. The registration
+  tools check the build manifest and entrypoint. StarVLA preserves one termination component when
+  converting a recipe that already declares it.
 
 ## Validation
 
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
-| Repository and shared SDK | working tree | passed | `pnpm verify`, the Python 3.8 shared SDK selection and Python 3.11 discovery, and synthetic DROID, LingBot and StarVLA I/O checks. |
-| Native registrations | working tree | passed | LIBERO-PRO Language and Task use the existing OpenVLA-OFT checkpoint. MolmoSpaces registrations, both RoboTwin 50-task catalogs, and the four StarVLA grids with 96 initial scenes resolve. |
-| Model image packaging | working tree | passed | The three Docker policy images loaded their released checkpoints and served requests in native short runs. |
-| OpenVLA-OFT × LIBERO-PRO | working tree | passed | One native rollout each for Spatial Language and Spatial Task. CPU rescore reproduced the initial verifier decisions. |
-| OpenPI DROID × MolmoSpaces | working tree | passed | Pick and Pick-and-Place each completed one native rollout with GPU EGL rendering in a development image, independent CPU verification and rescore. The transport regression exercises keepalive during a synchronous model call. |
-| LingBot inference environment | working tree | passed | The released checkpoint and the pinned Torch and FlashAttention image passed checkpoint integrity and offline import checks. |
-| StarVLA inference environment | working tree | passed | The released checkpoint passed integrity checks and the Python 3.11 policy image passed offline import checks. |
-| StarVLA × SimplerEnv WidowX | working tree | passed | A real carrot-on-plate episode completed the frozen 120-step protocol and passed independent CPU verification and rescore. |
-| LingBot × RoboTwin | working tree | passed | One Clean `adjust_bottle` episode passed native success, independent CPU verification and rescore. The transport and Triton compiler also passed offline checks. |
+| Repository and shared SDK | `5108243` | passed | `pnpm verify`, 60 Python 3.8 shared SDK tests and 151 Python 3.11 SDK tests, with two skips. Includes synthetic Policy I/O and Binding checks. |
+| Native registration scope | Development tree | passed | MolmoSpaces registrations, both RoboTwin 50-task catalogs and the four StarVLA grids with 96 initial scenes resolve. |
+| OpenVLA-OFT × LIBERO-PRO | Development tree | passed | One native rollout each for Spatial Language and Spatial Task using the existing OFT checkpoint. CPU rescore reproduced the initial verifier decisions. |
+| OpenPI DROID × MolmoSpaces | Development image before manifest validation | passed | Pick and Pick-and-Place each completed one native rollout with EGL, independent CPU verification and rescore. |
+| LingBot × RoboTwin | Development image before manifest validation | passed | One Clean `adjust_bottle` episode completed with native success, independent CPU verification and rescore. |
+| StarVLA × SimplerEnv WidowX | Development image before manifest validation | passed | One Carrot on Plate episode completed under the frozen 120-step protocol with independent CPU verification and rescore. |
+| DROID, LingBot and StarVLA image checks | Policy recipes and SDK in `ffdae2c` | passed | Rebuilt the images and checked offline imports, including LingBot's compiler environment. Registration accepted the matching images with released weights and rejected legacy or mismatched images. |
+| GPU rollouts with rebuilt policy images | Policy recipes and SDK in `ffdae2c` | not_run | Validation of the rebuilt images covered packaging, imports and registration. |
 
 ## Next / open issues
 
