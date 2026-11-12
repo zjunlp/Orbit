@@ -143,3 +143,4 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261110](20261110-integrate-local-branches.md) Integrate completed local branches
 - [20261110](20261110-integrate-ui-embodied.md) Integrate Web discovery and native embodied adapters
 - [20261111](20261111-converge-concepts-docs.md) Converge benchmark concepts and organize docs
+- [20261112](20261112-positioning-self-improving-lab.md) Positioning: the lab for self-improving agents
