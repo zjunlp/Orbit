@@ -25,7 +25,7 @@ reference evolver with baselines, and the cross-environment admission experiment
 | Local CLI capabilities | documentation working tree | passed | Claude Code 2.1.319 and codex-cli 0.167.0 flags read from help text, the binary's option definitions and the generated app-server schema; behavior of truncating resume not exercised |
 | Survey spot checks | documentation working tree | passed | Cited repositories and arXiv ids exist; Harbor adapters write ATIF v1.7; other survey claims are marked unverified |
 | Sample-size table | documentation working tree | passed | Recomputed with the normal approximation stated in the plan |
-| pnpm verify | documentation working tree | see handoff | Recorded in the commit handoff |
+| pnpm verify | bc8b4fe | passed | 752 Orbit, 114 Web and 5 script tests; 28 opt-in tests skipped; format, types, boundaries and builds passed |
 | Docker/GPU/Agent execution | — | not_run | Documentation only |
 
 ## Next / open issues
