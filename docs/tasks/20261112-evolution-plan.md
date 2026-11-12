@@ -29,8 +29,9 @@ reference evolver with baselines, and the cross-environment admission experiment
 | Docker/GPU/Agent execution | — | not_run | Documentation only |
 
 ## Next / open issues
-- User decisions: default margin and alpha, whether "transferable" is only a level, ordering of the
-  step-snapshot packages, which published methods to use as subjects.
+- Decisions confirmed by the user and recorded in plan §10: default margin 5 points with alpha 0.05;
+  "transferable" is a level and a matrix column, not an admission condition; step snapshots come
+  after the gate; subject methods are chosen when V2 starts.
 - F0 (fork mechanism checks) and T1 (ATIF contract and converters) can start independently.
 - The survey's original report and downloaded upstream files were lost with a host reboot; the
   research note was written from what had been read.
