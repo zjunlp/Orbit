@@ -41,6 +41,29 @@ class RLEAdapterTests(unittest.TestCase):
             with patch.object(adapter, "delegate", return_value=native):
                 return adapter.score(req)
 
+    def test_review_keeps_declared_kinds_and_lists_stages_and_checkpoints(self):
+        with tempfile.TemporaryDirectory() as directory:
+            verifier = Path(directory) / "collected/logs/verifier"
+            verifier.mkdir(parents=True)
+            (verifier / "reward.json").write_text(json.dumps({"reward": 0.5}))
+            (verifier / "report.json").write_text(json.dumps({
+                "gate_failed": ["S1.load"], "stages": {"validity": 1.0, "design": "n/a"},
+                "checkpoints": {"S1.load": 0.0, "S2.run": 0.5}}))
+            files = [{"label": "Tests", "phase": "verify", "path": "collected/logs/verifier/ctrf.json",
+                      "kind": "tests", "fallback": "json"},
+                     {"label": "Test output", "phase": "verify", "path": "collected/logs/verifier/test-stdout.txt"}]
+            native = {"score": 0.5, "maxScore": 1, "invalid": False,
+                      "review": {"files": files, "items": [], "details": {}}}
+            req = {"verify": {"output": directory, "run": {"spec": {}}}}
+            with patch.object(adapter, "delegate", return_value=native):
+                review = adapter.score(req)["review"]
+        self.assertEqual([f["kind"] for f in review["files"]], ["tests", "text"])
+        self.assertEqual([(i["criterion"], i["type"], i["score"]) for i in review["items"]],
+                         [("validity", "stage", 1.0), ("S1.load", "checkpoint", 0.0), ("S2.run", "checkpoint", 0.5)])
+        self.assertIn("Gate failed", review["items"][1]["reasoning"])
+        self.assertNotIn("reasoning", review["items"][2])
+        self.assertEqual(self.score({"reward": 1})["review"]["items"], [])
+
     def test_pin_images_recurses_and_rejects_unprepared_images(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "orbit-images.json"

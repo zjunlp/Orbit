@@ -7,10 +7,14 @@ import { episodeVideoTime, parseEpisode, sampleAt } from "../../lib/episode.ts";
 import { episodeVideo, MAX_VIDEO_BYTES } from "../../lib/episode-video.ts";
 import { useRunFile } from "../../lib/run-file.ts";
 import { useAsync } from "../../lib/use.ts";
+import { FileBar } from "./parts.tsx";
 import "./episode.css";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const seconds = (value: number) => Number(value.toFixed(4)).toString();
+/** A recorded number at reading precision: four significant digits, no float noise. */
+const shown = (value: number | null | undefined) =>
+  value == null ? "—" : Number(value.toPrecision(4)).toString();
 
 export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; solve?: Run }) {
   const session = useAsync(() => api.session(run.id), [run.id, run.state]);
@@ -37,14 +41,7 @@ export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; 
     (source.missing ? "Episode index is missing from the saved outputs." : null);
   return (
     <div className="episode-review">
-      <div className="toolbar">
-        <span>Saved episode</span>
-        <span className="mono">{file.path}</span>
-        <div className="spacer" />
-        <a className="btn sm" href={fileUrl(run.id, file.path, true)}>
-          Download index
-        </a>
-      </div>
+      <FileBar runId={run.id} path={file.path} />
       {error ? (
         <Empty title="Episode unavailable">{error}</Empty>
       ) : !source.data || (separateMedia && !media.data && !media.error) ? (
@@ -247,8 +244,8 @@ export function EpisodeViewer({
     <div className="episode-viewer">
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         <b>{trace.goal || "Saved episode"}</b>
-        <span className="chip">{trace.producer ?? "producer not recorded"}</span>
-        <span className="chip">{trace.trust ?? "trust not recorded"}</span>
+        {trace.producer && <span className="chip">{trace.producer}</span>}
+        {trace.trust && <span className="chip">{trace.trust}</span>}
         {trace.completeness && (
           <span className="chip">
             {trace.completeness === "complete"
@@ -293,7 +290,7 @@ export function EpisodeViewer({
         </span>
       </div>
       <div className="episode-flags" aria-live="polite">
-        <span className="chip">Reward {sample.reward ?? "not recorded"}</span>
+        {sample.reward != null && <span className="chip">Reward {shown(sample.reward)}</span>}
         <span className="chip">
           {sample.truncated ? "Truncated" : sample.terminated ? "Terminated" : "Continuing"}
         </span>
@@ -374,7 +371,7 @@ export function EpisodeViewer({
         <div className="episode-values">
           {shownSeries.map((item) => (
             <span key={item.label} style={{ color: item.color }}>
-              {item.label}: {item.points[index]?.[1]}
+              {item.label}: {shown(item.points[index]?.[1])}
             </span>
           ))}
         </div>
@@ -400,9 +397,6 @@ export function EpisodeViewer({
           </p>
         )}
       </section>
-      <p className="faint">
-        Saved media only. Moving the timeline does not send actions or restore the environment.
-      </p>
     </div>
   );
 }

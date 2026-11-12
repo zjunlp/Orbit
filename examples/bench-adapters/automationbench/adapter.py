@@ -92,6 +92,21 @@ def plan(req, phase):
                      "timeoutMin": (trial.get("timeoutMin") or 20) if phase == "solve" else 5}}
 
 
+def assertion_items(assertions):
+    """The original rubric's assertions as rubric rows; an excluded assertion carries no score."""
+    items = []
+    for a in assertions if isinstance(assertions, list) else []:
+        if not isinstance(a, dict):
+            continue
+        excluded = bool(a.get("excluded"))
+        item = {"criterion": str(a.get("type", "assertion")), "type": "excluded" if excluded else "assertion",
+                "score": None if excluded else (1 if a.get("passed") else 0), "maxScore": 1}
+        if a.get("params"):
+            item["reasoning"] = json.dumps(a["params"], ensure_ascii=False, sort_keys=True)
+        items.append(item)
+    return items[:500]
+
+
 def score(req):
     try:
         report = json.loads((Path(req["verify"]["output"]) / "verdict.json").read_text())
@@ -109,6 +124,7 @@ def score(req):
         return valid(report["score"], metrics={"partial_credit": 100 * report["partial_credit"]}, review={
             "files": [{"label": "Native tool conversation and world", "phase": "solve", "path": "native.json", "kind": "json"},
                       {"label": "Independent original rubric", "phase": "verify", "path": "verdict.json", "kind": "json"}],
+            "items": assertion_items(report.get("assertions")),
             "details": {"Source": REVISION, "Split": cfg.get("split", "public")}})
     except (OSError, ValueError, KeyError, TypeError, StopIteration) as exc:
         return invalid("scorer_error", str(exc))

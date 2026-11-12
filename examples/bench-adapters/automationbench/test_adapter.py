@@ -55,6 +55,18 @@ class AdapterTest(unittest.TestCase):
         self.assertFalse(result["invalid"])
         self.assertEqual(result["score"], 0)
         self.assertEqual(result["metrics"]["partial_credit"], 50)
+        self.assertEqual(result["review"]["items"], [])
+        report = self.evidence()
+        report["assertions"] = [{"type": "record_exists", "passed": True, "excluded": False, "params": {"id": 7}},
+                                {"type": "email_sent", "passed": False, "excluded": False, "params": {}},
+                                {"type": "llm_judge", "passed": False, "excluded": True}]
+        (self.root / "verdict.json").write_text(json.dumps(report))
+        items = adapter.score(self.req)["review"]["items"]
+        self.assertEqual([(i["criterion"], i["type"], i["score"]) for i in items],
+                         [("record_exists", "assertion", 1), ("email_sent", "assertion", 0),
+                          ("llm_judge", "excluded", None)])
+        self.assertEqual(items[0]["reasoning"], '{"id": 7}')
+        self.assertNotIn("reasoning", items[1])
         (self.root / "native.json").write_text("changed")
         self.assertTrue(adapter.score(self.req)["invalid"])
         (self.root / "verdict.json").write_text('{"invalid":true,"error":"API failed"}')

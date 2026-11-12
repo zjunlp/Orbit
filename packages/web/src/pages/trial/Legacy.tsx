@@ -10,7 +10,7 @@ import { reportCandidates } from "../../lib/report.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { readRunFile } from "../../lib/run-file.ts";
 import { useAsync } from "../../lib/use.ts";
-import { Reasoning } from "./Review.tsx";
+import { Reasoning } from "./parts.tsx";
 
 function useText(runId: string, path: string | undefined) {
   return useAsync(

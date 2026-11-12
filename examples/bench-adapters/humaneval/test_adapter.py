@@ -57,6 +57,12 @@ class Tests(unittest.TestCase):
         (v / "result.json").write_text(json.dumps({"task_id": "HumanEval/0", "result": "passed"}))
         self.req.update(solve={"output": str(self.root)}, verify={"output": str(v)})
         self.assertEqual((adapter.score(self.req)["score"], adapter.score(self.req)["invalid"]), (1.0, False))
+        self.assertEqual(adapter.score(self.req)["review"]["items"][0]["score"], 1)
+        (v / "result.json").write_text(json.dumps({"task_id": "HumanEval/0", "result": "failed: AssertionError"}))
+        item = adapter.score(self.req)["review"]["items"][0]
+        self.assertEqual((item["score"], item["maxScore"], item["reasoning"]), (0, 1, "AssertionError"))
+        (v / "result.json").write_text(json.dumps({"task_id": "HumanEval/0", "result": "timed out"}))
+        self.assertEqual(adapter.score(self.req)["review"]["items"][0]["reasoning"], "timed out")
         (v / "result.json").write_text(json.dumps({"task_id": "HumanEval/9", "result": "passed"}))
         self.assertEqual(adapter.score(self.req)["failure"], "scorer_error")
 

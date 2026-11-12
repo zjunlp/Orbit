@@ -163,7 +163,6 @@ export function ConversationViewer({ c }: { c: Conversation }) {
             >
               <header>
                 <b>{whole ? "Conversation" : `Turn ${t.index + 1}`}</b>
-                {!whole && <span className="faint mono">index {t.index}</span>}
                 {t.check && (
                   <span className={`conv-check st-${t.check.status}`}>
                     {STATUS_ICON[t.check.status]} {t.check.status}

@@ -139,16 +139,6 @@
   min-width: 100px;
   accent-color: var(--accent);
 }
-.gui-trace-note {
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-  margin-top: 18px;
-  font-size: 12px;
-}
-.trial-config .kv dd {
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
 .trial-head .meta .chip {
   max-width: 100%;
   height: auto;

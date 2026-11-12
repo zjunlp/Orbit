@@ -890,8 +890,13 @@ function harborTask(root: string, id: string, opts: HarborOptions = {}): HarborT
 }
 
 const REVIEW_SKIP = /^reward\.(json|txt)$/;
+/** The test report (Common Test Report Format) a Harbor verifier writes next to its reward. */
+const CTRF = /(^|[._-])ctrf\.json$/i;
 
-/** Verifier outputs worth reading on the trial page (test output, logs), smallest first. */
+/**
+ * Verifier outputs worth reading on the trial page: the test report first, shown as a checklist,
+ * then test output and logs by name.
+ */
 export function harborReview(verifyOutput: string, sub = "collected"): ScoreReply["review"] {
   const dir = join(verifyOutput, sub, "logs", "verifier");
   const files: NonNullable<ScoreReply["review"]>["files"] = [];
@@ -899,10 +904,16 @@ export function harborReview(verifyOutput: string, sub = "collected"): ScoreRepl
   try {
     names = readdirSync(dir);
   } catch {}
-  for (const n of names.sort()) {
+  names.sort((a, b) => Number(CTRF.test(b)) - Number(CTRF.test(a)) || a.localeCompare(b));
+  for (const n of names) {
     const st = statSync(join(dir, n), { throwIfNoEntry: false });
     if (!st?.isFile() || REVIEW_SKIP.test(n)) continue;
-    files.push({ label: n, phase: "verify", path: relative(verifyOutput, join(dir, n)) });
+    const path = relative(verifyOutput, join(dir, n));
+    files.push(
+      CTRF.test(n)
+        ? { label: "Tests", phase: "verify", path, kind: "tests", fallback: "json" }
+        : { label: n === "test-stdout.txt" ? "Test output" : n, phase: "verify", path },
+    );
     if (files.length >= 8) break;
   }
   for (const n of ["reward.json", "reward.txt"])

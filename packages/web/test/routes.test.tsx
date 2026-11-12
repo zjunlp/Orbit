@@ -69,14 +69,9 @@ describe("run output files", () => {
 });
 
 describe("review file views", () => {
-  it("has a view for every known review kind and puts step-by-step kinds first", async () => {
-    const { FILE_VIEWS, isInteractive } = await import("../src/pages/trial/Review.tsx");
+  it("has a view for every known review kind", async () => {
+    const { FILE_VIEWS } = await import("../src/pages/trial/Review.tsx");
     expect(Object.keys(FILE_VIEWS).sort()).toEqual([...KNOWN_KINDS].sort());
-    const file = (kind: string, path = "a.json") => ({ label: kind, phase: "verify", path, kind });
-    expect(isInteractive(file("trajectory") as never)).toBe(true);
-    expect(isInteractive(file("conversation") as never)).toBe(true);
-    expect(isInteractive(file("episode") as never)).toBe(false);
-    expect(isInteractive(file("markdown") as never)).toBe(false);
   });
 
   it("lists unknown review fields under Details", async () => {
@@ -89,5 +84,26 @@ describe("review file views", () => {
     expect(html).toContain("reward");
     expect(html).toContain("rubric");
     expect(html).toContain("v2");
+  });
+
+  it("lists grouped evidence files and shows the selected one", async () => {
+    const { EvidenceView } = await import("../src/pages/trial/Review.tsx");
+    const files = [
+      { label: "Native result", phase: "solve", path: "native.json", kind: "json" },
+      { label: "Scorer log", phase: "verify", path: "log.txt" },
+    ];
+    const html = renderToStaticMarkup(
+      <EvidenceView
+        review={{ files, items: [], details: {} } as never}
+        indexes={[0, 1]}
+        selected={1}
+        solve={undefined}
+        verify={undefined}
+      />,
+    );
+    expect(html).toContain('href="?tab=evidence&amp;file=0"');
+    expect(html).toMatch(/class="on"[^>]*>Scorer log/);
+    expect(html).toContain("verify · text");
+    expect(html).toContain("No verify run");
   });
 });

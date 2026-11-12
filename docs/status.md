@@ -1,6 +1,6 @@
 # Orbit status
 
-Updated 2026-11-11. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
+Updated 2026-11-12. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
 
 **Stage.** R0–R2 validated on this machine. R3 benchmarks run: LongDS with one complete native Codex task, Harbor with oracle/empty samples. R4 (multi-node) only as two daemons on one machine. No release blockers.
 
@@ -17,7 +17,7 @@ Updated 2026-11-11. Architecture: [design](design.md). Docs map: [docs/README](R
 - **Calibrated samples.** Bounded empty/oracle or scripted calibration for HumanEval, EFE MetaWorld+, BFCL, τ²-bench, MiniWoB, LIBERO, TextArena, Cua Bench basic desktop, CUA-Lite MiniWoB; BFCL also has a real CLI Agent check.
 - **GUI.** Private signed GUI service (`orbit-computer` CLI/MCP); Claude Code and Codex verified on sampled MiniWoB/BrowserGym tasks; MCP servers wired into Claude/Codex homes ([GUI guide](guides/gui-bench-web.md)).
 - **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). Harness benchmarks RLE-Bench, EmbodiedCLBench, EmbodiedLab T0 via Agent adapters.
-- **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial views for conversations, GUI steps and embodied timelines; evaluation configurations grouped by content revision.
+- **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial page built from evidence shapes (conversation, GUI steps, embodied timeline, test report, rubric, grouped evidence files); evaluation configurations grouped by content revision.
 - **Multi-node.** Workers join by token; placement, hashed code bundles, named datasets, mirrored logs and artifacts ([guide](guides/multi-node.md)).
 
 ## Main gaps

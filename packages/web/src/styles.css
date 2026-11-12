@@ -422,8 +422,18 @@ textarea {
   min-width: 0;
   color: var(--text-2);
 }
+.crumbs > .row {
+  flex: 0 1 auto;
+}
+.crumbs > .row:first-child {
+  flex-shrink: 0;
+}
 .crumbs a {
   color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .crumbs .sep {
   color: var(--text-3);
@@ -1580,8 +1590,12 @@ mark.cur {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr) 280px;
 }
+.session.no-aside {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
 @media (max-width: 1200px) {
-  .session {
+  .session,
+  .session.no-aside {
     grid-template-columns: 220px minmax(0, 1fr);
   }
   .session > .aside {
@@ -2178,7 +2192,7 @@ a.score:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
-  margin-top: 6px;
+  padding-left: 6px;
   font-size: 12.5px;
 }
 .trial-metrics b {

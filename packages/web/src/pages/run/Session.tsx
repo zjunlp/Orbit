@@ -176,6 +176,7 @@ function SessionView(props: {
           {t.sessionId}
         </span>
         <CopyButton text={t.sessionId} title="Copy session id" />
+        {!pane && <span className="faint">{messages.length} messages</span>}
         <div className="spacer" />
         {here >= 0 && (
           <button type="button" className="btn sm" onClick={() => scrollTo(here)}>
@@ -217,7 +218,7 @@ function SessionView(props: {
   if (pane) return <div className="session-pane">{transcript}</div>;
 
   return (
-    <div className="session">
+    <div className={kind === "submitter" ? "session" : "session no-aside"}>
       <div className="outline">
         <div className="row" style={{ padding: "2px 8px 8px", gap: 6 }}>
           <span className="faint" style={{ fontSize: 12 }}>
@@ -262,41 +263,29 @@ function SessionView(props: {
           })}
       </div>
       {transcript}
-      <aside className="aside">
-        <section className="card">
-          <div className="card-h">Session</div>
-          <div className="card-b">
-            <dl className="kv" style={{ fontSize: 12 }}>
-              <dt>Role</dt>
-              <dd>{ROLE_LABEL[kind]}</dd>
-              <dt>Agent</dt>
-              <dd>{harnessLabel(t.harness)}</dd>
-              <dt>Messages</dt>
-              <dd>{messages.length}</dd>
-              <dt>Started</dt>
-              <dd>{dateTime(messages.find((m) => m.at)?.at)}</dd>
-              <dt>Last</dt>
-              <dd>{ago(messages.findLast((m) => m.at)?.at)}</dd>
-              {kind === "submitter" && run.spec.agent?.cwd && (
-                <>
-                  <dt>cwd</dt>
-                  <dd className="mono" style={{ fontSize: 11 }}>
-                    {run.spec.agent.cwd}
-                  </dd>
-                </>
-              )}
-              {t.file && (
-                <>
-                  <dt>File</dt>
-                  <dd className="mono faint" style={{ fontSize: 11 }}>
-                    {t.file}
-                  </dd>
-                </>
-              )}
-            </dl>
-          </div>
-        </section>
-        {kind === "submitter" && (
+      {kind === "submitter" && (
+        <aside className="aside">
+          <section className="card">
+            <div className="card-h">Session</div>
+            <div className="card-b">
+              <dl className="kv" style={{ fontSize: 12 }}>
+                <dt>Messages</dt>
+                <dd>{messages.length}</dd>
+                <dt>Started</dt>
+                <dd>{dateTime(messages.find((m) => m.at)?.at)}</dd>
+                <dt>Last</dt>
+                <dd>{ago(messages.findLast((m) => m.at)?.at)}</dd>
+                {run.spec.agent?.cwd && (
+                  <>
+                    <dt>cwd</dt>
+                    <dd className="mono" style={{ fontSize: 11 }}>
+                      {run.spec.agent.cwd}
+                    </dd>
+                  </>
+                )}
+              </dl>
+            </div>
+          </section>
           <section className="card" style={{ marginTop: 12 }}>
             <div className="card-h">
               Runs from this session <span className="sub">{sessionRuns.length}</span>
@@ -323,8 +312,8 @@ function SessionView(props: {
               ))}
             </div>
           </section>
-        )}
-      </aside>
+        </aside>
+      )}
     </div>
   );
 }

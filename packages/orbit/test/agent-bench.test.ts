@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { asiAdapter } from "../src/bench/asi.ts";
 import { solveVerdict } from "../src/bench/classify.ts";
 import { parseCompose } from "../src/bench/compose.ts";
-import { harborReward } from "../src/bench/harbor.ts";
+import { harborReview, harborReward } from "../src/bench/harbor.ts";
 import { toRunSpec } from "../src/bench/protocol.ts";
 import {
   type AuthProfile,
@@ -296,6 +296,25 @@ describe("harbor rewards with diagnostic fields (Embodied First Exam)", () => {
     expect(
       harborReward(verifier({ "reward.json": efe({ grader_error: 1 }), "reward.txt": "0" })),
     ).toMatchObject({ invalid: true, failure: "scorer_error" });
+  });
+});
+
+describe("harbor review", () => {
+  it("declares the test report first as tests, names the test output and ends with the reward", () => {
+    const out = mkdtempSync(join(tmpdir(), "orbit-review-"));
+    const verifier = join(out, "collected", "logs", "verifier");
+    mkdirSync(verifier, { recursive: true });
+    for (const n of ["test-stdout.txt", "ctrf.json", "notes.log", "reward.txt"])
+      writeFileSync(join(verifier, n), "x");
+    const at = (n: string) => `collected/logs/verifier/${n}`;
+    expect(harborReview(out)?.files).toEqual([
+      { label: "Tests", phase: "verify", path: at("ctrf.json"), kind: "tests", fallback: "json" },
+      { label: "notes.log", phase: "verify", path: at("notes.log") },
+      { label: "Test output", phase: "verify", path: at("test-stdout.txt") },
+      { label: "Reward", phase: "verify", path: at("reward.txt") },
+    ]);
+    expect(harborReview(join(out, "missing"))?.files).toEqual([]);
+    rmSync(out, { recursive: true, force: true });
   });
 });
 

@@ -253,6 +253,28 @@ def rejected_task08_submission(req, reward, verifier_dir):
     return None
 
 
+def report_items(path):
+    """The stages and checkpoints of the native report as rubric rows; nothing when a task has none."""
+    try:
+        report = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    if not isinstance(report, dict):
+        return []
+    failed = report.get("gate_failed") if isinstance(report.get("gate_failed"), list) else []
+    items = []
+    for kind, key in (("stage", "stages"), ("checkpoint", "checkpoints")):
+        rows = report.get(key)
+        for name, value in rows.items() if isinstance(rows, dict) else []:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                continue
+            item = {"criterion": str(name), "type": kind, "score": value, "maxScore": 1}
+            if name in failed:
+                item["reasoning"] = "Gate failed: the native scorer caps the reward when this check fails."
+            items.append(item)
+    return items[:500]
+
+
 def score(req):
     if req.get("trial", {}).get("task") in UNSUPPORTED:
         return invalid("scorer_error", UNSUPPORTED[req["trial"]["task"]])
@@ -283,7 +305,8 @@ def score(req):
     review.setdefault("details", {}).update({"upstream revision": REVISION,
                                              "evaluation target": "coding-agent harness"})
     for file in review.get("files", []):
-        file["kind"] = "json" if file["path"].endswith(".json") else "text"
+        file.setdefault("kind", "json" if file["path"].endswith(".json") else "text")
+    review["items"] = report_items(reward_file.parent / "report.json")
     media = reward_file.parent / "media"
     for path in sorted(media.rglob("*")) if media.is_dir() else []:
         if path.is_file() and not path.is_symlink() and path.suffix.lower() in (".png", ".jpg", ".jpeg"):
