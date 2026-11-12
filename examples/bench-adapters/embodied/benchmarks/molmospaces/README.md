@@ -62,3 +62,31 @@ The upstream [Pi baseline instructions](https://github.com/allenai/molmospaces/b
 describe the `pi05_droid_jointpos` checkpoint and the required OpenPI fork. A Pi connector
 must lowercase the instruction, normalize the gripper angle by 0.824033 with clipping
 to [0, 1], and threshold the returned gripper value at 0.5 before emitting 0 or 255.
+
+## Register the OpenPI DROID baseline
+
+The separate Policy uses the [OpenPI fork](https://github.com/omarrayyann/openpi/tree/711487f019e5f03b254d427d4523b1f0805a4814)
+and the released `gs://openpi-assets/checkpoints/pi05_droid_jointpos` checkpoint.
+Set `DROID_OPENPI_SOURCE` to the pinned checkout and `DROID_WEIGHTS` to the local
+checkpoint directory containing `params/` and `assets/`. Use the existing OpenPI JAX
+policy image as `OPENPI_POLICY_BASE`. Put the PyPI wheels for `msgpack-numpy==0.4.8`,
+`opencv-python-headless==4.11.0.86`, and `pytest==8.4.2` with its dependencies in
+`WIRE_WHEELS` for the offline build.
+
+The build exports the OpenPI sources from the pinned commit and adds a manifest to
+the image. Configuration generation checks the manifest and the DROID entrypoint.
+Rebuild older DROID images with the command below before generating a configuration.
+
+```bash
+python3 -B examples/bench-adapters/embodied/policies/openpi/configure_droid.py \
+  --source "$DROID_OPENPI_SOURCE" --wire-wheels "$WIRE_WHEELS" \
+  --policy-base "$OPENPI_POLICY_BASE" --build-tag orbit/openpi-droid:reference
+python3 -B examples/bench-adapters/embodied/policies/openpi/configure_droid.py \
+  --reference-file "$MOLMOSPACES_CONFIG/molmospaces-pick-v1-1-native/reference.json" \
+  --weights "$DROID_WEIGHTS" --policy-image orbit/openpi-droid:reference \
+  --output "$MOLMOSPACES_CONFIG/policy.json"
+orbit data add pi05-droid-molmospaces "$DROID_WEIGHTS"
+orbit policy add "$MOLMOSPACES_CONFIG/policy.json"
+orbit bench calibrate molmospaces-pick-v1-1-native --policy pi05-droid-molmospaces \
+  --sample-plan "$MOLMOSPACES_CONFIG/pick-samples.json" --budget 20
+```

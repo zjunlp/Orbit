@@ -45,6 +45,7 @@
 | SmolVLA `smolvla-libero`；MolmoAct2 `molmoact2-libero` | 分别为 LIBERO Spatial、Goal 各自的模型协议 | 两个组合分别通过两个冻结样本、CPU 验证和选定重评。[记录](../tasks/20261108-embodied-native-expansion.md) |
 | OpenVLA-OFT 联合权重，`openvla-oft-libero-combined-spatial` | LIBERO-Plus Spatial | 两个扰动样本（光照和纹理）通过真实批次、CPU 验证与重评。[记录](../../examples/bench-adapters/embodied/benchmarks/libero-plus/README.md#verification) |
 | OpenVLA-OFT Spatial，`openvla-oft-libero-spatial` | LIBERO-PRO Spatial Language、Spatial Task | 两种扰动各完成一条有效样本，CPU 重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
+| OpenPI π₀.₅ DROID，`pi05-droid-molmospaces` | MolmoSpaces Pick、Pick-and-Place，DROID 关节控制 | 两条轨道各有一个固定样本使用本地 EGL 开发配置完成，CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | OpenWAM，`openwam-alpha-sim-vlabench` | VLABench Track 1 | 一个真实 episode 与独立 CPU 验证；另做了参考客户端 I/O 和动作转换对照。[记录](../tasks/20261109-openwam.md) |
 | GR00T N1.7 Bridge / Fractal，`groot-n17-widowx` / `groot-n17-google` | SimplerEnv WidowX / Google Robot 的 GR00T recipe | 两套均有真实抽样、批次和独立验证；WidowX 有参考边界抽查，Google 有固定动作对照。[WidowX](../tasks/20261106-embodied-batches.md) · [参考边界](../tasks/20261106-embodied-endpoints.md) · [Google](../tasks/20261107-groot-google.md) |
 | RoboCasa365 π₀.₅，`pi05-robocasa365-shared` | RoboCasa365 Atomic-Seen，OpenPI recipe | 两个冻结样本通过真实批次及 CPU 验证，另有短原生状态与动作对照。[记录](../tasks/20261107-robocasa365.md) |

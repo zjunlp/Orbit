@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import subprocess
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -33,6 +34,53 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_policy_build_exports_the_pinned_source_and_labels_the_image(self):
+        with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
+            import native_runtime
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout = root / "upstream"
+            subprocess.run(["git", "init", "--quiet", str(checkout)], check=True)
+            code = checkout / "inference.py"
+            code.write_text("pinned\n")
+            subprocess.run(["git", "-C", str(checkout), "add", code.name], check=True)
+            subprocess.run(["git", "-C", str(checkout), "-c", "user.name=Orbit Test",
+                            "-c", "user.email=orbit@example.invalid", "-c", "commit.gpgsign=false",
+                            "commit", "--quiet", "-m", "Pin test policy source"], check=True)
+            commit = subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip()
+            source = {"repository": "synthetic", "commit": commit}
+            native_runtime.check_policy_source(checkout, source)
+            code.write_text("local edit\n")
+            with self.assertRaisesRegex(ValueError, "clean pinned policy checkout"):
+                native_runtime.check_policy_source(checkout, source)
+
+            dockerfile, server = root / "policy.Dockerfile", root / "server.py"
+            dockerfile.write_text("FROM scratch\n")
+            server.write_text("server\n")
+            manifest = native_runtime.policy_manifest("synthetic-policy", {"model": source}, dockerfile, server)
+            self.assertEqual(manifest["sources"], {"model": commit})
+            self.assertEqual(manifest["server"], adapter.file_digest(server))
+            self.assertEqual(manifest["sdk"]["wire.py"], adapter.file_digest(ROOT / "examples/sdk/orbit_embodied/wire.py"))
+            self.assertNotIn("test_wire.py", manifest["sdk"])
+            run = subprocess.run
+            builds = []
+
+            def capture_build(command, **kwargs):
+                if command[:2] == ["docker", "build"]:
+                    context = command[command.index("--build-context") + 1].split("=", 1)[1]
+                    self.assertEqual((Path(context) / code.name).read_text(), "pinned\n")
+                    label = next(arg for arg in command if arg.startswith(native_runtime.MANIFEST_LABEL + "="))
+                    self.assertEqual(json.loads(label.split("=", 1)[1]), manifest)
+                    builds.append(command)
+                else:
+                    return run(command, **kwargs)
+
+            args = SimpleNamespace(source=checkout, policy_base="synthetic:base", build_tag="synthetic:policy")
+            with patch.object(native_runtime.subprocess, "run", side_effect=capture_build):
+                native_runtime.build_policy_image(args, "model", source, dockerfile, manifest)
+            self.assertEqual(len(builds), 1)
+
     def test_native_runtime_images_require_matching_manifest_and_entrypoint(self):
         with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
             import native_runtime

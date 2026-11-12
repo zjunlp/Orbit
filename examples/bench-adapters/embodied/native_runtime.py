@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from adapter import HERE, check_source, file_digest, pinned
+from adapter import HERE, SDK, check_source, file_digest, pinned
 
 
 ROBOCASA = {"repository": "https://github.com/robocasa/robocasa", "commit": "756598a5be52e052339bb2d957426e39015c2afb"}
@@ -78,6 +78,40 @@ def export_source(source, expected, target, paths):
                     expected["commit"], "--", *paths], check=True)
     subprocess.run(["tar", "-xf", str(archive), "-C", str(target)], check=True)
     archive.unlink()
+
+
+def check_policy_source(source, expected):
+    check_source(source, expected, {})
+    status = subprocess.check_output(
+        ["git", "-C", str(source), "status", "--porcelain", "--untracked-files=normal"], text=True)
+    if status.strip():
+        raise ValueError("expected a clean pinned policy checkout: " + expected["repository"])
+
+
+def policy_manifest(kind, sources, dockerfile, server, *, interpreter="python"):
+    return {
+        "kind": kind,
+        "sources": {name: source["commit"] for name, source in sources.items()},
+        "dockerfile": file_digest(dockerfile),
+        "server": file_digest(server),
+        "sdk": {path.name: file_digest(path) for path in sorted((SDK / "orbit_embodied").glob("*.py"))
+                if not path.name.startswith("test_")},
+        "entrypoint": [interpreter, "/opt/orbit/" + server.name],
+    }
+
+
+def build_policy_image(args, context_name, source, dockerfile, manifest, *, source_paths=(), extra_contexts=()):
+    with tempfile.TemporaryDirectory(prefix="orbit-native-policy-") as temporary:
+        context = Path(temporary) / context_name
+        export_source(args.source, source, context, source_paths)
+        contexts = ["--build-context", context_name + "=" + str(context)]
+        for name, path in extra_contexts:
+            contexts.extend(["--build-context", name + "=" + str(path)])
+        label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
+                        *contexts,
+                        "--build-arg", "POLICY_BASE=" + args.policy_base,
+                        "-f", str(dockerfile), "-t", args.build_tag, str(HERE.parents[2])], check=True)
 
 
 def build(args):

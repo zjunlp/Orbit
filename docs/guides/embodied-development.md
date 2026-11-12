@@ -17,7 +17,8 @@ daemon 另行在主机上启动 adapter，原生 adapter 的 `/usr/bin/env` 从 
 PYTHONPATH=examples/sdk "$PYTHON38" -B -m unittest -v \
   orbit_bench.test_protocol \
   orbit_embodied.test_core orbit_embodied.test_batch \
-  orbit_embodied.test_openpi orbit_embodied.test_groot orbit_embodied.test_openvla
+  orbit_embodied.test_openpi orbit_embodied.test_groot orbit_embodied.test_openvla \
+  orbit_embodied.test_wire
 ```
 
 ## Python 3.11 主机集成回归
