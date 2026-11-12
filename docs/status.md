@@ -32,3 +32,4 @@ Updated 2026-11-11. Architecture: [design](design.md). Docs map: [docs/README](R
 1. Web: Catalog filter memoization, abort stale `useAsync` requests, virtualize long conversations.
 2. EFE GPU tasks, licensed-data volumes, KVM calibration of MobileWorld / OSWorld-V2.
 3. Real Agent bench jobs (RCB first); R4 on two machines; later, official-runner comparison for a few classic benchmarks.
+4. Evolution line, not started: unified trajectories and token accounting, export, fork, the evolution gate ([plan](evolution-plan.md)).

@@ -7,6 +7,7 @@ Where each kind of document lives and which one is authoritative. Rules for keep
 | --- | --- | --- |
 | [design.md](design.md) | Architecture, contracts, module boundaries, decisions | Only source for design; update in the same branch as the change |
 | [status.md](status.md) | What works now, main gaps, next steps | Current state; replace, never append history |
+| [evolution-plan.md](evolution-plan.md) | Work packages for unified trajectories, export, fork, the evolution gate and evolution experiments | A plan, not a specification; decisions move into design.md as each package lands |
 | [catalog.md](catalog.md) | How to read the benchmark product library | Data lives in `packages/orbit/src/bench/benchmarks/` |
 | [guides/](#guides) | How to use an implemented feature | Implemented behavior only |
 | [tasks/](tasks/README.md) | One record per feature or substantive fix, indexed by topic | Historical; not updated after completion |
