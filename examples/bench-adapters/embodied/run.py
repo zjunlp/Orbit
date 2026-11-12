@@ -14,6 +14,7 @@ from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 from orbit_embodied.libero_plus import NATIVE_ROOT as LIBERO_PLUS_ROOT
 from orbit_embodied.libero_suites import HORIZONS
+from orbit_embodied.simpler import WIDOWX_AREA_SIZE
 from orbit_embodied.vlabench import ASSETS_ROOT as VLABENCH_ASSETS
 
 
@@ -231,6 +232,8 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         benchmark = native(suite, name, settle_steps=reference["parameters"]["settleSteps"])
     expected_horizon = reference_horizon(reference, sample["taskId"])
     expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128}.get(kind, 256)
+    if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):
+        expected_render_size = WIDOWX_AREA_SIZE
     policy = LazyPolicy(request["policy"])
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]

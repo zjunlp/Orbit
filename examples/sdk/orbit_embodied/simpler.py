@@ -4,6 +4,9 @@ from itertools import islice, product
 from math import prod
 
 
+WIDOWX_AREA_SIZE = 224
+
+
 def grid_size(scene):
     ranges = [scene["robotX"], scene["robotY"], *(scene["rpy"][i:i + 3] for i in (0, 3, 6))]
     if "objectEpisodes" in scene:
@@ -62,6 +65,22 @@ def make_wrapper(environment, task, index):
     google = environment["simplerRobot"] == "google"
     wrapper_type = GoogleFractalEnv if google else WidowXBridgeEnv
     image_size = (256, 320) if google else (256, 256)
+    if environment.get("widowxAreaResize"):
+        if google:
+            raise ValueError("the RGB224 recipe requires the WidowX camera")
+        import cv2
+        from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
+
+        class WidowXVisualMatching224(WidowXBridgeEnv):
+            def _process_observation(self, raw):
+                image = get_image_from_maniskill2_obs_dict(self.env, raw)
+                return {
+                    "video.image_0": cv2.resize(image, self.image_size, interpolation=cv2.INTER_AREA),
+                    "annotation.human.action.task_description": self.env.unwrapped.get_language_instruction(),
+                }
+
+        wrapper_type = WidowXVisualMatching224
+        image_size = (WIDOWX_AREA_SIZE, WIDOWX_AREA_SIZE)
     if "simplerScenes" not in environment:
         name = task.split("/", 1)[1]
         ray_tracing = name.endswith("_drawer")

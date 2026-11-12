@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install numpy==1.26.4 scipy==1.15.3 gymnasium==0.29.1 sapien==2.2.2 \
     opencv-python-headless==4.10.0.84 transforms3d==0.4.2 imageio==2.37.0 \
-    imageio-ffmpeg==0.6.0 msgpack==1.1.0 msgpack-numpy==0.4.8 pyzmq==26.2.0 \
+    imageio-ffmpeg==0.6.0 msgpack==1.1.0 msgpack-numpy==0.4.8 websockets==13.1 pyzmq==26.2.0 \
     mujoco==3.3.1 robosuite==1.4.0 bddl==1.0.1 easydict==1.13 \
     gym==0.25.2 matplotlib==3.9.4 hydra-core==1.3.2 cloudpickle==3.1.1 \
     h5py==3.14.0 pyyaml==6.0.2 GitPython==3.1.45 tabulate==0.9.0 \

@@ -48,6 +48,7 @@
 | OpenPI π₀.₅ DROID，`pi05-droid-molmospaces` | MolmoSpaces Pick、Pick-and-Place，DROID 关节控制 | 两条轨道各有一个固定样本使用本地 EGL 开发配置完成，CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | OpenWAM，`openwam-alpha-sim-vlabench` | VLABench Track 1 | 一个真实 episode 与独立 CPU 验证；另做了参考客户端 I/O 和动作转换对照。[记录](../tasks/20261109-openwam.md) |
 | GR00T N1.7 Bridge / Fractal，`groot-n17-widowx` / `groot-n17-google` | SimplerEnv WidowX / Google Robot 的 GR00T recipe | 两套均有真实抽样、批次和独立验证；WidowX 有参考边界抽查，Google 有固定动作对照。[WidowX](../tasks/20261106-embodied-batches.md) · [参考边界](../tasks/20261106-embodied-endpoints.md) · [Google](../tasks/20261107-groot-google.md) |
+| StarVLA QwenGR00T 20K，`starvla-qwen3vl-groot-widowx` | SimplerEnv WidowX Visual Matching，224×224 RGB 配方 | Carrot on Plate 完成一条真实样本，独立 CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | RoboCasa365 π₀.₅，`pi05-robocasa365-shared` | RoboCasa365 Atomic-Seen，OpenPI recipe | 两个冻结样本通过真实批次及 CPU 验证，另有短原生状态与动作对照。[记录](../tasks/20261107-robocasa365.md) |
 | RoboCasa365 GR00T N1.5，`groot-n15-robocasa365-shared` | RoboCasa365 Atomic-Seen 与 `target50` pretrain 中的两个 Composite 组 | Atomic 两个样本与官方多步 wrapper 对照；两个 Composite 组各一个真实样本，均有独立验证与重评。[Atomic](../tasks/20261107-robocasa365-gr00t-n15.md) · [Composite](../tasks/20261109-embodied-benchmark-coverage.md) |
 | RoboCasa365 Diffusion Policy，`diffusion-policy-robocasa365-shared` | RoboCasa365 Atomic-Seen，双帧八步 recipe | 两个冻结样本覆盖成功停止与步数上限，完成 CPU 验证和选定重评。[记录](../tasks/20261109-robocasa365-diffusion-policy.md) |

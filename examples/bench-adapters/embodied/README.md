@@ -24,7 +24,7 @@ from the current recipe.
 | LIBERO-Plus | [Perturbation suites and OFT](benchmarks/libero-plus/README.md) |
 | LIBERO-PRO | [Original leaderboard perturbations](benchmarks/libero-pro/README.md) |
 | VLABench | [Native tracks and OpenWAM](benchmarks/vlabench/README.md) |
-| SimplerEnv | [Native catalogs and scene grids](benchmarks/simpler-env/README.md) · [GR00T N1.7](policies/groot/README.md) |
+| SimplerEnv | [Native catalogs and scene grids](benchmarks/simpler-env/README.md) · [GR00T N1.7](policies/groot/README.md) · [StarVLA QwenGR00T](policies/starvla/README.md) |
 | RoboCasa v0.2 | [Atomic-24](benchmarks/robocasa-v02/README.md) |
 | RoboCasa365 | [Multitask, Lifelong, π₀.₅, GR00T N1.5 and Diffusion Policy](benchmarks/robocasa365/README.md) |
 | RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) · [LingBot-VLA](policies/lingbot-vla/README.md) |

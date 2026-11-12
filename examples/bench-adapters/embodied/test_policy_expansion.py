@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import ModuleType
 import unittest
 from unittest.mock import patch
 
@@ -101,6 +102,59 @@ class PolicyExpansionTests(unittest.TestCase):
         self.assertEqual(inputs["task"], "Open the microwave")
         np.testing.assert_array_equal(inputs["observation.state"], state)
         self.assertEqual(inputs["observation.state"].dtype, np.float32)
+
+    def test_starvla_recipe_preserves_initial_scene_grid_and_native_action_order(self):
+        from orbit_embodied import resolve_binding
+
+        config = load("policies/starvla/configure_starvla.py")
+        simpler = load("benchmarks/simpler-env/configure_simpler.py")
+        reference = json.loads((ADAPTER / "profiles/groot-widowx.json").read_text())
+        scene = {"objectEpisodes": [0, 24], "horizon": 60}
+        environment = reference["environment"]
+        environment.update(simplerRobot="widowx", tasks=sorted(config.TASKS),
+                           horizons={task: 60 for task in config.TASKS},
+                           simplerScenes={task: [dict(scene)] for task in config.TASKS})
+        benchmark = {"config": {"reference": json.dumps(reference)}}
+        with patch.object(config, "file_digest", return_value="sha256:" + "a" * 64):
+            recipe = config.benchmark_recipe(benchmark, ADAPTER)
+            digest = benchmark["config"]["profileDigest"]
+            self.assertEqual(config.benchmark_recipe(benchmark, ADAPTER), recipe)
+            self.assertEqual(benchmark["config"]["profileDigest"], digest)
+            with patch.object(simpler, "file_digest", return_value="sha256:" + "b" * 64):
+                simpler.use_policy_termination(reference, ADAPTER)
+            terminated = {"config": {"reference": json.dumps(reference)}}
+            converted = config.benchmark_recipe(terminated, ADAPTER)
+            resolve_binding(converted["benchmarkProfile"], recipe["policyProfile"], converted["observationMap"])
+            reference["benchmarkProfile"]["action"]["order"].append("terminate")
+            invalid = {"config": {"reference": json.dumps(reference)}}
+            with self.assertRaisesRegex(ValueError, "native WidowX action protocol"):
+                config.benchmark_recipe(invalid, ADAPTER)
+        self.assertTrue(recipe["environment"]["policyTermination"])
+        self.assertEqual(recipe["parameters"]["successRule"], "last")
+        self.assertEqual(recipe["parameters"]["replanSteps"], 1)
+        self.assertEqual(recipe["benchmarkProfile"]["observations"]["video.image_0"]["shape"], [224, 224, 3])
+        self.assertEqual(recipe["benchmarkProfile"]["action"]["order"],
+                         ["x", "y", "z", "roll", "pitch", "yaw", "gripper", "terminate"])
+        for scenes in recipe["environment"]["simplerScenes"].values():
+            self.assertEqual(scenes, [{"objectEpisodes": [0, 24], "horizon": 120}])
+
+        runner = load("run.py")
+        request = {"reference": recipe, "sample": {"benchmarkProfile": recipe["id"], "taskId": min(config.TASKS)},
+                   "policy": {"connector": "policy-ws", "replanSteps": 1}, "binding": {}, "episodeId": "example",
+                   "trialId": "trial", "implementationDigest": "test"}
+        with patch.dict("os.environ", {"ORBIT_RUN_ID": "run"}), patch.object(runner, "run_episode") as rollout:
+            runner.execute_episode(request, None)
+            rollout.assert_called_once()
+            request["reference"]["parameters"]["renderSize"] = 256
+            with self.assertRaisesRegex(ValueError, "driver settings differ"):
+                runner.execute_episode(request, None)
+
+        starvla = load("policies/starvla/serve_starvla.py")
+        euler = ModuleType("transforms3d.euler")
+        euler.euler2axangle = lambda roll, pitch, yaw: (np.array([1, 0, 0]), roll)
+        with patch.dict(sys.modules, {"transforms3d.euler": euler}):
+            action = starvla.native_action(np.array([1, 2, 3, 0.2, 0, 0, 0.6]))
+        np.testing.assert_allclose(action, [[1, 2, 3, 0.2, 0, 0, 1, 0]])
 
 
 if __name__ == "__main__":

@@ -107,6 +107,7 @@ const nativeProfiles: Record<string, string> = {
   "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
+  "widowx-visual-matching-rgb224/1": "simpler-env",
   "robocasa-v02-panda-arm/1": "robocasa-v02",
   "robocasa365-panda-omron-native/1": "robocasa365",
   "robotwin-aloha-agilex-native/1": "robotwin",
