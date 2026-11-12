@@ -137,6 +137,10 @@ def score(req):
     if r.get("task_id") != req["trial"]["task"]:
         return invalid("scorer_error", "the check result is for another problem", review=review)
     review["details"] = {"result": r["result"]}
+    passed, _, why = str(r["result"]).partition(": ")
+    review["items"] = [{"criterion": "The completion passes the problem's unit tests", "type": "test",
+                        "score": 1 if passed == "passed" else 0, "maxScore": 1,
+                        **({"reasoning": why or passed} if passed != "passed" else {})}]
     return valid(1.0 if r["result"] == "passed" else 0.0, metrics={"pass": 100.0 if r["result"] == "passed" else 0.0},
                  review=review)
 

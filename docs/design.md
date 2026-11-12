@@ -344,10 +344,13 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   `-g` 实验组、bench job（显示为 job 行：benchmark、trial 进度、各配置均分；展开为 trial 行，每行 solve → verify
   状态、分数、有效性，点击进入 trial 页）。顶部按 All / Experiments / Benchmarks 筛选。首次加载及 SSE 重连时逐页加载全部 Run；
   加载期间的 SSE 更新和删除覆盖快照，加载途中断线重连会再取一遍，文件夹计数与筛选不再受 1000 条上限影响。
-- **Trial**（`/bench/<job>/trials/<trial>`）：结果与 issues、solve → verify 时间线与实测用量、重新评分前的历次结果；标签由 adapter 的
-  `review` 决定（每个声明的文件一个标签，按 kind 由 `pages/trial/Review.tsx` 的 `FILE_VIEWS` 渲染，新增 kind 时类型检查要求补齐；
-  文件读取共用 `lib/run-file.ts`，各视图保留自己的预览上限；Grader 来自 `items`；Details 来自 `details` 与未知字段），
-  之后固定有 Agent session 与 Outputs（两个 Run 的全部文件）。Markdown 只生成 React 元素，不渲染 HTML、不加载外部图片，
+- **Trial**（`/bench/<job>/trials/<trial>`）：页头只有一个结论（进行中的状态、评测无效/未知、二元 benchmark 的完成与否；标量只显示分数）、
+  issues、非正常的 execution / cleanup，以及与分数不重复的指标；solve → verify 时间线、实测用量和历次评分收在 Execution details
+  （有回放视图时默认折叠）。标签由 adapter 的 `review` 决定，按证据形态而不是 benchmark 名称（`lib/review.ts` 的 `reviewTabs`）：
+  回放（`trajectory` / `conversation` / `episode`）与测试报告（`tests`）各占一个标签并排在最前；没有回放时 Markdown 报告和视频也各占一个；
+  其余文件合并为 **Evidence**（左侧文件列表，一次看一个；只有一个文件时直接是标签）；**Rubric** 来自 `items`（逐条得分、权重、理由，
+  可只看失分项）；Details 来自 `details` 与未知字段。每个 kind 由 `pages/trial/Review.tsx` 的 `FILE_VIEWS` 渲染，新增 kind 时类型检查要求补齐；
+  文件读取共用 `lib/run-file.ts`，各视图保留自己的预览上限。之后固定有 Configuration、Agent session 与 Outputs（两个 Run 的全部文件）。Markdown 只生成 React 元素，不渲染 HTML、不加载外部图片，
   图片按相对路径取同一 Run 的文件。bench 的 solve / verify Run 页面包屑为 `Bench / job / trial / phase`，带 “← Trial”。
   Runs 页选中整个 job 行可删除该 job。
 - **Run 详情**：Overview（生命周期时间线、清理核对、笔记、指标迷你图、日志尾）、Logs（虚拟列表、ANSI、
@@ -596,8 +599,9 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
 - 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[], capabilities?: BenchCapabilities, official?: OfficialRule }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
   `{ score, maxScore?, invalid?, issues?, review?, metrics?, failure?, episode? }`。`official` 与报告修订见 §9.7（已实现部分）。`review`（可选）告诉 trial 页展示什么：
   `files[{ label, phase: solve|verify, path(相对该 Run 输出目录), kind?, fallback? }]`、`items[{ criterion, score?,
-  maxScore?, weight?, type?, reasoning? }]`、`details{ key: 短值 }`。`kind` 是封闭集合 `markdown | image | text | json |
-  table | trajectory`，样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
+  maxScore?, weight?, type?, reasoning? }]`、`details{ key: 短值 }`。`kind` 是封闭集合：六种文件视图 `markdown | image | video | text | json |
+  table` 与四种专用视图 `trajectory | episode | conversation | tests`（`tests` 读标准 CTRF 测试报告；名为 `ctrf.json` 的文件即使未声明 kind
+  也按测试报告显示，旧 trial 无需重新评分），样式全由 Web 决定，adapter 不能传 HTML / CSS；不认识的 `kind` 依次退回 `fallback`、文件扩展名、纯文本，并在页面
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
 - `capabilities` 描述身份、六维分类（`taxonomy`）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。旧 adapter 回复中的 `category` / `profiles` / `domains` / `kind` 被忽略（§9.10）；分类标签不替代准入检查。

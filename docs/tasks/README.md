@@ -61,6 +61,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261111](20261111-bench-core-decoupling.md) Decouple bench core from specific benchmarks, split calibration and trial views
 - [20261111](20261111-bench-trial-machine.md) Move the trial state machine out of BenchService
 - [20261112](20261112-web-polish.md) Web page layout and visual consistency
+- [20261112](20261112-trial-review-views.md) Trial page: tests and rubric views, grouped evidence, leaner header
 
 ## Harbor and code / research benchmarks
 

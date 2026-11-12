@@ -2,13 +2,14 @@ import type { GuiTrace, SessionMessage } from "@zjunlp/orbit/contracts";
 import { useMemo, useState } from "react";
 import { copy, Empty, Link, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
-import { bytes, runPath } from "../../lib/format.ts";
+import { bytes } from "../../lib/format.ts";
 import { actionOverlay, stepMessages } from "../../lib/gui-action.ts";
 import { overlayOpen, useHotkeys } from "../../lib/hotkeys.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { useRunFile } from "../../lib/run-file.ts";
 import { parseTrajectory, trajectoryFrame, trajectoryStep } from "../../lib/trajectory.ts";
 import { useAsync } from "../../lib/use.ts";
+import { FileBar } from "./parts.tsx";
 import "./trajectory.css";
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -44,23 +45,9 @@ export function TrajectoryFile({
     source.error;
   return (
     <div className="gui-review">
-      <div className="toolbar">
-        <span className="faint">Saved trajectory</span>
-        <span className="mono ellipsis">{file.path}</span>
+      <FileBar runId={run.id} path={file.path}>
         {note && <span className="chip warn">{note}</span>}
-        <div className="spacer" />
-        {fallback && (
-          <Link className="btn sm" href={fallback}>
-            Markdown view
-          </Link>
-        )}
-        <a className="btn sm" href={fileUrl(run.id, file.path, true)}>
-          Download trace
-        </a>
-        <Link className="btn sm" href={`${runPath(run.id)}?tab=logs`}>
-          Execution logs
-        </Link>
-      </div>
+      </FileBar>
       {problem ? (
         <Empty title="Trajectory unavailable">
           {problem} Other saved outputs and scores remain available.
@@ -342,9 +329,6 @@ export function TrajectoryViewer({
           Copy step link
         </button>
       </div>
-      <p className="faint gui-trace-note">
-        Saved observations only. Viewing a step does not rerun actions or restore the environment.
-      </p>
     </div>
   );
 }

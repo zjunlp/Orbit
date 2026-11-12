@@ -414,6 +414,9 @@ export function modelError(message: unknown): string | null {
 
 interface ScoreDetail {
   scorer_name?: string;
+  score?: unknown;
+  max_score?: unknown;
+  passed?: unknown;
   message?: unknown;
   details?: Record<string, unknown> | null;
 }
@@ -450,6 +453,50 @@ interface ScoreItem {
   score_results?: unknown;
 }
 
+const latestItem = (items: ScoreItem[], instance: string, level: string) =>
+  items
+    .filter((r) => r.instance_id === instance && r.prompt_level === level)
+    .sort((a, b) => (b.attempt ?? 1) - (a.attempt ?? 1))[0];
+
+type ReviewItems = NonNullable<ScoreReply["review"]>["items"];
+
+/** The gates and scorers of the instance in the score report, as the rubric of the trial page. */
+function scorerItems(ctx: Trial, verifyOutput: string): ReviewItems {
+  let item: ScoreItem | undefined;
+  try {
+    const report = JSON.parse(readFileSync(join(verifyOutput, "score.json"), "utf8")) as {
+      results?: ScoreItem[];
+    };
+    item = latestItem(
+      report.results ?? [],
+      `${ctx.task}${ASI_SEED_SUFFIX}`,
+      ctx.options.promptLevel ?? "b1",
+    );
+  } catch {}
+  const number = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const rows = (list: unknown, type: string): ReviewItems =>
+    (Array.isArray(list) ? (list as ScoreDetail[]) : [])
+      .filter((d) => d && typeof d === "object")
+      .map((d) => {
+        const points = number(d.score);
+        const max = number(d.max_score);
+        // A scorer that reports only pass / fail counts as one point.
+        const passed = typeof d.passed === "boolean" ? (d.passed ? 1 : 0) : null;
+        return {
+          criterion: String(d.scorer_name ?? type),
+          type,
+          score: points ?? passed,
+          ...(points !== undefined
+            ? max !== undefined
+              ? { maxScore: max }
+              : {}
+            : { maxScore: 1 }),
+          ...(typeof d.message === "string" && d.message ? { reasoning: d.message } : {}),
+        };
+      });
+  return [...rows(item?.gate_results, "gate"), ...rows(item?.score_results, "score")].slice(0, 500);
+}
+
 export function asiScore(ctx: Trial, solveOutput: string, verifyOutput: string): ScoreReply {
   const instance = `${ctx.task}${ASI_SEED_SUFFIX}`;
   const level = ctx.options.promptLevel ?? "b1";
@@ -470,9 +517,7 @@ export function asiScore(ctx: Trial, solveOutput: string, verifyOutput: string):
   } catch {
     return bad("score report is not valid JSON");
   }
-  const item = items
-    .filter((r) => r.instance_id === instance && r.prompt_level === level)
-    .sort((a, b) => (b.attempt ?? 1) - (a.attempt ?? 1))[0];
+  const item = latestItem(items, instance, level);
   if (!item || typeof item.final_score !== "number")
     return bad("instance missing from score report");
   const maxScore = typeof item.max_score === "number" && item.max_score > 0 ? item.max_score : 100;
@@ -523,7 +568,7 @@ export function asiReview(
     files.push({ label: "Score report", phase: "verify", kind: "json", path: "score.json" });
   return {
     files,
-    items: [],
+    items: scorerItems(ctx, verifyOutput),
     details: {
       "prompt level": level,
       attempt_status: attemptStatus(latestNativeResult(ctx, solveOutput)),

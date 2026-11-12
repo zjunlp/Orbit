@@ -13,7 +13,7 @@
 | `test_adapter.py`（或 `*.test.ts`） | 必须。默认在本目录独立跑 `python3 -m unittest discover` |
 | `Dockerfile` / `resources.json` / `profiles/` / `fixtures/` | 可选，按需 |
 
-`packages/orbit/test/adapter-directory-contract.test.ts` 强制以上三条：每个目录都要有入口、README 和测试；每个目录都要被产品目录（`packages/orbit/src/bench/benchmarks/`）引用；产品目录不能指向不存在的目录。测试不在本目录时，在该测试文件的 `TESTS_ELSEWHERE` 里登记实际位置——登记的文件不存在也算失败。
+`packages/orbit/test/adapter-directory-contract.test.ts` 强制以上三条：每个目录都要有入口、README 和测试；每个目录都要被产品目录（`packages/orbit/src/bench/benchmarks/`）引用；产品目录不能指向不存在的目录。
 
 产品目录按族拆成 `packages/orbit/src/bench/benchmarks/<family>.ts`，新增 benchmark 时新建一个文件并在 `index.ts` 里加一行 import。不要改动其他族。
 
@@ -219,8 +219,23 @@ orbit logs <solve 或 verify run>
 ```
 
 - `path` 相对对应 Run 的 `$ORBIT_OUTPUT`（即请求里的 `solve.output` / `verify.output`），不能以 `/` 开头或含 `..`。
-- `kind` 只能选 `markdown`、`image`、`text`、`json`、`table`（CSV / TSV）、`trajectory`。样式由 Orbit 决定，不要也不能传 HTML 或 CSS。
-  新增的 kind，旧版 Orbit 会用 `fallback`、再按扩展名、再按纯文本显示，并标注“未知类型”。轨迹应声明 `fallback: "json"` 并保留 Markdown 文件。
+- `kind` 是封闭集合，样式由 Orbit 决定，不要也不能传 HTML 或 CSS。不需要也不能为某个 benchmark 定制页面：把证据写成下表的一种形态即可。
+
+  | kind | 文件内容 | trial 页 |
+  | --- | --- | --- |
+  | `markdown` `image` `video` `text` `json` `table`（CSV / TSV） | 普通文件 | 按类型预览 |
+  | `tests` | [CTRF](https://ctrf.io) 测试报告（pytest 等的 `ctrf.json`） | 用例清单：失败在前，带断言信息与 trace，可按状态筛选 |
+  | `trajectory` | `GuiTrajectory`（见下） | GUI 逐步回放 |
+  | `conversation` | `ConversationTrajectory` | 工具调用与对话轮次 |
+  | `episode` | `EpisodeTrajectory` | 具身时间线：视频、动作与状态曲线 |
+
+  新增的 kind，旧版 Orbit 会用 `fallback`、再按扩展名、再按纯文本显示，并标注“未知类型”。专用 kind 应声明 `fallback: "json"`。
+  名为 `ctrf.json` 的文件不声明 kind 也按 `tests` 显示。
+- 标签顺序由 Orbit 决定：回放和测试报告在最前；没有回放时 Markdown 报告和视频各占一个标签；其余文件收进 **Evidence** 标签的文件列表。
+  `label` 是标签或列表中的名字，写内容（“Judge result”）而不是文件名。
+- `items` 是逐条评分依据，显示为 **Rubric** 标签：`criterion` 必填；`score` 与 `maxScore` 决定满分 / 部分 / 零分（`score: null` 表示未评，
+  不给 `maxScore` 只显示分数）；`type` 是短分类（如 `gate`、`assertion`）；`reasoning` 写失分原因。评分脚本已有分项结果时应填它，
+  而不是只给一个 JSON 文件。
 - 其他字段不会丢：Details 标签按键值列出。文本过长会截断，条目数有上限（文件 20、items 500、details 50）。
 - 不给 `review` 时，trial 页退回通用猜测（solve 中的 Markdown 报告、verify 中的 JSON），Outputs 标签始终可看全部文件。
 

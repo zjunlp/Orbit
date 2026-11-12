@@ -1,13 +1,20 @@
-// One bench trial (task × method × seed) on one page: its outcome and issues, the solve → verify
-// timeline with measured use, then tabs. The adapter's `review` decides the content tabs (one per
-// declared file, rendered by kind through `FILE_VIEWS`; Grader from its items; Details for its facts
-// and any fields this UI does not know). Without a review (older trials and adapters) the page
-// guesses: the solve's Markdown report and the verifier's JSON (trial/Legacy.tsx). The Agent
-// session and all outputs are always there.
-import { fmtMetric, type MetricDef, metricValue, resolveMetrics } from "@zjunlp/orbit/metrics";
+// One bench trial (task × method × seed) on one page: what it concluded and anything abnormal, the
+// solve → verify timeline with measured use, then tabs. The adapter's `review` decides the content
+// tabs: the views a trial is read through first (replays, test reports, documents; one per file,
+// rendered by kind through `FILE_VIEWS`), Rubric from its items, the remaining files together under
+// Evidence, and Details for its facts and any fields this UI does not know. Without a review (older
+// trials and adapters) the page guesses: the solve's Markdown report and the verifier's JSON
+// (trial/Legacy.tsx). The configuration, the Agent session and all outputs are always there.
+import {
+  fmtMetric,
+  type MetricDef,
+  metricValue,
+  resolveMetrics,
+  SCORE,
+} from "@zjunlp/orbit/metrics";
 import { planRank, sampleLabel, sampleOrder } from "@zjunlp/orbit/naming";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { IconAlert, IconFlask } from "../components/icons.tsx";
+import { IconAlert } from "../components/icons.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { Empty, Link, Loading, StateBadge, toast, useNow } from "../components/ui.tsx";
 import {
@@ -30,18 +37,29 @@ import {
   trialPath,
 } from "../lib/format.ts";
 import { useHotkeys } from "../lib/hotkeys.ts";
-import { extraFields, REVIEW_FIELDS, resolveKind } from "../lib/review.ts";
+import {
+  extraFields,
+  fileLabel,
+  isBlank,
+  isReplay,
+  REVIEW_FIELDS,
+  resolveKind,
+  reviewTabs,
+} from "../lib/review.ts";
 import { navigate, setQuery, useLocation } from "../lib/router.ts";
 import { upsertRun, useRun } from "../lib/runs-store.ts";
 import { useAsync } from "../lib/use.ts";
 import { ArtifactsTab } from "./run/Artifacts.tsx";
 import { SessionTab } from "./run/Session.tsx";
 import { GraderView, ReportView } from "./trial/Legacy.tsx";
-import { DetailsView, FILE_VIEWS, GraderItems, isInteractive } from "./trial/Review.tsx";
+import { Value } from "./trial/parts.tsx";
+import { DetailsView, EvidenceView, FILE_VIEWS } from "./trial/Review.tsx";
+import { RubricView } from "./trial/Rubric.tsx";
 
 interface TabDef {
   key: string;
   label: string;
+  count?: number;
 }
 
 /** A run from the live store, else fetched once. */
@@ -61,14 +79,18 @@ function useRunOnce(id: string | null): Run | undefined {
   return id ? (live ?? fetched) : undefined;
 }
 
-/** The trial's value of every metric of its job (the primary first), e.g. `Resolved 100% · Reward 100%`. */
+/** The trial's other metrics; the score itself is the headline of the page. */
 function TrialMetrics({ o, metrics }: { o: Outcome | null; metrics: MetricDef[] }) {
-  const all = resolveMetrics(metrics);
-  if (!o || all.length < 2) return null;
-  const ordered = [...all.filter((m) => m.primary), ...all.filter((m) => !m.primary)];
+  // Next to the score, a metric without a value or a percentage equal to it says nothing new.
+  const score = metricValue(o, SCORE);
+  const rest = resolveMetrics(metrics).filter((m) => {
+    const v = metricValue(o, m.name);
+    return m.name !== SCORE && v !== null && !(m.unit === "%" && v === score);
+  });
+  if (!o || rest.length === 0) return null;
   return (
     <div className="trial-metrics">
-      {ordered.map((m) => (
+      {[...rest.filter((m) => m.primary), ...rest.filter((m) => !m.primary)].map((m) => (
         <span key={m.name} className={m.primary ? "primary" : ""} title={m.description}>
           <span className="faint">{m.label}</span> <b>{fmtMetric(metricValue(o, m.name), m)}</b>
         </span>
@@ -87,19 +109,33 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const review = trial?.outcome
     ? trial.outcome.review
     : (trial?.history.at(-1)?.outcome.review ?? null);
+  const plan = useMemo(() => reviewTabs(review?.files ?? []), [review]);
   const tabs: TabDef[] = useMemo(() => {
     if (!review) return LEGACY_TABS;
-    const out: TabDef[] = review.files
-      .map((f, i) => ({ key: `f${i}`, label: f.label, interactive: isInteractive(f) }))
-      .sort((a, b) => Number(b.interactive) - Number(a.interactive));
-    if (review.items.length) out.push({ key: "grader", label: "Grader" });
+    const own = (i: number): TabDef => ({
+      key: `f${i}`,
+      label: review.files[i] ? fileLabel(review.files[i]) : `File ${i + 1}`,
+    });
+    const out = [...plan.main, ...plan.documents].map(own);
+    if (review.items.length)
+      out.push({ key: "rubric", label: "Rubric", count: review.items.length });
+    if (plan.rest.length > 1)
+      out.push({ key: "evidence", label: "Evidence", count: plan.rest.length });
+    else out.push(...plan.rest.map(own));
     if (Object.keys(review.details).length || extraFields(review, REVIEW_FIELDS).length)
       out.push({ key: "details", label: "Details" });
     return [...out, ...ALWAYS_TABS];
-  }, [review]);
-  const tab = tabs.some((t) => t.key === loc.query.get("tab"))
-    ? (loc.query.get("tab") as string)
-    : (tabs[0]?.key as string);
+  }, [review, plan]);
+  // A link to a file that is now listed under Evidence opens it there.
+  const asked = loc.query.get("tab");
+  const linked = /^f(\d+)$/.exec(asked ?? "");
+  const grouped = linked && plan.rest.length > 1 && plan.rest.includes(Number(linked[1]));
+  const tab = grouped
+    ? "evidence"
+    : tabs.some((t) => t.key === asked)
+      ? (asked as string)
+      : (tabs[0]?.key as string);
+  const evidenceFile = grouped ? Number(linked[1]) : Number(loc.query.get("file") ?? Number.NaN);
   const now = useNow(
     1000,
     Boolean((solve && isActive(solve.state)) || (verify && isActive(verify.state))),
@@ -140,7 +176,8 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const o = trial.outcome;
   const method = job.spec.methods.find((m) => m.name === trial.method);
   const evidence = job.capabilities?.rescore === "evidence";
-  const gui = review?.files.some(isInteractive) ?? false;
+  const replay = review?.files.some(isReplay) ?? false;
+  const binary = binaryResult(o, job.capabilities?.scoreKind === "binary");
   const nav = neighbours(d.data.trials, trial, job.spec.samplePlan);
   const rescoreLabel = evidence ? "Recheck evidence" : "Rescore";
   const rescore = async () => {
@@ -170,9 +207,6 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   return (
     <>
       <TopBar crumbs={crumbs} className="topbar-wrap">
-        <Link className="btn sm" href={`/bench/new?from=${encodeURIComponent(job.id)}`}>
-          Copy configuration
-        </Link>
         {job.revisions[trial.method] &&
           !["empty", "oracle"].includes(
             job.spec.methods.find((m) => m.name === trial.method)?.agent ?? "",
@@ -216,9 +250,6 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
               {rescoreLabel}
             </button>
           )}
-        <Link className="btn sm" href={jobPath(jobId)}>
-          <IconFlask size={13} /> Job
-        </Link>
         <span className="trial-nav" title="Other trials of this job">
           <TrialLink jobId={jobId} t={nav.prev} label="‹ Prev" keyHint="[" />
           <TrialLink jobId={jobId} t={nav.next} label="Next ›" keyHint="]" />
@@ -227,7 +258,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
       </TopBar>
       <div className="run-head trial-head">
         <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-          <TrialResult t={trial} binary={job.capabilities?.scoreKind === "binary"} />
+          <TrialResult t={trial} binary={binary} evidence={evidence} />
           <h1 className="ellipsis">
             {trial.task} <span className="faint">·</span> {trial.method}
             {(trial.sampleRef || (job.spec.seeds ?? 1) > 1) && (
@@ -235,14 +266,13 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
             )}
           </h1>
           <div className="spacer" />
-          {o && o.score !== null && (
+          {o && o.score !== null && !binary && (
             <span className="trial-score num">
               {fmtScore(o.score)}
               <span className="faint"> / {fmtScore(o.maxScore)}</span>
             </span>
           )}
         </div>
-        <TrialMetrics o={o} metrics={job.metrics} />
         <div className="meta">
           <span className="chip mono">{job.spec.benchmark}</span>
           {method && (
@@ -253,23 +283,12 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
               {method.effort ? ` · ${method.effort}` : ""}
             </span>
           )}
-          {o && <span className="chip mono">execution {o.execution}</span>}
-          {o && (
-            <span className={`chip ${evalClass(o.evaluation)}`}>evaluation {o.evaluation}</span>
+          {o && o.execution !== "succeeded" && (
+            <span className="chip warn">execution {o.execution}</span>
           )}
-          {o && (
-            <span className={`chip${o.cleanup !== "done" ? " warn" : ""}`}>
-              cleanup {o.cleanup}
-            </span>
-          )}
-          <span className="chip">
-            {trial.state !== "done" && trial.history.length
-              ? evidence
-                ? "rechecking evidence"
-                : "rescoring"
-              : trial.state}
-          </span>
-          <span className="faint">created {dateTime(trial.createdAt)}</span>
+          {o && o.cleanup !== "done" && <span className="chip warn">cleanup {o.cleanup}</span>}
+          <TrialMetrics o={o} metrics={job.metrics} />
+          <span className="faint">{dateTime(trial.createdAt)}</span>
         </div>
         {(o?.issues ?? trial.issues).length > 0 && (
           <div className={`trial-issues${o?.evaluation === "valid" ? " neutral" : ""}`}>
@@ -277,15 +296,15 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
             <span>{(o?.issues ?? trial.issues).join(" · ")}</span>
           </div>
         )}
-        <details className="disclosure" open={!gui}>
+        <details className="disclosure" open={!replay}>
           <summary>Execution details</summary>
           <div className="trial-timeline">
             <PhaseCard label="Solve" run={solve} id={trial.solveRunId} now={now} />
             <span className="faint">→</span>
             <PhaseCard label="Verify" run={verify} id={trial.verifyRunId} now={now} />
           </div>
+          {trial.history.length > 0 && <ScoringHistory history={trial.history} />}
         </details>
-        {trial.history.length > 0 && <ScoringHistory history={trial.history} />}
       </div>
       <nav className="tabs">
         {tabs.map((t, i) => (
@@ -296,15 +315,25 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
             onClick={(e) => {
               if (e.metaKey || e.ctrlKey) return;
               e.preventDefault();
-              setQuery({ tab: i === 0 ? null : t.key }, { replace: false, hash: "" });
+              setQuery({ tab: i === 0 ? null : t.key, file: null }, { replace: false, hash: "" });
             }}
           >
             {t.label}
+            {t.count !== undefined && <span className="count">{t.count}</span>}
           </a>
         ))}
       </nav>
       <div className="page" style={{ display: "flex", flexDirection: "column" }}>
-        <TabBody tab={tab} trial={trial} job={job} review={review} solve={solve} verify={verify} />
+        <TabBody
+          tab={tab}
+          trial={trial}
+          job={job}
+          review={review}
+          solve={solve}
+          verify={verify}
+          evidence={plan.rest}
+          evidenceFile={Number.isInteger(evidenceFile) ? evidenceFile : null}
+        />
       </div>
     </>
   );
@@ -327,6 +356,8 @@ function TabBody(props: {
   review: Review | null;
   solve: Run | undefined;
   verify: Run | undefined;
+  evidence: number[];
+  evidenceFile: number | null;
 }) {
   const { tab, trial, job, review, solve, verify } = props;
   const notStarted = (phase: string) => (
@@ -345,7 +376,17 @@ function TabBody(props: {
       <View key={`${tab}/${run.id}/${f.path}`} run={run} file={f} review={review} solve={solve} />
     );
   }
-  if (tab === "grader" && review) return <GraderItems items={review.items} />;
+  if (tab === "rubric" && review) return <RubricView items={review.items} />;
+  if (tab === "evidence" && review)
+    return (
+      <EvidenceView
+        review={review}
+        indexes={props.evidence}
+        selected={props.evidenceFile}
+        solve={solve}
+        verify={verify}
+      />
+    );
   if (tab === "details" && review) return <DetailsView review={review} />;
   if (tab === "config") return <TrialConfiguration job={job} trial={trial} />;
   if (tab === "report") return solve ? <ReportView run={solve} /> : notStarted("solve");
@@ -358,25 +399,46 @@ function TabBody(props: {
 const evalClass = (e: string | undefined) =>
   e === "invalid" ? "bad" : e === "unknown" ? "warn" : "";
 
-function TrialResult({ t, binary }: { t: Trial; binary: boolean }) {
+/** A valid score of a pass / fail benchmark: true when the task was completed, else null. */
+function binaryResult(o: Outcome | null, binary: boolean): boolean | null {
+  if (!binary || !o || o.evaluation !== "valid" || o.score === null || o.maxScore <= 0) return null;
+  return o.score === o.maxScore;
+}
+
+const STATE_LABEL: Record<Trial["state"], string> = {
+  pending: "Pending",
+  solving: "Solving",
+  verifying: "Verifying",
+  done: "Awaiting result",
+};
+
+/**
+ * The one status of a trial: where it is until it has a result, then what the evaluation concluded.
+ * A valid score that is not pass / fail needs no word next to the number.
+ */
+function TrialResult(props: { t: Trial; binary: boolean | null; evidence: boolean }) {
+  const { t, binary } = props;
   const o = t.outcome;
-  const binaryResult = binary && o?.evaluation === "valid" && o.score !== null && o.maxScore > 0;
-  const success = binaryResult && o.score === o.maxScore;
+  if (!o)
+    return (
+      <span className="chip">
+        {t.state !== "done" && t.history.length
+          ? props.evidence
+            ? "Rechecking evidence"
+            : "Rescoring"
+          : STATE_LABEL[t.state]}
+      </span>
+    );
+  if (o.evaluation !== "valid")
+    return (
+      <span className={`chip ${evalClass(o.evaluation)}`}>
+        {o.evaluation === "invalid" ? "Evaluation invalid" : "Result unknown"}
+      </span>
+    );
+  if (binary === null) return null;
   return (
-    <span
-      className={`chip ${binaryResult ? (success ? "good" : "warn") : evalClass(o?.evaluation)}`}
-    >
-      {binaryResult
-        ? success
-          ? "Task completed"
-          : "Task not completed"
-        : o?.evaluation === "invalid"
-          ? "Evaluation invalid"
-          : o?.evaluation === "unknown"
-            ? "Result unknown"
-            : o?.evaluation === "valid"
-              ? "Scored"
-              : "Awaiting result"}
+    <span className={`chip ${binary ? "good" : "warn"}`}>
+      {binary ? "Task completed" : "Task not completed"}
     </span>
   );
 }
@@ -384,87 +446,109 @@ function TrialResult({ t, binary }: { t: Trial; binary: boolean }) {
 function TrialConfiguration({ job, trial }: { job: BenchJob; trial: Trial }) {
   const method = job.spec.methods.find((m) => m.name === trial.method);
   const saved = job.benchmarkSnapshot;
-  const rows: [string, unknown][] = [
-    ["Benchmark", job.spec.benchmark],
-    ["Task", trial.task],
-    [trial.sampleRef ? "Sample" : "Seed", trial.sampleRef ?? trial.seed],
-    ...(trial.batch
-      ? ([
-          ["Shared solve batch", trial.batch.plan.id],
-          ["Episode position", `${trial.batch.index + 1} / ${trial.batch.plan.members.length}`],
-          [
-            "Model random stream",
-            trial.batch.plan.randomness === "service"
-              ? "Continues in fixed batch order; retries require the same full prefix"
-              : "Stateless",
-          ],
-          [
-            "Shared resources and cancellation",
-            "Solve duration and resource use cover the whole batch. Cancelling the solve stops all unfinished episodes; completed evidence is still verified.",
-          ],
-        ] satisfies [string, unknown][])
-      : []),
+  const sample = job.spec.samplePlan?.items.find((s) => s.sampleId === trial.sampleRef);
+  const policy = method?.policySnapshot;
+  const sections: [string, [string, unknown][]][] = [
     [
-      "Initial state",
-      job.spec.samplePlan?.items.find((s) => s.sampleId === trial.sampleRef)?.initialStateId,
+      "Task",
+      [
+        ["Benchmark", job.spec.benchmark],
+        ["Task", trial.task],
+        [trial.sampleRef ? "Sample" : "Seed", trial.sampleRef ?? trial.seed],
+        ["Initial state", sample?.initialStateId],
+        ["Sample conditions", sample],
+        ...(trial.batch
+          ? ([
+              ["Shared solve batch", trial.batch.plan.id],
+              ["Episode position", `${trial.batch.index + 1} / ${trial.batch.plan.members.length}`],
+              [
+                "Model random stream",
+                trial.batch.plan.randomness === "service"
+                  ? "Continues in fixed batch order; retries require the same full prefix"
+                  : "Stateless",
+              ],
+              [
+                "Shared resources and cancellation",
+                "Solve duration and resource use cover the whole batch. Cancelling the solve stops all unfinished episodes; completed evidence is still verified.",
+              ],
+            ] satisfies [string, unknown][])
+          : []),
+        [
+          "Earlier solve attempts",
+          trial.priorAttempts?.map((attempt) => ({
+            run: attempt.solveRunId,
+            batch: attempt.batch?.plan.id,
+            outcome: attempt.outcome,
+          })),
+        ],
+      ],
     ],
-    ["Sample conditions", job.spec.samplePlan?.items.find((s) => s.sampleId === trial.sampleRef)],
-    ["Policy", method?.policyRef],
     [
-      "Earlier solve attempts",
-      trial.priorAttempts?.map((attempt) => ({
-        run: attempt.solveRunId,
-        batch: attempt.batch?.plan.id,
-        outcome: attempt.outcome,
-      })),
+      "Agent",
+      [
+        ["Configuration", method?.name],
+        ["Agent", method?.agent],
+        ["Model", method?.model],
+        ["Entrypoint", method?.entrypoint],
+        ["Reasoning effort", method?.effort],
+        ["Configuration settings", method?.config],
+      ],
     ],
-    ["Policy type", method?.policySnapshot?.kind],
-    ["Policy connector", method?.policySnapshot?.connector],
-    ["Policy I/O adapter", method?.policySnapshot?.ioAdapter],
-    ["Execution horizon", method?.policySnapshot?.replanSteps],
-    ["Backbone digest", method?.policySnapshot?.backboneDigest],
-    ["Checkpoint digest", method?.policySnapshot?.checkpointDigest],
-    ["Normalization digest", method?.policySnapshot?.normalizationDigest],
-    ["Normalization key", method?.policySnapshot?.normalizationKey],
-    ["Configuration", method?.name],
-    ["Agent", method?.agent],
-    ["Model", method?.model],
-    ["Entrypoint", method?.entrypoint],
-    ["Configuration settings", method?.config],
-    ["Reasoning effort", method?.effort],
-    ["Solve timeout (minutes)", job.spec.timeoutMin ?? job.resources?.[trial.task]?.timeoutMin],
-    ["Solve resources", job.resources?.[trial.task]],
-    ["Job options", job.spec.options],
-    ["Source", job.source],
-    ["Environment conditions", job.capabilities?.conditions],
-    ["Adapter", saved?.adapter],
-    ["Environment settings", saved?.config],
+    [
+      "Policy",
+      [
+        ["Policy", method?.policyRef],
+        ["Policy type", policy?.kind],
+        ["Policy connector", policy?.connector],
+        ["Policy I/O adapter", policy?.ioAdapter],
+        ["Execution horizon", policy?.replanSteps],
+        ["Backbone digest", policy?.backboneDigest],
+        ["Checkpoint digest", policy?.checkpointDigest],
+        ["Normalization digest", policy?.normalizationDigest],
+        ["Normalization key", policy?.normalizationKey],
+      ],
+    ],
+    [
+      "Environment",
+      [
+        ["Solve timeout (minutes)", job.spec.timeoutMin ?? job.resources?.[trial.task]?.timeoutMin],
+        ["Solve resources", job.resources?.[trial.task]],
+        ["Job options", job.spec.options],
+        ["Source", job.source],
+        ["Environment conditions", job.capabilities?.conditions],
+        ["Adapter", saved?.adapter],
+        ["Environment settings", saved?.config],
+      ],
+    ],
   ];
   return (
     <div className="page-pad trial-config">
-      <section className="card">
-        <div className="card-h">Saved configuration</div>
-        <div className="card-b">
-          {!saved && (
-            <p className="faint">
-              This older job has no saved environment configuration. Current registration settings
-              are not used to fill the gap.
-            </p>
-          )}
-          <dl className="kv">
-            {rows
-              .filter(([, v]) => v !== undefined)
-              .map(([label, value]) => (
-                <Fragment key={label}>
-                  <dt>{label}</dt>
-                  <dd>
-                    {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
-                  </dd>
-                </Fragment>
-              ))}
-          </dl>
-        </div>
-      </section>
+      {!saved && (
+        <p className="faint">
+          This older job has no saved environment configuration. Current registration settings are
+          not used to fill the gap.
+        </p>
+      )}
+      {sections.map(([title, all]) => {
+        const rows = all.filter(([, v]) => !isBlank(v));
+        return rows.length === 0 ? null : (
+          <section className="card" key={title}>
+            <div className="card-h">{title}</div>
+            <div className="card-b">
+              <dl className="kv">
+                {rows.map(([label, value]) => (
+                  <Fragment key={label}>
+                    <dt>{label}</dt>
+                    <dd>
+                      <Value value={value} />
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

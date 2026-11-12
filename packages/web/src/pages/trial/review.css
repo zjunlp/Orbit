@@ -1,0 +1,265 @@
+/* Shared by the trial's file views: the file bar, check lists (tests, rubric) and evidence. */
+.file-bar {
+  flex-wrap: nowrap;
+}
+.file-bar > .mono {
+  min-width: 0;
+  font-size: 12px;
+}
+
+/* A list of checks: status icon, what was checked and why, then the measure on the right. */
+.chk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.chk {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: start;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+}
+.chk:first-child {
+  border-top: 0;
+}
+.chk-icon {
+  display: grid;
+  place-items: center;
+  height: 20px;
+  color: var(--text-3);
+}
+.chk.st-passed .chk-icon,
+.chk.st-full .chk-icon {
+  color: var(--st-succeeded);
+}
+.chk.st-failed .chk-icon,
+.chk.st-zero .chk-icon {
+  color: var(--st-failed);
+}
+.chk.st-partial .chk-icon {
+  color: var(--st-cancelled);
+}
+.chk-main {
+  min-width: 0;
+}
+.chk-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.chk-head > .mono {
+  font-size: 12.5px;
+}
+.chk-text {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chk.st-failed .chk-text {
+  color: var(--st-failed);
+}
+.chk details.disclosure > summary {
+  margin-top: 4px;
+}
+.chk-trace {
+  margin: 6px 0 2px;
+  padding: 10px 12px;
+  max-height: 420px;
+  overflow: auto;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  font: 12px / 1.55 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chk-side {
+  line-height: 20px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ---- tests ---- */
+.tests {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.tests-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.tests-summary > b {
+  font-size: 15px;
+}
+.tests-summary > b.st-failed {
+  color: var(--st-failed);
+}
+.tests-summary > b.st-passed {
+  color: var(--st-succeeded);
+}
+.tests-bar {
+  display: flex;
+  width: 160px;
+  height: 6px;
+  gap: 2px;
+}
+.tests-bar > i {
+  min-width: 3px;
+  border-radius: 3px;
+  background: var(--text-3);
+}
+.tests-bar > i.st-passed {
+  background: var(--st-succeeded);
+}
+.tests-bar > i.st-failed {
+  background: var(--st-failed);
+}
+.tests .chk-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+/* ---- rubric ---- */
+.rubric .card-h {
+  flex-wrap: wrap;
+}
+.rubric-count {
+  font-weight: 400;
+  color: var(--text-2);
+}
+.rubric-count.st-full {
+  color: var(--st-succeeded);
+}
+.rubric-count.st-zero {
+  color: var(--st-failed);
+}
+.rubric-count.st-partial {
+  color: var(--st-cancelled);
+}
+.rubric-criterion {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.rubric-extras {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.rubric-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 92px;
+  font-size: 12.5px;
+}
+.rubric-bar {
+  width: 92px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.rubric-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--st-cancelled);
+}
+.st-full .rubric-bar > i {
+  background: var(--st-succeeded);
+}
+
+/* ---- evidence: the remaining files, one at a time ---- */
+.evidence {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+}
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+}
+.evidence-list a {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.evidence-list a:hover {
+  background: var(--hover);
+  color: var(--text);
+  text-decoration: none;
+}
+.evidence-list a.on {
+  background: var(--selected);
+  color: var(--text);
+}
+.evidence-list small {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.evidence > .evidence-file {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 800px) {
+  .evidence {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .evidence-list {
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .evidence-list a {
+    flex: none;
+  }
+}
+
+/* ---- saved values: details and configuration ---- */
+.trial-config .kv {
+  margin: 0;
+}
+.kv.nested {
+  gap: 2px 12px;
+  font-size: 12.5px;
+}
+.value-json {
+  margin: 0;
+  font: 12px / 1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.trial-config {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.trial-config > p {
+  margin: 0;
+}
+.trial-head .meta {
+  align-items: center;
+}

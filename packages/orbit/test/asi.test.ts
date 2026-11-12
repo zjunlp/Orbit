@@ -175,6 +175,36 @@ describe("ASI execution and evaluation remain independent", () => {
     expect(asiReview(ctx, solve, verify)?.details).toMatchObject({ attempt_status: attempt });
   });
 
+  it("lists the gates and scorers of the instance as rubric items", () => {
+    const { solve, verify, result } = outputs();
+    result("completed");
+    expect(asiReview(ctx, solve, verify)?.items).toEqual([]);
+    write(
+      join(verify, "score.json"),
+      JSON.stringify({
+        results: [
+          { instance_id: "another", prompt_level: "b4", score_results: [{ scorer_name: "x" }] },
+          {
+            instance_id: instance,
+            prompt_level: "b4",
+            final_score: 80,
+            gate_results: [{ scorer_name: "format", passed: false, message: "" }],
+            score_results: [
+              { scorer_name: "accuracy", score: 3.5, max_score: 36, passed: true, message: "rmse" },
+              { scorer_name: "bonus", score: 2 },
+              null,
+            ],
+          },
+        ],
+      }),
+    );
+    expect(asiReview(ctx, solve, verify)?.items).toEqual([
+      { criterion: "format", type: "gate", score: 0, maxScore: 1 },
+      { criterion: "accuracy", type: "score", score: 3.5, maxScore: 36, reasoning: "rmse" },
+      { criterion: "bonus", type: "score", score: 2 },
+    ]);
+  });
+
   it("uses the highest attempt number for both the review and failure issues", () => {
     const { solve, verify, result } = outputs();
     result("timeout", 2);
