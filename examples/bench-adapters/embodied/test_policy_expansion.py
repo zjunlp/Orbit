@@ -90,6 +90,18 @@ class PolicyExpansionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite"):
             droid.droid_actions(actions)
 
+    def test_lingbot_preserves_joint_order_and_camera_identity(self):
+        lingbot = load("policies/lingbot-vla/serve_lingbot.py")
+        state = np.arange(14, dtype=np.float64)
+        inputs = lingbot.model_inputs({"head_camera": "head", "left_camera": "left", "right_camera": "right",
+                                       "joint_state": state, "instruction": "Open the microwave"})
+        self.assertEqual(inputs["observation.images.cam_high"], "head")
+        self.assertEqual(inputs["observation.images.cam_left_wrist"], "left")
+        self.assertEqual(inputs["observation.images.cam_right_wrist"], "right")
+        self.assertEqual(inputs["task"], "Open the microwave")
+        np.testing.assert_array_equal(inputs["observation.state"], state)
+        self.assertEqual(inputs["observation.state"].dtype, np.float32)
+
 
 if __name__ == "__main__":
     unittest.main()

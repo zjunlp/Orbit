@@ -52,6 +52,7 @@
 | RoboCasa365 GR00T N1.5，`groot-n15-robocasa365-shared` | RoboCasa365 Atomic-Seen 与 `target50` pretrain 中的两个 Composite 组 | Atomic 两个样本与官方多步 wrapper 对照；两个 Composite 组各一个真实样本，均有独立验证与重评。[Atomic](../tasks/20261107-robocasa365-gr00t-n15.md) · [Composite](../tasks/20261109-embodied-benchmark-coverage.md) |
 | RoboCasa365 Diffusion Policy，`diffusion-policy-robocasa365-shared` | RoboCasa365 Atomic-Seen，双帧八步 recipe | 两个冻结样本覆盖成功停止与步数上限，完成 CPU 验证和选定重评。[记录](../tasks/20261109-robocasa365-diffusion-policy.md) |
 | 社区 RoboTwin π₀.₅，`pi05-robotwin-adjust-bottle-shared` | RoboTwin Clean 单任务 `adjust_bottle` | 两个专家通过场景的真实批次及独立验证，另有原生固定动作对照。[记录](../tasks/20261107-robotwin.md) |
+| LingBot-VLA 4B RoboTwin，`lingbot-vla-4b-robotwin` | RoboTwin Clean，50 步关节控制配方 | `adjust_bottle` 完成一条真实样本，独立 CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | X-VLA，`xvla-robotwin2` | RoboTwin Clean、Randomized 末端位姿协议 | 两套各两个真实样本并重评。[Clean](../tasks/20261108-embodied-calvin-xvla.md) · [Randomized](../tasks/20261109-embodied-benchmark-coverage.md) |
 | RLinf OpenVLA-OFT，`openvla-oft-rlinf-maniskill3` | ManiSkill3 Plate-25 | 两个真实样本通过共享批次、CPU 验证和重评。[记录](../tasks/20261108-embodied-native-expansion.md) |
 | RLinf π₀.₅，`pi05-rlinf-metaworld` | Meta-World MT50 | 两个任务实测并重评。短参考对照核对首个动作块与原生任务判定。[接入](../tasks/20261108-embodied-native-expansion.md) · [参考对照](../tasks/20261108-embodied-calvin-xvla.md) |

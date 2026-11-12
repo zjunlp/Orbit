@@ -19,4 +19,5 @@ imageio-ffmpeg==0.5.1
 pyglet==1.5.31
 PyYAML==6.0.2
 msgpack==1.1.0
+msgpack-numpy==0.4.8
 websockets==13.1

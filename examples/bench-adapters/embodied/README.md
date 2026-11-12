@@ -27,7 +27,7 @@ from the current recipe.
 | SimplerEnv | [Native catalogs and scene grids](benchmarks/simpler-env/README.md) · [GR00T N1.7](policies/groot/README.md) |
 | RoboCasa v0.2 | [Atomic-24](benchmarks/robocasa-v02/README.md) |
 | RoboCasa365 | [Multitask, Lifelong, π₀.₅, GR00T N1.5 and Diffusion Policy](benchmarks/robocasa365/README.md) |
-| RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) |
+| RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) · [LingBot-VLA](policies/lingbot-vla/README.md) |
 | ManiSkill3 and Meta-World | [Tabletop, Plate-25 and MT50](benchmarks/tabletop/README.md) |
 | RLBench | [MT100 and RVT-18](benchmarks/rlbench/README.md) |
 | CALVIN | [ABC→D](benchmarks/calvin/README.md) |
