@@ -12,12 +12,13 @@ import numpy as np
 from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed, robodojo_layout
 
 
-def write_json(path, value):
+def write_json(path, value, *, compact=False):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".partial")
     with temporary.open("w", encoding="utf-8") as stream:
-        json.dump(value, stream, ensure_ascii=False, sort_keys=True, allow_nan=False)
+        json.dump(value, stream, ensure_ascii=False, sort_keys=True, allow_nan=False,
+                  separators=(",", ":") if compact else None)
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())

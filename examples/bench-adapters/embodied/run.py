@@ -136,12 +136,13 @@ def main(argv):
             kind = "libero"
         if kind == "libero-plus":
             kind = "libero"
-        if result["valid"] and kind in ("robotwin", "libero"):
-            from orbit_embodied.episode_trajectory import write_trajectory
+        if result["valid"]:
+            # The review index is optional: a kind without one, or a failure to build it, leaves the verdict alone.
             try:
+                from orbit_embodied.episode_trajectory import write_trajectory
                 write_trajectory(directory, Path(destination).with_name("orbit-trajectory.json"), result, expected,
                                  kind=kind)
-            except (OSError, ValueError, KeyError, TypeError) as exc:
+            except (ImportError, OSError, ValueError, KeyError, TypeError) as exc:
                 print("Native trajectory unavailable: " + str(exc), file=sys.stderr)
         return
     request = json.loads(Path(argv[1]).read_text())

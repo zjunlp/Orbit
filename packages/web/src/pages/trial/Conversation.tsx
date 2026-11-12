@@ -150,8 +150,8 @@ export function ConversationViewer({ c }: { c: Conversation }) {
         </aside>
         <main className="conv-main">
           <div className="conv-source faint">
-            Tool results and states come from the verifier's independent replay of the recorded
-            calls; replies are the agent's own text. The Agent session tab has what the agent saw.
+            Messages, tool results and states come from the saved evaluation record. The Agent
+            session tab has the agent's full session.
           </div>
           {shown.map(({ t, events }) => (
             <section

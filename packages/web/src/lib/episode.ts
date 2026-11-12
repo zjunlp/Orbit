@@ -148,3 +148,35 @@ export function episodeVideoTime(
     Math.max(0, at - (video.offsetSec ?? 0))
   );
 }
+
+/** Above this many action chunks the view shows their timing summary instead of one button each. */
+export const MAX_CHUNK_BUTTONS = 24;
+
+/** Median and maximum measured inference time, and the slowest chunk; null when none was measured. */
+export function chunkTiming(chunks: EpisodeTrajectory["chunks"]) {
+  const timed = chunks.filter((chunk) => chunk.inferSeconds !== undefined);
+  const slowest = timed.reduce<(typeof timed)[number] | undefined>(
+    (best, chunk) => (best && (best.inferSeconds ?? 0) >= (chunk.inferSeconds ?? 0) ? best : chunk),
+    undefined,
+  );
+  if (!slowest) return null;
+  const sorted = timed.map((chunk) => chunk.inferSeconds ?? 0).sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return {
+    median:
+      sorted.length % 2 === 0
+        ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+        : (sorted[middle] ?? 0),
+    max: slowest.inferSeconds ?? 0,
+    slowest,
+  };
+}
+
+/**
+ * Channels present in both action and state vectors can be displayed together;
+ * `all` also includes channels that exist on one side only.
+ */
+export function channelNames(trace: Pick<EpisodeTrajectory, "actionNames" | "proprioNames">) {
+  const paired = trace.actionNames.filter((name) => trace.proprioNames.includes(name));
+  return { paired, all: [...new Set([...trace.actionNames, ...trace.proprioNames])] };
+}

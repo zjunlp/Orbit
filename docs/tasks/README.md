@@ -135,6 +135,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261109](20261109-benchmark-library.md) Supported benchmark library
 - [20261109](20261109-benchmark-taxonomy.md) Benchmark taxonomy v1 and catalog facets
 - [20261110](20261110-evaluation-configurations.md) Evaluation configurations in the Web UI
+- [20261112](20261112-trial-review-views.md) Trial review views and grouped evidence
+- [20261112](20261112-trial-evidence-shapes.md) Native episode timelines and TextArena game conversations
 
 ## Docs, presentation and integration merges
 

@@ -3,7 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, PALETTE } from "../../components/Chart.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
-import { episodeVideoTime, parseEpisode, sampleAt } from "../../lib/episode.ts";
+import {
+  channelNames,
+  chunkTiming,
+  episodeVideoTime,
+  MAX_CHUNK_BUTTONS,
+  parseEpisode,
+  sampleAt,
+} from "../../lib/episode.ts";
 import { episodeVideo, MAX_VIDEO_BYTES } from "../../lib/episode-video.ts";
 import { useRunFile } from "../../lib/run-file.ts";
 import { useAsync } from "../../lib/use.ts";
@@ -196,9 +203,13 @@ export function EpisodeViewer({
     MAX_VIDEO_BYTES / Math.max(1, trace.cameras.filter((camera) => camera.video).length),
   );
   const [index, setIndex] = useState(0);
-  const pairedChannels =
-    trace.frameBeforeAction && trace.actionNames.every((name) => trace.proprioNames.includes(name));
-  const [channel, setChannel] = useState(pairedChannels ? (trace.actionNames[0] ?? "") : "");
+  const channels = useMemo(() => channelNames(trace), [trace]);
+  const [channel, setChannel] = useState(channels.paired[0] ?? "");
+  const timing = useMemo(() => chunkTiming(trace.chunks), [trace]);
+  const linked = useMemo(
+    () => trace.samples.some((row) => row.sessionMessageIndexes?.length),
+    [trace],
+  );
   const sample = trace.samples[index] ?? trace.samples[0];
   const [playing, setPlaying] = useState(false);
   const last = trace.samples.length - 1;
@@ -317,7 +328,32 @@ export function EpisodeViewer({
       </div>
       <section aria-label="Action chunk boundaries" className="episode-chunks">
         <b>Action chunks</b>
-        {trace.chunks.length ? (
+        {trace.chunks.length > MAX_CHUNK_BUTTONS ? (
+          // One policy call per step or two: hundreds of buttons say less than their summary.
+          <>
+            <span>
+              {trace.chunks.length} {trace.completeness === "truncated" ? "shown chunks" : "chunks"}
+            </span>
+            {timing && (
+              <>
+                <span className="faint">
+                  {trace.completeness === "truncated" ? "shown inference" : "inference"} median{" "}
+                  {seconds(timing.median)}s · max {seconds(timing.max)}s
+                </span>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => {
+                    setPlaying(false);
+                    setIndex(sampleAt(trace, timing.slowest.start));
+                  }}
+                >
+                  Slowest · {seconds(timing.slowest.start)}s
+                </button>
+              </>
+            )}
+          </>
+        ) : trace.chunks.length ? (
           trace.chunks.map((chunk) => (
             <button
               type="button"
@@ -339,15 +375,15 @@ export function EpisodeViewer({
       </section>
       <section aria-label="Action and joint curves">
         <h3>Actions and body state</h3>
-        {pairedChannels && trace.actionNames.length > 0 && (
+        {channels.all.length > 1 && (
           <label>
-            Joint or gripper{" "}
+            Channel{" "}
             <select
               className="input"
               value={channel}
               onChange={(event) => setChannel(event.target.value)}
             >
-              {trace.actionNames.map((name) => (
+              {channels.all.map((name) => (
                 <option key={name} value={name}>
                   {name}
                 </option>
@@ -376,27 +412,29 @@ export function EpisodeViewer({
           ))}
         </div>
       </section>
-      <section aria-label="Agent at this time" className="episode-session">
-        <h3>Agent at this time</h3>
-        {sample.sessionMessageIndexes?.some((index) => messages[index]) ? (
-          sample.sessionMessageIndexes.map((index) => {
-            const message = messages[index];
-            return message ? (
-              <details key={index} open={message.kind === "thinking"}>
-                <summary>
-                  {message.kind.replace("_", " ")}
-                  {message.name ? ` · ${message.name}` : ""}
-                </summary>
-                <pre>{message.text}</pre>
-              </details>
-            ) : null;
-          })
-        ) : (
-          <p className="faint">
-            No session messages linked at this time. The full Agent session remains available.
-          </p>
-        )}
-      </section>
+      {linked && (
+        <section aria-label="Agent at this time" className="episode-session">
+          <h3>Agent at this time</h3>
+          {sample.sessionMessageIndexes?.some((index) => messages[index]) ? (
+            sample.sessionMessageIndexes.map((index) => {
+              const message = messages[index];
+              return message ? (
+                <details key={index} open={message.kind === "thinking"}>
+                  <summary>
+                    {message.kind.replace("_", " ")}
+                    {message.name ? ` · ${message.name}` : ""}
+                  </summary>
+                  <pre>{message.text}</pre>
+                </details>
+              ) : null;
+            })
+          ) : (
+            <p className="faint">
+              No session messages linked at this time. The full Agent session remains available.
+            </p>
+          )}
+        </section>
+      )}
     </div>
   );
 }
