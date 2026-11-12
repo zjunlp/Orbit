@@ -40,7 +40,8 @@ Python 3.11 的真实 HDF5 生命周期检查还使用 `h5py`。缺少可选依�
 [SDK 说明](../../examples/sdk/README.md#optional-dependencies)。
 这些回归包括明确标注的合成策略和本地传输测试。
 
-`pnpm verify` 还会用当前虚拟环境的 `python3` 发现适配器根目录的测试。需要模拟器镜像的回归由各 benchmark 指南给出运行命令。
+`pnpm verify` 还会用当前环境的 `python3` 发现各适配器根目录的测试。CI 和发布流程使用 Python 3.11，并从
+[CI 依赖清单](../../examples/sdk/requirements-ci.txt)安装这组测试所需的 Python 包。需要模拟器镜像的回归由各 benchmark 指南给出运行命令。
 
 ## 固定运行时中的原生验证
 
