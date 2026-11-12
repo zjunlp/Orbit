@@ -129,6 +129,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261110](20261110-molmospaces.md) Native MolmoSpaces MS manipulation
 - [20261110](20261110-vla-arena.md) Native VLA-Arena
 - [20261111](20261111-embodied-directory.md) Native embodied adapter directory layout
+- [20261111](20261111-embodied-policy-expansion.md) Native embodied policy expansion
 
 ## Web, catalog and taxonomy
 
