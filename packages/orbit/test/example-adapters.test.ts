@@ -211,6 +211,7 @@ with tempfile.TemporaryDirectory() as folder:
     const saved = JSON.parse(output);
     const listing = AdapterTasksResponse.parse(saved.listing);
     expect(listing.tasks).toHaveLength(1);
+    expect(listing.capabilities?.embodied?.replanSteps).toBe(1);
     expect(listing.capabilities?.scoreKind).toBe(kind === "robodojo" ? "scalar" : "binary");
     const solve = RunSpec.parse(AdapterSpecResponse.parse(saved.solve).spec);
     expect(solve.resources.gpus).toBe(1);

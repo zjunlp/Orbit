@@ -895,8 +895,9 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   旧 vla-eval 登记保持原行为。
 - **源码布局**：原生登记使用公共 `adapter.py`。benchmark 的准备工具和镜像配方按家族放在 `embodied/benchmarks/`，
   模型服务、镜像配方与权重工具放在 `embodied/policies/`。[具身适配器索引](../examples/bench-adapters/embodied/README.md)。
-- **语义绑定**：`BenchCapabilities.embodied` 声明评测 profile、观测/动作语义与显式映射。提交时逐项核对单位、frame、相机与动作
-  描述，生成不可变 `ResolvedBinding`；不按同名、维度或顺序猜测对应。
+- **语义绑定**：`BenchCapabilities.embodied` 声明评测 profile、观测与动作语义、显式映射及可选的重规划步数。提交时核对
+  已声明的重规划步数，并逐项核对单位、frame、相机与动作描述。若一维动作声明了分量顺序，其长度必须与动作维数一致，
+  分量名必须唯一。通过后生成不可变 `ResolvedBinding`。
 - **Policy 登记**：`PolicyDefinition` 是共享形状（固定镜像、readiness、checkpoint/归一化摘要、命名权重 dataset、随机流声明）；
   各 connector 的必需字段（OFT 的 8 步 LIBERO recipe、GR00T 的执行长度/动作顺序/backbone 摘要）在 `bench/policies.ts` 登记时检查。
   提交时保存权威快照。`gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。

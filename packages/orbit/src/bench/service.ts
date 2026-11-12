@@ -244,6 +244,12 @@ export class BenchService {
         m.policySnapshot = structuredClone(policy);
         const endpoint = info.capabilities?.embodied;
         if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
+        // Legacy OpenPI registrations use the native runner's five-step default.
+        const policyReplanSteps = policy.replanSteps ?? 5;
+        if (endpoint.replanSteps !== undefined && endpoint.replanSteps !== policyReplanSteps)
+          throw new UserError(
+            `${m.name}: policy replanSteps ${policyReplanSteps} differs from benchmark replanSteps ${endpoint.replanSteps}`,
+          );
         try {
           resolvedBindings[m.name] = resolveBinding(
             endpoint.semanticProfile,

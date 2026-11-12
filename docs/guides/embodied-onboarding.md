@@ -33,7 +33,9 @@
 
 新增环境 driver 时参考 LIBERO 或原生 Gym 的 `reset`、`step` 和状态记录，复用已有适配器的 `tasks`、`solve`、`verify` 和 `score` 流程。先核对目录及初态资产，再验证代表任务的 reset、观测、少量原生控制步、终止和正负例。记录实际完成原生检查的任务数。[LIBERO driver](../../examples/sdk/orbit_embodied/libero.py) · [Gym driver](../../examples/sdk/orbit_embodied/gym.py)
 
-提交时 Orbit 校验映射和语义，再冻结 `ResolvedBinding`。维度相同的字段仍须匹配相机、单位、坐标系等语义。模型配置和 benchmark recipe 的重规划步数也须一致。
+提交时 Orbit 校验映射和语义，再冻结 `ResolvedBinding`。维度相同的字段仍须匹配相机、单位和坐标系。
+一维动作的显式分量顺序须与动作维数一致，分量名须唯一。原生 adapter 会从冻结的 recipe 声明重规划步数，
+Orbit 会在提交时核对它与 Policy 的配置。
 
 ## 组合验收
 

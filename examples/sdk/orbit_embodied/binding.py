@@ -78,10 +78,17 @@ def resolve_binding(benchmark, policy, observation_map):
             raise ValueError("missing physical unit for " + target)
         if any(term in expected["semantic"] for term in ("position", "orientation")) and not expected.get("frame"):
             raise ValueError("missing coordinate frame for " + target)
-    if not policy.get("action") or policy["action"] != benchmark.get("action"):
+    action = policy.get("action")
+    if not action or action != benchmark.get("action"):
         raise ValueError("action semantics differ; an explicit verified conversion is required")
-    if not {"semantic", "shape", "controller", "frame", "unit", "rotation", "gripper"}.issubset(policy["action"]):
+    if not {"semantic", "shape", "controller", "frame", "unit", "rotation", "gripper"}.issubset(action):
         raise ValueError("incomplete action semantic declaration")
+    shape, order = action["shape"], action.get("order")
+    if len(shape) == 1 and order is not None:
+        if len(order) != shape[0]:
+            raise ValueError("action order length must match the action dimension")
+        if len(set(order)) != len(order):
+            raise ValueError("action order must not contain duplicate names")
     result = {
         "version": 1,
         "benchmarkProfile": benchmark,

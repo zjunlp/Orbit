@@ -166,6 +166,7 @@ def tasks(req):
             "capabilities": {"embodied": {
                                  "profile": reference["id"], "semanticProfile": reference["benchmarkProfile"],
                                  "observationMap": reference["observationMap"],
+                                 "replanSteps": reference["parameters"]["replanSteps"],
                                  **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
                              }, "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],

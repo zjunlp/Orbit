@@ -26,6 +26,13 @@ export function resolveBinding(
   }
   if (!isDeepStrictEqual(benchmark.action, policy.action))
     throw new Error("action semantics differ");
+  const { shape, order } = policy.action;
+  if (shape.length === 1 && order !== undefined) {
+    if (order.length !== shape[0])
+      throw new Error("action order length must match the action dimension");
+    if (new Set(order).size !== order.length)
+      throw new Error("action order must not contain duplicate names");
+  }
   const content = {
     version: 1 as const,
     benchmarkProfile: benchmark,
