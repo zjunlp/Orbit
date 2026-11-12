@@ -110,6 +110,30 @@ class PolicyExpansionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite"):
             droid.droid_actions(actions)
 
+    def test_fast_vla_registration_checks_its_fixed_history_and_joint_semantics(self):
+        config = load("policies/fast-vla/configure_fast_vla.py")
+        reference = json.loads((ADAPTER / "profiles/robotwin-demo-clean.json").read_text())
+        reference["environment"]["headCameraHistorySteps"] = [17, 8]
+        benchmark = reference["benchmarkProfile"]
+        benchmark["id"] = "robotwin-aloha-agilex-head-history/1"
+        for steps in (17, 8):
+            field = f"head_camera_t_minus_{steps}"
+            benchmark["observations"][field] = {**benchmark["observations"]["head_camera"],
+                                                "format": f"RGB-native-t-minus-{steps}"}
+            reference["observationMap"][field] = field
+        profile = config.policy_profile(reference)
+        self.assertEqual(profile["id"], "fast-vla-robotwin-input/1")
+
+        reference["observationMap"]["head_camera_t_minus_17"] = "head_camera_t_minus_8"
+        with self.assertRaisesRegex(ValueError, "incompatible semantics for head_camera_t_minus_17"):
+            config.policy_profile(reference)
+
+        reference["observationMap"]["head_camera_t_minus_17"] = "head_camera_t_minus_17"
+        benchmark["observations"]["joint_state"]["order"].reverse()
+        self.assertNotEqual(benchmark["observations"]["joint_state"], profile["observations"]["joint_state"])
+        with self.assertRaisesRegex(ValueError, "incompatible semantics for joint_state"):
+            config.policy_profile(reference)
+
     def test_lingbot_preserves_joint_order_and_camera_identity(self):
         lingbot = load("policies/lingbot-vla/serve_lingbot.py")
         state = np.arange(14, dtype=np.float64)

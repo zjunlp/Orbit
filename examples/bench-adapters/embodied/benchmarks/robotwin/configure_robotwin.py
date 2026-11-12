@@ -48,6 +48,17 @@ def configure_benchmark(args, reference):
         environment["assets"]["dataset"] = f"robotwin-{suite_name}-full-assets"
     environment["assets"]["digest"] = asset_digest
     suffix = "-full-native" if args.suite else "-native"
+    if args.recipe == "fast-vla":
+        reference["id"] = reference["id"].rsplit("/", 1)[0] + "-fast-vla/1"
+        environment["headCameraHistorySteps"] = [17, 8]
+        profile = reference["benchmarkProfile"]
+        profile["id"] = "robotwin-aloha-agilex-head-history/1"
+        for steps in environment["headCameraHistorySteps"]:
+            name = f"head_camera_t_minus_{steps}"
+            profile["observations"][name] = {**profile["observations"]["head_camera"],
+                                              "format": f"RGB-native-t-minus-{steps}"}
+            reference["observationMap"][name] = name
+        suffix = "-full-fast-vla-native"
     return {
         "name": "robotwin-" + environment["suite"].replace("_", "-") + suffix,
         "adapter": str(HERE / "adapter.py"),
@@ -100,6 +111,7 @@ def main():
     benchmark.add_argument("--robotwin-source", type=Path, required=True)
     benchmark.add_argument("--suite", choices=("demo_clean", "demo_randomized"),
                            help="register all tasks for this suite; omit for the legacy adjust_bottle recipe")
+    benchmark.add_argument("--recipe", choices=("joint", "fast-vla"), default="joint")
     benchmark.add_argument("--assets", type=Path, required=True)
     benchmark.add_argument("--benchmark-image", required=True)
     benchmark.add_argument("--output-dir", type=Path, required=True)
@@ -110,6 +122,8 @@ def main():
     policy.add_argument("--share-gpu", action="store_true")
     policy.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
+    if args.endpoint == "benchmark" and args.recipe == "fast-vla" and not args.suite:
+        parser.error("the Fast-VLA recipe requires --suite")
 
     reference = json.loads((HERE / "profiles/robotwin-demo-clean.json").read_text())
     if args.endpoint == "benchmark":

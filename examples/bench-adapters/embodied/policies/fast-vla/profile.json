@@ -1,0 +1,94 @@
+{
+  "id": "fast-vla-robotwin-input/1",
+  "observations": {
+    "head_camera": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "head_camera",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "left_camera": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "left_camera",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "right_camera": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "right_camera",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "joint_state": {
+      "semantic": "aloha-agilex-joint-and-gripper-state",
+      "dtype": "float64",
+      "shape": [14],
+      "frame": "aloha-agilex-joints",
+      "unit": "radians-and-normalized-gripper",
+      "order": [
+        "left_joint_1",
+        "left_joint_2",
+        "left_joint_3",
+        "left_joint_4",
+        "left_joint_5",
+        "left_joint_6",
+        "left_gripper",
+        "right_joint_1",
+        "right_joint_2",
+        "right_joint_3",
+        "right_joint_4",
+        "right_joint_5",
+        "right_joint_6",
+        "right_gripper"
+      ]
+    },
+    "instruction": { "semantic": "language-instruction", "dtype": "string", "shape": [] },
+    "head_camera_t_minus_17": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "head_camera",
+      "layout": "HWC",
+      "format": "RGB-native-t-minus-17"
+    },
+    "head_camera_t_minus_8": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "head_camera",
+      "layout": "HWC",
+      "format": "RGB-native-t-minus-8"
+    }
+  },
+  "action": {
+    "semantic": "absolute-joint-and-gripper-target",
+    "shape": [14],
+    "controller": "robotwin-qpos-toppra",
+    "frame": "aloha-agilex-joints",
+    "unit": "radians-and-normalized-gripper",
+    "rotation": "joint-angles",
+    "gripper": "normalized-open-fraction",
+    "order": [
+      "left_joint_1",
+      "left_joint_2",
+      "left_joint_3",
+      "left_joint_4",
+      "left_joint_5",
+      "left_joint_6",
+      "left_gripper",
+      "right_joint_1",
+      "right_joint_2",
+      "right_joint_3",
+      "right_joint_4",
+      "right_joint_5",
+      "right_joint_6",
+      "right_gripper"
+    ]
+  }
+}

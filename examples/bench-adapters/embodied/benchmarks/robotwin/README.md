@@ -122,6 +122,9 @@ policy. Omit `--share-gpu` to use separate GPU roles and the policy name without
   each configuration.
   [Single-task validation](../../../../../docs/tasks/20261107-robotwin.md) · [Suite validation](../../../../../docs/tasks/20261108-robotwin-suites.md)
 
+The [Fast-VLA policy](../../policies/fast-vla/README.md) uses the fifty-step joint controller
+with a separate observation profile for its two head-camera history frames.
+
 ## X-VLA Cartesian evaluation
 
 The [published X-VLA checkpoint](https://huggingface.co/2toINF/X-VLA-RoboTwin2/tree/a157c580cfe6f9f445614490f3bec1b2f9ef9f18)
