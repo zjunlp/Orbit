@@ -26,6 +26,7 @@ Run planned episodes through independent policy and benchmark endpoints on a pin
 | Real VLA positive (CPU and GPU) | working tree | passed | Pinned π₀.₅ weights, native LIBERO success; GPU run on leased card, main role has no GPU; independent verify, cleanup |
 | Deterministic preprocessing, fixed actions, horizon negative | working tree | passed | Exact dtype/shape/values, simulator-state and camera fingerprints; zero fixture agrees with official loop |
 | Shared-runtime real VLA protocol control | working tree | passed | Same compiled model, fresh key-0 streams; inputs, full predicted chunks and native trace agree exactly |
+| Two-state LIBERO Spatial protocol check | `5c3bcf3` with parity helper fix | passed | Select two upstream initial states for the first task, each as the first episode of its own key-0 stream. The official and Orbit paths agree on reset, policy requests, full action chunks, physics traces and stopping. Independent CPU verification confirms the two Orbit episodes. |
 | Independent GPU process bitwise rollout | working tree | failed | Both paths succeed but full predicted chunks differ |
 | Official-path cross-process repeatability | working tree | failed | Identical first inputs give different first chunks; low-level cause not isolated |
 | Reproductions before review fixes | 6ad872c + tests | passed | Different CPU budgets accepted in both job modes; default reference verification raised KeyError |
