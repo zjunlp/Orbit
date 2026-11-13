@@ -18,14 +18,14 @@ Updated 2026-11-12. Architecture: [design](design.md). Docs map: [docs/README](R
 - **Calibrated samples.** Bounded empty/oracle or scripted calibration for HumanEval, EFE MetaWorld+, BFCL, τ²-bench, MiniWoB, LIBERO, TextArena, Cua Bench basic desktop, CUA-Lite MiniWoB; BFCL also has a real CLI Agent check.
 - **GUI.** Private signed GUI service (`orbit-computer` CLI/MCP); Claude Code and Codex verified on sampled MiniWoB/BrowserGym tasks; MCP servers wired into Claude/Codex homes ([GUI guide](guides/gui-bench-web.md)).
 - **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). Harness benchmarks RLE-Bench, EmbodiedCLBench, EmbodiedLab T0 via Agent adapters.
-- **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial page built from evidence shapes (conversation, GUI steps, embodied timeline, test report, rubric, grouped evidence files); evaluation configurations grouped by content revision.
+- **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial views follow evidence shapes, including RoboDojo/RoboLab timelines and recorded TextArena conversations; evaluation configurations grouped by content revision.
 - **Multi-node.** Workers join by token; placement, hashed code bundles, named datasets, mirrored logs and artifacts ([guide](guides/multi-node.md)).
 
 ## Main gaps
 
 - **Validation.** Native embodied checks include sampled simulator runs, real-policy rollouts and short upstream comparisons. Full-suite statistical equivalence with upstream evaluators remains unverified. [Coverage and evidence](guides/embodied-compatibility.md).
 - **Not run for real.** MobileWorld / OSWorld-V2 KVM calibration; EFE GPU tasks; EmbodiedLab experiments (RTX startup); WebVoyager and Web judge calibration; R4 on two machines; LongDS Claude continuation.
-- **Missing.** Environment pools and `slots`; trajectory importers beyond EFE, RoboTwin and LIBERO; licensed-data volumes (BEHAVIOR, ManiGuard); allowlist networks, multi-step Harbor tasks, Harbor MCP tool sets; MCP server; native Policy view in Agents; bundle cache eviction.
+- **Missing.** Environment pools and `slots`; episode importers beyond EFE, RoboTwin, LIBERO, RoboDojo and RoboLab; licensed-data volumes (BEHAVIOR, ManiGuard); allowlist networks, multi-step Harbor tasks, Harbor MCP tool sets; MCP server; native Policy view in Agents; bundle cache eviction.
 - **Known issues.** Docker [`userns-remap`](guides/docker-userns-remap.md) breaks Run output writes and is not detected; daemons of different users on one machine can lease the same free GPU.
 
 ## Next

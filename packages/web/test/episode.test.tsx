@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import { EpisodeTrajectory } from "@zjunlp/orbit/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { episodeVideoTime, parseEpisode, sampleAt } from "../src/lib/episode.ts";
+import {
+  channelNames,
+  chunkTiming,
+  episodeVideoTime,
+  MAX_CHUNK_BUTTONS,
+  parseEpisode,
+  sampleAt,
+} from "../src/lib/episode.ts";
 import { EpisodeViewer } from "../src/pages/trial/Episode.tsx";
 
 vi.mock("../src/lib/router.ts", () => ({ onLinkClick: vi.fn() }));
@@ -165,5 +172,82 @@ describe("saved embodied episode", () => {
     );
     expect(html).toContain("Camera media unavailable");
     expect(html).toContain("Action chunks");
+  });
+  it("summarizes one policy call per step instead of listing every chunk", () => {
+    const raw = fixture();
+    const steps = MAX_CHUNK_BUTTONS + 6;
+    raw.samples = Array.from({ length: steps }, (_, step) => ({
+      time: step / 10,
+      action: [0],
+      proprio: [0, 0],
+      reward: 0,
+      terminated: false,
+      truncated: false,
+    }));
+    raw.chunks = raw.samples.map((sample: { time: number }, step: number) => ({
+      label: String(step + 1),
+      start: sample.time,
+      end: sample.time,
+      inferSeconds: step === 7 ? 0.9 : 0.1,
+    }));
+    const trace = parseEpisode(JSON.stringify(raw));
+    expect(chunkTiming(trace.chunks)).toMatchObject({
+      median: 0.1,
+      max: 0.9,
+      slowest: { label: "8" },
+    });
+    expect(chunkTiming([{ start: 0, end: 1 }])).toBeNull();
+    const html = renderToStaticMarkup(
+      <EpisodeViewer trace={trace} runId="fixture" files={new Set()} />,
+    );
+    expect(html).toContain(`${steps} chunks`);
+    expect(html).toContain("inference median 0.1s · max 0.9s");
+    expect(html).toContain("Slowest · 0.7s");
+    expect(html).not.toContain("Chunk 3 ·");
+    trace.completeness = "truncated";
+    const partial = renderToStaticMarkup(
+      <EpisodeViewer trace={trace} runId="fixture" files={new Set()} />,
+    );
+    expect(partial).toContain("Partial record");
+    expect(partial).toContain(`${steps} shown chunks`);
+    expect(partial).toContain("shown inference median 0.1s");
+  });
+  it("computes the median of measured inference times, including even counts and zero", () => {
+    const chunks = [
+      { start: 0, end: 1, inferSeconds: 0.6 },
+      { start: 1, end: 2 },
+      { start: 2, end: 3, inferSeconds: 0 },
+      { start: 3, end: 4, inferSeconds: 0.2 },
+      { start: 4, end: 5, inferSeconds: 0.4 },
+    ];
+    expect(chunkTiming(chunks)).toMatchObject({ max: 0.6, slowest: chunks[0] });
+    expect(chunkTiming(chunks)?.median).toBeCloseTo(0.3);
+    expect(chunkTiming(chunks.slice(0, 4))?.median).toBe(0.2);
+    expect(chunkTiming(chunks.slice(2, 3))?.median).toBe(0);
+    expect(chunkTiming([])).toBeNull();
+  });
+  it("pairs an action channel with the state of the same name", () => {
+    const raw = fixture();
+    raw.actionNames = ["joint 1", "gripper"];
+    for (const sample of raw.samples) sample.action = [0.5, 1];
+    const trace = parseEpisode(JSON.stringify(raw));
+    expect(channelNames(trace)).toEqual({
+      paired: ["joint 1"],
+      all: ["joint 1", "gripper", "joint 2"],
+    });
+    const html = renderToStaticMarkup(
+      <EpisodeViewer trace={trace} runId="fixture" files={new Set()} />,
+    );
+    // The first pair is selected, leaving the other channels available in the selector.
+    expect(html).toContain("Action · joint 1");
+    expect(html).toContain("State · joint 1");
+    expect(html).not.toContain("State · joint 2");
+    expect(html).toContain("All channels");
+  });
+  it("leaves out the Agent section when no step links to the session", () => {
+    const html = renderToStaticMarkup(
+      <EpisodeViewer trace={parseEpisode(source)} runId="fixture" files={new Set()} />,
+    );
+    expect(html).not.toContain("Agent at this time");
   });
 });

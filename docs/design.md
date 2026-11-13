@@ -1153,9 +1153,13 @@ P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE Meta
 sample 的 `sessionMessageIndexes`（引用同一 Run 会话）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
 Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目录归还 daemon 用户，再运行 adapter hooks，保证会话可读与凭据清理；不改变模拟器评分。
 
-原生 RoboTwin 和 LIBERO 的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
+原生 RoboTwin、LIBERO、RoboDojo 和 RoboLab 的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
 `mediaPhase: "solve"` 将相机路径限定在同一 Trial 的 Solve 产物中。`frameBeforeAction` 标记每步画面取自动作前，状态和奖励取自动作后。
 动作批次可带 `inferSeconds`。录像以控制步取样，时间轴按录像帧率排列，推理时长使用实际测量值。
+除 LIBERO 的固定字段外，动作与状态通道名来自冻结的 Binding profile；没有声明顺序的状态字段不猜测通道。
+RoboDojo 录像为 25 FPS，RoboLab 使用冻结配置中的控制频率。索引以紧凑 JSON 写入，按实际 UTF-8 字节数限制在 2 MiB 内；
+必要时抽样并标为 `truncated`，保留首尾与最慢动作批次的跳转位置和原始视频时间。原始动作、状态与录像仍完整保留。
+Web 对长批次列表显示耗时摘要和最慢批次跳转；抽样后的列表与统计明确标为所显示的记录。
 
 ### 9.9 Web：按场景的视图
 
@@ -1307,9 +1311,15 @@ JSON 是辅助；"能跑 / 校准通过 / 真实 Agent 或 Policy 跑过 / 与�
 - 参与者（agent / user / system / tool 环境，带显示名）；按原始用户轮次分组的事件：消息、工具调用（`callId`、调用者、名称、参数、
   结果或错误、`rejected` 表示 scaffold 拒绝的非法调用）；轮次的 `check`（passed / failed / unchecked）与可选 before / after /
   expected 状态；整体 `verdict`（上游 checker 的类型与说明、首次检测到失败的轮次，可为空，不猜）；`producer` / `trust` / `completeness`。
-- 由 **verify** 产生（独立重放，可信），原生文件照旧保留。BFCL：重放实际调用与参考调用，逐轮状态；对前缀依次运行原版
+- BFCL 与 τ² 的轨迹由 **verify** 产生（独立重放，可信），原生文件照旧保留。BFCL：重放实际调用与参考调用，逐轮状态；对前缀依次运行原版
   `multi_turn_checker` 得到首个失败轮次，之后的轮次标 `unchecked`。τ²：消息流按 `requestor` 区分 agent 与 user 的工具，终态 DB
   的期望/实际与 action / communicate 检查来自原版 reward；没有逐消息 DB 快照，不画逐轮状态。
+- **TextArena 游戏记录**：Harbor 对明确的 `textarena/…` 任务及已识别的原生 game server，在任务 staging 中生成带记录器的副本，
+  只读挂入游戏服务；不修改 benchmark 源文件、游戏接口或奖励。服务 stdout 保存初始观测、动作与返回观测，不记录结果接口的 token。
+  score 从采集的 `services/game/log` 生成 Solve 产物 `orbit-conversation.json`，声明既有 `conversation` 视图；
+  `producer: sidecar`、`completeness: environment-only`，未结束或被截断的记录标为 `truncated`。
+  总判定只来自原 verifier reward，不推断每步正确性或 Agent 是否读取了某条观测。导入失败保留原奖励并附 issue；
+  原始日志继续可查，预览上限 2 MiB。已有只含启动信息的日志不能还原对局；shared 模式不能 rescore，需重新运行才能记录。
 - Web `pages/trial/Conversation.tsx`：轮次目录 / 对话 / 检查器三栏（窄屏单栏）；工具卡片按 `callId` 合并调用与结果，错误与失败相关
   内容默认展开；检查器有 Checker、状态 diff（只看变化字段）、期望 vs 实际、Raw；顶部 verdict 横幅可跳到失败轮次。键位：`h/l` 轮次、
   `/` 搜索、`e` 跳到失败证据。参考调用与实际调用的差异只作诊断，不当作判分规则。

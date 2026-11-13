@@ -252,6 +252,40 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertTrue(output.with_name("verification.json").is_file())
             self.assertFalse(output.with_name("orbit-trajectory.json").exists())
 
+    def test_native_verifier_writes_new_episode_views_without_changing_the_verdict(self):
+        from orbit_embodied.test_episode_trajectory import episode, expectation
+
+        for kind, state, action_size in (
+            ("robodojo", {"joint_state": [0.0] * 14, "instruction": "Synthetic task"}, 14),
+            ("robolab", {"joint_position": [0.0] * 7, "gripper_position": [1.0]}, 8),
+        ):
+            for valid, broken_index in ((True, False), (False, False), (True, True)):
+                with self.subTest(kind=kind, valid=valid, broken_index=broken_index), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    staging = adapter.stage({"trial": {"staging": str(root / "stage")}})
+                    spec = importlib.util.spec_from_file_location("trajectory_run", staging / "run.py")
+                    run = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(run)
+                    directory = root / "solve/episode"
+                    directory.mkdir(parents=True)
+                    episode(directory, [state] * 2, action=[0.0] * action_size, horizon=2, initial=state)
+                    write_json(directory / "contract.json", {"horizon": 2, "identity": {}})
+                    expected = expectation(kind + "-native.json", "synthetic")
+                    expected["sample"]["sampleId"] = "synthetic-sample"
+                    expected.update(evidenceVersion=1, solveRunId="synthetic-solve", trialId="synthetic-trial",
+                                    verifierDigest=archive_implementation(staging, root / "probe"))
+                    write_json(root / "expected.json", expected)
+                    result = {"episodeId": "synthetic-trial.attempt", "valid": valid, "success": False, "issues": []}
+                    write_json(directory / "native-result.json", result)
+                    if broken_index:
+                        (directory / "chunks/0.json").unlink()
+                    output = root / "out/verified.json"
+                    # Verification is explicit synthetic setup; exercise the real index writer and entry point.
+                    with patch.object(run, "verify_episode", return_value=result):
+                        run.main(["verify", str(directory), str(output), str(root / "expected.json")])
+                    self.assertEqual(json.loads(output.read_text()), result)
+                    self.assertEqual(output.with_name("orbit-trajectory.json").exists(), valid and not broken_index)
+
     def test_fixed_batch_has_one_run_and_independent_episode_verification(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

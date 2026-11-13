@@ -152,9 +152,9 @@ const Check = z.object({
 });
 
 /**
- * A tool-calling or simulated-user conversation (C3 / C4, design §9.15), written by the verifier
- * from its independent replay. Turns follow the benchmark's own user turns; states are the public
- * environment state the checker compares, when the benchmark has per-turn states.
+ * A tool-calling, simulated-user or game conversation (design §9.15), imported from verifier
+ * replay or protected environment records. Turns follow the benchmark's own interaction turns;
+ * states are the public environment state the checker compares, when available.
  */
 export const ConversationTrajectory = z.object({
   version: z.literal(1),

@@ -37,6 +37,7 @@ class SuiteTests(unittest.TestCase):
             rows = [{"phase": "settle", "step": 0}, control, {**control, "step": 1}]
             (episode / "actions.jsonl").write_text("\n".join(map(json.dumps, rows)))
             write_json(episode / "chunks/0.json", {"inferSeconds": 0.2})
+            write_json(episode / "contract.json", {"horizon": 2})
             output = episode / "orbit-trajectory.json"
             write_trajectory(episode, output, {"success": False, "issues": []},
                              {"sample": {"taskId": "libero_90:synthetic"}}, kind="libero")
