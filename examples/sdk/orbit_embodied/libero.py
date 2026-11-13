@@ -18,7 +18,7 @@ class LiberoBenchmark:
     action_size = 7
     settle_steps = 10
 
-    def __init__(self, suite, task_name, *, settle_steps=10):
+    def __init__(self, suite, task_name, *, settle_steps=10, horizon=None):
         from libero.libero import benchmark
 
         self.suite_name = suite
@@ -26,7 +26,7 @@ class LiberoBenchmark:
         self.task_index = next(i for i in range(self.suite.n_tasks)
                                if self.suite.get_task(i).name == task_name)
         self.task = self.suite.get_task(self.task_index)
-        self.horizon = HORIZONS[suite]
+        self.horizon = HORIZONS[suite] if horizon is None else horizon
         if type(settle_steps) is not int or not 0 <= settle_steps < self.horizon:
             raise ValueError("LIBERO settle steps must fit the frozen recipe")
         self.settle_steps = settle_steps

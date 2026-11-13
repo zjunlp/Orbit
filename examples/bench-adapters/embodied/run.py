@@ -238,7 +238,12 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         from orbit_embodied.libero import LiberoBenchmark, LiberoPlusBenchmark
         suite, name = sample["taskId"].split(":", 1)
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
-        benchmark = native(suite, name, settle_steps=reference["parameters"]["settleSteps"])
+        options = {"settle_steps": reference["parameters"]["settleSteps"]}
+        if reference.get("environment", {}).get("protocol") == "fast-wam":
+            if sample["environmentSeed"] != reference["parameters"]["environmentSeed"]:
+                raise ValueError("Fast-WAM requires the frozen LIBERO environment seed")
+            options["horizon"] = reference["horizons"][suite]
+        benchmark = native(suite, name, **options)
     expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
     expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84, "cliport": 480}.get(kind, 256)
     if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):

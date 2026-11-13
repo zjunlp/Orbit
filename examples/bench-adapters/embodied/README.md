@@ -20,7 +20,7 @@ from the current recipe.
 
 | Benchmark or runtime | Setup |
 | --- | --- |
-| LIBERO | [OpenPI π₀.₅](benchmarks/libero/README.md) · [All suites](../../../docs/guides/libero-suites.md) · [GR00T N1.7](policies/groot/README.md) · [OpenVLA-OFT](policies/openvla-oft/README.md) · [SmolVLA and MolmoAct2](benchmarks/tabletop/README.md) |
+| LIBERO | [OpenPI π₀.₅](benchmarks/libero/README.md) · [All suites](../../../docs/guides/libero-suites.md) · [GR00T N1.7](policies/groot/README.md) · [OpenVLA-OFT](policies/openvla-oft/README.md) · [SmolVLA and MolmoAct2](benchmarks/tabletop/README.md) · [Fast-WAM](policies/fast-wam/README.md) |
 | LIBERO-Plus | [Perturbation suites and OFT](benchmarks/libero-plus/README.md) |
 | LIBERO-PRO | [Original leaderboard perturbations](benchmarks/libero-pro/README.md) |
 | VLABench | [Native tracks and OpenWAM](benchmarks/vlabench/README.md) |

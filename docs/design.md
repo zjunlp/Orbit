@@ -927,6 +927,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
+  Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。
 - **RoboCasa365**：Atomic-Seen 使用原生 PandaOmron Gymnasium 环境。每个样本以 `environmentSeed + initialStateId` 创建首个
   rollout，仿真资产经摘要核对并以只读数据集挂载，临时 XML 写入容器内的链接视图。`robocasa-native` I/O 保留原生 12 维动作，
   以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/robocasa365/README.md)
