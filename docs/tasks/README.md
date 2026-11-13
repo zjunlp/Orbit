@@ -143,6 +143,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261113](20261113-robotwin-september.md) RoboTwin 2.0 September suites
 - [20261113](20261113-groot-n17-refresh.md) GR00T N1.7 inference refresh
 - [20261113](20261113-fast-wam-libero-suites.md) Fast-WAM LIBERO suites and LeRobot 0.7.0
+- [20261113](20261113-molmobot-v2.md) Native MolmoBot v2 evaluation
 
 ## Web, catalog and taxonomy
 

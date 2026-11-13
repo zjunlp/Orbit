@@ -69,6 +69,11 @@ class MolmoSpacesBenchmark(GymBenchmark):
         from molmo_spaces.evaluation.benchmark_schema import EpisodeSpec
         from molmo_spaces.evaluation.configs.evaluation_configs import PiPolicyEvalConfig
         from molmo_spaces.tasks.json_eval_task_sampler import JsonEvalTaskSampler
+        import mujoco
+
+        backend = environment.get("renderBackend")
+        if backend is not None and getattr(mujoco, "mjRENDERER", "classic") != backend:
+            raise ValueError("MolmoSpaces renderer differs from the frozen recipe")
 
         self.spec = EpisodeSpec.model_validate(episode)
         parameters = self.reference["parameters"]
@@ -86,8 +91,6 @@ class MolmoSpacesBenchmark(GymBenchmark):
         self.prompt = self.env.get_task_description()
         if not isinstance(self.prompt, str) or not self.prompt:
             raise ValueError("MolmoSpaces returned an empty task instruction")
-        import mujoco
-
         try:
             self.env.env.current_model.opt.enableflags |= int(mujoco.mjtEnableBit.mjENBL_SLEEP)
             self.env.env.current_model.opt.sleep_tolerance = 1e-3
@@ -118,6 +121,7 @@ class MolmoSpacesBenchmark(GymBenchmark):
 
         row, = raw
         shoulder = "droid_shoulder_light_randomization" if "droid_shoulder_light_randomization" in row else "exo_camera_1"
+        shoulder = self.reference["environment"].get("frontCamera", shoulder)
         wrist = "wrist_camera_zed_mini" if "wrist_camera_zed_mini" in row else "wrist_camera"
         size = self.reference["parameters"]["renderSize"]
         return {

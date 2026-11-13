@@ -118,6 +118,44 @@ class PolicyExpansionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite"):
             droid.droid_actions(actions)
 
+    def test_droid_randcam_has_a_separate_policy_binding_and_shares_weights(self):
+        config = load("policies/openpi/configure_droid.py")
+        molmo = load("benchmarks/molmospaces/configure_molmospaces.py")
+        from orbit_embodied import resolve_binding
+
+        standard = molmo.profile()
+        randcam = molmo.profile()
+        randcam["id"] = "molmospaces-franka-droid-exocentric/1"
+        camera = "randomized_zed2_analogue_1"
+        randcam["observations"]["front_rgb"]["camera"] = camera
+        observation_map = {name: name for name in standard["observations"]}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "params").mkdir()
+            (root / "params/manifest.ocdbt").write_bytes(b"fixture")
+            (root / "assets/droid").mkdir(parents=True)
+            (root / "assets/droid/norm_stats.json").write_text("{}")
+            reference_path, output = root / "reference.json", root / "policy.json"
+            reference = {"benchmarkProfile": randcam, "environment": {"frontCamera": camera},
+                         "parameters": {"replanSteps": 8}}
+            argv = ["configure_droid.py", "--policy-image", "test:policy", "--reference-file", str(reference_path),
+                    "--weights", str(root), "--output", str(output), "--share-gpu"]
+            with patch.object(sys, "argv", argv), patch.object(config, "require_image", return_value="sha256:" + "a" * 64):
+                reference_path.write_text(json.dumps(reference))
+                config.main()
+                policy = json.loads(output.read_text())
+                self.assertEqual(policy["name"], "pi05-droid-molmospaces-randcam")
+                self.assertEqual(policy["weights"]["dataset"], "pi05-droid-molmospaces")
+                self.assertEqual(policy["service"]["gpusOf"], "main")
+                resolve_binding(randcam, policy["profile"], observation_map)
+                with self.assertRaisesRegex(ValueError, "incompatible semantics for front_rgb"):
+                    resolve_binding(standard, policy["profile"], observation_map)
+
+                reference["environment"]["frontCamera"] = "another_camera"
+                reference_path.write_text(json.dumps(reference))
+                with self.assertRaisesRegex(ValueError, "published MolmoBot RandCam"):
+                    config.main()
+
     def test_fast_vla_registration_checks_its_fixed_history_and_joint_semantics(self):
         config = load("policies/fast-vla/configure_fast_vla.py")
         reference = json.loads((ADAPTER / "profiles/robotwin-demo-clean.json").read_text())

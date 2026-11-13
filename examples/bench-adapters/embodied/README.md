@@ -34,7 +34,7 @@ from the current recipe.
 | RoboDojo and RoboLab | [RoboDojo](benchmarks/robodojo/README.md) · [RoboLab](benchmarks/robolab/README.md) |
 | RoboMimic | [PH low-dimensional and RGB profiles](benchmarks/robomimic/README.md) |
 | VIMA-Bench | [Test partitions and VIMA 20M](benchmarks/vima-bench/README.md) |
-| MolmoSpaces-Bench | [MS manipulation tracks](benchmarks/molmospaces/README.md) |
+| MolmoSpaces-Bench | [MS v1 and MolmoBot v2 tracks](benchmarks/molmospaces/README.md) |
 | Colosseum V2 | [Single-arm and bimanual perturbation protocols](benchmarks/colosseum-v2/README.md) |
 | VLA-Arena | [Difficulty levels and safety scoring](benchmarks/vla-arena/README.md) · [DM0.5](policies/dm05/README.md) |
 | BiGym 2.0 | [G1 learned-policy evaluation](benchmarks/bigym2/README.md) |
