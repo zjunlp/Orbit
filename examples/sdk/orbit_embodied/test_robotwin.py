@@ -9,11 +9,13 @@ from types import ModuleType
 import unittest
 from unittest.mock import Mock, patch
 
-from orbit_embodied.binding import digest
+import numpy as np
+
+from orbit_embodied.binding import digest, seed_asset
 from orbit_embodied.robotwin import RoboTwinBenchmark, setup_native_scene
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
-sys.path.insert(0, str(ADAPTER))
+sys.path.insert(0, str(ADAPTER / "benchmarks/robotwin"))
 import configure_robotwin
 import plan_robotwin
 
@@ -23,6 +25,56 @@ def reference():
 
 
 class RobotwinTests(unittest.TestCase):
+    def test_fast_vla_refreshes_replan_observation_and_keeps_history_at_control_offsets(self):
+        profile = reference()
+        profile["environment"]["headCameraHistorySteps"] = [17, 8]
+        profile["environment"]["assets"]["digest"] = "sha256:" + "1" * 64
+        benchmark = RoboTwinBenchmark(profile, "adjust_bottle")
+        benchmark.horizon = 100
+        env = Mock(step_lim=benchmark.horizon, take_action_cnt=0, eval_success=False)
+        env.get_instruction.return_value = "adjust the bottle"
+        benchmark.env = env
+        frame = np.zeros((1, 1, 3), dtype=np.uint8)
+        raw = {"observation": {name: {"rgb": frame} for name in ("head_camera", "left_camera", "right_camera")},
+               "joint_action": {"vector": np.zeros(14)}}
+        reads = []
+
+        def take_action(_action, *, action_type):
+            self.assertEqual(action_type, "qpos")
+            env.take_action_cnt += 1
+
+        def get_obs():
+            reads.append(env.take_action_cnt)
+            frame.fill(len(reads))
+            return raw
+
+        env.take_action.side_effect = take_action
+        env.get_obs.side_effect = get_obs
+        benchmark.observation(env.get_obs())
+        action = np.zeros(14)
+        for _ in range(50):
+            result = benchmark.step(action)
+        self.assertFalse(result.terminated)
+        self.assertEqual(reads, [*range(51), 50])
+        self.assertEqual(result.observation["head_camera"].item(0), 52)
+        self.assertEqual(result.observation["head_camera_t_minus_17"].item(0), 34)
+        self.assertEqual(result.observation["head_camera_t_minus_8"].item(0), 43)
+
+        for _ in range(50):
+            result = benchmark.step(action)
+        self.assertTrue(result.terminated)
+        self.assertEqual(reads[52:], list(range(51, 101)))
+
+        sample = {"taskId": "adjust_bottle", "environmentSeed": 42, "initialStateId": "0",
+                  "initialStateDigest": seed_asset(profile, "adjust_bottle")}
+        env.take_action_cnt = 0
+        with patch.object(benchmark, "_native_args"), patch.object(benchmark, "_instruction"), \
+                patch.object(benchmark, "_expert_scene", return_value=(env, {})), \
+                patch("orbit_embodied.robotwin.setup_native_scene"):
+            observation = benchmark.reset(sample)
+        self.assertEqual(observation["head_camera_t_minus_17"].item(0), 103)
+        self.assertEqual(observation["head_camera_t_minus_8"].item(0), 103)
+
     def test_task_name_instructions_bypass_episode_descriptions(self):
         profile = reference()
         benchmark = RoboTwinBenchmark(profile, "adjust_bottle")
@@ -74,7 +126,8 @@ class RobotwinTests(unittest.TestCase):
                         patch.object(configure_robotwin, "file_digest", return_value="synthetic"), \
                         patch.object(configure_robotwin, "tree_digest",
                                      return_value=config["assetDigests"].get(suite, "synthetic")):
-                    args = Namespace(suite=suite, robotwin_source=root, assets=root, benchmark_image="synthetic")
+                    args = Namespace(suite=suite, recipe="joint", robotwin_source=root, assets=root,
+                                     benchmark_image="synthetic")
                     registration = configure_robotwin.configure_benchmark(args, reference())
                     profile = json.loads(registration["config"]["reference"])
                     environment = profile["environment"]

@@ -16,7 +16,7 @@ Aggregation scene sweeps as benchmark registrations independent of policy weight
   independent while retaining the existing seed-sum identity for prepackaged environments.
 - Retain the established policy binding and native success signal. Reject blank raw RT frames
   even with an overlay and allow a separate profile with OptiX denoising disabled. Document the
-  [benchmark-only configuration](../../examples/bench-adapters/embodied/SIMPLER.md).
+  [benchmark-only configuration](../../examples/bench-adapters/embodied/benchmarks/simpler-env/README.md).
 
 ## Validation
 

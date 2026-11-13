@@ -87,6 +87,87 @@ class CoreTests(unittest.TestCase):
     def verify(self):
         return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
 
+    def test_cliport_evidence_preserves_partial_reward_at_native_horizon(self):
+        from orbit_embodied.cliport import CLIPortBenchmark, verify_cliport
+
+        task = self.sample["taskId"]
+        sample = {**self.sample, "initialStateId": "1", "environmentSeed": 10001}
+        reference = {"environment": {"kind": "cliport", "primitive": "pick-place",
+                                     "environmentSeed": 10001, "tasks": [task],
+                                     "initialStateCounts": {task: 2},
+                                     "testEpisodes": {task: [{"seed": 10001, "horizon": 5},
+                                                             {"seed": 10007, "horizon": 2}]}},
+                     "parameters": {"controlHz": 5}}
+        self.assertEqual(CLIPortBenchmark(reference, {**sample, "initialStateId": "0"}).horizon, 5)
+        self.assertEqual(CLIPortBenchmark(reference, sample).horizon, 2)
+        action = [0.0] * 14
+        controls = [
+            {"reward": 0.25, "action": action, "nativeAction": action, "nativeDone": False,
+             "nativeSuccess": False, "terminated": step == 2,
+             "state": {"instruction": str(step), "totalReward": step * 0.25}}
+            for step in (1, 2)
+        ]
+        native = {"source": "CLIPort test mean reward", "task": task, "seed": 10007,
+                  "primitive": "pick-place", "success": False, "totalReward": 0.5}
+        verify_cliport(reference, sample, controls, {"native": native})
+        for altered in ({"totalReward": 0.0}, {"seed": 10003}):
+            with self.subTest(altered=altered), self.assertRaisesRegex(ValueError, "cumulative reward"):
+                verify_cliport(reference, sample, controls, {"native": {**native, **altered}})
+        with self.assertRaisesRegex(ValueError, "stopping rules"):
+            verify_cliport(reference, sample, [{**controls[0], "nativeDone": True}, controls[1]], {"native": native})
+        with self.assertRaisesRegex(ValueError, "exceed the frozen sample horizon"):
+            verify_cliport(reference, sample, [*controls, controls[-1]], {"native": native})
+        legacy_reference = copy.deepcopy(reference)
+        del legacy_reference["environment"]["testEpisodes"]
+        with self.assertRaisesRegex(ValueError, "regenerate the CLIPort seed catalogue"):
+            CLIPortBenchmark(legacy_reference, sample)
+
+    def test_cliport_push_binding_and_native_command(self):
+        from orbit_embodied.cliport import profile, verify_cliport
+
+        benchmark = profile("native", "push")
+        observation_map = {key: key for key in benchmark["observations"]}
+        resolve_binding(benchmark, profile("policy", "push"), observation_map)
+        with self.assertRaisesRegex(ValueError, "action semantics differ"):
+            resolve_binding(benchmark, profile("policy", "pick-place"), observation_map)
+
+        task = "separating-piles-seen-colors"
+        sample = {**self.sample, "taskId": task, "initialStateId": "0", "environmentSeed": 10001}
+        reference = {"environment": {"kind": "cliport", "primitive": "push", "environmentSeed": 10001,
+                                     "initialStateCounts": {task: 1},
+                                     "testEpisodes": {task: [{"seed": 10001, "horizon": 1}]}}}
+        action = [0.25, -0.1, 0.5, 0.1]
+        native_action = [0.25, -0.1, 0, 0, 0, 0, 1, 0.5, 0.1, 0, 0, 0, 0, 1]
+        control = {"action": action, "nativeAction": native_action, "nativeDone": False,
+                   "terminated": True, "nativeSuccess": False, "reward": 0.25,
+                   "state": {"instruction": "push the pile", "totalReward": 0.25}}
+        result = {"native": {"source": "CLIPort test mean reward", "task": task, "seed": 10001,
+                             "primitive": "push", "success": False, "totalReward": 0.25}}
+        verify_cliport(reference, sample, [control], result)
+        with self.assertRaisesRegex(ValueError, "control evidence differs"):
+            verify_cliport(reference, sample, [{**control, "nativeAction": action}], result)
+
+    def test_bigym2_fall_overrides_task_success(self):
+        from orbit_embodied.bigym2 import verify_bigym2
+
+        task = self.sample["taskId"]
+        sample = {**self.sample, "initialStateId": "99", "environmentSeed": 620000}
+        reference = {"environment": {"kind": "bigym2", "environmentSeed": 620000,
+                                     "horizons": {task: 4}, "taskTitles": {task: "Open the drawer."},
+                                     "initialStateCounts": {task: 100}}}
+        action = [0.0] * 20
+        controls = [
+            {"action": action, "nativeAction": action, "nativeDone": step == 2,
+             "terminated": step == 2, "nativeSuccess": False,
+             "state": {"instruction": "Open the drawer.", "taskSucceeded": step == 2,
+                       "fell": True, "truncation": None}} for step in (1, 2)
+        ]
+        native = {"source": "BiGym 2.0 protocol v1", "task": task, "seed": 620099, "termination": "fell",
+                  "success": False, "taskSucceeded": True, "fell": True, "truncation": None}
+        verify_bigym2(reference, sample, controls, {"native": native})
+        with self.assertRaisesRegex(ValueError, "success or stopping"):
+            verify_bigym2(reference, sample, [controls[0], {**controls[1], "nativeSuccess": True}], {"native": native})
+
     def test_calvin_partial_sequence_replans_and_verifies_its_progress(self):
         tasks = ["one", "two", "three", "four", "five"]
 
@@ -154,6 +235,56 @@ class CoreTests(unittest.TestCase):
         seal(self.output, result)
         with self.assertRaisesRegex(ValueError, "recorded native state"):
             self.verify()
+
+    def test_libero_pro_rejects_changed_bddl_identity_after_resealing(self):
+        instruction = "place the object in the drawer"
+        reset_digest = digest([0.1, 0.2])
+
+        class PerturbedTask(SyntheticBenchmark):
+            def state(self, observation):
+                return {**super().state(observation), "instruction": instruction,
+                        "resetStateDigest": reset_digest}
+
+            def result(self):
+                return {**super().result(), "instruction": instruction, "perturbation": "task"}
+
+        reference = {"environment": {"kind": "libero-pro", "perturbation": "task",
+                                     "taskTitles": {self.sample["taskId"]: instruction}},
+                     "parameters": {"settleSteps": 0, "replanSteps": 5}}
+        result = self.run_sample(PerturbedTask(success_at=2), SyntheticPolicy(), {"reference": reference})
+        self.assertEqual(self.verify()["native"]["instruction"], instruction)
+        initial_file = self.output / "initial-state.json"
+        actions_file = self.output / "actions.jsonl"
+        initial = json.loads(initial_file.read_text())
+        actions = [json.loads(line) for line in actions_file.read_text().splitlines()]
+        for field, value in (("instruction", "another task"), ("perturbation", "lan")):
+            with self.subTest(native=field):
+                seal(self.output, {**result, "native": {**result["native"], field: value}})
+                with self.assertRaisesRegex(ValueError, "differs from the frozen BDDL"):
+                    self.verify()
+
+        for field, value, message in (
+            ("instruction", "another task", "differs from the frozen BDDL"),
+            ("resetStateDigest", "", "constructor state differs"),
+        ):
+            with self.subTest(initial=field):
+                write_json(initial_file, {**initial, "state": {**initial["state"], field: value}})
+                seal(self.output, result)
+                with self.assertRaisesRegex(ValueError, message):
+                    self.verify()
+        write_json(initial_file, initial)
+
+        for field, value, message in (
+            ("instruction", "another task", "differs from the frozen BDDL"),
+            ("resetStateDigest", digest([0.2, 0.1]), "constructor state differs"),
+        ):
+            with self.subTest(control=field):
+                changed = copy.deepcopy(actions)
+                changed[-1]["state"][field] = value
+                actions_file.write_text("".join(json.dumps(row) + "\n" for row in changed))
+                seal(self.output, result)
+                with self.assertRaisesRegex(ValueError, message):
+                    self.verify()
 
     def test_native_instability_during_control_remains_an_explicit_rejected_sample(self):
         class Unstable(SyntheticBenchmark):

@@ -9,7 +9,7 @@ export const robocasaV02: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "24 atomic tasks with held-out object instances, fixed kitchen layouts and PandaOmron arm control.",
-      "examples/bench-adapters/embodied/ROBOCASA-V02.md",
+      "examples/bench-adapters/embodied/benchmarks/robocasa-v02/README.md",
     ),
   ],
   verification: checked(

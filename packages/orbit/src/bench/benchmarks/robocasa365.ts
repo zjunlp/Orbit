@@ -10,7 +10,7 @@ export const robocasa365: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Pinned full catalog and Lifelong scopes; π₀.₅ and GR00T N1.5 recipes use different runtime and success conditions.",
-      "examples/bench-adapters/embodied/ROBOCASA365.md",
+      "examples/bench-adapters/embodied/benchmarks/robocasa365/README.md",
     ),
   ],
   verification: checked(

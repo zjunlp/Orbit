@@ -10,7 +10,7 @@ export const simplerEnv: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "GR00T recipes, prepackaged tasks, visual matching and variant aggregation; policy termination is available on fixed grids.",
-      "examples/bench-adapters/embodied/SIMPLER.md",
+      "examples/bench-adapters/embodied/benchmarks/simpler-env/README.md",
     ),
   ],
   verification: checked(

@@ -81,6 +81,6 @@ Test counts reconcile across the moves: `benchmark-gaps` 6→5, `example-adapter
 - `service.ts` remains 1,626 lines. `BenchServiceDeps` is referenced 147 times, so splitting the
   class would cost more than it saves; further work should narrow that dependency bag rather than
   split the file.
-- `embodied/` still holds 25 Dockerfiles and 48 Python modules in one directory. Splitting it by
-  driver is unblocked by the contract test but not done here.
+- The native adapter's setup files were grouped in the follow-up
+  [embodied directory reorganization](20261111-embodied-directory.md).
 - One lint warning remains, an intentional compose fixture in `bench.test.ts`.

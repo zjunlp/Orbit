@@ -158,7 +158,7 @@ class OpenVLATests(unittest.TestCase):
                     thread.join(5)
 
     def test_official_loader_can_only_modify_a_temporary_checkpoint_view(self):
-        path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/serve_openvla.py"
+        path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/policies/openvla-oft/serve_openvla.py"
         spec = importlib.util.spec_from_file_location("serve_openvla", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

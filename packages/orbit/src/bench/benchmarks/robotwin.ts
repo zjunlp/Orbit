@@ -10,7 +10,7 @@ export const robotwin: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "Clean and Randomized catalogs; joint-control and Cartesian policies are separate protocols.",
-      "examples/bench-adapters/embodied/ROBOTWIN.md",
+      "examples/bench-adapters/embodied/benchmarks/robotwin/README.md",
     ),
   ],
   verification: checked(

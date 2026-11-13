@@ -8,7 +8,7 @@ Register all four official VIMA-Bench test partitions and serve the released VIM
 
 ## Changes
 
-Preserve native prompts, segmentation and pick/place primitives. Use frozen sample plans and independent CPU evidence verification. [Registration guide](../../examples/bench-adapters/embodied/VIMA-BENCH.md)
+Preserve native prompts, segmentation and pick/place primitives. Use frozen sample plans and independent CPU evidence verification. [Registration guide](../../examples/bench-adapters/embodied/benchmarks/vima-bench/README.md)
 The Policy image manifest records the file digests of the SDK modules included in its build.
 
 ## Validation

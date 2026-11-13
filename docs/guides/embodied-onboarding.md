@@ -2,9 +2,12 @@
 
 模型端和 benchmark 端分别登记，组合验收记录具体的权重、评测 recipe 和样本计划。先选一个[已实测的组合](embodied-compatibility.md#真实模型实测)做基线。新增模型优先复用 benchmark 和 connector，新增套件优先复用原生 driver。遇到新的传输协议或环境 API 时，在对应端实现适配。[配置指南索引](../../examples/bench-adapters/embodied/README.md) · [Python 环境和开发验证](embodied-development.md)
 
+模拟器配方、资产准备和登记工具放在 `embodied/benchmarks/<family>/`。模型服务、镜像和权重工具放在
+`embodied/policies/<family>/`。各家族的登记复用 `embodied/adapter.py`，评测样本由 `embodied/plan.py` 冻结。
+
 ## 模型端
 
-复制表格填写模型接入记录。生成的 `policy.json` 交给 `orbit policy add`。已有模型可直接参考对应的配置生成器。[PolicyDefinition](../../packages/orbit/src/contracts/embodied.ts) · [π₀.₅](../../examples/bench-adapters/embodied/configure.py) · [GR00T](../../examples/bench-adapters/embodied/configure_groot.py) · [OpenVLA-OFT](../../examples/bench-adapters/embodied/configure_openvla.py)
+复制表格填写模型接入记录。生成的 `policy.json` 交给 `orbit policy add`。已有模型可直接参考对应的配置生成器。[PolicyDefinition](../../packages/orbit/src/contracts/embodied.ts) · [π₀.₅](../../examples/bench-adapters/embodied/benchmarks/libero/configure.py) · [GR00T](../../examples/bench-adapters/embodied/policies/groot/configure_groot.py) · [OpenVLA-OFT](../../examples/bench-adapters/embodied/policies/openvla-oft/configure_openvla.py)
 
 | 填写项 | 记录内容 |
 | --- | --- |
@@ -15,6 +18,10 @@
 | 模型侧转换 | 记录 `ioAdapter`（如适用）、预处理、归一化、动作转换和 `replanSteps`。握手核对冻结的身份和随机流声明 |
 
 先用固定观测和动作检查客户端、服务握手及输出转换，覆盖错误身份、错误形状、非有限值和超时。模型端负责自身的输入处理和动作转换，环境端负责原生控制器的执行与判定。新增传输时参考 `LazyPolicy` 的客户端选择和身份校验。共享 GPU 时使用 `gpusOf: main`，由模拟器持有主角色 GPU，并把两端的显存预算相加。[模型接入入口](../../examples/bench-adapters/embodied/run.py)
+
+### 复用已登记的 benchmark
+
+用现有 benchmark 的 reference 核对观测字段、动作语义和 `replanSteps`。使用 `policy-ws` 接入时，模型服务负责把观测转成模型输入，再把模型输出转成该 benchmark 的原生动作。完成后登记 Policy，并用现有 benchmark 和对应的冻结样本计划提交。MolmoSpaces 的 DROID 基线提供独立的模型构建和登记命令。 [DROID 登记示例](../../examples/bench-adapters/embodied/benchmarks/molmospaces/README.md#register-the-openpi-droid-baseline)
 
 ## Benchmark 端
 
@@ -30,7 +37,10 @@
 
 新增环境 driver 时参考 LIBERO 或原生 Gym 的 `reset`、`step` 和状态记录，复用已有适配器的 `tasks`、`solve`、`verify` 和 `score` 流程。先核对目录及初态资产，再验证代表任务的 reset、观测、少量原生控制步、终止和正负例。记录实际完成原生检查的任务数。[LIBERO driver](../../examples/sdk/orbit_embodied/libero.py) · [Gym driver](../../examples/sdk/orbit_embodied/gym.py)
 
-提交时 Orbit 校验映射和语义，再冻结 `ResolvedBinding`。维度相同的字段仍须匹配相机、单位、坐标系等语义。模型配置和 benchmark recipe 的重规划步数也须一致。
+提交时 Orbit 校验映射和语义，再冻结 `ResolvedBinding`。维度相同的字段仍须匹配相机、单位和坐标系。
+一维动作的显式分量顺序须与动作维数一致，分量名须唯一。原生 adapter 会从冻结的 recipe 声明重规划步数，
+Orbit 会在提交时核对它与 Policy 的配置。
+升级 adapter 或共享 SDK 后，如果提交提示实现摘要变化，用对应的配置生成器刷新 `benchmark.json` 的 `implementationDigest`，再执行 `orbit bench add-file` 更新登记。
 
 ## 组合验收
 
@@ -48,7 +58,7 @@ python3 examples/bench-adapters/embodied/plan.py \
   --environment-seed "$ENVIRONMENT_SEED" > "$LOCAL_CONFIG/samples.json"
 ```
 
-SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。预打包任务用 `environmentSeed + initialStateId` 生成场景。固定场景网格用 `initialStateId` 选场景和位姿，`environmentSeed` 单独控制模拟器随机流。LIBERO 用 `initialStateId` 索引已固定的初态文件。[LIBERO 配置示例](libero-suites.md) · [SimplerEnv 配置示例](../../examples/bench-adapters/embodied/SIMPLER.md)
+SimplerEnv 使用对应 Gym reference 和任务 ID，可省略 `--suite`。预打包任务用 `environmentSeed + initialStateId` 生成场景。固定场景网格用 `initialStateId` 选场景和位姿，`environmentSeed` 单独控制模拟器随机流。LIBERO 用 `initialStateId` 索引已固定的初态文件。[LIBERO 配置示例](libero-suites.md) · [SimplerEnv 配置示例](../../examples/bench-adapters/embodied/benchmarks/simpler-env/README.md)
 
 先选同一代表任务的 2–5 个冻结样本。支持固定批次的登记使用[有界 Policy 校准](policy-integration-checks.md)。
 例如 LIBERO 的 20 分钟预算涵盖排队、模型启动、执行、CPU 验证和默认首样本重评。

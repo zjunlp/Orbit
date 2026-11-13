@@ -1,7 +1,9 @@
 // Real contracts/store/planning; submitted runs and adapter execution are explicitly synthetic.
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectorIssues, PolicyRegistry } from "../src/bench/policies.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
@@ -381,6 +383,60 @@ describe("planned sample and explicit binding contracts", () => {
       ),
     ).toThrow("action semantics");
   });
+
+  it("resolves or rejects the same vector action orders in TypeScript and Python", () => {
+    const order = ["x", "y", "z", "roll", "pitch", "yaw", "gripper"];
+    const cases = [
+      { action: policyProfile.action },
+      { action: { ...policyProfile.action, order } },
+      {
+        action: { ...policyProfile.action, order: [...order, "terminate"] },
+        issue: "action order length must match the action dimension",
+      },
+      {
+        action: { ...policyProfile.action, order: [...order.slice(0, -1), "x"] },
+        issue: "action order must not contain duplicate names",
+      },
+    ].map(({ action, issue }) => ({
+      benchmark: { ...benchmarkProfile, action },
+      policy: { ...policyProfile, action },
+      issue,
+    }));
+    const sdk = fileURLToPath(new URL("../../../examples/sdk", import.meta.url));
+    const output = execFileSync(
+      "python3",
+      [
+        "-S",
+        "-B",
+        "-c",
+        `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from orbit_embodied import resolve_binding
+request = json.load(sys.stdin)
+outcomes = []
+for case in request["cases"]:
+    try:
+        outcomes.append(resolve_binding(case["benchmark"], case["policy"], request["mapping"])["digest"])
+    except ValueError as error:
+        outcomes.append(str(error))
+print(json.dumps(outcomes))
+`,
+        sdk,
+      ],
+      { encoding: "utf8", input: JSON.stringify({ cases, mapping: reference.observationMap }) },
+    );
+    expect(JSON.parse(output)).toEqual(
+      cases.map(({ benchmark, policy, issue }) => {
+        const resolve = () => resolveBinding(benchmark, policy, reference.observationMap);
+        if (issue) {
+          expect(resolve).toThrow(issue);
+          return issue;
+        }
+        return resolve().digest;
+      }),
+    );
+  });
 });
 
 it("checks connector requirements when a policy is registered", () => {
@@ -442,6 +498,7 @@ it.each([false, true, "batch-separate", "batch-shared"])(
             profile: reference.id,
             semanticProfile: benchmarkProfile,
             observationMap: reference.observationMap,
+            replanSteps: reference.parameters.replanSteps,
             batch: { maxEpisodes: 128 },
           },
         },
@@ -500,6 +557,15 @@ it.each([false, true, "batch-separate", "batch-shared"])(
         methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
       }),
     ).rejects.toThrow("initial-state asset");
+    const wrongReplan = bench.policies.put({ ...definition, name: "wrong-replan", replanSteps: 4 });
+    await expect(
+      bench.submit({
+        benchmark: "synthetic",
+        samplePlan: plan(),
+        methods: [{ name: "p", agent: "policy", policyRef: wrongReplan.name }],
+      }),
+    ).rejects.toThrow("policy replanSteps 4 differs from benchmark replanSteps 5");
+    expect(solve).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(store.listJobs()).toHaveLength(0);
     const job = await bench.submit({

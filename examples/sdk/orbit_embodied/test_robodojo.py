@@ -18,7 +18,7 @@ from orbit_embodied.driver import SampleRejected
 from orbit_embodied.robodojo import RoboDojoBenchmark, OrbitPolicyLifecycle, create_native_env, joint_action
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
-sys.path.insert(0, str(ADAPTER))
+sys.path.insert(0, str(ADAPTER / "benchmarks/robodojo"))
 import configure_robodojo
 sys.path.insert(0, str(ADAPTER / "fixtures"))
 import hold_robodojo

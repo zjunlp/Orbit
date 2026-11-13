@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import subprocess
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -16,7 +17,12 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "examples/sdk"))
 
 from orbit_embodied import digest, resolve_binding  # noqa: E402
-from orbit_embodied.binding import reference_horizon, seed_asset  # noqa: E402
+from orbit_embodied.binding import (  # noqa: E402
+    check_distinct_resets,
+    reference_horizon,
+    reset_seed,
+    seed_asset,
+)
 from orbit_embodied.evidence import write_json  # noqa: E402
 from orbit_embodied.implementation import archive_implementation, verify_implementation  # noqa: E402
 
@@ -28,6 +34,53 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_policy_build_exports_the_pinned_source_and_labels_the_image(self):
+        with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
+            import native_runtime
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout = root / "upstream"
+            subprocess.run(["git", "init", "--quiet", str(checkout)], check=True)
+            code = checkout / "inference.py"
+            code.write_text("pinned\n")
+            subprocess.run(["git", "-C", str(checkout), "add", code.name], check=True)
+            subprocess.run(["git", "-C", str(checkout), "-c", "user.name=Orbit Test",
+                            "-c", "user.email=orbit@example.invalid", "-c", "commit.gpgsign=false",
+                            "commit", "--quiet", "-m", "Pin test policy source"], check=True)
+            commit = subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip()
+            source = {"repository": "synthetic", "commit": commit}
+            native_runtime.check_policy_source(checkout, source)
+            code.write_text("local edit\n")
+            with self.assertRaisesRegex(ValueError, "clean pinned policy checkout"):
+                native_runtime.check_policy_source(checkout, source)
+
+            dockerfile, server = root / "policy.Dockerfile", root / "server.py"
+            dockerfile.write_text("FROM scratch\n")
+            server.write_text("server\n")
+            manifest = native_runtime.policy_manifest("synthetic-policy", {"model": source}, dockerfile, server)
+            self.assertEqual(manifest["sources"], {"model": commit})
+            self.assertEqual(manifest["server"], adapter.file_digest(server))
+            self.assertEqual(manifest["sdk"]["wire.py"], adapter.file_digest(ROOT / "examples/sdk/orbit_embodied/wire.py"))
+            self.assertNotIn("test_wire.py", manifest["sdk"])
+            run = subprocess.run
+            builds = []
+
+            def capture_build(command, **kwargs):
+                if command[:2] == ["docker", "build"]:
+                    context = command[command.index("--build-context") + 1].split("=", 1)[1]
+                    self.assertEqual((Path(context) / code.name).read_text(), "pinned\n")
+                    label = next(arg for arg in command if arg.startswith(native_runtime.MANIFEST_LABEL + "="))
+                    self.assertEqual(json.loads(label.split("=", 1)[1]), manifest)
+                    builds.append(command)
+                else:
+                    return run(command, **kwargs)
+
+            args = SimpleNamespace(source=checkout, policy_base="synthetic:base", build_tag="synthetic:policy")
+            with patch.object(native_runtime.subprocess, "run", side_effect=capture_build):
+                native_runtime.build_policy_image(args, "model", source, dockerfile, manifest)
+            self.assertEqual(len(builds), 1)
+
     def test_native_runtime_images_require_matching_manifest_and_entrypoint(self):
         with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
             import native_runtime
@@ -58,7 +111,7 @@ class AdapterPlanningTests(unittest.TestCase):
                             native_runtime.require_image("tag", expected)
 
     def test_vima_policy_image_requires_the_packaged_sdk_manifest(self):
-        with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
+        with patch.object(sys, "path", [str(ADAPTER.parent / "benchmarks"), *sys.path]):
             import configure_manipulation
             import native_runtime
 
@@ -298,6 +351,23 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertNotIn("services", verifier)
             self.assertFalse(verifier["network"])
 
+    def test_fixed_native_catalog_keeps_seed_and_state_index_independent(self):
+        asset = "sha256:" + "b" * 64
+        reference = {"environment": {"kind": "vla-arena", "environmentSeed": 7,
+                                     "initialStateCounts": {"task": 2},
+                                     "initialStateDigests": {"task": asset}}}
+        first = {"taskId": "task", "initialStateId": "0", "environmentSeed": 7, "policySeed": 0,
+                 "repetition": 0, "sampleId": "first"}
+        second = {**first, "initialStateId": "1", "sampleId": "second"}
+        self.assertEqual(seed_asset(reference, "task"), asset)
+        self.assertEqual(reset_seed(second, reference), 7)
+        check_distinct_resets([first, second], reference)
+        for invalid in ({**second, "initialStateId": "2"}, {**second, "environmentSeed": 8}):
+            with self.assertRaisesRegex(ValueError, "frozen initial-state"):
+                reset_seed(invalid, reference)
+        with self.assertRaisesRegex(ValueError, "same native reset"):
+            check_distinct_resets([first, {**first, "sampleId": "aliased"}], reference)
+
     def test_robocasa_plans_task_horizons_and_mounts_assets_only_for_solve(self):
         reference = json.loads((ADAPTER.parent / "profiles/robocasa365-atomic-seen.json").read_text())
         assets = reference["environment"]["assets"]
@@ -418,6 +488,88 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertFalse(outcome["invalid"])
             self.assertEqual(outcome["metrics"], {"completed_subtasks": 2, "success_at_1": 1, "success_at_2": 1,
                                                    "success_at_3": 0, "success_at_4": 0, "success_at_5": 0})
+
+    def test_cliport_scores_partial_reward_as_a_scalar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            config = request["benchmark"]["config"]
+            reference = json.loads(config["reference"])
+            reference["environment"] = {"kind": "cliport", "tasks": [request["trial"]["task"]]}
+            config.update(reference=json.dumps(reference), profileDigest=digest(reference), renderer="pybullet-direct")
+            with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                catalog = adapter.tasks(request)
+            self.assertEqual(catalog["capabilities"]["scoreKind"], "scalar")
+
+            request["verify"] = {"output": str(root / "verify-output")}
+            expected = adapter.verification_expectation(request)
+            result = {"sampleRef": request["trial"]["sampleRef"], "episodeId": "synthetic-trial.attempt",
+                      "valid": True, "success": False, "issues": [], "native": {"totalReward": 0.5}}
+            write_json(root / "solve-output/episode/native-result.json", result)
+            write_json(root / "verify-output/verified.json", result)
+            write_json(root / "verify-output/verification.json",
+                       {"sampleRef": result["sampleRef"], "episodeId": result["episodeId"],
+                        "solveRunId": expected["solveRunId"], "trialId": expected["trialId"],
+                        "implementationDigest": expected["verifierDigest"], "expectationDigest": digest(expected)})
+            outcome = adapter.score(request)
+            self.assertFalse(outcome["invalid"])
+            self.assertEqual(outcome["score"], 0.5)
+            self.assertEqual(outcome["metrics"], {"success_rate": 0})
+
+    def test_arena_reports_success_and_safety_cost_by_level(self):
+        for suite, level, gate, success in (
+            ("safety_hazard_avoidance", 0, True, False),
+            ("safety_hazard_avoidance", 1, False, True),
+            ("long_horizon", 2, False, True),
+        ):
+            with self.subTest(suite=suite, level=level, gate=gate), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                request = self.request(root)
+                request["benchmark"]["path"] = str(root)
+                request["verify"] = {"output": str(root / "verify-output")}
+                config = request["benchmark"]["config"]
+                reference = json.loads(config["reference"])
+                reference["reference"]["files"] = {}
+                task = request["trial"]["task"]
+                levels = {task if difficulty == level else f"task-l{difficulty}": {"level": difficulty}
+                          for difficulty in range(3)}
+                reference["environment"] = {"kind": "vla-arena", "suite": suite, "safety": gate,
+                                            "tasks": list(levels), "catalog": levels}
+                config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+
+                safety_suite = suite.startswith("safety_")
+                declared = [f"success_l{difficulty}" for difficulty in range(3)]
+                if safety_suite:
+                    declared.extend(["safety_cost", *(f"safety_cost_l{difficulty}" for difficulty in range(3))])
+                metrics = adapter.tasks(request)["metrics"]
+                self.assertEqual([metric["name"] for metric in metrics], declared)
+                self.assertTrue(all(metric["higherIsBetter"] is False for metric in metrics[3:]))
+
+                expected = adapter.verification_expectation(request)
+                result = {"sampleRef": request["trial"]["sampleRef"], "episodeId": "synthetic-trial.attempt",
+                          "valid": True, "success": success, "issues": [],
+                          "native": {"taskSuccess": True, "safetyCost": 12.5}}
+                write_json(root / "solve-output/episode/native-result.json", result)
+                write_json(root / "verify-output/verified.json", result)
+                write_json(root / "verify-output/verification.json",
+                           {"sampleRef": result["sampleRef"], "episodeId": result["episodeId"],
+                            "solveRunId": expected["solveRunId"], "trialId": expected["trialId"],
+                            "implementationDigest": expected["verifierDigest"], "expectationDigest": digest(expected)})
+                outcome = adapter.score(request)
+                self.assertFalse(outcome["invalid"])
+                self.assertEqual(outcome["score"], int(success))
+                expected_metrics = {f"success_l{level}": int(success)}
+                if safety_suite:
+                    expected_metrics.update({"safety_cost": 12.5, f"safety_cost_l{level}": 12.5})
+                self.assertEqual(outcome["metrics"], expected_metrics)
+
+    def test_native_registration_help_requires_only_the_standard_library(self):
+        for script in ("colosseum-v2/configure_colosseum.py", "libero-pro/configure_libero_pro.py"):
+            with self.subTest(script=script):
+                completed = subprocess.run([sys.executable, "-S", "-B", str(ADAPTER.parent / "benchmarks" / script), "--help"],
+                                           text=True, capture_output=True)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertIn("--benchmark-image", completed.stdout)
 
     def test_host_verifier_planning_requires_only_the_standard_library(self):
         with tempfile.TemporaryDirectory() as temporary:

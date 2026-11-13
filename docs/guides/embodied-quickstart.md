@@ -1,14 +1,14 @@
 # 具身评测快速开始
 
 Orbit 分别登记 **Policy**（模型服务、权重和 I/O）与 **benchmark**（原生仿真环境、任务和评测协议）。
-提交时用 Method 选定 Policy，Orbit 核对观测和动作的语义映射，并冻结本次使用的样本与配置。
+提交时用 Method 选定 Policy，Orbit 核对观测与动作的语义映射以及重规划步数，并冻结本次使用的样本与配置。
 
 ## 1. 选组合并登记
 
 从[已实测的模型组合](embodied-compatibility.md#真实模型实测)选择具体权重和评测协议，再按
 [配置指南索引](../../examples/bench-adapters/embodied/README.md)准备对应的源码、镜像、权重和场景资产。
-常用起点有 [π₀.₅ × LIBERO Spatial](../../examples/bench-adapters/embodied/OPENPI-LIBERO.md)和
-[可在 CPU 上运行的 VIMA 20M × VIMA-Bench](../../examples/bench-adapters/embodied/VIMA-BENCH.md)。
+常用起点有 [π₀.₅ × LIBERO Spatial](../../examples/bench-adapters/embodied/benchmarks/libero/README.md)和
+[可在 CPU 上运行的 VIMA 20M × VIMA-Bench](../../examples/bench-adapters/embodied/benchmarks/vima-bench/README.md)。
 产品目录会显示 Orbit 支持的家族，本机可用的登记用 `orbit bench ls` 和 `orbit policy ls` 查看。
 
 各组合的指南给出镜像构建、数据集登记（如需）、`orbit bench add-file`、`orbit policy add` 和

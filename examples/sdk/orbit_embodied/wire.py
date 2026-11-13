@@ -31,6 +31,7 @@ def unpack(value):
 
 async def serve_actions(policy, metadata, host, port, *, reset=None):
     import asyncio
+    from concurrent.futures import ThreadPoolExecutor
     from http import HTTPStatus
     from websockets.exceptions import ConnectionClosed
     from websockets.server import serve
@@ -40,6 +41,12 @@ async def serve_actions(policy, metadata, host, port, *, reset=None):
             return HTTPStatus.OK, [("Content-Type", "text/plain")], b"OK\n"
 
     episode = asyncio.Lock()
+    loop = asyncio.get_running_loop()
+
+    def predict(message, reset_episode):
+        if reset_episode:
+            reset()
+        return pack({"actions": policy(unpack(message))})
 
     async def handler(connection):
         if reset is not None:
@@ -50,11 +57,9 @@ async def serve_actions(policy, metadata, host, port, *, reset=None):
             async for message in connection:
                 if not isinstance(message, bytes):
                     raise ValueError("policy requests must be binary")
-                if first and reset is not None:
-                    reset()
+                response = await loop.run_in_executor(worker, predict, message, first and reset is not None)
                 first = False
-                actions = policy(unpack(message))
-                await connection.send(pack({"actions": actions}))
+                await connection.send(response)
         except ConnectionClosed:
             return
         except Exception as exc:
@@ -64,6 +69,8 @@ async def serve_actions(policy, metadata, host, port, *, reset=None):
             if reset is not None:
                 episode.release()
 
-    async with serve(handler, host, port, compression=None, max_size=64 * 1024 * 1024,
-                     ping_interval=None if reset is not None else 20, process_request=health):
-        await asyncio.Future()
+    # Keep the socket responsive during synchronous model calls and serialize the model's state.
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        async with serve(handler, host, port, compression=None, max_size=64 * 1024 * 1024,
+                         ping_interval=None if reset is not None else 20, process_request=health):
+            await asyncio.Future()

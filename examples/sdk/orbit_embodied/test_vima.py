@@ -58,7 +58,7 @@ class VIMATests(unittest.TestCase):
             assert_array(decoded["bounds"][key], original)
 
     def test_policy_service_resets_history_on_the_next_episode(self):
-        path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/serve_vima.py"
+        path = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/policies/vima/serve_vima.py"
         spec = importlib.util.spec_from_file_location("serve_vima", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

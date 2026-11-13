@@ -44,6 +44,7 @@ export const EmbodiedCapabilities = z.object({
   profile: z.string().min(1),
   semanticProfile: SemanticProfile,
   observationMap: z.record(z.string(), z.string()),
+  replanSteps: z.number().int().positive().optional(),
   /** Fixed sequential solve batches; model RNG remains scoped to the leased service. */
   batch: z.object({ maxEpisodes: z.number().int().min(2).max(256) }).optional(),
 });
