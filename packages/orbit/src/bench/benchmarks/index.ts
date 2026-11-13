@@ -6,6 +6,7 @@ import { automationbench } from "./automationbench.ts";
 import { bfcl } from "./bfcl.ts";
 import { calvin } from "./calvin.ts";
 import { chartography } from "./chartography.ts";
+import { colosseumV2 } from "./colosseum-v2.ts";
 import { cuaBench } from "./cua-bench.ts";
 import { embodiedClbench } from "./embodied-clbench.ts";
 import { embodiedFirstExam } from "./embodied-first-exam.ts";
@@ -14,11 +15,13 @@ import { frontiersweV2 } from "./frontierswe-v2.ts";
 import { humaneval } from "./humaneval.ts";
 import { libero } from "./libero.ts";
 import { liberoPlus } from "./libero-plus.ts";
+import { liberoPro } from "./libero-pro.ts";
 import { longds } from "./longds.ts";
 import { maniskill3 } from "./maniskill3.ts";
 import { metaworld } from "./metaworld.ts";
 import { miniwob } from "./miniwob.ts";
 import { mobileworld } from "./mobileworld.ts";
+import { molmospaces } from "./molmospaces.ts";
 import { onlineMind2web } from "./online-mind2web.ts";
 import { osworld } from "./osworld.ts";
 import { posttrainbench } from "./posttrainbench.ts";
@@ -37,6 +40,7 @@ import { terminalBench4 } from "./terminal-bench-4.ts";
 import { terminalBenchScience } from "./terminal-bench-science.ts";
 import { textarena } from "./textarena.ts";
 import { vimaBench } from "./vima-bench.ts";
+import { vlaArena } from "./vla-arena.ts";
 import { vlabench } from "./vlabench.ts";
 import { wandr } from "./wandr.ts";
 import { webvoyager } from "./webvoyager.ts";
@@ -79,6 +83,10 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   calvin,
   robomimic,
   vimaBench,
+  molmospaces,
+  colosseumV2,
+  vlaArena,
+  liberoPro,
   robodojo,
   robolab,
 ];
@@ -90,10 +98,16 @@ const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
   "libero-plus-panda-raw/1": "libero-plus",
+  "molmospaces-franka-droid/1": "molmospaces",
+  "colosseum-v2-single-arm/1": "colosseum-v2",
+  "colosseum-v2-bimanual/1": "colosseum-v2",
+  "vla-arena-panda-raw/1": "vla-arena",
+  "libero-pro-panda-raw/1": "libero-pro",
   "vlabench-franka-ee/1": "vlabench",
   "vima-bench-primitive/1": "vima-bench",
   "google-official-gym/1": "simpler-env",
   "widowx-official-gym/1": "simpler-env",
+  "widowx-visual-matching-rgb224/1": "simpler-env",
   "robocasa-v02-panda-arm/1": "robocasa-v02",
   "robocasa365-panda-omron-native/1": "robocasa365",
   "robotwin-aloha-agilex-native/1": "robotwin",

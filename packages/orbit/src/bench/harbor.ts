@@ -21,6 +21,7 @@ import { runAgentDir } from "../config/paths.ts";
 import type { BenchTask, FailureKind, Method, ScoreResult } from "../contracts/index.ts";
 import type { AdapterHandlers, RunDescription, ScoreReply } from "./adapter.ts";
 import { type ComposePlan, composeFile, parseCompose } from "./compose.ts";
+import { textarenaService } from "./textarena-trajectory.ts";
 
 export interface Artifact {
   /** Absolute path in the solve container. */
@@ -83,6 +84,8 @@ export interface HarborTask {
   tags: Record<string, string>;
   /** Conditions that differ from Harbor's, allowed by the registration and recorded on trials. */
   deviations: string[];
+  /** Explicit upstream task identity, used only for optional game evidence recording. */
+  textarena?: boolean;
 }
 
 /** Registration options of the built-in harbor adapter (`orbit bench add -c KEY=VALUE`). */
@@ -518,6 +521,7 @@ export function parseHarborTask(dir: string, id: string, opts: HarborOptions = {
     },
     tags: deviations.length ? { ...tags, deviations: deviations.join("; ") } : tags,
     deviations,
+    ...(str(task.name)?.startsWith("textarena/") ? { textarena: true } : {}),
   };
 }
 
@@ -648,7 +652,7 @@ export function harborSolveSpec(
     ...(c?.services.length
       ? {
           services: c.services.map((s) => ({
-            ...s,
+            ...(t.textarena ? textarenaService(s, staging) : s),
             collect: t.artifacts.filter((a) => a.service === s.name).map((a) => a.source),
           })),
           networks: c.networks,
@@ -977,7 +981,7 @@ export const harborAdapter: AdapterHandlers = {
     const { spec, missing } = harborVerifySpec(t, solve.output, trial.staging);
     return { spec, issues: missing.map((m) => `artifact not produced: ${m}`) };
   },
-  score: async ({ trial, solve, verify }) => {
+  score: async ({ benchmark, trial, solve, verify }) => {
     // Shared mode: the solve run's after phase collected /logs/verifier into output/after/.
     const sub = verify.run.spec.after ? "after" : "collected";
     const r = harborReward(join(verify.output, sub, "logs", "verifier"));
@@ -1002,6 +1006,26 @@ export const harborAdapter: AdapterHandlers = {
         transcript?.messages ?? [],
         trial.task,
       );
+    }
+    const game = solve.run.spec.services?.find((service) => service.name === "game");
+    let textarena = game?.binds?.some(
+      (bind) =>
+        bind.target === "/app/game_server.py" &&
+        basename(bind.source) === "textarena-game-server.py",
+    );
+    if (game && !textarena) {
+      // Legacy runs have no recorder marker. A missing task source must not invalidate saved rewards.
+      try {
+        textarena = harborTask(
+          benchmark.path,
+          trial.task,
+          harborOptions(benchmark.config),
+        ).textarena;
+      } catch {}
+    }
+    if (textarena) {
+      const { addTextarenaConversation } = await import("./textarena-trajectory.ts");
+      await addTextarenaConversation(solve.output, reply);
     }
     return reply;
   },

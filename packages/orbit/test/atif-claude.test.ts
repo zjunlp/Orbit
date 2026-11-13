@@ -324,6 +324,32 @@ describe("Claude Code ATIF conversion", () => {
     expect(trajectory.extra?.orbit?.completeness).toBe("truncated");
   });
 
+  it("preserves usable content when native timestamps violate the ATIF datetime contract", () => {
+    for (const timestamp of [
+      "2026-11-12",
+      "Thu, 12 Nov 2026 12:00:00 GMT",
+      "2026-02-30T12:00:00Z",
+      "not-a-time",
+    ]) {
+      const trajectory = convert([
+        { ...user("u", null, "Fixture request"), timestamp },
+        {
+          ...assistant("a", "u", "m", text("Fixture answer")),
+          timestamp: "2026-11-12T12:00:00+08:00",
+        },
+      ]);
+      expect(trajectory.steps[0]?.message).toBe("Fixture request");
+      expect(trajectory.steps[0]?.timestamp, timestamp).toBeUndefined();
+      expect(trajectory.steps[1]?.timestamp).toBe("2026-11-12T12:00:00+08:00");
+      expect(trajectory.extra?.orbit?.completeness).toBe("truncated");
+      expect(trajectory.extra?.orbit?.metadata?.conversion_issues).toContainEqual({
+        line: 1,
+        type: "invalid_timestamp",
+      });
+      expect(AtifTrajectory.safeParse(trajectory).success, timestamp).toBe(true);
+    }
+  });
+
   it("does not account synthetic API errors as model usage", () => {
     const trajectory = convert([
       user("u", null, "Fixture"),

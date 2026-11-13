@@ -9,17 +9,19 @@ from pathlib import Path
 import tempfile
 import sys
 import unittest
+import urllib.request
 from unittest.mock import patch
 
 
-SPEC = importlib.util.spec_from_file_location("fetch_groot", Path(__file__).resolve().parents[2] / "bench-adapters/embodied/fetch_groot.py")
+ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
+SPEC = importlib.util.spec_from_file_location("fetch_groot", ADAPTER / "policies/groot/fetch_groot.py")
 fetcher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(fetcher)
 
 
 def configured_resources(root, *, shared, profile="widowx", simulator_memory=None, suite="libero_spatial"):
     """Synthetic assets and audit/image identities; exercise production configuration and planning."""
-    adapter_spec = importlib.util.spec_from_file_location("resource_fixture_adapter", Path(SPEC.origin).with_name("adapter.py"))
+    adapter_spec = importlib.util.spec_from_file_location("resource_fixture_adapter", ADAPTER / "adapter.py")
     adapter = importlib.util.module_from_spec(adapter_spec)
     adapter_spec.loader.exec_module(adapter)
     config_spec = importlib.util.spec_from_file_location("resource_fixture_config", Path(SPEC.origin).with_name("configure_groot.py"))
@@ -75,7 +77,7 @@ class Response(io.BytesIO):
 
 class ProvisionTests(unittest.TestCase):
     def test_selected_model_fetch_preserves_other_asset_identities_and_skips_training_files(self):
-        reference = json.loads((Path(SPEC.origin).parent / "profiles/groot-model.json").read_text())
+        reference = json.loads((ADAPTER / "profiles/groot-model.json").read_text())
         model = reference["models"]["fractal"]
         names = ["config.json", "statistics.json", "model.safetensors", "optimizer.pt", "training/model.safetensors"]
         metadata = {"sha": model["revision"], "siblings": [{"rfilename": name, "size": 1} for name in names]}
@@ -133,7 +135,7 @@ class ProvisionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "model"
             path.with_name("model.partial").write_bytes(b"abc")
-            with patch.object(fetcher.urllib.request.OpenerDirector, "open", return_value=Response(b"def")) as request:
+            with patch.object(urllib.request.OpenerDirector, "open", return_value=Response(b"def")) as request:
                 result = fetcher.fetch(self.job(path))
             self.assertEqual(request.call_args[0][0].get_header("Range"), "bytes=3-")
             self.assertEqual(path.read_bytes(), b"abcdef")
@@ -146,7 +148,7 @@ class ProvisionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "model"
             path.with_name("model.partial").write_bytes(b"abcdef")
-            with patch.object(fetcher.urllib.request.OpenerDirector, "open") as request:
+            with patch.object(urllib.request.OpenerDirector, "open") as request:
                 fetcher.fetch(self.job(path))
             request.assert_not_called()
             self.assertEqual(path.read_bytes(), b"abcdef")

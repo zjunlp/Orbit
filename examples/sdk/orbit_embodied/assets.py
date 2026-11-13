@@ -5,6 +5,9 @@ from pathlib import Path
 from .binding import digest
 
 
+COLOSSEUM_ASSET_ROOT = "/colosseum-assets"
+
+
 def tree_digest(directory):
     import hashlib
     root = Path(directory).resolve()

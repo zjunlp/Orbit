@@ -8,16 +8,20 @@ import sys
 import time
 
 from orbit_embodied import digest, run_episode, verify_episode
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import COLOSSEUM_ASSET_ROOT, tree_digest
 from orbit_embodied.binding import reference_horizon
+from orbit_embodied.cliport import GOOGLE_ASSETS
 from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 from orbit_embodied.libero_plus import NATIVE_ROOT as LIBERO_PLUS_ROOT
 from orbit_embodied.libero_suites import HORIZONS
+from orbit_embodied.simpler import WIDOWX_AREA_SIZE
 from orbit_embodied.vlabench import ASSETS_ROOT as VLABENCH_ASSETS
 
 
-SIMULATOR_ASSET_ROOTS = {"libero-plus": LIBERO_PLUS_ROOT + "/assets", "vlabench": VLABENCH_ASSETS}
+SIMULATOR_ASSET_ROOTS = {"libero-plus": LIBERO_PLUS_ROOT + "/assets", "vlabench": VLABENCH_ASSETS,
+                        "molmospaces": "/molmospaces", "colosseum-v2": COLOSSEUM_ASSET_ROOT,
+                        "cliport": GOOGLE_ASSETS}
 
 
 class LazyPolicy:
@@ -136,12 +140,13 @@ def main(argv):
             kind = "libero"
         if kind == "libero-plus":
             kind = "libero"
-        if result["valid"] and kind in ("robotwin", "libero"):
-            from orbit_embodied.episode_trajectory import write_trajectory
+        if result["valid"]:
+            # The review index is optional: a kind without one, or a failure to build it, leaves the verdict alone.
             try:
+                from orbit_embodied.episode_trajectory import write_trajectory
                 write_trajectory(directory, Path(destination).with_name("orbit-trajectory.json"), result, expected,
                                  kind=kind)
-            except (OSError, ValueError, KeyError, TypeError) as exc:
+            except (ImportError, OSError, ValueError, KeyError, TypeError) as exc:
                 print("Native trajectory unavailable: " + str(exc), file=sys.stderr)
         return
     request = json.loads(Path(argv[1]).read_text())
@@ -182,9 +187,27 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "robomimic":
         from orbit_embodied.robomimic import RoboMimicBenchmark
         benchmark = RoboMimicBenchmark(reference, sample["taskId"])
+    elif kind == "bigym2":
+        from orbit_embodied.bigym2 import BiGym2Benchmark
+        benchmark = BiGym2Benchmark(reference, sample["taskId"])
+    elif kind == "cliport":
+        from orbit_embodied.cliport import CLIPortBenchmark
+        benchmark = CLIPortBenchmark(reference, sample)
     elif kind == "vima-bench":
         from orbit_embodied.vima_bench import VIMABenchBenchmark
         benchmark = VIMABenchBenchmark(reference, sample["taskId"])
+    elif kind == "molmospaces":
+        from orbit_embodied.molmospaces import MolmoSpacesBenchmark
+        benchmark = MolmoSpacesBenchmark(reference, sample["taskId"])
+    elif kind == "colosseum-v2":
+        from orbit_embodied.colosseum import ColosseumBenchmark
+        benchmark = ColosseumBenchmark(reference, sample["taskId"])
+    elif kind == "vla-arena":
+        from orbit_embodied.vla_arena import VLAArenaBenchmark
+        benchmark = VLAArenaBenchmark(reference, sample["taskId"])
+    elif kind == "libero-pro":
+        from orbit_embodied.libero_pro import LiberoProBenchmark
+        benchmark = LiberoProBenchmark(reference, sample["taskId"])
     elif kind == "rlbench":
         from orbit_embodied.rlbench import RLBenchBenchmark
         benchmark = RLBenchBenchmark(reference, sample["taskId"])
@@ -216,13 +239,16 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         suite, name = sample["taskId"].split(":", 1)
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
         benchmark = native(suite, name, settle_steps=reference["parameters"]["settleSteps"])
-    expected_horizon = reference_horizon(reference, sample["taskId"])
-    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128}.get(kind, 256)
+    expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
+    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84, "cliport": 480}.get(kind, 256)
+    if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):
+        expected_render_size = WIDOWX_AREA_SIZE
     policy = LazyPolicy(request["policy"])
     parameters = request["reference"]["parameters"]
     if (benchmark.horizon != expected_horizon or benchmark.settle_steps != parameters["settleSteps"]
             or policy.replan_steps != parameters["replanSteps"]
-            or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin", "robolab", "robodojo", "robomimic", "vima-bench")
+            or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin", "robolab", "robodojo",
+                            "robomimic", "vima-bench", "molmospaces", "colosseum-v2")
                 and parameters["renderSize"] != expected_render_size)
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")

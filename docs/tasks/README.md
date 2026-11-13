@@ -127,6 +127,16 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261110](20261110-embodied-harness-benchmarks.md) Embodied harness benchmarks
 - [20261110](20261110-robomimic.md) Native RoboMimic
 - [20261110](20261110-vima-bench.md) Native VIMA-Bench
+- [20261110](20261110-colosseum-v2.md) Native Colosseum V2
+- [20261110](20261110-libero-pro.md) Native LIBERO-PRO
+- [20261110](20261110-molmospaces.md) Native MolmoSpaces MS manipulation
+- [20261110](20261110-vla-arena.md) Native VLA-Arena
+- [20261111](20261111-embodied-directory.md) Native embodied adapter directory layout
+- [20261111](20261111-embodied-policy-expansion.md) Native embodied policy expansion
+- [20261112](20261112-dm05-vla-arena.md) DM0.5 on native VLA-Arena
+- [20261112](20261112-fast-vla-robotwin.md) Fast-VLA on native RoboTwin 2.0
+- [20261112](20261112-bigym2.md) Native BiGym 2.0 learned-policy evaluation
+- [20261112](20261112-cliport.md) Native CLIPort language-conditioned evaluation
 
 ## Web, catalog and taxonomy
 
@@ -138,6 +148,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261109](20261109-benchmark-library.md) Supported benchmark library
 - [20261109](20261109-benchmark-taxonomy.md) Benchmark taxonomy v1 and catalog facets
 - [20261110](20261110-evaluation-configurations.md) Evaluation configurations in the Web UI
+- [20261112](20261112-trial-review-views.md) Trial review views and grouped evidence
+- [20261112](20261112-trial-evidence-shapes.md) Native episode timelines and TextArena game conversations
 
 ## Docs, presentation and integration merges
 
@@ -149,3 +161,4 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261111](20261111-converge-concepts-docs.md) Converge benchmark concepts and organize docs
 - [20261112](20261112-positioning-self-improving-lab.md) Positioning: the lab for self-improving agents
 - [20261112](20261112-evolution-plan.md) Implementation plan: trajectories, export, fork and the evolution gate
+- [20261113](20261113-integrate-branches.md) Integrate embodied expansion, ATIF converters and trial evidence views

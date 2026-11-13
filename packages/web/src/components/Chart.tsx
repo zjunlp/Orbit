@@ -153,7 +153,15 @@ export function Chart({ series, smoothing, logY, syncKey, height = 220, onHover 
       height,
       series: sdefs,
       scales: { x: { time: false }, y: logY ? { distr: 3 } : {} },
-      axes: [{ ...axis }, { ...axis, size: 56 }],
+      axes: [
+        { ...axis },
+        {
+          ...axis,
+          // Wide enough for the longest tick label: an exponent such as 8.00e-10 needs more than 56.
+          size: (_u, values) =>
+            Math.max(56, 14 + 6.5 * Math.max(0, ...(values ?? []).map((value) => value.length))),
+        },
+      ],
       legend: { show: false },
       cursor: {
         sync: syncKey ? { key: syncKey } : undefined,

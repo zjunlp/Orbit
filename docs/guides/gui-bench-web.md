@@ -58,12 +58,27 @@ RoboTwin Trial 的 **Episode timeline** 可以拖动到任意控制步，按关�
 画面取自动作前，关节状态和奖励取自动作后，时间轴按录像帧率排列。新运行保存头部与左右腕部三路录像，历史运行可点 **Recheck evidence** 从已保存的轨迹生成时间轴，回看当时录下的相机。
 LIBERO 复用 **Episode timeline**，展示已录制的外部视角、末端执行器位姿、夹爪状态、动作和奖励。时间轴从第一条策略动作开始，达到控制步上限的试验会标记为 **Truncated**。
 
+RoboDojo 和 RoboLab 也复用此视图，动作与状态的通道名来自该次运行冻结的 Binding 配置。
+RoboDojo 的录像时间按 25 FPS，RoboLab 按配置中的控制频率计算；图中的状态是环境保存的状态，不保证每个通道都是传感器实测值。
+通过 **Channel** 选择单个通道或全部通道。动作批次数量较多时显示耗时中位数、最大值与最慢批次跳转。
+超过预览容量的长 episode 会抽样显示，并标为不完整；原始文件仍可下载，首尾与所保留记录的视频时间不变。
+已有的这两类 trial 可用 `orbit bench rescore "$JOB" --trial "$TRIAL"` 从保存证据生成时间线，无需重新运行策略或仿真。
+
 EFE MetaWorld+ standard/2.1 的 Harbor trial 会在评分后自动生成 `orbit-trajectory.json`：原生 journal 调用边界、已执行动作曲线、最终 reward 和 render 视频。
 **Agent at this time** 显示按调用时间关联的会话；完整度标注会话完整、只有环境或记录截断。原版 sidecar 没有保存 proprioception 时不显示身体状态曲线。
 导入失败会显示 issue，分数仍由原版 verifier 决定。索引和媒体都是保存产物的复盘视图，不控制仿真、不恢复状态。
 
 CLI GUI 由共享服务承载，BrowserGym 使用原高层动作字符串，CUA-Lite MiniWoB 使用自己的 canonical JSON tool call；权限和时间限制在 Conditions 中显示。
 `agentTask.tools` 声明的 MCP 由 Orbit 自动接入支持的 Agent；Details 的 `mcpToolsUsed` 只列会话中真正调用过的 MCP 工具。
+
+## TextArena games
+
+新运行的、使用已支持原生 game server 的 Harbor TextArena trial 会显示 **Game conversation**，按顺序查看初始观测、
+每步动作与游戏返回。整体结果取自验证器的 Reward，不把某步动作标成推测的对错。未结束的游戏与超长记录会标明不完整；
+**Evidence** 中保留原始游戏服务日志和验证器输出。
+
+早期运行只保存了游戏服务的启动信息，没有逐步记录，无法补出对局。TextArena 的 shared 验证环境在结束后已释放，
+当前也不支持 Rescore；需要重新运行才能得到此视图。未识别的自定义游戏服务继续使用原行为，并在缺少记录时提示原因。
 
 ## Compare configurations
 

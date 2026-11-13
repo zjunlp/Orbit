@@ -19,6 +19,7 @@ from .isaac import driver_version_kit_args
 ROOT = Path("/workspace/RoboDojo")
 JOINT_KEYS = ("left_arm_joint_state", "left_ee_joint_state", "right_arm_joint_state", "right_ee_joint_state")
 CAMERAS = ("cam_head", "cam_left_wrist", "cam_right_wrist")
+VIDEO_FPS = 25
 _APP = None
 
 
@@ -204,7 +205,7 @@ class RoboDojoBenchmark:
 
     def start_video(self, directory):
         import imageio
-        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=25)
+        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=VIDEO_FPS)
 
     def record_frame(self, observation):
         self.video.append_data(observation["cam_head"])

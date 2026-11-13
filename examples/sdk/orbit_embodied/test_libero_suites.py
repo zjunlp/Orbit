@@ -37,6 +37,7 @@ class SuiteTests(unittest.TestCase):
             rows = [{"phase": "settle", "step": 0}, control, {**control, "step": 1}]
             (episode / "actions.jsonl").write_text("\n".join(map(json.dumps, rows)))
             write_json(episode / "chunks/0.json", {"inferSeconds": 0.2})
+            write_json(episode / "contract.json", {"horizon": 2})
             output = episode / "orbit-trajectory.json"
             write_trajectory(episode, output, {"success": False, "issues": []},
                              {"sample": {"taskId": "libero_90:synthetic"}}, kind="libero")
@@ -50,7 +51,7 @@ class SuiteTests(unittest.TestCase):
     def test_libero_90_registration_requires_only_a_simulator_audit(self):
         adapter = load("suite_native_adapter", "adapter.py")
         with patch.dict(sys.modules, {"adapter": adapter}):
-            config = load("suite_native_config", "configure.py")
+            config = load("suite_native_config", "benchmarks/libero/configure.py")
         reference = json.loads((HERE / "reference.json").read_text())
         image = "sha256:" + "a" * 64
         audit = {"profileDigest": digest(reference), "checks": [{"result": "passed"}],
@@ -77,7 +78,7 @@ class SuiteTests(unittest.TestCase):
     def test_pi05_and_groot_share_benchmark_conditions_and_use_matching_suite_weights(self):
         adapter = load("suite_adapter", "adapter.py")
         with patch.dict(sys.modules, {"adapter": adapter}):
-            config = load("suite_pi05", "configure.py")
+            config = load("suite_pi05", "benchmarks/libero/configure.py")
         reference = json.loads((HERE / "reference.json").read_text())
         for suite in SUITES:
             with self.subTest(suite=suite), tempfile.TemporaryDirectory() as temporary:
@@ -108,9 +109,7 @@ class SuiteTests(unittest.TestCase):
     def test_oft_configuration_keeps_suite_assets_and_score_name(self):
         adapter = load("suite_oft_adapter", "adapter.py")
         with patch.dict(sys.modules, {"adapter": adapter}):
-            groot = load("suite_groot", "configure_groot.py")
-            with patch.dict(sys.modules, {"configure_groot": groot}):
-                config = load("suite_oft", "configure_openvla.py")
+            config = load("suite_oft", "policies/openvla-oft/configure_openvla.py")
         for suite in (*SUITES, "libero_90"):
             with self.subTest(suite=suite), tempfile.TemporaryDirectory() as temporary:
                 discrete = suite == "libero_90"

@@ -896,8 +896,11 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **入口**：`orbit policy add / ls / rm`、`bench add-file`、`bench run --sample-plan [--batch-size]`、`bench calibrate --policy`
   都走现有 HTTP 控制面。原生路径为 `examples/bench-adapters/embodied` 加容器内 `examples/sdk/orbit_embodied`，不依赖 vla-eval；
   旧 vla-eval 登记保持原行为。
-- **语义绑定**：`BenchCapabilities.embodied` 声明评测 profile、观测/动作语义与显式映射。提交时逐项核对单位、frame、相机与动作
-  描述，生成不可变 `ResolvedBinding`；不按同名、维度或顺序猜测对应。
+- **源码布局**：原生登记使用公共 `adapter.py`。benchmark 的准备工具和镜像配方按家族放在 `embodied/benchmarks/`，
+  模型服务、镜像配方与权重工具放在 `embodied/policies/`。[具身适配器索引](../examples/bench-adapters/embodied/README.md)。
+- **语义绑定**：`BenchCapabilities.embodied` 声明评测 profile、观测与动作语义、显式映射及可选的重规划步数。提交时核对
+  已声明的重规划步数，并逐项核对单位、frame、相机与动作描述。若一维动作声明了分量顺序，其长度必须与动作维数一致，
+  分量名必须唯一。通过后生成不可变 `ResolvedBinding`。
 - **Policy 登记**：`PolicyDefinition` 是共享形状（固定镜像、readiness、checkpoint/归一化摘要、命名权重 dataset、随机流声明）；
   各 connector 的必需字段（OFT 的 8 步 LIBERO recipe、GR00T 的执行长度/动作顺序/backbone 摘要）在 `bench/policies.ts` 登记时检查。
   提交时保存权威快照。`gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
@@ -925,7 +928,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
 - **RoboCasa365**：Atomic-Seen 使用原生 PandaOmron Gymnasium 环境。每个样本以 `environmentSeed + initialStateId` 创建首个
   rollout，仿真资产经摘要核对并以只读数据集挂载，临时 XML 写入容器内的链接视图。`robocasa-native` I/O 保留原生 12 维动作，
-  以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/ROBOCASA365.md)
+  以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/robocasa365/README.md)
   GR00T N1.5 共用环境 driver，以 RoboCasa 1.0.1 原生 horizon 运行。每 16 步重规划，按动作段末尾的原生成功信号计分。
   OpenPI 和 GR00T 的 recipe 分别登记，GR00T recipe 的统计排除无效样本。
   Diffusion Policy 使用 RoboCasa 1.0.0，向 Policy 端发送两帧原生观测，每 8 步重规划。
@@ -933,13 +936,13 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   新证据单独保存原生 `done`，验证器据此重算停止点。旧证据可重评，验证记录会标明停止点未经复核。
   固定任务目录、Lifelong 的阶段及累计套件独立于模型登记，复用每任务的原生步数和判定。
 - **原版 RoboCasa**：v0.2 Atomic-24 固定旧版物体资产和 B 划分，在 PandaOmron 上执行 7 维操作臂动作。
-  原生控制器接收补齐后的 12 维动作，按任务注册表设置步数上限，原生成功时提前停止。重评核对动作补零和停止点。[接入说明](../examples/bench-adapters/embodied/ROBOCASA-V02.md)
+  原生控制器接收补齐后的 12 维动作，按任务注册表设置步数上限，原生成功时提前停止。重评核对动作补零和停止点。[接入说明](../examples/bench-adapters/embodied/benchmarks/robocasa-v02/README.md)
 - **RLBench**：MT100 的种子场景与 RVT-18 的测试初态独立登记。RVT 保留四路相机、世界坐标点云、原生位姿规划和碰撞标志。
-  CoppeliaSim 使用 Xvfb 和 Mesa GLX，每个 episode 启动独立进程以保持相机输出一致。RVT 规划失败保留原生异常类型，计为有效失败。[接入说明](../examples/bench-adapters/embodied/RLBENCH.md)
+  CoppeliaSim 使用 Xvfb 和 Mesa GLX，每个 episode 启动独立进程以保持相机输出一致。RVT 规划失败保留原生异常类型，计为有效失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/rlbench/README.md)
   原版 RoboCasa 和 RLBench 从固定提交导出构建输入，登记时校验构建清单及入口。
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
-  50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/ROBOTWIN.md)
+  50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/benchmarks/robotwin/README.md)
   X-VLA 在 Clean 和 Randomized 各使用独立的末端位姿配置，沿用原生场景和专家筛选逻辑。策略输出转换为 16 维原生控制目标，每 30 步重规划。
 - **ManiSkill3 与 Meta-World**：两个 RLinf recipe 分别使用原生 SAPIEN WidowX 和 MuJoCo Sawyer 环境。冻结样本种子、观测和控制语义，
   以原生 `info.success` 判定 episode。Meta-World 用同一个 `environmentSeed + initialStateId` 生成 MT1 目标并重置环境。
@@ -949,10 +952,23 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   用下一条指令重规划。独立 verifier 从封存的动作证据核对子任务进度、重规划边界和停止条件。主分数为完成的连续子任务数。
   Scene D 的 benchmark 可独立登记，checkpoint 的训练场景属于策略来源。
 - **RoboMimic**：从 PH v1.5.1 数据集冻结五个环境的控制器、动作顺序和步数上限。低维与图像模式分别登记，Transport 使用双臂。
-  种子重置后恢复初始仿真状态，并按原生成功或终止判分。[接入说明](../examples/bench-adapters/embodied/ROBOMIMIC.md)
+  种子重置后恢复初始仿真状态，并按原生成功或终止判分。[接入说明](../examples/bench-adapters/embodied/benchmarks/robomimic/README.md)
 - **VIMA-Bench**：独立登记四档官方测试划分，保留图文提示、实例分割和原生抓放动作。变长提示资产使用显式编码字段，
   VIMA 推理由独立 Policy 服务执行，登记时核对其镜像构建清单中的 SDK 文件摘要。证据记录原生动作与终止，供 CPU 重评核对。
-  [接入说明](../examples/bench-adapters/embodied/VIMA-BENCH.md)
+  [接入说明](../examples/bench-adapters/embodied/benchmarks/vima-bench/README.md)
+- **MolmoSpaces-Bench**：固定官方 MS v1 操作轨道的 episode JSON 和资源，按轨道和 episode 序号选择场景。DROID 关节命令与原生
+  `judge_success()` 构成独立的 Policy I/O 和判分契约。[接入说明](../examples/bench-adapters/embodied/benchmarks/molmospaces/README.md)
+- **Colosseum V2**：固定 ManiSkill 任务和原生扰动预设，分别声明单臂末端增量与双臂关节位置。执行到原生任务步数上限，分别核对
+  过程内是否成功及最后一步成功状态。[接入说明](../examples/bench-adapters/embodied/benchmarks/colosseum-v2/README.md)
+- **VLA-Arena**：固定套件、难度、初态及语言和视觉探针。安全协议保存原生逐步代价与最终修正，CPU verifier 复核累计代价和判定。
+  [接入说明](../examples/bench-adapters/embodied/benchmarks/vla-arena/README.md)
+- **LIBERO-PRO**：固定初版的四套件和五类排行榜扰动。用上游扰动器生成 BDDL，并从同一 BDDL 取得策略指令与原生目标。
+  初态用索引选取确定性构造种子，独立保存场景状态摘要。[接入说明](../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md)
+- **BiGym 2.0**：按 G1 的躯干俯仰动作和本体状态布局分别登记。按任务冻结 100 个种子、控制步数上限和 50 Hz 原生控制，
+  并在 CPU 验证中核对原生终止和跌倒状态。[接入说明](../examples/bench-adapters/embodied/benchmarks/bigym2/README.md)
+- **CLIPort**：冻结语言条件测试集的 oracle 合格种子及各样本 reset 后的原生步数上限，转发 RGB-D 和当前子目标。
+  16 个吸盘抓放任务与 2 个铲形末端推扫任务分别登记动作契约。推扫只接收两个世界坐标 XY 端点，CPU 验证核对原生命令和样本上限，
+  并逐步重算累计奖励。[接入说明](../examples/bench-adapters/embodied/benchmarks/cliport/README.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。
@@ -1156,9 +1172,13 @@ P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE Meta
 sample 的 `sessionMessageIndexes`（引用同一 Run 会话）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
 Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目录归还 daemon 用户，再运行 adapter hooks，保证会话可读与凭据清理；不改变模拟器评分。
 
-原生 RoboTwin 和 LIBERO 的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
+原生 RoboTwin、LIBERO、RoboDojo 和 RoboLab 的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
 `mediaPhase: "solve"` 将相机路径限定在同一 Trial 的 Solve 产物中。`frameBeforeAction` 标记每步画面取自动作前，状态和奖励取自动作后。
 动作批次可带 `inferSeconds`。录像以控制步取样，时间轴按录像帧率排列，推理时长使用实际测量值。
+除 LIBERO 的固定字段外，动作与状态通道名来自冻结的 Binding profile；没有声明顺序的状态字段不猜测通道。
+RoboDojo 录像为 25 FPS，RoboLab 使用冻结配置中的控制频率。索引以紧凑 JSON 写入，按实际 UTF-8 字节数限制在 2 MiB 内；
+必要时抽样并标为 `truncated`，保留首尾与最慢动作批次的跳转位置和原始视频时间。原始动作、状态与录像仍完整保留。
+Web 对长批次列表显示耗时摘要和最慢批次跳转；抽样后的列表与统计明确标为所显示的记录。
 
 ### 9.9 Web：按场景的视图
 
@@ -1285,8 +1305,8 @@ Harbor 补全：共享 GPU 组、`gpu_types`、main `shm_size`、服务 `entrypo
 4. 按 coverage 排名补全 Harbor 能力：allowlist 网络、GPU 共享语义（EFE abc-sim）、`mcp_servers`、多步任务。
 5. 跨 bench 汇总视图：各 bench 分数尺度不同，只并列"有效样本数、官方值、Orbit 值、最近校准"，不做跨 bench 平均。
 
-**仍未统一、需要正视的**：轨迹（Agent 会话与环境记录合成一份，§9.8，P6 主线第 4 项）；具身 bench 尚无真实
-coding agent / VLA 正向校准；覆盖数字在 `coverage` 落地前不对外宣称。
+统一 Agent 会话与环境轨迹是 §9.8 所列的后续工作。原生具身 Policy 的抽样校准、短上游对照及其适用范围见
+[具身兼容矩阵](guides/embodied-compatibility.md)。
 
 ### 9.15 Web：Catalog 与工具和模拟用户对话视图（2026-11-05）
 
@@ -1310,9 +1330,15 @@ JSON 是辅助；"能跑 / 校准通过 / 真实 Agent 或 Policy 跑过 / 与�
 - 参与者（agent / user / system / tool 环境，带显示名）；按原始用户轮次分组的事件：消息、工具调用（`callId`、调用者、名称、参数、
   结果或错误、`rejected` 表示 scaffold 拒绝的非法调用）；轮次的 `check`（passed / failed / unchecked）与可选 before / after /
   expected 状态；整体 `verdict`（上游 checker 的类型与说明、首次检测到失败的轮次，可为空，不猜）；`producer` / `trust` / `completeness`。
-- 由 **verify** 产生（独立重放，可信），原生文件照旧保留。BFCL：重放实际调用与参考调用，逐轮状态；对前缀依次运行原版
+- BFCL 与 τ² 的轨迹由 **verify** 产生（独立重放，可信），原生文件照旧保留。BFCL：重放实际调用与参考调用，逐轮状态；对前缀依次运行原版
   `multi_turn_checker` 得到首个失败轮次，之后的轮次标 `unchecked`。τ²：消息流按 `requestor` 区分 agent 与 user 的工具，终态 DB
   的期望/实际与 action / communicate 检查来自原版 reward；没有逐消息 DB 快照，不画逐轮状态。
+- **TextArena 游戏记录**：Harbor 对明确的 `textarena/…` 任务及已识别的原生 game server，在任务 staging 中生成带记录器的副本，
+  只读挂入游戏服务；不修改 benchmark 源文件、游戏接口或奖励。服务 stdout 保存初始观测、动作与返回观测，不记录结果接口的 token。
+  score 从采集的 `services/game/log` 生成 Solve 产物 `orbit-conversation.json`，声明既有 `conversation` 视图；
+  `producer: sidecar`、`completeness: environment-only`，未结束或被截断的记录标为 `truncated`。
+  总判定只来自原 verifier reward，不推断每步正确性或 Agent 是否读取了某条观测。导入失败保留原奖励并附 issue；
+  原始日志继续可查，预览上限 2 MiB。已有只含启动信息的日志不能还原对局；shared 模式不能 rescore，需重新运行才能记录。
 - Web `pages/trial/Conversation.tsx`：轮次目录 / 对话 / 检查器三栏（窄屏单栏）；工具卡片按 `callId` 合并调用与结果，错误与失败相关
   内容默认展开；检查器有 Checker、状态 diff（只看变化字段）、期望 vs 实际、Raw；顶部 verdict 横幅可跳到失败轮次。键位：`h/l` 轮次、
   `/` 搜索、`e` 跳到失败证据。参考调用与实际调用的差异只作诊断，不当作判分规则。

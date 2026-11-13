@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import type { AtifContentPart, AtifMetrics, AtifStep, AtifTrajectory } from "../contracts/atif.ts";
+import {
+  type AtifContentPart,
+  type AtifMetrics,
+  AtifStep,
+  type AtifTrajectory,
+} from "../contracts/atif.ts";
 import {
   collectImage,
   nativeMetadata,
@@ -212,11 +217,12 @@ function convertClaude(
   }
   function step(source: AtifStep["source"], event: NativeEvent): AtifStep {
     const at = string(event.value.timestamp);
+    const validTimestamp = Boolean(at) && AtifStep.shape.timestamp.safeParse(at).success;
     const value: AtifStep = {
       step_id: steps.length + 1,
       source,
       message: "",
-      ...(at && Number.isFinite(Date.parse(at)) ? { timestamp: at } : {}),
+      ...(validTimestamp ? { timestamp: at } : {}),
       extra: {
         orbit: {
           native: {
@@ -227,8 +233,7 @@ function convertClaude(
         },
       },
     };
-    if (at && !Number.isFinite(Date.parse(at)))
-      issues.push({ line: event.line, type: "invalid_timestamp" });
+    if (at && !validTimestamp) issues.push({ line: event.line, type: "invalid_timestamp" });
     steps.push(value);
     return value;
   }

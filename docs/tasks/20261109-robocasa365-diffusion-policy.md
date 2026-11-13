@@ -16,7 +16,7 @@ Run the published RoboCasa365 Diffusion Policy through Orbit's native Atomic-See
 - Record native `done` per control step in new runs. CPU verification checks the fixed action
   schedule, sparse reward, and exact stop point. Legacy evidence can be rescored with
   `diffusionStoppingVerified: false` in its verification record.
-- [Setup and protocol](../../examples/bench-adapters/embodied/ROBOCASA365.md#diffusion-policy)
+- [Setup and protocol](../../examples/bench-adapters/embodied/benchmarks/robocasa365/README.md#diffusion-policy)
 
 ## Validation
 

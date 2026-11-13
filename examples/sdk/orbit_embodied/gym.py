@@ -14,12 +14,12 @@ class GymBenchmark:
     action_size = 7
     settle_steps = 0
 
-    def __init__(self, reference, task):
+    def __init__(self, reference, task, *, sample=None):
         self.reference, self.task = reference, task
         config = reference["environment"]
         if task not in config["tasks"]:
             raise ValueError("task is not in the frozen environment catalog")
-        self.horizon = reference_horizon(reference, task)
+        self.horizon = reference_horizon(reference, task, sample=sample)
         self.control_hz = config.get("controlRates", {}).get(task, reference["parameters"]["controlHz"])
         self.env, self.video = None, None
         self.success = False
@@ -140,7 +140,8 @@ class SimplerPolicyTerminationBenchmark(GymBenchmark):
         if terminate and not native.unwrapped.is_final_subtask():
             native.unwrapped.advance_to_next_subtask()
             terminate = False
-        raw, reward, done, truncated, _ = native.step(action[:7])
+        # The native controller needs a writable buffer. Policy wire arrays can be read-only.
+        raw, reward, done, truncated, _ = native.step(action[:7].copy())
         self.success, self.truncated = bool(done), bool(truncated)
         observation = self.observation(self.env._process_observation(raw))
         return StepResult(observation, float(reward), terminate or self.truncated, self.success,

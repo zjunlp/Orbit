@@ -1,5 +1,6 @@
 """Native RoboTwin 2.0 episodes with the upstream expert feasibility check."""
 
+from collections import deque
 from contextlib import ExitStack
 from functools import lru_cache
 import importlib
@@ -78,6 +79,14 @@ class RoboTwinBenchmark:
         self.env = None
         self.video_stack = ExitStack()
         self.videos = {}
+        self.head_history_steps = reference["environment"].get("headCameraHistorySteps", ())
+        if self.head_history_steps and (
+            not all(type(steps) is int and 0 < steps < reference["parameters"]["replanSteps"]
+                    for steps in self.head_history_steps)
+            or len(set(self.head_history_steps)) != len(self.head_history_steps)
+        ):
+            raise ValueError("invalid RoboTwin head-camera history offsets")
+        self.head_history = deque(maxlen=max(self.head_history_steps, default=0) + 1)
 
     def _native_args(self):
         config = self.reference["environment"]
@@ -123,6 +132,7 @@ class RoboTwinBenchmark:
         return True
 
     def reset(self, sample):
+        self.head_history.clear()
         if sample["taskId"] != self.task or sample["initialStateDigest"] != seed_asset(self.reference, self.task):
             raise ValueError("RoboTwin reset recipe differs from the frozen sample")
         self.seed = sample["environmentSeed"] + int(sample["initialStateId"])
@@ -155,11 +165,19 @@ class RoboTwinBenchmark:
             random.setstate(random_state)
 
     def observation(self, raw):
-        return {
+        observation = {
             **{name: raw["observation"][name]["rgb"] for name in ("head_camera", "left_camera", "right_camera")},
             "joint_state": raw["joint_action"]["vector"],
             "instruction": self.env.get_instruction(),
         }
+        if self.head_history_steps:
+            head = np.array(observation["head_camera"], copy=True)
+            self.head_history.append(head)
+            for steps in self.head_history_steps:
+                observation[f"head_camera_t_minus_{steps}"] = (
+                    self.head_history[-steps - 1] if len(self.head_history) > steps else head
+                )
+        return observation
 
     @staticmethod
     def state(observation):
@@ -171,9 +189,14 @@ class RoboTwinBenchmark:
         if self.env.take_action_cnt != previous + 1:
             raise ValueError("native RoboTwin controller did not execute the requested action")
         success = bool(self.env.eval_success)
-        return StepResult(self.observation(self.env.get_obs()), float(success),
-                          success or self.env.take_action_cnt == self.horizon, success,
-                          native_action=action.tolist())
+        terminated = success or self.env.take_action_cnt == self.horizon
+        raw = self.env.get_obs()
+        if (self.head_history_steps and not terminated
+                and self.env.take_action_cnt % self.reference["parameters"]["replanSteps"] == 0):
+            # Fast-VLA's native evaluator captures video during the chunk and fetches a fresh
+            # observation before the next query. RoboTwin advances randomized lighting on each read.
+            raw = self.env.get_obs()
+        return StepResult(self.observation(raw), float(success), terminated, success, native_action=action.tolist())
 
     def result(self):
         success = bool(self.env.eval_success)

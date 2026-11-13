@@ -1,0 +1,50 @@
+{
+  "id": "dm05-vla-arena-input/1",
+  "observations": {
+    "front_rgb": {
+      "semantic": "rgb",
+      "camera": "agentview",
+      "dtype": "uint8",
+      "shape": [256, 256, 3],
+      "layout": "HWC"
+    },
+    "wrist_rgb": {
+      "semantic": "rgb",
+      "camera": "robot0_eye_in_hand",
+      "dtype": "uint8",
+      "shape": [256, 256, 3],
+      "layout": "HWC"
+    },
+    "eef_position": {
+      "semantic": "eef-position",
+      "dtype": "float64",
+      "shape": [3],
+      "unit": "metre",
+      "frame": "world"
+    },
+    "eef_quaternion": {
+      "semantic": "eef-orientation",
+      "dtype": "float64",
+      "shape": [4],
+      "format": "xyzw",
+      "frame": "world"
+    },
+    "gripper_position": {
+      "semantic": "gripper-joints",
+      "dtype": "float64",
+      "shape": [2],
+      "unit": "metre",
+      "order": ["finger_joint1", "finger_joint2"]
+    },
+    "instruction": { "semantic": "task-language", "dtype": "string", "shape": [] }
+  },
+  "action": {
+    "semantic": "panda-ee-delta",
+    "shape": [7],
+    "controller": "OSC_POSE",
+    "frame": "world",
+    "unit": "controller-normalized",
+    "rotation": "axis-angle",
+    "gripper": "native-libero-minus1-open-plus1-close"
+  }
+}

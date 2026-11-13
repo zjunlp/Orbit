@@ -8,7 +8,7 @@ Expose the four released LIBERO-Plus perturbation suites through the native C6 a
 
 ## Changes
 
-Pin the simulator and asset identity, use one native initial state per variant, and report success by perturbation category. Check the mounted simulator assets once before a solve Run starts. Reuse the independent OFT policy interface. [Registration guide](../../examples/bench-adapters/embodied/LIBERO-PLUS.md)
+Pin the simulator and asset identity, use one native initial state per variant, and report success by perturbation category. Check the mounted simulator assets once before a solve Run starts. Reuse the independent OFT policy interface. [Registration guide](../../examples/bench-adapters/embodied/benchmarks/libero-plus/README.md)
 
 ## Validation
 

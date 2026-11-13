@@ -10,7 +10,7 @@ export const vlabench: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "All five published fixed tracks and the released native task registry for seeded cross-task evaluation.",
-      "examples/bench-adapters/embodied/VLABENCH.md",
+      "examples/bench-adapters/embodied/benchmarks/vlabench/README.md",
     ),
   ],
   verification: checked(

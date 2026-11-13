@@ -8,7 +8,8 @@ import math
 from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
-                          "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench")
+                          "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic",
+                          "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2", "cliport")
 
 
 def digest(value):
@@ -30,7 +31,8 @@ def check_sample(sample, sample_ref):
 
 
 def seed_asset(reference, task):
-    assets = reference["environment"].get("assets")
+    environment = reference["environment"]
+    assets = environment.get("assets")
     if assets and not assets.get("digest"):
         raise ValueError("use the generated reference with the frozen environment asset digest")
     reset = ("layouts[task][environmentSeed][initialStateId]" if reference["environment"].get("kind") == "robodojo"
@@ -40,11 +42,23 @@ def seed_asset(reference, task):
         reset = "officialTrack[taskId][initialStateId],environmentSeed+initialStateId"
     if reference["environment"].get("protocol") == "rvt-test":
         reset = "testDemo[taskId][initialStateId]"
+    if "initialStateCounts" in environment:
+        reset = "fixedInitialState[taskId][initialStateId],environmentSeed"
+        if "initialStateDigests" in environment and task not in environment.get("unsupported", {}):
+            return environment["initialStateDigests"][task]
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
 
-def reference_horizon(reference, task):
+def cliport_episode(environment, sample):
+    if "testEpisodes" not in environment:
+        raise ValueError("regenerate the CLIPort seed catalogue and registration with per-sample horizons")
+    return environment["testEpisodes"][sample["taskId"]][int(sample["initialStateId"])]
+
+
+def reference_horizon(reference, task, *, sample=None):
     environment = reference.get("environment", {})
+    if environment.get("kind") == "cliport":
+        return cliport_episode(environment, sample)["horizon"]
     if "horizons" in environment:
         return environment["horizons"][task]
     return environment.get("horizon", reference.get("horizons", {}).get(task.split(":")[0]))
@@ -72,10 +86,17 @@ def resolve_binding(benchmark, policy, observation_map):
             raise ValueError("missing physical unit for " + target)
         if any(term in expected["semantic"] for term in ("position", "orientation")) and not expected.get("frame"):
             raise ValueError("missing coordinate frame for " + target)
-    if not policy.get("action") or policy["action"] != benchmark.get("action"):
+    action = policy.get("action")
+    if not action or action != benchmark.get("action"):
         raise ValueError("action semantics differ; an explicit verified conversion is required")
-    if not {"semantic", "shape", "controller", "frame", "unit", "rotation", "gripper"}.issubset(policy["action"]):
+    if not {"semantic", "shape", "controller", "frame", "unit", "rotation", "gripper"}.issubset(action):
         raise ValueError("incomplete action semantic declaration")
+    shape, order = action["shape"], action.get("order")
+    if len(shape) == 1 and order is not None:
+        if len(order) != shape[0]:
+            raise ValueError("action order length must match the action dimension")
+        if len(set(order)) != len(order):
+            raise ValueError("action order must not contain duplicate names")
     result = {
         "version": 1,
         "benchmarkProfile": benchmark,
@@ -127,8 +148,22 @@ def reset_seed(sample, reference=None):
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
     index = int(sample["initialStateId"])
+    if "initialStateCounts" in environment:
+        seed = sample["environmentSeed"]
+        count = environment["initialStateCounts"].get(sample["taskId"], 0)
+        if not 0 <= index < count or not 0 <= seed < 2 ** 32 or seed != environment.get("environmentSeed", seed):
+            raise ValueError("sample is outside the frozen initial-state catalog or seed recipe")
+        if environment.get("kind") == "bigym2":
+            return seed + index
+        if environment.get("kind") == "cliport":
+            return cliport_episode(environment, sample)["seed"]
+        if environment.get("kind") == "vla-arena" and environment.get("protocol") == "dm05":
+            seed += environment["catalog"][sample["taskId"]]["index"] * 10000 + sample["repetition"]
+            if not 0 <= seed < 2 ** 32:
+                raise ValueError("DM0.5 Arena episode seed must fit in an unsigned 32-bit integer")
+        return seed
     seed = sample["environmentSeed"] + index
-    if environment.get("kind") in ("robocasa-v02", "rlbench", "robomimic", "vima-bench"):
+    if environment.get("kind") in ("robocasa-v02", "rlbench", "robomimic", "vima-bench", "colosseum-v2"):
         count = environment.get("initialStateCount")
         if (sample["environmentSeed"] < 0 or index < 0 or not 0 <= seed < 2 ** 32
                 or (count is not None and index >= count)
@@ -149,6 +184,7 @@ def check_distinct_resets(samples, reference=None):
     seen = {}
     for sample in samples:
         scene = int(sample["initialStateId"]) if reference and ("simplerScenes" in reference["environment"]
+                     or "initialStateCounts" in reference["environment"]
                      or reference["environment"].get("kind") == "robodojo") else None
         key = (sample["taskId"], scene, reset_seed(sample, reference), sample["policySeed"], sample["repetition"])
         if seen.setdefault(key, sample["sampleId"]) != sample["sampleId"]:

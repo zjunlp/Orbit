@@ -1,4 +1,4 @@
-"""Build and check the pinned RoboCasa v0.2 and RLBench simulator images."""
+"""Resolve immutable image IDs and build and check pinned native runtimes."""
 
 import argparse
 import json
@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from adapter import HERE, check_source, file_digest, pinned
+from adapter import HERE, SDK, check_source, digest, file_digest, implementation_digest, pinned
 
 
 ROBOCASA = {"repository": "https://github.com/robocasa/robocasa", "commit": "756598a5be52e052339bb2d957426e39015c2afb"}
@@ -21,6 +21,14 @@ RVT_PYREP = {**PYREP, "commit": "231a1ac6b0a179cff53c1d403d379260b9f05f2f"}
 RVT_PLANNER = "rvt/utils/rlbench_planning.py"
 COPPELIASIM_SHA256 = "sha256:512de3a7347387fcc1b12fa675195a912265753f7901808382865bbf51a2a7f8"
 MANIFEST_LABEL = "orbit.reference.native-runtime"
+RLINF_REVISION = "1bf78980d9339cbc67497eddceb9a1e3a74e2acc"
+
+
+def image_id(image):
+    value = subprocess.check_output(["docker", "image", "inspect", "--format", "{{.Id}}", image], text=True).strip()
+    if not pinned(value):
+        raise ValueError("runtime image must have an immutable content identity")
+    return value
 
 
 def robocasa_sources():
@@ -38,12 +46,12 @@ def runtime_manifest(kind, sources):
     manifest = {
         "kind": kind,
         "sources": {name: source["commit"] for name, source in sources.items()},
-        "dockerfile": file_digest(HERE / (recipe + ".Dockerfile")),
+        "dockerfile": file_digest(HERE / "benchmarks" / recipe / (recipe + ".Dockerfile")),
         "entrypoint": ["python"] if recipe == "robocasa-v02" else ["/usr/local/bin/rlbench-python"],
     }
     if recipe == "rlbench":
         manifest["coppeliasim"] = COPPELIASIM_SHA256
-        manifest["launcher"] = file_digest(HERE / "rlbench-python.sh")
+        manifest["launcher"] = file_digest(HERE / "benchmarks/rlbench/rlbench-python.sh")
     return manifest
 
 
@@ -70,6 +78,78 @@ def export_source(source, expected, target, paths):
                     expected["commit"], "--", *paths], check=True)
     subprocess.run(["tar", "-xf", str(archive), "-C", str(target)], check=True)
     archive.unlink()
+
+
+def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths, *, extra_contexts=()):
+    with tempfile.TemporaryDirectory(prefix="orbit-" + kind + "-") as temporary:
+        context = Path(temporary) / kind
+        export_source(source, identity, context, source_paths)
+        contexts = ["--build-context", kind + "=" + str(context)]
+        for name, path in extra_contexts:
+            contexts.extend(["--build-context", name + "=" + str(path)])
+        label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
+                        *contexts, "-f", str(dockerfile),
+                        "-t", tag, str(HERE.parents[2])], check=True)
+
+
+def read_native_catalog(image, module):
+    prefix = "ORBIT_NATIVE_CATALOG="
+    code = ("import json; from " + module + " import native_catalog; "
+            + f"print({prefix!r} + json.dumps(native_catalog()))")
+    output = subprocess.check_output(
+        ["docker", "run", "--rm", "--network", "none", "--label", "orbit.task=embodied-eval",
+         "--mount", f"type=bind,src={SDK},dst=/orbit-sdk,readonly", "-e", "PYTHONPATH=/orbit-sdk",
+         image, "-B", "-c", code], text=True)
+    line, = (line for line in output.splitlines() if line.startswith(prefix))
+    return json.loads(line[len(prefix):])
+
+
+def write_benchmark(output_dir, name, source, image, renderer, interpreter, reference, *, gpu_mem=None):
+    benchmark = {"name": name, "path": str(source.resolve()), "adapter": str(HERE / "adapter.py"),
+                 "config": {"image": image, "python": interpreter, "renderer": renderer,
+                            "simGpus": "1" if gpu_mem is not None else "0",
+                            **({"simGpuMemGB": str(gpu_mem)} if gpu_mem is not None else {}),
+                            "reference": json.dumps(reference, separators=(",", ":")),
+                            "profileDigest": digest(reference), "implementationDigest": implementation_digest()}}
+    output = output_dir / name
+    output.mkdir(parents=True, exist_ok=True)
+    for filename, value in (("benchmark.json", benchmark), ("reference.json", reference)):
+        (output / filename).write_text(json.dumps(value, indent=2) + "\n")
+
+
+def check_policy_source(source, expected):
+    check_source(source, expected, {})
+    status = subprocess.check_output(
+        ["git", "-C", str(source), "status", "--porcelain", "--untracked-files=normal"], text=True)
+    if status.strip():
+        raise ValueError("expected a clean pinned policy checkout: " + expected["repository"])
+
+
+def policy_manifest(kind, sources, dockerfile, server, *, interpreter="python"):
+    return {
+        "kind": kind,
+        "sources": {name: source["commit"] for name, source in sources.items()},
+        "dockerfile": file_digest(dockerfile),
+        "server": file_digest(server),
+        "sdk": {path.name: file_digest(path) for path in sorted((SDK / "orbit_embodied").glob("*.py"))
+                if not path.name.startswith("test_")},
+        "entrypoint": [interpreter, "/opt/orbit/" + server.name],
+    }
+
+
+def build_policy_image(args, context_name, source, dockerfile, manifest, *, source_paths=(), extra_contexts=()):
+    with tempfile.TemporaryDirectory(prefix="orbit-native-policy-") as temporary:
+        context = Path(temporary) / context_name
+        export_source(args.source, source, context, source_paths)
+        contexts = ["--build-context", context_name + "=" + str(context)]
+        for name, path in extra_contexts:
+            contexts.extend(["--build-context", name + "=" + str(path)])
+        label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
+                        *contexts,
+                        "--build-arg", "POLICY_BASE=" + args.policy_base,
+                        "-f", str(dockerfile), "-t", args.build_tag, str(HERE.parents[2])], check=True)
 
 
 def build(args):
@@ -104,7 +184,7 @@ def build(args):
             contexts += ["--build-context", "coppeliasim=" + str(simulator)]
         label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
         subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label, *target, *contexts,
-                        "-f", str(HERE / (args.recipe + ".Dockerfile")), "-t", args.tag, str(HERE.parents[2])],
+                        "-f", str(HERE / "benchmarks" / args.recipe / (args.recipe + ".Dockerfile")), "-t", args.tag, str(HERE.parents[2])],
                        check=True)
 
 

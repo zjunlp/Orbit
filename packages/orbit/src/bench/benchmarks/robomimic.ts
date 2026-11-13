@@ -10,7 +10,7 @@ export const robomimic: Omit<SupportedBenchmark, "registrationNames"> = {
   integrations: [
     nativeRoute(
       "PH v1.5.1 environments with separate low-dimensional and RGB policy profiles.",
-      "examples/bench-adapters/embodied/ROBOMIMIC.md",
+      "examples/bench-adapters/embodied/benchmarks/robomimic/README.md",
     ),
   ],
   verification: checked(

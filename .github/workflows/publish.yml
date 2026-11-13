@@ -28,6 +28,10 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: node --input-type=module -e 'import p from "./packages/orbit/package.json" with {type:"json"}; if (process.env.RELEASE_TAG !== `v${p.version}`) throw new Error("Release tag must match the package version");'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install -r examples/sdk/requirements-ci.txt
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
       - run: pnpm pack:release

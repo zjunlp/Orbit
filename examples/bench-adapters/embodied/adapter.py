@@ -24,6 +24,10 @@ from orbit_embodied.vlabench import METRICS as VLABENCH_METRICS, initial_state_c
 CALVIN_COMPLETED_SUBTASKS = "completed_subtasks"
 
 
+def reports_arena_safety_cost(environment):
+    return environment.get("kind") == "vla-arena" and environment.get("suite", "").startswith("safety_")
+
+
 def check_source(root, source, files):
     commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
     if commit != source["commit"]:
@@ -64,7 +68,8 @@ def settings(req):
     if not pinned(image):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
     kind = reference.get("environment", {}).get("kind")
-    renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",)}.get(kind, ("osmesa", "egl", "vulkan"))
+    renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",),
+                 "cliport": ("pybullet-direct",), "bigym2": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -101,6 +106,11 @@ def tasks(req):
             reason = environment.get("unsupported", {}).get(task["id"])
             if reason:
                 task.update(supported=False, reason=reason)
+            if "taskTitles" in environment:
+                task["title"] = environment["taskTitles"].get(task["id"], task["title"])
+            task["tags"] = {**environment.get("taskTags", {}).get(task["id"], {}), **task["tags"]}
+            if "initialStateCounts" in environment:
+                task["tags"]["initialStateCount"] = str(environment["initialStateCounts"].get(task["id"], 0))
             if environment.get("kind") == "robodojo":
                 counts = {seed: len(rows) for seed, rows in environment["layouts"].get(task["id"], {}).items()}
                 task["tags"]["initialStateCounts"] = json.dumps(counts, sort_keys=True)
@@ -141,18 +151,32 @@ def tasks(req):
     elif kind == "libero-plus":
         metrics = [{"name": metric_name(category), "label": category + " success", "unit": "ratio",
                     "range": [0, 1]} for category in PERTURBATIONS]
+    elif kind == "vla-arena":
+        levels = sorted({row["level"] for row in environment["catalog"].values()})
+        metrics = [{"name": f"success_l{level}", "label": f"L{level} success",
+                    "unit": "ratio", "range": [0, 1]} for level in levels]
+        if reports_arena_safety_cost(environment):
+            metrics.append({"name": "safety_cost", "label": "Native safety cost",
+                            "unit": "cost", "higherIsBetter": False})
+            metrics.extend({"name": f"safety_cost_l{level}", "label": f"L{level} safety cost",
+                            "unit": "cost", "higherIsBetter": False} for level in levels)
+    elif kind == "cliport":
+        metrics = [{"name": "success_rate", "label": "Reward above 0.99", "unit": "ratio", "range": [0, 1]}]
+    elif kind == "colosseum-v2":
+        metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
             "capabilities": {"embodied": {
                                  "profile": reference["id"], "semanticProfile": reference["benchmarkProfile"],
                                  "observationMap": reference["observationMap"],
+                                 "replanSteps": reference["parameters"]["replanSteps"],
                                  **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
                              }, "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
-                             "scoreKind": "scalar" if calvin or robodojo else "binary", "rescore": "evidence",
+                             "scoreKind": "scalar" if calvin or robodojo or kind == "cliport" else "binary", "rescore": "evidence",
                              # A still policy can satisfy a goal that holds at the start.
                              "calibration": {"empty": "any", "oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
@@ -190,8 +214,10 @@ def solve_one(req):
         if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
-    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench"):
-        if sample["taskId"] not in environment["tasks"] or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
+    if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
+                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2", "cliport"):
+        if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
+                or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
     if environment.get("kind") == "libero-plus":
@@ -222,12 +248,13 @@ def solve_one(req):
     if environment.get("kind") in ("robolab", "robodojo"):
         resources["gpuModels"] = ["RTX", "L4", "L40", "L40S", "A10", "A40"]
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
+    libero_pro_path = "/opt/libero-pro:" if environment.get("kind") == "libero-pro" else ""
     assets = environment.get("assets")
     if assets:
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
-                     "env": {"PYTHONPATH": "/orbit-embodied/python:/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
+                     "env": {"PYTHONPATH": "/orbit-embodied/python:" + libero_pro_path + "/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
                              **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
                                 if gl_platform not in ("xvfb-glx", "pybullet-direct") else {})},
                      "resources": resources,
@@ -366,7 +393,8 @@ def score(req):
             files.append({"label": "Episode timeline", "phase": "verify", "path": "orbit-trajectory.json", "kind": "episode"})
         if req["trial"].get("batch"):
             files.append({"label": "Fixed solve batch", "phase": "solve", "path": "batch-plan.json", "kind": "json"})
-        kind = expected["reference"].get("environment", {}).get("kind")
+        environment = expected["reference"].get("environment", {})
+        kind = environment.get("kind")
         if kind == "calvin":
             completed = result["native"]["completedSubtasks"]
             metrics = {CALVIN_COMPLETED_SUBTASKS: completed,
@@ -379,12 +407,23 @@ def score(req):
                 metrics["process_score"] = result["native"]["processScore"]
             return valid(result["native"]["score"], metrics=metrics,
                          issues=result["issues"], review={"files": files})
+        if kind == "cliport":
+            return valid(result["native"]["totalReward"], metrics={"success_rate": int(result["success"])},
+                         issues=result["issues"], review={"files": files})
         success = int(result["success"])
         metrics = None
         if kind == "vlabench":
             metrics = result["native"]["metrics"]
         elif kind == "libero-plus":
             metrics = {metric_name(result["native"]["perturbation"]): success}
+        elif kind == "vla-arena":
+            level = environment["catalog"][req["trial"]["sample"]["taskId"]]["level"]
+            metrics = {f"success_l{level}": success}
+            if reports_arena_safety_cost(environment):
+                cost = result["native"]["safetyCost"]
+                metrics.update({"safety_cost": cost, f"safety_cost_l{level}": cost})
+        elif kind == "colosseum-v2":
+            metrics = {"success_at_end": int(result["native"]["successAtEnd"])}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

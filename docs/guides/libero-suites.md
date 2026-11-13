@@ -47,18 +47,18 @@ recipe. These remain distinct from full official-runtime or published-score equi
 
 Keep sources, weights, generated configuration and audit outputs outside the checkout. Set the
 local variables used below to the corresponding locations. Follow the image and source setup in
-[the OpenPI runtime build](../../examples/bench-adapters/embodied/OPENPI-LIBERO.md#reference-and-assets),
-[GR00T setup](../../examples/bench-adapters/embodied/GR00T.md) and
-[OpenVLA-OFT setup](../../examples/bench-adapters/embodied/OPENVLA.md).
+[the OpenPI runtime build](../../examples/bench-adapters/embodied/benchmarks/libero/README.md#reference-and-assets),
+[GR00T setup](../../examples/bench-adapters/embodied/policies/groot/README.md) and
+[OpenVLA-OFT setup](../../examples/bench-adapters/embodied/policies/openvla-oft/README.md).
 
 Register LIBERO-90 using the pinned OpenPI simulator image:
 
 ```bash
 mkdir -p "$LOCAL_CONFIG"
-python3 examples/bench-adapters/embodied/audit.py \
+python3 examples/bench-adapters/embodied/benchmarks/libero/audit.py \
   --reference-source "$OPENPI_SOURCE" --benchmark-image "$LIBERO_SIM_IMAGE" \
   > "$LOCAL_CONFIG/libero-90-audit.json"
-python3 examples/bench-adapters/embodied/configure.py --benchmark-only \
+python3 examples/bench-adapters/embodied/benchmarks/libero/configure.py --benchmark-only \
   --audit "$LOCAL_CONFIG/libero-90-audit.json" --reference-source "$OPENPI_SOURCE" \
   --suite libero_90 --output-dir "$LOCAL_CONFIG/libero-90"
 orbit bench add-file "$LOCAL_CONFIG/libero-90/benchmark.json"
@@ -72,22 +72,22 @@ and the LIBERO success signal.
 Use `SUITE=libero_object`, `libero_goal` or `libero_10` in these model setup examples:
 
 ```bash
-PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure.py \
+PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/benchmarks/libero/configure.py \
   --audit "$PI05_AUDIT" --reference-source "$OPENPI_SOURCE" --suite "$SUITE" \
   --share-gpu --output-dir "$LOCAL_CONFIG/pi05/$SUITE"
 
-python3 examples/bench-adapters/embodied/fetch_groot.py \
+python3 examples/bench-adapters/embodied/policies/groot/fetch_groot.py \
   --models libero_object libero_goal libero_10 backbone \
   --source modelscope --output-dir "$GROOT_ASSETS"
-PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure_groot.py \
+PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/policies/groot/configure_groot.py \
   --reference-source "$GROOT_SOURCE" --benchmark-source "$OPENPI_SOURCE" \
   --weights "$GROOT_ASSETS" --profile libero --suite "$SUITE" --share-gpu \
   --policy-image orbit/groot-policy:reference --benchmark-image orbit/libero-zmq:reference \
   --output-dir "$LOCAL_CONFIG/groot/$SUITE"
 
-python3 examples/bench-adapters/embodied/fetch_openvla.py --model combined \
+python3 examples/bench-adapters/embodied/policies/openvla-oft/fetch_openvla.py --model combined \
   --output-dir "$OFT_COMBINED_WEIGHTS"
-PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/configure_openvla.py \
+PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/policies/openvla-oft/configure_openvla.py \
   --reference-source "$OPENVLA_SOURCE" --benchmark-source "$OPENPI_SOURCE" \
   --weights "$OFT_COMBINED_WEIGHTS" --model combined --suite "$SUITE" --share-gpu \
   --policy-image orbit/openvla-oft-policy:reference --benchmark-image orbit/libero-zmq:reference \

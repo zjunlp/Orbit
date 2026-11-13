@@ -3,21 +3,42 @@
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
+
+import numpy as np
 
 from orbit_embodied.binding import check_distinct_resets, reset_seed, seed_asset
 from orbit_embodied.evidence import verify_simpler_termination
+from orbit_embodied.gym import SimplerPolicyTerminationBenchmark
 from orbit_embodied.simpler import grid_size, initial_state_count, rt_options, scene_at
 
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
-sys.path.insert(0, str(ADAPTER))
+sys.path.insert(0, str(ADAPTER / "benchmarks/simpler-env"))
 from configure_simpler import expand_sweeps
 
 SWEEPS = json.loads((ADAPTER / "profiles/simpler-sweeps.json").read_text())
 
 
 class SimplerTests(unittest.TestCase):
+    def test_native_controller_gets_a_writable_copy_of_wire_actions(self):
+        benchmark = SimplerPolicyTerminationBenchmark.__new__(SimplerPolicyTerminationBenchmark)
+        benchmark.reference = {"benchmarkProfile": {"observations": {}}}
+        benchmark.native_action = None
+        action = np.frombuffer(np.arange(8, dtype=np.float32).tobytes(), dtype=np.float32)
+
+        def step(command):
+            np.testing.assert_array_equal(command, action[:7])
+            self.assertTrue(command.flags.writeable)
+            command[0] = 100
+            return {}, 0, False, False, {}
+
+        native = SimpleNamespace(step=step, unwrapped=SimpleNamespace(is_final_subtask=lambda: True))
+        benchmark.env = SimpleNamespace(env=native, _process_observation=lambda raw: raw)
+        self.assertTrue(benchmark.step(action).terminated)
+        self.assertEqual(action[0], 0)
+
     def test_termination_advances_then_stops_on_the_final_subtask(self):
         native = [0] * 7
         initial = {"finalSubtask": False, "truncated": False}

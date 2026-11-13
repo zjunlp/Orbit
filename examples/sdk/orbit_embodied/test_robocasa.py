@@ -31,9 +31,7 @@ def load(name, filename):
 def load_config():
     adapter = load("robocasa_fixture_adapter", "adapter.py")
     with patch.dict(sys.modules, {"adapter": adapter}):
-        groot = load("robocasa_fixture_groot", "configure_groot.py")
-        with patch.dict(sys.modules, {"configure_groot": groot}):
-            config = load("robocasa_fixture_config", "configure_robocasa365.py")
+        config = load("robocasa_fixture_config", "benchmarks/robocasa365/configure_robocasa365.py")
     return adapter, config
 
 

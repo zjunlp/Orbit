@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 
-SOURCE = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/parity.py"
+SOURCE = Path(__file__).resolve().parents[2] / "bench-adapters/embodied/benchmarks/libero/parity.py"
 SPEC = importlib.util.spec_from_file_location("embodied_parity_tool", SOURCE)
 parity = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(parity)

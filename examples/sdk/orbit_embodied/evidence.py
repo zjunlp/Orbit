@@ -12,12 +12,13 @@ import numpy as np
 from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed, robodojo_layout
 
 
-def write_json(path, value):
+def write_json(path, value, *, compact=False):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".partial")
     with temporary.open("w", encoding="utf-8") as stream:
-        json.dump(value, stream, ensure_ascii=False, sort_keys=True, allow_nan=False)
+        json.dump(value, stream, ensure_ascii=False, sort_keys=True, allow_nan=False,
+                  separators=(",", ":") if compact else None)
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())
@@ -194,8 +195,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         raise ValueError("contract fingerprint mismatch")
     reference = contract["identity"].get("reference", {})
     if "parameters" in reference:
-        task = contract["sample"]["taskId"]
-        horizon = reference_horizon(reference, task)
+        sample = contract["sample"]
+        horizon = reference_horizon(reference, sample["taskId"], sample=sample)
         if horizon is not None and contract["horizon"] != horizon:
             raise ValueError("episode horizon differs from the frozen reference")
         if contract["replanSteps"] != reference["parameters"]["replanSteps"]:
@@ -268,8 +269,40 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if result["valid"] and reference.get("environment", {}).get("kind") == "robocasa-v02":
         verify_robocasa_v02(controls, contract["horizon"])
     kind = reference.get("environment", {}).get("kind")
+    if result["valid"] and kind == "bigym2":
+        from .bigym2 import verify_bigym2
+        verify_bigym2(reference, contract["sample"], controls, result)
+    if result["valid"] and kind == "cliport":
+        from .cliport import verify_cliport
+        verify_cliport(reference, contract["sample"], controls, result)
     if result["valid"] and kind in ("robomimic", "vima-bench"):
         verify_manipulation_stopping(kind, controls, contract["horizon"])
+    if result["valid"] and kind == "molmospaces":
+        from .molmospaces import verify_molmospaces
+        verify_molmospaces(controls, contract["horizon"], reference["parameters"])
+    if result["valid"] and kind == "vla-arena":
+        from .vla_arena import verify_arena_evidence
+        verify_arena_evidence(reference, contract["sample"], controls, result,
+                              [row for row in actions if row["phase"] == "settle"])
+    if result["valid"] and kind == "colosseum-v2":
+        native = result["native"]
+        if (len(controls) != contract["horizon"] or not controls[-1]["terminated"]
+                or any(row["terminated"] for row in controls[:-1])
+                or native["successOnce"] is not success
+                or native["successAtEnd"] is not controls[-1]["nativeSuccess"]):
+            raise ValueError("Colosseum V2 horizon or success flags differ from the controls")
+    if result["valid"] and kind == "libero-pro":
+        task = contract["sample"]["taskId"]
+        environment = reference["environment"]
+        instruction = environment["taskTitles"][task]
+        native = result["native"]
+        if (initial["state"]["instruction"] != instruction or native["instruction"] != instruction
+                or native["perturbation"] != environment["perturbation"]
+                or any(row["state"]["instruction"] != instruction for row in controls)):
+            raise ValueError("LIBERO-PRO policy instruction differs from the frozen BDDL")
+        reset_digest = initial["state"].get("resetStateDigest")
+        if not reset_digest or any(row["state"].get("resetStateDigest") != reset_digest for row in controls):
+            raise ValueError("LIBERO-PRO constructor state differs across the recorded episode")
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     if (result["valid"] and contract.get("version") == 3
