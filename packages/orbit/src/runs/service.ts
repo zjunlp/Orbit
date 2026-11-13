@@ -35,6 +35,7 @@ import { newId, nowIso } from "../lib/ids.ts";
 import { Redactor } from "../lib/redact.ts";
 import { allocateRoles, hostProtection } from "../resources/allocate.ts";
 import { resolveAgentRef } from "../sessions/index.ts";
+import { trajectoryTokens } from "../sessions/tokens.ts";
 import { redactTrajectory, trajectorySummary } from "../sessions/trajectory.ts";
 import type { RunFilter, Store } from "../store/index.ts";
 import type { DatasetRegistry } from "../workspace/datasets.ts";
@@ -452,6 +453,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       folder: folder.data,
       usage: null,
       trajectory: null,
+      tokens: null,
       services: [],
       after: null,
       phases: [],
@@ -1086,8 +1088,14 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     const run = this.mustGet(id);
     if (!isTerminal(run.state) || run.cleanup !== "done") return;
     const summary = trajectory ? trajectorySummary(trajectory) : null;
-    if (JSON.stringify(run.trajectory) === JSON.stringify(summary)) return;
+    const tokens = trajectory ? trajectoryTokens(trajectory) : null;
+    if (
+      JSON.stringify(run.trajectory) === JSON.stringify(summary) &&
+      JSON.stringify(run.tokens) === JSON.stringify(tokens)
+    )
+      return;
     run.trajectory = summary;
+    run.tokens = tokens;
     this.save(run);
   }
 

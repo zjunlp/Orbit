@@ -194,10 +194,11 @@ unknown。纯粹用于展示：准入只看显存占用。
 ```
 
 **Run**：`{ id, spec, state, exitCode?, node, remote, origin?, leaseId?, containerId?, code{commit, dirty, diffRef},
-createdAt/startedAt/endedAt, cleanup: pending|done|failed, usage?, trajectory }`
+createdAt/startedAt/endedAt, cleanup: pending|done|failed, usage?, trajectory, tokens }`
 
 - `state`: `queued → starting → running → succeeded | failed | cancelled | lost`。
 - `trajectory`：`{ schema, steps, completeness, importer: { name, version } } | null`，仅存摘要；完整 ATIF 和媒体留在 Run 文件中（§9.8）。旧记录默认 null。
+- `tokens`：`{ input, cachedInput, cacheWrite, output, reasoning, calls, costUsd?, source: "session" } | null`；由 ATIF 记账，未知字段为 null，费用只保留 CLI 自报值（§9.8）。旧记录默认 null。
 - 执行结果（state/exitCode）、清理状态（cleanup）、评测有效性（bench 中）是三个独立字段。
 - `remote`：主节点上的镜像记录，Run 实际在 `node` 上执行；`origin`：worker 上替主节点执行的 Run 的主节点名（§8）。
 - mount 二选一：`source`（本机绝对路径）或 `dataset`（命名数据集，在执行节点解析为本地路径）；
@@ -1162,7 +1163,16 @@ Orbit 扩展放在 `extra.orbit`，包含来源文件摘要、导入器版本、
 CLI：`orbit trajectory show <run> [--json]`、`orbit trajectory rebuild <runs...> [--json]`。
 详细使用见 [轨迹指南](guides/trajectories.md)。
 
-**后续接入**：T3 从轨迹记账；T4 对齐环境引用；T5 增加 Harbor / Cua 直通及其他来源。
+**Token 记账（T3）**：`sessions/tokens.ts` 从 ATIF 生成 `Run.tokens`，在轨迹生成/重建、缓存读取补记及 worker 同步时保存，沿用同一 Run 生命周期。
+根轨迹与嵌入子轨迹各计一次，忽略复制上下文和非模型调用。`input` 含缓存读取/写入，`output` 含 reasoning；细分字段不能再加到总量上。
+未记录的字段为 null，全部未记录则整项为 null；不把代理缺失用量、缺失前缀或溢出计作 0。
+`costUsd` 仅采纳 ATIF 明确记录的费用或 Claude 原生 `cost-state` 中同一 session 的最后一项 `totalCostUSD`；后者已含子会话，不再叠加。不查询价格、不估价。
+
+`orbit show`、Run 概览/对比显示用量；`bench usage`、报告配置汇总和 Bench Compare 按不同 solve Run 合计，包含失败与重试，共享 batch Run 去重，排除 verifier。
+报告条目记录当前选用 solve Run 的完整用量，batch 条目可能指向同一 Run，不能直接相加。聚合带 `runs` / `recordedRuns` 覆盖率，只合计有记录的 Run；其中任一 Run 缺失的细分项仍为 null。
+计数仅供查看，不参与分数、有效性或置信区间。报告保留不可变修订；旧报告字段可缺省，读取不重写，后续新报告/重评分修订才写入统计。
+
+**后续接入**：T4 对齐环境引用；T5 增加 Harbor / Cua 直通及其他来源。
 开发期可用隔离环境中的 Harbor validator 校验输出；它不进入 daemon 或 CI 依赖。
 
 P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE MetaWorld+ standard/2.1 的 journal、已执行动作矩阵、最终奖励与 render 视频，

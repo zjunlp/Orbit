@@ -175,6 +175,7 @@ export function applyRemote(ctx: Context, id: string, remote: Run, events: RunEv
   run.cleanup = remote.cleanup;
   run.usage = remote.usage;
   run.trajectory = remote.trajectory;
+  run.tokens = remote.tokens;
   if (remote.lease) run.lease = remote.lease;
   else if (isTerminal(remote.state) && run.lease?.state === "active")
     run.lease = { ...run.lease, state: "released", releasedAt: remote.endedAt ?? nowIso() };
@@ -264,6 +265,7 @@ export async function receiveRemote(ctx: Context, input: RemoteSubmit): Promise<
     folder: "",
     usage: null,
     trajectory: null,
+    tokens: null,
     services: [],
     after: null,
     phases: [],

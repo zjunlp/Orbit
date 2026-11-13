@@ -10,6 +10,7 @@ import type {
   OfficialValue,
   Outcome,
   ReportEntry,
+  Run,
   Trial,
 } from "../contracts/index.ts";
 import { planRank, sampleIdentity, sampleKey, sampleOrder } from "../contracts/index.ts";
@@ -21,7 +22,9 @@ import {
   resolveMetrics,
   taskMeans,
 } from "../contracts/metrics.ts";
+import { tokenUsage } from "../sessions/tokens.ts";
 import { splitBatches } from "./batches.ts";
+import { solveRuns } from "./resources.ts";
 import { contentDigest } from "./samples.ts";
 
 export const isValid = (t: Trial) => t.outcome?.evaluation === "valid";
@@ -118,7 +121,7 @@ export function planDigest(
 export { sampleKey };
 
 /** One trial as a report entry; `value` is the given metric. */
-function entry(t: Trial, metric: string): ReportEntry {
+function entry(t: Trial, metric: string, getRun?: (id: string) => Run | null): ReportEntry {
   return {
     trial: t.id,
     sample: sampleKey(t),
@@ -141,6 +144,7 @@ function entry(t: Trial, metric: string): ReportEntry {
     evaluation: t.outcome?.evaluation ?? "pending",
     ...(t.outcome?.failure ? { failure: t.outcome.failure } : {}),
     value: t.outcome ? metricValue(t.outcome, metric) : null,
+    ...(getRun ? { tokens: t.solveRunId ? (getRun(t.solveRunId)?.tokens ?? null) : null } : {}),
   };
 }
 
@@ -223,6 +227,7 @@ export function buildReport(
   reason: BenchReport["reason"],
   revision: number,
   at: string,
+  getRun?: (id: string) => Run | null,
 ): BenchReport {
   const metric = primaryMetric(resolveMetrics(job.metrics)).name;
   const rule = job.official ?? null;
@@ -240,7 +245,7 @@ export function buildReport(
       const ts = trials
         .filter((t) => t.method === name)
         .sort((a, b) => a.task.localeCompare(b.task) || sampleOrder(a, b, rank));
-      const entries = ts.map((t) => entry(t, metric));
+      const entries = ts.map((t) => entry(t, metric, getRun));
       const count = (e: ReportEntry["evaluation"]) =>
         entries.filter((x) => x.evaluation === e).length;
       const failures: Record<string, number> = {};
@@ -262,6 +267,7 @@ export function buildReport(
           ? officialValue(officialEntries, rule, officialMetric(rule, job.metrics))
           : null,
         entries,
+        ...(getRun ? { tokenUsage: tokenUsage(solveRuns(ts, getRun)) } : {}),
       };
     }),
   };
@@ -286,7 +292,10 @@ function sharedMetrics(jobs: BenchJob[]): MetricSpec[] {
  * trials; column means are over all its tasks and over the tasks every column has (`paired`), and
  * `diff` is the paired difference to the first column, so methods are compared on the same tasks.
  */
-export function compareJobs(jobs: { job: BenchJob; trials: Trial[] }[]): BenchCompare {
+export function compareJobs(
+  jobs: { job: BenchJob; trials: Trial[] }[],
+  getRun?: (id: string) => Run | null,
+): BenchCompare {
   // Jobs may share a name: fall back to the job id so every column key is unique.
   const keys = new Set<string>();
   const columns = jobs.flatMap(({ job, trials }) =>
@@ -375,7 +384,12 @@ export function compareJobs(jobs: { job: BenchJob; trials: Trial[] }[]): BenchCo
     };
   }
   return {
-    columns: columns.map(({ key, jobId, method }) => ({ key, jobId, method })),
+    columns: columns.map(({ key, jobId, method, trials }) => ({
+      key,
+      jobId,
+      method,
+      ...(getRun ? { tokenUsage: tokenUsage(solveRuns(trials, getRun)) } : {}),
+    })),
     metrics,
     rows,
     stats,

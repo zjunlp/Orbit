@@ -602,7 +602,10 @@ export class BenchService {
   compare(ids: string[]): BenchCompare {
     if (ids.length === 0) throw new UserError("no jobs to compare");
     if (new Set(ids).size !== ids.length) throw new UserError("a job is listed more than once");
-    return compareJobs(ids.map((id) => this.job(id)));
+    return compareJobs(
+      ids.map((id) => this.job(id)),
+      (id) => this.deps.runs.get(id),
+    );
   }
 
   /**
@@ -911,6 +914,7 @@ export class BenchService {
         reason,
         (last?.revision ?? 0) + 1,
         nowIso(),
+        (id) => this.deps.runs.get(id),
       );
       if (last && sameReport(last, next)) return null;
       this.deps.store.addReport(next);

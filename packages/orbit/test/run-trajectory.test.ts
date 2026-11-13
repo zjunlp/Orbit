@@ -24,6 +24,7 @@ import { Run } from "../src/contracts/index.ts";
 import { type AppDeps, createApp } from "../src/daemon/app.ts";
 import { RunService } from "../src/runs/service.ts";
 import { projectTranscript, runAgentFailure } from "../src/sessions/index.ts";
+import { trajectoryTokens } from "../src/sessions/tokens.ts";
 import { Store } from "../src/store/index.ts";
 
 const homes: string[] = [];
@@ -96,6 +97,12 @@ describe("Run trajectories", () => {
         schema: "ATIF-v1.7",
         steps: trajectory?.steps.length,
       });
+      expect(f.runs.get(f.run.id)?.tokens).toEqual(trajectoryTokens(trajectory));
+      const saved = f.runs.get(f.run.id);
+      assert(saved);
+      f.store.putRun({ ...saved, tokens: null });
+      await c.trajectory(f.run.id);
+      expect(f.runs.get(f.run.id)?.tokens).toEqual(trajectoryTokens(trajectory));
       expect(statSync(f.path).mode & 0o777).toBe(0o600);
       const session = await c.session(f.run.id);
       expect(session.agent).toEqual(projectTranscript(trajectory));
@@ -112,10 +119,12 @@ describe("Run trajectories", () => {
     const { c } = client(f);
     expect(await c.trajectory(f.run.id)).toBeNull();
     expect(existsSync(f.path)).toBe(false);
+    expect(f.runs.get(f.run.id)?.tokens).toBeNull();
     f.source();
     f.store.putRun({ ...f.run, state: "running", endedAt: null, cleanup: "pending" });
     expect(await c.trajectory(f.run.id)).not.toBeNull();
     expect(existsSync(f.path)).toBe(false);
+    expect(f.runs.get(f.run.id)?.tokens).toBeNull();
     await expect(c.rebuildTrajectory(f.run.id)).rejects.toThrow(/finished run/);
   });
   it("serializes backfill and rebuild, preserves one old importer revision, and retains the original on failure", async () => {
@@ -256,6 +265,10 @@ describe("Run trajectories", () => {
     assert(t);
     expect(existsSync(worker.path)).toBe(true);
     expect(existsSync(primary.path)).toBe(false);
+    expect(primary.runs.get(primary.run.id)?.tokens).toEqual(
+      worker.runs.get(worker.run.id)?.tokens,
+    );
+    expect(primary.runs.get(primary.run.id)?.tokens).not.toBeNull();
     expect(primary.runs.get(primary.run.id)?.trajectory).toEqual(
       worker.runs.get(worker.run.id)?.trajectory,
     );

@@ -122,11 +122,20 @@ it("persists the generated summary before cleanup and keeps execution and cleanu
     completeness: "complete" as const,
     importer: { name: "codex-rollout", version: 1 },
   };
+  const tokens = {
+    input: 10,
+    cachedInput: 2,
+    cacheWrite: null,
+    output: 3,
+    reasoning: null,
+    calls: 1,
+    source: "session" as const,
+  };
   vi.mocked(f.ctx.trajectory).mockImplementationOnce(async (id, finalized) => {
     expect(finalized).toBe(true);
     expect(docker.removeContainer).toHaveBeenCalled();
     expect(f.store.activeLeases()).toHaveLength(1);
-    f.store.putRun({ ...f.ctx.mustGet(id), trajectory: summary });
+    f.store.putRun({ ...f.ctx.mustGet(id), trajectory: summary, tokens });
     return null;
   });
   await cleanup(f.ctx, f.run);
@@ -134,6 +143,7 @@ it("persists the generated summary before cleanup and keeps execution and cleanu
     state: "succeeded",
     cleanup: "done",
     trajectory: summary,
+    tokens,
   });
   const failed = fixture();
   vi.mocked(failed.ctx.trajectory).mockRejectedValueOnce(new Error("invalid session"));

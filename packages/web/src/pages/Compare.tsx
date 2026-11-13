@@ -9,6 +9,7 @@ import { stats } from "../lib/ema.ts";
 import {
   ago,
   duration,
+  formatTokens,
   isActive,
   num,
   runDuration,
@@ -215,6 +216,7 @@ export function Compare() {
                         .map((p) => (
                           <th key={p}>{p}</th>
                         ))}
+                      <th>Tokens</th>
                       {tableKeys.map((k) => (
                         <th
                           key={k}
@@ -291,6 +293,13 @@ export function Compare() {
                                 {row.params[p] ?? "—"}
                               </td>
                             ))}
+                          <td>
+                            {row.runs.map((run) => (
+                              <div key={run.id} title={`${run.id}: ${formatTokens(run.tokens)}`}>
+                                {formatTokens(run.tokens, true)}
+                              </div>
+                            ))}
+                          </td>
                           {tableKeys.map((k) => (
                             <MetricCell
                               key={k}

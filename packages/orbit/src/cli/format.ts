@@ -7,7 +7,9 @@ import {
   type Ledger,
   type NodeResources,
   type Run,
+  type RunTokens,
   runDisplayName,
+  type TokenUsage,
 } from "../contracts/index.ts";
 
 export function duration(ms: number): string {
@@ -85,6 +87,7 @@ export function formatRun(r: Run, summary?: Record<string, number>): string {
       `  lease    ${r.lease.state} ${r.lease.gpuIds.join(", ") || "no GPUs"}${r.spec.services.length ? `, ${r.lease.cpus} CPU, ${r.lease.memGB} GB with services` : ""}`,
     );
   if (r.usage) lines.push(`  usage    ${formatUsage(r)}`);
+  lines.push(`  tokens   ${formatTokens(r.tokens)}`);
   if (r.checkpoint)
     lines.push(
       `  checkpoint ${r.checkpoint.state}${r.checkpoint.sizeBytes === null ? "" : ` ${fmtBytes(r.checkpoint.sizeBytes)}`}${r.checkpoint.reason ? `: ${r.checkpoint.reason}` : `; orbit resume ${r.id}`}`,
@@ -260,3 +263,27 @@ export function formatUsage(r: Run): string {
 }
 
 export const compactTable = (rows: string[][]): string => table(rows, true);
+
+export function formatTokens(tokens: RunTokens | null | undefined, compact = false): string {
+  if (!tokens) return "Not recorded";
+  const n = (value: number | null) => (value === null ? "not recorded" : String(value));
+  const parts = [
+    `input ${n(tokens.input)}`,
+    `output ${n(tokens.output)}`,
+    `${n(tokens.calls)} calls`,
+  ];
+  if (!compact)
+    parts.push(
+      `cached input ${n(tokens.cachedInput)}`,
+      `cache write ${n(tokens.cacheWrite)}`,
+      `reasoning ${n(tokens.reasoning)}`,
+    );
+  if (tokens.costUsd !== undefined) parts.push(`$${tokens.costUsd.toFixed(6)} reported`);
+  return parts.join(" · ");
+}
+
+export function formatTokenUsage(usage: TokenUsage | undefined): string {
+  return usage
+    ? `${formatTokens(usage.tokens, true)} · ${usage.recordedRuns}/${usage.runs} runs recorded`
+    : "Not recorded";
+}

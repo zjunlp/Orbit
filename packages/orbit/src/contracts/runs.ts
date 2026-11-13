@@ -624,6 +624,27 @@ export const RunPhase = z.object({
 });
 export type RunPhase = z.infer<typeof RunPhase>;
 
+/** Session-reported totals; input includes cache reads/writes, output includes reasoning. */
+export const RunTokens = z.object({
+  input: z.number().int().nonnegative().nullable(),
+  cachedInput: z.number().int().nonnegative().nullable(),
+  cacheWrite: z.number().int().nonnegative().nullable(),
+  output: z.number().int().nonnegative().nullable(),
+  reasoning: z.number().int().nonnegative().nullable(),
+  calls: z.number().int().nonnegative().nullable(),
+  costUsd: z.number().nonnegative().optional(),
+  source: z.literal("session"),
+});
+export type RunTokens = z.infer<typeof RunTokens>;
+
+/** Subtotals over recorded, distinct solve runs, independent of evaluation validity. */
+export const TokenUsage = z.object({
+  runs: z.number().int().nonnegative(),
+  recordedRuns: z.number().int().nonnegative(),
+  tokens: RunTokens.nullable(),
+});
+export type TokenUsage = z.infer<typeof TokenUsage>;
+
 export const RunTrajectory = z.object({
   schema: z.enum(["ATIF-v1.5", "ATIF-v1.6", "ATIF-v1.7", "ATIF-v1.8"]),
   steps: z.number().int().nonnegative(),
@@ -660,6 +681,7 @@ export const Run = z.object({
   folder: Folder.default(""),
   usage: RunUsage.nullable().default(null),
   trajectory: RunTrajectory.nullable().default(null),
+  tokens: RunTokens.nullable().default(null),
   /** The run's service containers; `failure` says how one broke while the run was going. */
   services: z
     .array(

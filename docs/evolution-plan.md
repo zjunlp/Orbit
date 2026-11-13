@@ -158,12 +158,15 @@
 
 ### T3 Token 记账
 
-分支 `feat/token-accounting`。
+按用户要求沿用分支 `feat/run-trajectory`。
 
-- [ ] `Run.tokens = { input, cachedInput, cacheWrite, output, reasoning, calls, costUsd?, source: "session" } | null`，由轨迹合计得到；`costUsd` 只在 CLI 自报时填写。
-- [ ] `orbit show`、`orbit bench usage`、报告条目与 Compare 页面显示 token；报告聚合只统计，不参与分数。
-- [ ] 中转或代理不返回用量时为 `null`，界面显示"未记录"，不补 0。
-- [ ] 真实检查：同一任务在 Codex 与 Claude Code 上各跑一次，核对合计与各自 CLI 的结束输出。
+- [x] `Run.tokens = { input, cachedInput, cacheWrite, output, reasoning, calls, costUsd?, source: "session" } | null`，由轨迹合计得到；`costUsd` 只在 CLI 自报时填写。
+- [x] `orbit show`、`orbit bench usage`、报告条目与 Compare 页面显示 token；报告聚合只统计，不参与分数。
+- [x] 中转或代理不返回用量时为 `null`，界面显示"未记录"，不补 0。
+- [x] Codex 真实检查：同一小任务的会话汇总与 CLI 结束输出核对通过。
+- [ ] Claude 成功用量核对：首次调用被服务端拒绝；用户要求停止进一步 Claude 检查。
+
+实现与验证见 [T3 任务记录](tasks/20261113-token-accounting.md)。
 
 ### T4 环境侧对齐
 

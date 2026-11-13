@@ -9,7 +9,7 @@ import {
   SamplePlan,
 } from "./embodied.ts";
 import { Folder } from "./folders.ts";
-import { CheckpointPolicy } from "./runs.ts";
+import { CheckpointPolicy, RunTokens, TokenUsage } from "./runs.ts";
 import { TAXONOMY_VALUES } from "./taxonomy.ts";
 
 /** Adapters shipped with Orbit (`orbit __adapter <name>`). */
@@ -912,6 +912,8 @@ export const ReportEntry = z
     failure: FailureKind.optional(),
     /** The primary metric (Orbit's view uses valid entries only). */
     value: z.number().nullable(),
+    /** Selected solve Run only; method totals also include prior attempts. */
+    tokens: RunTokens.nullable().optional(),
   })
   .and(SampleIdentity);
 export type ReportEntry = z.infer<typeof ReportEntry>;
@@ -943,6 +945,7 @@ export const BenchReport = z.object({
       orbit: MetricStat.nullable(),
       official: OfficialValue.nullable(),
       entries: z.array(ReportEntry),
+      tokenUsage: TokenUsage.optional(),
     }),
   ),
 });
@@ -1072,7 +1075,14 @@ export type BenchTaskList = z.infer<typeof BenchTaskList>;
 
 /** Methods from several jobs side by side; columns are `<job>/<method>`. */
 export const BenchCompare = z.object({
-  columns: z.array(z.object({ key: z.string(), jobId: z.string(), method: z.string() })),
+  columns: z.array(
+    z.object({
+      key: z.string(),
+      jobId: z.string(),
+      method: z.string(),
+      tokenUsage: TokenUsage.optional(),
+    }),
+  ),
   /** Metrics every compared job has (always `score`); the first job's primary one if shared. */
   metrics: z.array(MetricSpec),
   rows: z.array(
@@ -1125,6 +1135,7 @@ export const BenchUsageRow = z.object({
   /** Fields worth changing (empty when the request fits), and why. */
   suggest: ResourceOverride,
   notes: z.array(z.string()),
+  tokenUsage: TokenUsage.optional(),
 });
 export type BenchUsageRow = z.infer<typeof BenchUsageRow>;
 export const BenchUsage = z.object({ jobs: z.array(z.string()), rows: z.array(BenchUsageRow) });

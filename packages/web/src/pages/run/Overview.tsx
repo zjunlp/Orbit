@@ -18,6 +18,7 @@ import {
   bytes,
   dateTime,
   duration,
+  formatTokens,
   isActive,
   num,
   queuedFor,
@@ -53,6 +54,16 @@ export function Overview({
         <div className="col" style={{ gap: 14 }}>
           <Lifecycle run={run} events={events.data ?? []} now={now} />
           <Spec run={run} />
+          <section className="card">
+            <div className="card-h">Token usage</div>
+            <div className="card-b">
+              <p>{formatTokens(run.tokens)}</p>
+              <p className="faint">
+                Session-reported totals. Input includes cache reads and writes; output includes
+                reasoning.
+              </p>
+            </div>
+          </section>
           {run.code && <Code run={run} />}
         </div>
         <div className="col" style={{ gap: 14 }}>

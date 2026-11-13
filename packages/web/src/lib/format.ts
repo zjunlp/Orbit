@@ -1,3 +1,4 @@
+import type { RunTokens, TokenUsage } from "@zjunlp/orbit/contracts";
 import { runDisplayName } from "@zjunlp/orbit/naming";
 import type { Run, RunState } from "./api.ts";
 
@@ -151,4 +152,28 @@ export function harnessLabel(h: string): string {
 export function fmtScore(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return "—";
   return String(Math.round(v * 100) / 100);
+}
+
+export function formatTokens(tokens: RunTokens | null | undefined, compact = false): string {
+  if (!tokens) return "Not recorded";
+  const n = (value: number | null) => (value === null ? "not recorded" : String(value));
+  const parts = [
+    `input ${n(tokens.input)}`,
+    `output ${n(tokens.output)}`,
+    `${n(tokens.calls)} calls`,
+  ];
+  if (!compact)
+    parts.push(
+      `cached input ${n(tokens.cachedInput)}`,
+      `cache write ${n(tokens.cacheWrite)}`,
+      `reasoning ${n(tokens.reasoning)}`,
+    );
+  if (tokens.costUsd !== undefined) parts.push(`$${tokens.costUsd.toFixed(6)} reported`);
+  return parts.join(" · ");
+}
+
+export function formatTokenUsage(usage: TokenUsage | undefined): string {
+  return usage
+    ? `${formatTokens(usage.tokens, true)} · ${usage.recordedRuns}/${usage.runs} runs recorded`
+    : "Not recorded";
 }

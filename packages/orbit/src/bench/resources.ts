@@ -11,7 +11,9 @@ import {
   type ResourceOverride,
   type Run,
   type RunSpecInput,
+  type Trial,
 } from "../contracts/index.ts";
+import { tokenUsage } from "../sessions/tokens.ts";
 import { timedOut } from "./classify.ts";
 
 /** Read and validate a resources file; errors name the file and the offending field. */
@@ -106,6 +108,7 @@ export function usageRow(task: string, requested: ResourceOverride, runs: Run[])
     timeouts: timeouts.length,
     suggest: {},
     notes: [],
+    tokenUsage: tokenUsage(runs),
   };
   if (measured.length === 0) {
     row.notes.push("no measured runs");
@@ -179,5 +182,18 @@ export function usageRows(
     if ((runs.get(task) ?? []).some((run) => Number(run.spec.tags.batch_size ?? 1) > 1))
       row.notes.push("shared solve measurements cover the entire batch, not individual episodes");
     return row;
+  });
+}
+
+/** Selected and prior solve attempts, shared batch runs counted once. */
+export function solveRuns(trials: Trial[], getRun: (id: string) => Run | null): Run[] {
+  const ids = new Set(
+    trials
+      .flatMap((t) => [t.solveRunId, ...(t.priorAttempts ?? []).map((a) => a.solveRunId)])
+      .filter((id): id is string => Boolean(id)),
+  );
+  return [...ids].flatMap((id) => {
+    const run = getRun(id);
+    return run ? [run] : [];
   });
 }

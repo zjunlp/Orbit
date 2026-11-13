@@ -106,6 +106,7 @@ export async function cleanup(ctx: Context, run: Run): Promise<void> {
   await ctx.trajectory(run.id, true).catch(() => null);
   // Re-read after trajectory persistence so cleanup cannot overwrite its summary.
   fresh.trajectory = ctx.mustGet(run.id).trajectory;
+  fresh.tokens = ctx.mustGet(run.id).tokens;
   fresh.cleanup = "done";
   const lease = fresh.lease;
   ctx.store.tx(() => {

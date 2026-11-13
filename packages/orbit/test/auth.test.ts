@@ -241,6 +241,7 @@ function run(id: string, state: Run["state"], group?: string): Run {
     folder: "",
     usage: null,
     trajectory: null,
+    tokens: null,
     services: [],
     after: null,
     phases: [],

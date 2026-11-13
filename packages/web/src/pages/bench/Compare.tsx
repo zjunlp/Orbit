@@ -10,7 +10,7 @@ import { IconCompare } from "../../components/icons.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { Empty, Link, Loading } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
-import { jobPath } from "../../lib/format.ts";
+import { formatTokenUsage, jobPath } from "../../lib/format.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
 import { Conditions } from "./Conditions.tsx";
@@ -275,6 +275,12 @@ function CompareView({ c: original }: { c: Compare }) {
                     </td>
                   );
                 })}
+              </tr>
+              <tr>
+                <td>Tokens (all solve attempts)</td>
+                {c.columns.map((x) => (
+                  <td key={x.key}>{formatTokenUsage(x.tokenUsage)}</td>
+                ))}
               </tr>
             </tbody>
           </table>

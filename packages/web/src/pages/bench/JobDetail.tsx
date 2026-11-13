@@ -5,7 +5,7 @@ import { IconCompare } from "../../components/icons.tsx";
 import { TopBar } from "../../components/TopBar.tsx";
 import { ConfirmDialog, Empty, Link, Loading, toast } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
-import { dateTime, duration } from "../../lib/format.ts";
+import { dateTime, duration, formatTokenUsage } from "../../lib/format.ts";
 import { navigate, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
 import { Conditions } from "./Conditions.tsx";
@@ -299,6 +299,7 @@ function Reports({ id, version }: { id: string; version: number }) {
                       (m) =>
                         `${m.method}: ${m.valid}/${m.planned} valid` +
                         (m.missing ? `, ${m.missing} missing` : "") +
+                        `, tokens: ${formatTokenUsage(m.tokenUsage)}` +
                         (m.orbit ? `, Orbit ${m.orbit.mean.toFixed(2)}` : "") +
                         (m.official?.value != null
                           ? `, official ${m.official.value.toFixed(2)}`

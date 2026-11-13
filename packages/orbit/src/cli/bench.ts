@@ -27,7 +27,7 @@ import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "../contracts/me
 import type { Print } from "./auth.ts";
 import { calibrate } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
-import { compactTable as table } from "./format.ts";
+import { formatTokens, formatTokenUsage, compactTable as table } from "./format.ts";
 import { kv, numericOption } from "./options.ts";
 
 type Job = BenchJobList["jobs"][number];
@@ -138,7 +138,18 @@ function formatReport(r: BenchReport): string {
       : "official rule: none declared by the adapter",
     "",
     table([
-      ["METHOD", "PLANNED", "DONE", "VALID", "INVALID", "UNKNOWN", "ORBIT", "OFFICIAL", "FAILURES"],
+      [
+        "METHOD",
+        "PLANNED",
+        "DONE",
+        "VALID",
+        "INVALID",
+        "UNKNOWN",
+        "ORBIT",
+        "OFFICIAL",
+        "TOKENS",
+        "FAILURES",
+      ],
       ...r.methods.map((m) => [
         m.method,
         String(m.planned),
@@ -148,6 +159,7 @@ function formatReport(r: BenchReport): string {
         String(m.unknown),
         v(m.orbit?.mean),
         m.official ? `${v(m.official.value)}${m.official.partial ? " (partial)" : ""}` : "-",
+        formatTokenUsage(m.tokenUsage),
         Object.entries(m.failures)
           .map(([k, n]) => `${k}:${n}`)
           .join(" "),
@@ -155,7 +167,7 @@ function formatReport(r: BenchReport): string {
     ]),
     "",
     table([
-      ["METHOD", "SAMPLE", "EVAL", "VALUE", "TRIAL", "SOLVE"],
+      ["METHOD", "SAMPLE", "EVAL", "VALUE", "TRIAL", "SOLVE", "TOKENS"],
       ...r.methods.flatMap((m) =>
         m.entries.map((e) => [
           m.method,
@@ -164,6 +176,7 @@ function formatReport(r: BenchReport): string {
           v(e.value),
           e.trial,
           e.solveRunId ?? "-",
+          formatTokens(e.tokens, true),
         ]),
       ),
     ]),
@@ -245,6 +258,7 @@ function formatUsageTable(u: BenchUsage): string {
       "GPU GB peak/req",
       "CPU peak/req",
       "MIN max/limit",
+      "TOKENS",
       "SUGGEST",
       "NOTES",
     ],
@@ -258,6 +272,7 @@ function formatUsageTable(u: BenchUsage): string {
       q.gpus ? `${gb(r.peakGpuMemGB)}/${gb(q.gpuMemGB)}` : "-",
       `${gb(r.peakCpus)}/${gb(q.cpus)}`,
       `${gb(r.maxMinutes)}/${gb(q.timeoutMin)}`,
+      formatTokenUsage(r.tokenUsage),
       Object.entries(r.suggest)
         .map(([k, v]) => `${k}=${v}`)
         .join(" ") || "-",
@@ -315,6 +330,10 @@ export function formatCompare(c: BenchCompare, metric?: string): string {
       const ci = fmtCi(d, m);
       return `${fmtMetric(d.mean, m, true)}${ci ? ` ${ci}` : ""}`;
     }),
+  ]);
+  rows.push([
+    "tokens (all solve attempts)",
+    ...c.columns.map((column) => formatTokenUsage(column.tokenUsage)),
   ]);
   const others = c.metrics.filter((x) => x.name !== m.name).map((x) => x.name);
   return [

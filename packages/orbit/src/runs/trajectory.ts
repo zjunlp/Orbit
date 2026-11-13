@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type AtifTrajectory, isTerminal } from "../contracts/index.ts";
+import { trajectoryTokens } from "../sessions/tokens.ts";
 import {
   loadAgentTrajectory,
   readTrajectory,
@@ -19,7 +20,14 @@ export async function runTrajectory(
   const run = ctx.mustGet(id);
   const dirs = ctx.dirs(id);
   const previous = await readTrajectory(join(dirs.orbit, "trajectory"));
-  if (previous && run.trajectory && !rebuild) return previous;
+  if (previous && run.trajectory && !rebuild) {
+    const tokens = trajectoryTokens(previous);
+    if (JSON.stringify(run.tokens) !== JSON.stringify(tokens)) {
+      run.tokens = tokens;
+      ctx.save(run);
+    }
+    return previous;
+  }
   const result = await loadAgentTrajectory(dirs.agent);
   if (!result) {
     if (previous && rebuild)
@@ -43,6 +51,7 @@ export async function runTrajectory(
   if (canSave) {
     const fresh = ctx.mustGet(id);
     fresh.trajectory = trajectorySummary(trajectory);
+    fresh.tokens = trajectoryTokens(trajectory);
     ctx.save(fresh, "trajectory", rebuild ? "trajectory rebuilt" : "trajectory generated");
   }
   return trajectory;
