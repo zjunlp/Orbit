@@ -1172,14 +1172,27 @@ CLI：`orbit trajectory show <run> [--json]`、`orbit trajectory rebuild <runs..
 报告条目记录当前选用 solve Run 的完整用量，batch 条目可能指向同一 Run，不能直接相加。聚合带 `runs` / `recordedRuns` 覆盖率，只合计有记录的 Run；其中任一 Run 缺失的细分项仍为 null。
 计数仅供查看，不参与分数、有效性或置信区间。报告保留不可变修订；旧报告字段可缺省，读取不重写，后续新报告/重评分修订才写入统计。
 
-**后续接入**：T4 对齐环境引用；T5 增加 Harbor / Cua 直通及其他来源。
+**环境关联（T4）**：`SessionMessage.stepId` 标记原 ATIF `step_id`，同一步投影的文本、思考和工具结果共享该 ID。
+GUI step、Episode sample 和 Conversation turn 的可选 `sessionStepIds` 引用 `sessionRunId` 所指 Run 的根 ATIF；旧消息索引只用于兼容。
+`sessions/environment.ts` 在读取时校验原环境 schema 并生成关联，不修改原生证据或评分文件，不把环境内容塞进会话。
+GUI 依据工具结果内的动作 ID 与环境 step 找到拥有该结果的工具调用；重复或歧义匹配留空，不按时钟或动作文本猜测。
+EFE 新索引直接保存步骤 ID；旧 `sessionMessageIndexes` 按当前同一会话投影转换，显式步骤引用优先。
+对话先按 Agent 工具调用 ID；没有 ID 匹配时，仅接受环境与会话两侧均唯一的工具名+参数匹配，兼容 BFCL 的 `call_function` 包装。不关联模拟用户的工具调用。纯消息仅在两侧角色和全文均唯一一致时关联，不做模糊匹配。
+
+`GET /runs/:id/environment?path=<output-relative>&kind=gui|episode|conversation&session=<run>` 从既有安全产物通道读取；
+`session` 默认本 Run，Verify 的环境文件可显式关联 Solve 会话。worker 文件与 ATIF 均通过现有主节点代理，预览仍限制为 GUI/Episode 2 MiB、Conversation 16 MiB。
+仅有环境记录标 `environment-only`；仅有 Agent 的 ATIF 保持 `agent-only`；双方齐全且未截断标 `complete`，损坏或原已截断标 `truncated`。
+`complete` 表示两侧证据齐全，不保证每条环境记录都有唯一会话匹配。读取 Agent 失败时仍返回原环境内容并标截断。
+CLI `trajectory environment` 与三类 Web 回放读取同一关联结果；Web 按步骤 ID 选会话消息，保留旧索引/GUI 动作 ID 兼容。
+
+**后续接入**：T5 增加 Harbor / Cua 直通及其他来源。
 开发期可用隔离环境中的 Harbor validator 校验输出；它不进入 daemon 或 CI 依赖。
 
 P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE MetaWorld+ standard/2.1 的 journal、已执行动作矩阵、最终奖励与 render 视频，
 产出既有 `EpisodeTrajectory`。Harbor adapter 的 `score` 对 `metaworldplus-*` 任务读取 solve 的 Agent 会话、写 solve 的 `orbit-trajectory.json`
 并追加 episode review（按需加载导入器，其他 adapter 调用不受影响）；导入失败只加 issue，不改分数或有效性。
 原始 NumPy 数据仍保留；预览抽样保留调用边界，未保存的 proprioception 不补造。新增可选 `completeness`（complete/environment-only/truncated）、
-sample 的 `sessionMessageIndexes`（引用同一 Run 会话）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
+sample 的 `sessionStepIds`（引用同一 Run 的 ATIF 步骤，兼容旧 `sessionMessageIndexes`）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
 Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目录归还 daemon 用户，再运行 adapter hooks，保证会话可读与凭据清理；不改变模拟器评分。
 
 原生 RoboTwin、LIBERO、RoboDojo 和 RoboLab 的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。

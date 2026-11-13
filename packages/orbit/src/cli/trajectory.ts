@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
-import type { AtifTrajectory } from "../contracts/index.ts";
+import { type AtifTrajectory, EnvironmentKind } from "../contracts/index.ts";
 
 function summary(value: AtifTrajectory | null): string {
   if (!value) return "No agent trajectory recorded.";
@@ -16,6 +16,27 @@ export function registerTrajectory(program: Command, client: () => Promise<Orbit
       const value = await (await client()).trajectory(id);
       console.log(opts.json ? JSON.stringify(value, null, 2) : summary(value));
     });
+  group
+    .command("environment <run> <path>")
+    .description("show a saved environment record linked to Agent steps")
+    .requiredOption("--kind <kind>", "gui, episode or conversation")
+    .option("--session <run>", "Run containing the Agent session (default: the same Run)")
+    .option("--json", "print the linked environment JSON")
+    .action(
+      async (
+        id: string,
+        path: string,
+        opts: { kind: string; session?: string; json?: boolean },
+      ) => {
+        const kind = EnvironmentKind.parse(opts.kind);
+        const value = await (await client()).environment(id, path, kind, opts.session);
+        console.log(
+          opts.json
+            ? JSON.stringify(value, null, 2)
+            : `${kind} · ${value.completeness} · Session Run: ${value.sessionRunId}`,
+        );
+      },
+    );
   group
     .command("rebuild <runs...>")
     .description(

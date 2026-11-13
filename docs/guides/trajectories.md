@@ -55,3 +55,27 @@ Usage never changes scores or confidence intervals. Old saved reports remain unc
 and rescore revisions include the available usage.
 
 The unified step viewer is a separate work package.
+
+## Environment records
+
+GUI actions, embodied samples and conversation turns can refer to Agent steps with
+`sessionStepIds`. The Run's projected session messages carry the matching `stepId`; these are
+one-based ATIF step IDs, scoped to `sessionRunId`. They are not message-array positions.
+
+```sh
+orbit trajectory environment <run> gui-trajectory.json --kind gui --json
+orbit trajectory environment <verify-run> conversation.json --kind conversation --session <solve-run> --json
+```
+
+The Web review pages use the same linked records. GUI actions match the operation ID and environment
+step returned by the owning tool call. Conversation calls use exact IDs, or a tool name and arguments
+that occur only once on both sides. Plain messages require a unique exact match of role and full text.
+Ambiguous matches stay unlinked. EFE samples now save step IDs;
+legacy message indexes are translated when read. Explicit step IDs take precedence.
+
+The API is `GET /api/v1/runs/:id/environment?kind=<kind>&path=<relative-output-path>&session=<run>`.
+The session Run defaults to the file's Run; select Solve for records saved by Verify. Raw downloads
+remain unchanged. Preview limits are 2 MiB for GUI/episode and 16 MiB for conversation, including
+worker reads. Environment-only records stay viewable; missing or damaged Agent evidence never
+changes rewards or evaluation validity. `complete` means both records are available, while individual
+records can still have no unique match. Subagent-local step IDs are not root-session references.

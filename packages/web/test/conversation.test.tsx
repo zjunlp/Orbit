@@ -151,3 +151,20 @@ it("orders planned samples by their plan position, not by digest", () => {
   expect((neighbours(trials, trials[0] as never, plan).next as { id: string }).id).toBe("second");
   expect((neighbours(trials, trials[0] as never).prev as { id: string }).id).toBe("second");
 });
+
+it("shows only the selected turn's ATIF steps alongside the verifier conversation", () => {
+  const trace = ConversationTrajectory.parse(conv);
+  if (trace.turns[1]) trace.turns[1].sessionStepIds = [7];
+  const html = renderToStaticMarkup(
+    <ConversationViewer
+      c={trace}
+      messages={[
+        { at: null, role: "assistant", kind: "text", text: "Bound conversation call", stepId: 7 },
+        { at: null, role: "assistant", kind: "text", text: "Unrelated session step", stepId: 8 },
+      ]}
+    />,
+  );
+  expect(html).toContain("Agent at this turn");
+  expect(html).toContain("Bound conversation call");
+  expect(html).not.toContain("Unrelated session step");
+});

@@ -29,6 +29,7 @@ export function TrajectoryFile({
     what: "the trajectory",
     maxBytes: MAX_BYTES,
     parse: parseTrajectory,
+    load: () => api.environment(run.id, file.path, "gui"),
   });
   const a = source.listing;
   const session = useAsync(() => api.session(run.id), [run.id, run.state]);
@@ -118,6 +119,9 @@ export function TrajectoryViewer({
     <div className="gui-trajectory">
       <div className="gui-goal">
         <span className="faint">Task goal</span>
+        {trajectory.completeness && trajectory.completeness !== "complete" && (
+          <span className="chip warn">{trajectory.completeness}</span>
+        )}
         <p>{trajectory.goal || "No task goal recorded."}</p>
       </div>
       <div className="gui-trajectory-grid">

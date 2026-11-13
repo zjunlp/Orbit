@@ -29,6 +29,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 ## Agents, auth, plugins, notifications
 
 - [20261113](20261113-run-trajectory.md) Run trajectory generation, storage, API/CLI and session projection
+- [20261113](20261113-trajectory-environment.md) T4: environment records linked to ATIF steps
 - [20261113](20261113-token-accounting.md) T3: session token accounting in Runs, reports and comparisons
 - [20261112](20261112-atif-trajectory.md) ATIF contract and native Codex / Claude Code converters
 

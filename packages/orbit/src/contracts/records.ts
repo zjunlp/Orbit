@@ -43,6 +43,8 @@ export type Artifacts = z.infer<typeof Artifacts>;
 export const CodeDiff = z.object({ patch: z.string(), truncated: z.boolean() });
 
 export const SessionMessage = z.object({
+  /** Stable ATIF identity; legacy transcripts can omit it. */
+  stepId: z.number().int().positive().optional(),
   at: z.string().nullable(),
   role: z.enum(["user", "assistant", "tool", "system"]),
   kind: z.enum(["text", "thinking", "tool_call", "tool_result"]),

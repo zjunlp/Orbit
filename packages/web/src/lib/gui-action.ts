@@ -45,6 +45,11 @@ export function actionOverlay(action: string | null): ActionOverlay {
 }
 
 export function stepMessages(trace: GuiTrace, index: number, messages: SessionMessage[]) {
+  const refs = trace.steps[index]?.sessionStepIds;
+  if (refs !== undefined)
+    return messages.filter(
+      (message) => message.stepId !== undefined && refs.includes(message.stepId),
+    );
   const id = trace.steps[index]?.actionId;
   if (!id) return [];
   // Match the returned operation id, not a guessed clock alignment or a repeated action string.

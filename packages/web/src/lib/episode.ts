@@ -1,5 +1,5 @@
 import type { EpisodeTrajectory } from "@zjunlp/orbit/contracts";
-import { safeTrajectoryPath } from "./trajectory.ts";
+import { safeTrajectoryPath, validStepIds } from "./trajectory.ts";
 
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -49,6 +49,7 @@ export function parseEpisode(text: string): EpisodeTrajectory {
       !vector(sample.action, value.actionNames.length) ||
       !vector(sample.proprio, value.proprioNames.length) ||
       (sample.reward !== null && !number(sample.reward)) ||
+      !validStepIds(sample.sessionStepIds) ||
       typeof sample.terminated !== "boolean" ||
       typeof sample.truncated !== "boolean" ||
       (sample.sessionMessageIndexes !== undefined &&

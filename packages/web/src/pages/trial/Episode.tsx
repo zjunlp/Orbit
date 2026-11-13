@@ -15,6 +15,7 @@ import { episodeVideo, MAX_VIDEO_BYTES } from "../../lib/episode-video.ts";
 import { useRunFile } from "../../lib/run-file.ts";
 import { useAsync } from "../../lib/use.ts";
 import { FileBar } from "./parts.tsx";
+import { SessionSteps } from "./SessionSteps.tsx";
 import "./episode.css";
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -24,11 +25,14 @@ const shown = (value: number | null | undefined) =>
   value == null ? "—" : Number(value.toPrecision(4)).toString();
 
 export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; solve?: Run }) {
-  const session = useAsync(() => api.session(run.id), [run.id, run.state]);
+  const sessionRun = solve ?? run;
+  const session = useAsync(() => api.session(sessionRun.id), [sessionRun.id, sessionRun.state]);
   const source = useRunFile(run, file.path, {
     what: "the episode index",
     maxBytes: MAX_BYTES,
     parse: parseEpisode,
+    load: () => api.environment(run.id, file.path, "episode", sessionRun.id),
+    loadKey: sessionRun.id,
   });
   const artifacts = source.listing;
   const mediaRun = source.data?.mediaPhase === "solve" ? solve : run;
@@ -207,7 +211,8 @@ export function EpisodeViewer({
   const [channel, setChannel] = useState(channels.paired[0] ?? "");
   const timing = useMemo(() => chunkTiming(trace.chunks), [trace]);
   const linked = useMemo(
-    () => trace.samples.some((row) => row.sessionMessageIndexes?.length),
+    () =>
+      trace.samples.some((row) => row.sessionStepIds?.length || row.sessionMessageIndexes?.length),
     [trace],
   );
   const sample = trace.samples[index] ?? trace.samples[0];
@@ -415,24 +420,11 @@ export function EpisodeViewer({
       {linked && (
         <section aria-label="Agent at this time" className="episode-session">
           <h3>Agent at this time</h3>
-          {sample.sessionMessageIndexes?.some((index) => messages[index]) ? (
-            sample.sessionMessageIndexes.map((index) => {
-              const message = messages[index];
-              return message ? (
-                <details key={index} open={message.kind === "thinking"}>
-                  <summary>
-                    {message.kind.replace("_", " ")}
-                    {message.name ? ` · ${message.name}` : ""}
-                  </summary>
-                  <pre>{message.text}</pre>
-                </details>
-              ) : null;
-            })
-          ) : (
-            <p className="faint">
-              No session messages linked at this time. The full Agent session remains available.
-            </p>
-          )}
+          <SessionSteps
+            stepIds={sample.sessionStepIds}
+            indexes={sample.sessionMessageIndexes}
+            messages={messages}
+          />
         </section>
       )}
     </div>

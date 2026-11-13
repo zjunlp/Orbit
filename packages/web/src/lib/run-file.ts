@@ -37,7 +37,14 @@ export interface RunFile<T> {
 export function useRunFile<T>(
   run: Run,
   path: string,
-  opts: { what: string; maxBytes: number; parse: (text: string) => T; skip?: boolean },
+  opts: {
+    what: string;
+    maxBytes: number;
+    parse: (text: string) => T;
+    load?: () => Promise<T>;
+    loadKey?: string;
+    skip?: boolean;
+  },
 ): RunFile<T> {
   const listing = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
   const entry = useMemo(
@@ -48,8 +55,12 @@ export function useRunFile<T>(
   const read = !!entry && !tooLarge && !opts.skip;
   const source = useAsync(
     async () =>
-      read ? opts.parse(await readRunFile(run.id, path, opts.what, opts.maxBytes)) : undefined,
-    [run.id, path, read, entry?.bytes, entry?.mtime],
+      read
+        ? opts.load
+          ? await opts.load()
+          : opts.parse(await readRunFile(run.id, path, opts.what, opts.maxBytes))
+        : undefined,
+    [run.id, path, read, entry?.bytes, entry?.mtime, opts.loadKey],
   );
   return {
     listing,

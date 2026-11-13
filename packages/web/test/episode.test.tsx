@@ -251,3 +251,25 @@ describe("saved embodied episode", () => {
     expect(html).not.toContain("Agent at this time");
   });
 });
+
+it("resolves stable ATIF step IDs after message reordering and prefers them over legacy indexes", () => {
+  const trace = parseEpisode(source);
+  if (trace.samples[0]) {
+    trace.samples[0].sessionStepIds = [7];
+    trace.samples[0].sessionMessageIndexes = [0];
+  }
+  const html = renderToStaticMarkup(
+    <EpisodeViewer
+      trace={trace}
+      runId="fixture"
+      files={new Set()}
+      messages={[
+        { at: null, role: "assistant", kind: "text", text: "Wrong legacy message", stepId: 3 },
+        { at: null, role: "assistant", kind: "tool_call", text: "Stable robot call", stepId: 7 },
+      ]}
+    />,
+  );
+  expect(html).toContain("Stable robot call");
+  expect(html).toContain("Step 7");
+  expect(html).not.toContain("Wrong legacy message");
+});

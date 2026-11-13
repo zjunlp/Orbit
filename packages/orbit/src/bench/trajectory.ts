@@ -79,6 +79,18 @@ export function importEfeTrajectory(input: EfeTrajectoryInput): EpisodeTrajector
     final.infra_error === true ||
     final.infra_error === 1 ||
     ["step limit", "time limit", "timeout", "error"].includes(String(final.reason));
+  const references = (step: number) => {
+    const indexes = refs.get(step);
+    if (!indexes) return {};
+    const ids = [
+      ...new Set(
+        indexes.flatMap((index) =>
+          input.messages[index]?.stepId ? [input.messages[index].stepId] : [],
+        ),
+      ),
+    ];
+    return ids.length ? { sessionStepIds: ids } : { sessionMessageIndexes: indexes };
+  };
   const samples = [...steps]
     .sort((a, b) => a - b)
     .map((step) => ({
@@ -88,7 +100,7 @@ export function importEfeTrajectory(input: EfeTrajectoryInput): EpisodeTrajector
       reward: step === count && finite(final.final_reward) ? final.final_reward : null,
       terminated: step === count && ended && !truncated,
       truncated: step === count && truncated,
-      ...(refs.has(step) ? { sessionMessageIndexes: refs.get(step) } : {}),
+      ...references(step),
     }));
   previous = 0;
   const chunks = calls.flatMap((call) => {

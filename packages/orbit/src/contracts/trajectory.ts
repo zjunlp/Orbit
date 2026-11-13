@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { GuiTrajectory } from "./bench.ts";
+import { GuiTrajectory } from "./bench.ts";
 
 const ArtifactPath = z
   .string()
@@ -30,6 +30,7 @@ export const EpisodeTrajectory = z
     version: z.literal(1),
     kind: z.literal("episode"),
     goal: z.string().max(100_000),
+    sessionRunId: z.string().optional(),
     mediaPhase: z.literal("solve").optional(),
     frameBeforeAction: z.boolean().optional(),
     actionNames: z.array(z.string().max(100)).max(256),
@@ -72,6 +73,8 @@ export const EpisodeTrajectory = z
           reward: z.number().nullable(),
           terminated: z.boolean(),
           truncated: z.boolean(),
+          sessionStepIds: z.array(z.number().int().positive()).max(200).optional(),
+          /** Legacy zero-based projection indexes. Prefer sessionStepIds. */
           sessionMessageIndexes: z.array(z.number().int().nonnegative()).max(200).optional(),
           late: z.boolean().optional(),
           stall: z.boolean().optional(),
@@ -159,6 +162,7 @@ const Check = z.object({
 export const ConversationTrajectory = z.object({
   version: z.literal(1),
   kind: z.literal("conversation"),
+  sessionRunId: z.string().optional(),
   goal: z.string().max(100_000).optional(),
   participants: z
     .array(
@@ -173,6 +177,7 @@ export const ConversationTrajectory = z.object({
   turns: z
     .array(
       z.object({
+        sessionStepIds: z.array(z.number().int().positive()).max(200).optional(),
         /** The benchmark's own turn index. */
         index: z.number().int().nonnegative(),
         note: z.string().max(2000).optional(),
@@ -217,3 +222,16 @@ export const ConversationTrajectory = z.object({
   trust: z.enum(["trusted", "self-reported"]).optional(),
 });
 export type ConversationTrajectory = z.infer<typeof ConversationTrajectory>;
+
+export const EnvironmentKind = z.enum(["gui", "episode", "conversation"]);
+export type EnvironmentKind = z.infer<typeof EnvironmentKind>;
+export const EnvironmentTrajectory = z.union([
+  GuiTrajectory,
+  EpisodeTrajectory,
+  ConversationTrajectory,
+]);
+export type EnvironmentByKind = {
+  gui: GuiTrace;
+  episode: EpisodeTrajectory;
+  conversation: ConversationTrajectory;
+};

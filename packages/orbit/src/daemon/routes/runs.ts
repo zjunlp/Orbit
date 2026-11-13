@@ -6,6 +6,7 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
+  EnvironmentKind,
   isTerminal,
   type Run,
   RunCursor,
@@ -21,6 +22,7 @@ import {
   readLog,
   readMetrics,
 } from "../../records/index.ts";
+import { alignEnvironment } from "../../sessions/environment.ts";
 import { loadTranscript, projectTranscript } from "../../sessions/index.ts";
 import type { AppDeps } from "../app.ts";
 import { must, num, remoteRecords } from "../http.ts";
@@ -207,6 +209,67 @@ export function registerRunsRoutes(api: Hono, deps: AppDeps): void {
     if (run.remote) runs.recordTrajectory(run.id, result);
     return result;
   };
+  api.get("/runs/:id/environment", async (c) => {
+    const run = must(runs.get(c.req.param("id")));
+    const kind = EnvironmentKind.parse(c.req.query("kind"));
+    const path = z.string().min(1).parse(c.req.query("path"));
+    const sessionRun = must(runs.get(c.req.query("session") ?? run.id));
+    const limit = (kind === "conversation" ? 16 : 2) * 1024 * 1024;
+    let body: ReadableStream<Uint8Array> | null;
+    let size: number;
+    if (run.remote) {
+      const response = await remoteRecords(() => cluster.file(run, path));
+      if (!response.ok) {
+        await response.body?.cancel();
+        return c.json(
+          { error: "environment file unavailable" },
+          response.status === 404 ? 404 : 502,
+        );
+      }
+      size = Number(response.headers.get("content-length") ?? 0);
+      body = response.body;
+    } else {
+      const file = await outputFile(runs.dirs(run.id).output, path, c.req.raw.signal);
+      if (!file) return c.json({ error: "not found" }, 404);
+      size = file.size;
+      body = file.body;
+    }
+    if (!body) return c.json({ error: "empty environment file" }, 422);
+    if (size > limit) {
+      await body.cancel();
+      return c.json({ error: "environment preview exceeds limit" }, 413);
+    }
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > limit) return c.json({ error: "environment preview exceeds limit" }, 413);
+        chunks.push(part.value);
+      }
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
+    let evidence: unknown;
+    try {
+      evidence = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      return c.json({ error: "invalid environment JSON" }, 400);
+    }
+    let failed = false;
+    const atif = await trajectory(sessionRun).catch(() => {
+      failed = true;
+      return null;
+    });
+    const result = alignEnvironment(kind, evidence, atif, sessionRun.id);
+    if (failed) result.completeness = "truncated";
+    c.header("cache-control", "no-store");
+    return c.json(result);
+  });
   api.get("/runs/:id/trajectory", async (c) => {
     c.header("cache-control", "no-store");
     return c.json(await trajectory(must(runs.get(c.req.param("id")))));

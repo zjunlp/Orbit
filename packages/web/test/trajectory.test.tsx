@@ -232,3 +232,34 @@ describe("GUI action overlays and Agent alignment", () => {
     expect(html).not.toContain("Unrelated next action");
   });
 });
+
+it("uses stable step references even when the projected tool-result text is clipped", async () => {
+  const { stepMessages } = await import("../src/lib/gui-action.ts");
+  const trace = parsed();
+  if (trace.steps[1]) {
+    trace.steps[1].actionId = "operation";
+    trace.steps[1].sessionStepIds = [7];
+  }
+  const messages = [
+    {
+      at: null,
+      role: "tool" as const,
+      kind: "tool_result" as const,
+      text: "Clipped tool result",
+      stepId: 7,
+    },
+    {
+      at: null,
+      role: "tool" as const,
+      kind: "tool_result" as const,
+      text: '{"id":"operation","step":1}',
+      stepId: 8,
+    },
+  ];
+  expect(stepMessages(trace, 1, messages)).toEqual(messages.slice(0, 1));
+  if (trace.steps[1]) trace.steps[1].sessionStepIds = [];
+  expect(stepMessages(trace, 1, messages)).toEqual([]);
+  const invalid = parsed();
+  if (invalid.steps[1]) invalid.steps[1].sessionStepIds = [0];
+  expect(() => parseTrajectory(JSON.stringify(invalid))).toThrow(/references/);
+});

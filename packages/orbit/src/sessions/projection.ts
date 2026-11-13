@@ -55,8 +55,10 @@ export function projectTranscript(
       : (content ?? [])
           .map((p) => (p.type === "text" ? p.text : `[${p.type}: ${p.source?.path}]`))
           .join("\n");
+  let stepId: number | undefined;
   const push = (message: SessionMessage) => {
     const limit = message.kind.startsWith("tool_") ? 4000 : 8000;
+    message = { ...message, stepId };
     messages.push(
       message.text.length > limit
         ? { ...message, text: message.text.slice(0, limit), truncated: true }
@@ -64,6 +66,7 @@ export function projectTranscript(
     );
   };
   for (const step of trajectory.steps) {
+    stepId = step.step_id;
     const at = step.timestamp ?? null;
     const role = step.source === "agent" ? "assistant" : step.source;
     const message = text(step.message);

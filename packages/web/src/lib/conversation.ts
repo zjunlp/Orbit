@@ -2,6 +2,8 @@
 // `ConversationTrajectory`, flatten states to paths and diff them, summarize tool calls.
 import type { ConversationEvent, ConversationTrajectory } from "@zjunlp/orbit/contracts";
 
+import { validStepIds } from "./trajectory.ts";
+
 export type Conversation = ConversationTrajectory;
 export type Turn = Conversation["turns"][number];
 export type ToolCall = Extract<ConversationEvent, { type: "tool_call" }>;
@@ -13,7 +15,7 @@ export function parseConversation(text: string): Conversation {
     throw new Error("Not a version 1 conversation trajectory");
   if (!Array.isArray(v.participants) || !v.verdict) throw new Error("Malformed conversation");
   for (const t of v.turns)
-    if (!Array.isArray(t.events) || typeof t.index !== "number")
+    if (!Array.isArray(t.events) || typeof t.index !== "number" || !validStepIds(t.sessionStepIds))
       throw new Error("Malformed conversation turn");
   return { ...(v as Conversation), verdict: { ...v.verdict, checks: v.verdict.checks ?? [] } };
 }

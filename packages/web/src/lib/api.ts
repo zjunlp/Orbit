@@ -24,6 +24,8 @@ import type {
   BenchTaskList,
   CalibrationRequestInput,
   DoctorReport,
+  EnvironmentByKind,
+  EnvironmentKind,
   FolderMoveResult,
   FolderStat,
   Ledger,
@@ -152,6 +154,10 @@ export const api = {
   metrics: (id: string) => req<Metrics>(`/runs/${enc(id)}/metrics`),
   artifacts: (id: string) => req<Artifacts>(`/runs/${enc(id)}/artifacts`),
   diff: (id: string) => req<{ patch: string; truncated: boolean }>(`/runs/${enc(id)}/diff`),
+  environment: <K extends EnvironmentKind>(id: string, path: string, kind: K, session = id) =>
+    req<EnvironmentByKind[K]>(
+      `/runs/${enc(id)}/environment?${new URLSearchParams({ path, kind, session })}`,
+    ),
   trajectory: (id: string) => req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory`),
   rebuildTrajectory: (id: string) =>
     req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory/rebuild`, { method: "POST" }),

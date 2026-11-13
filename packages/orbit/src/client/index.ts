@@ -38,6 +38,9 @@ import {
   type DatasetInput,
   DatasetList,
   DoctorReport,
+  type EnvironmentByKind,
+  type EnvironmentKind,
+  EnvironmentTrajectory,
   ExposeStatus,
   FolderExportResult,
   FolderList,
@@ -168,6 +171,16 @@ export class OrbitClient {
   trajectory = (id: string) => this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory`);
   rebuildTrajectory = (id: string) =>
     this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory/rebuild`, { method: "POST" });
+  environment = <K extends EnvironmentKind>(
+    id: string,
+    path: string,
+    kind: K,
+    session = id,
+  ): Promise<EnvironmentByKind[K]> =>
+    this.call(
+      EnvironmentTrajectory,
+      `/runs/${enc(id)}/environment?${new URLSearchParams({ path, kind, session })}`,
+    ).then((value) => value as EnvironmentByKind[K]);
   session = (id: string) => this.call(RunSessions, `/runs/${enc(id)}/session`);
 
   authList = () =>

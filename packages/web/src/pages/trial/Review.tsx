@@ -56,7 +56,7 @@ export const FILE_VIEWS: Record<Kind, (p: FileViewProps) => React.ReactNode> = {
     );
   },
   episode: ({ run, file, solve }) => <EpisodeFile run={run} file={file} solve={solve} />,
-  conversation: ({ run, file }) => <ConversationFile run={run} file={file} />,
+  conversation: ({ run, file, solve }) => <ConversationFile run={run} file={file} solve={solve} />,
   tests: ({ run, file }) => <TestsFile run={run} file={file} />,
 };
 

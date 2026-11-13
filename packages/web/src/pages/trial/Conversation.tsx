@@ -1,10 +1,12 @@
 // C3 / C4 trial view (design §9.15): the verifier's conversation, read turn by turn. Left: turns
 // with their check status; middle: messages and tool-call cards; right: the selected turn's check,
 // state diff, reference calls and raw record. The checker's first failure is one key away (`e`).
+
+import type { SessionMessage } from "@zjunlp/orbit/contracts";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { IconAlert, IconBan, IconCheck, IconSearch, IconX } from "../../components/icons.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
-import type { ReviewFile, Run } from "../../lib/api.ts";
+import { api, type ReviewFile, type Run } from "../../lib/api.ts";
 import {
   brief,
   type Conversation,
@@ -22,15 +24,29 @@ import { bytes } from "../../lib/format.ts";
 import { overlayOpen, useHotkeys } from "../../lib/hotkeys.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { useRunFile } from "../../lib/run-file.ts";
+import { useAsync } from "../../lib/use.ts";
+import { SessionSteps } from "./SessionSteps.tsx";
 import "./conversation.css";
 
 const MAX_BYTES = 16 * 1024 * 1024;
 
-export function ConversationFile({ run, file }: { run: Run; file: ReviewFile }) {
+export function ConversationFile({
+  run,
+  file,
+  solve,
+}: {
+  run: Run;
+  file: ReviewFile;
+  solve?: Run;
+}) {
+  const sessionRun = solve ?? run;
+  const session = useAsync(() => api.session(sessionRun.id), [sessionRun.id, sessionRun.state]);
   const source = useRunFile(run, file.path, {
     what: "the conversation",
     maxBytes: MAX_BYTES,
     parse: parseConversation,
+    load: () => api.environment(run.id, file.path, "conversation", sessionRun.id),
+    loadKey: sessionRun.id,
   });
   const problem =
     (source.missing ? "The verifier did not save the declared conversation file." : null) ??
@@ -40,7 +56,7 @@ export function ConversationFile({ run, file }: { run: Run; file: ReviewFile }) 
     source.error;
   if (problem) return <Empty title="Conversation unavailable">{problem}</Empty>;
   if (!source.data) return <Loading what="Loading the conversation" />;
-  return <ConversationViewer c={source.data} />;
+  return <ConversationViewer c={source.data} messages={session.data?.agent?.messages ?? []} />;
 }
 
 const STATUS_ICON = {
@@ -49,7 +65,13 @@ const STATUS_ICON = {
   unchecked: <IconBan size={12} />,
 };
 
-export function ConversationViewer({ c }: { c: Conversation }) {
+export function ConversationViewer({
+  c,
+  messages = [],
+}: {
+  c: Conversation;
+  messages?: SessionMessage[];
+}) {
   const loc = useLocation();
   const [q, setQ] = useState("");
   const search = useRef<HTMLInputElement>(null);
@@ -153,6 +175,12 @@ export function ConversationViewer({ c }: { c: Conversation }) {
             Messages, tool results and states come from the saved evaluation record. The Agent
             session tab has the agent's full session.
           </div>
+          {c.turns.some((turn) => turn.sessionStepIds?.length) && (
+            <section aria-label="Agent at this turn">
+              <h3>Agent at this turn</h3>
+              <SessionSteps stepIds={turn?.sessionStepIds ?? []} messages={messages} />
+            </section>
+          )}
           {shown.map(({ t, events }) => (
             <section
               key={t.index}

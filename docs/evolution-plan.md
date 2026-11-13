@@ -170,13 +170,15 @@
 
 ### T4 环境侧对齐
 
-分支 `feat/trajectory-env-align`。
+按用户要求沿用分支 `feat/run-trajectory`。
 
-- [ ] GUI：`GuiTrajectory` 的每一步按动作 id 关联到发起它的工具调用步骤（现有 GUI 已按动作 id 关联）。
-- [ ] 具身（Agent 评测）：`EpisodeTrajectory.sessionMessageIndexes` 改为引用轨迹 `step_id`，旧索引兼容。
-- [ ] 对话（工具与模拟用户）：`ConversationTrajectory` 的 turn 关联到对应步骤。
-- [ ] 只有环境记录、没有会话时完整度为 `environment-only`；反之为 `agent-only`。
-- [ ] 测试覆盖三类各一个已校准的样例任务。
+- [x] GUI：`GuiTrajectory` 的每一步按动作 id 关联到发起它的工具调用步骤（现有 GUI 已按动作 id 关联）。
+- [x] 具身（Agent 评测）：`EpisodeTrajectory.sessionStepIds` 引用轨迹 `step_id`，兼容旧 `sessionMessageIndexes`。
+- [x] 对话（工具与模拟用户）：`ConversationTrajectory` 的 turn 关联到对应步骤。
+- [x] 只有环境记录、没有会话时完整度为 `environment-only`；反之为 `agent-only`。
+- [x] 测试覆盖已校准 MiniWoB click-test、EFE MetaWorld+、BFCL 的三类记录格式；使用可复现的协议样例，不宣称重新执行真实环境。
+
+实现与验证见 [T4 任务记录](tasks/20261113-trajectory-environment.md)。
 
 ### T5 更多导入器
 

@@ -14,6 +14,12 @@ export function safeTrajectoryPath(path: unknown): path is string {
   );
 }
 
+export const validStepIds = (value: unknown): boolean =>
+  value === undefined ||
+  (Array.isArray(value) &&
+    value.length <= 200 &&
+    value.every((id) => Number.isSafeInteger(id) && id > 0));
+
 /** Artifacts are untrusted input; validate before selecting an observation or requesting an image. */
 export function parseTrajectory(text: string): GuiTrace {
   let value: unknown;
@@ -35,6 +41,8 @@ export function parseTrajectory(text: string): GuiTrace {
   for (const [index, row] of value.steps.entries()) {
     if (!record(row) || row.step !== index)
       throw new Error(`The trajectory is missing or has an invalid step ${index}.`);
+    if (!validStepIds(row.sessionStepIds))
+      throw new Error(`Step ${index} has invalid session step references.`);
     if (!safeTrajectoryPath(row.screenshot))
       throw new Error(`Step ${index} has an unsafe or missing screenshot path.`);
     if (

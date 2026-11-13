@@ -506,10 +506,15 @@ export type ReviewKind = (typeof REVIEW_KINDS)[number];
 export const GuiTrajectory = z
   .object({
     version: z.literal(1),
+    completeness: z.enum(["complete", "environment-only", "truncated"]).optional(),
+    sessionRunId: z.string().optional(),
     goal: z.string().max(100_000),
     steps: z
       .array(
         z.object({
+          sessionStepIds: z.array(z.number().int().positive()).max(200).optional(),
+          actionId: z.string().min(1).max(128).optional(),
+          at: z.iso.datetime({ offset: true }).optional(),
           step: z.number().int().nonnegative(),
           screenshot: z
             .string()
