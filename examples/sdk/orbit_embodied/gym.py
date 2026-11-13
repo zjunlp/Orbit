@@ -14,12 +14,12 @@ class GymBenchmark:
     action_size = 7
     settle_steps = 0
 
-    def __init__(self, reference, task):
+    def __init__(self, reference, task, *, sample=None):
         self.reference, self.task = reference, task
         config = reference["environment"]
         if task not in config["tasks"]:
             raise ValueError("task is not in the frozen environment catalog")
-        self.horizon = reference_horizon(reference, task)
+        self.horizon = reference_horizon(reference, task, sample=sample)
         self.control_hz = config.get("controlRates", {}).get(task, reference["parameters"]["controlHz"])
         self.env, self.video = None, None
         self.success = False

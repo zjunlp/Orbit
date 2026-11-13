@@ -69,7 +69,7 @@ def settings(req):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
     kind = reference.get("environment", {}).get("kind")
     renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",),
-                 "bigym2": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
+                 "cliport": ("pybullet-direct",), "bigym2": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -160,6 +160,8 @@ def tasks(req):
                             "unit": "cost", "higherIsBetter": False})
             metrics.extend({"name": f"safety_cost_l{level}", "label": f"L{level} safety cost",
                             "unit": "cost", "higherIsBetter": False} for level in levels)
+    elif kind == "cliport":
+        metrics = [{"name": "success_rate", "label": "Reward above 0.99", "unit": "ratio", "range": [0, 1]}]
     elif kind == "colosseum-v2":
         metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
     return {"tasks": listing,
@@ -174,7 +176,7 @@ def tasks(req):
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
-                             "scoreKind": "scalar" if calvin or robodojo else "binary", "rescore": "evidence",
+                             "scoreKind": "scalar" if calvin or robodojo or kind == "cliport" else "binary", "rescore": "evidence",
                              # A still policy can satisfy a goal that holds at the start.
                              "calibration": {"empty": "any", "oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
@@ -213,7 +215,7 @@ def solve_one(req):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
-                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2"):
+                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2", "cliport"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -404,6 +406,9 @@ def score(req):
             if result["native"]["processScore"] is not None:
                 metrics["process_score"] = result["native"]["processScore"]
             return valid(result["native"]["score"], metrics=metrics,
+                         issues=result["issues"], review={"files": files})
+        if kind == "cliport":
+            return valid(result["native"]["totalReward"], metrics={"success_rate": int(result["success"])},
                          issues=result["issues"], review={"files": files})
         success = int(result["success"])
         metrics = None

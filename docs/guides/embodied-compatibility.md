@@ -38,6 +38,7 @@
 | [VLA-Arena](../../examples/bench-adapters/embodied/benchmarks/vla-arena/README.md) | 11 个套件、170 个 L0–L2 任务，8,500 个发布初态 | 全部任务与初态，保留原生安全计分和语言、视觉探针 | 5 组短原生对照通过。安全任务固定动作跑满 300 步并经 CPU 重评。DM0.5 完成两个真实样本。官方 OFT 权重待校准。[原生接入](../tasks/20261110-vla-arena.md) · [DM0.5](../tasks/20261112-dm05-vla-arena.md) |
 | [LIBERO-PRO](../../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md) | 初版四个原版套件、五类排行榜扰动，共 200 个目录条目 | 20 个条件全部登记，固定 BDDL 和构造种子生成 10,000 个计划样本 | 200 个条目都通过原生 reset 和一步控制。两组短原生对照、一个 220 步固定动作 episode 和 CPU 重评通过。OpenVLA-OFT 在 Spatial Language 和 Spatial Task 各完成一条有效短测，CPU 重评一致。[原生接入](../tasks/20261110-libero-pro.md) · [模型短测](../tasks/20261111-embodied-policy-expansion.md) |
 | [BiGym 2.0](../../examples/bench-adapters/embodied/benchmarks/bigym2/README.md) | 正式 learned-policy 协议 20 个任务，每任务 100 个种子 | 20 个任务全部接入，按 20D / 21D 动作分成两组登记，共 2,000 个计划样本 | 全部任务做过原生 reset、相机和一步控制。两种动作规格各有一条完整固定动作对照，并通过 CPU 验证和重评。训练权重待补。[记录](../tasks/20261112-bigym2.md) |
+| [CLIPort](../../examples/bench-adapters/embodied/benchmarks/cliport/README.md) | 语言条件测试集 18 个条目，每条目 100 个 oracle 合格种子 | 18 个条目全部接入，分为 16 个吸盘抓放任务和 2 个铲形末端推扫任务。完整计划共 1,800 个样本 | 全部条目各生成 2 个 oracle 合格样本，冻结 reset 后的步数上限。真实权重短测通过独立 CPU 验证与重评。[记录](../tasks/20261112-cliport.md) |
 
 ## 真实模型实测
 
@@ -70,3 +71,4 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | RLinf π₀.₅，`pi05-rlinf-metaworld` | Meta-World MT50 | 两个任务实测并重评。短参考对照核对首个动作块与原生任务判定。[接入](../tasks/20261108-embodied-native-expansion.md) · [参考对照](../tasks/20261108-embodied-calvin-xvla.md) |
 | RLinf π₀.₅，`pi05-rlinf-calvin-abc-d` | CALVIN ABC→D | 两条五指令序列经过真实批次、逐段计分、CPU 验证和重评。[记录](../tasks/20261108-embodied-calvin-xvla.md) |
 | 官方 VIMA 20M，`vima-20m` | VIMA-Bench Placement | Visual Manipulation、Follow Order 有真实样本与重评；Follow Order 与上游无头示例对齐动作和终止序列。[记录](../tasks/20261110-vima-bench.md) |
+| 官方 CLIPort 1000-demo，`cliport-multi-language` | CLIPort 语言条件测试 | 放碗抓放和 Separating Piles 的 seen、unseen 推扫各完成一条真实样本，CPU 验证与重评一致。推扫登记使用 `cliport-multi-language-push`。[记录](../tasks/20261112-cliport.md) |

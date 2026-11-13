@@ -9,7 +9,7 @@ from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
                           "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic",
-                          "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2")
+                          "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2", "cliport")
 
 
 def digest(value):
@@ -49,8 +49,16 @@ def seed_asset(reference, task):
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
 
 
-def reference_horizon(reference, task):
+def cliport_episode(environment, sample):
+    if "testEpisodes" not in environment:
+        raise ValueError("regenerate the CLIPort seed catalogue and registration with per-sample horizons")
+    return environment["testEpisodes"][sample["taskId"]][int(sample["initialStateId"])]
+
+
+def reference_horizon(reference, task, *, sample=None):
     environment = reference.get("environment", {})
+    if environment.get("kind") == "cliport":
+        return cliport_episode(environment, sample)["horizon"]
     if "horizons" in environment:
         return environment["horizons"][task]
     return environment.get("horizon", reference.get("horizons", {}).get(task.split(":")[0]))
@@ -147,6 +155,8 @@ def reset_seed(sample, reference=None):
             raise ValueError("sample is outside the frozen initial-state catalog or seed recipe")
         if environment.get("kind") == "bigym2":
             return seed + index
+        if environment.get("kind") == "cliport":
+            return cliport_episode(environment, sample)["seed"]
         if environment.get("kind") == "vla-arena" and environment.get("protocol") == "dm05":
             seed += environment["catalog"][sample["taskId"]]["index"] * 10000 + sample["repetition"]
             if not 0 <= seed < 2 ** 32:

@@ -489,6 +489,33 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertEqual(outcome["metrics"], {"completed_subtasks": 2, "success_at_1": 1, "success_at_2": 1,
                                                    "success_at_3": 0, "success_at_4": 0, "success_at_5": 0})
 
+    def test_cliport_scores_partial_reward_as_a_scalar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            config = request["benchmark"]["config"]
+            reference = json.loads(config["reference"])
+            reference["environment"] = {"kind": "cliport", "tasks": [request["trial"]["task"]]}
+            config.update(reference=json.dumps(reference), profileDigest=digest(reference), renderer="pybullet-direct")
+            with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                catalog = adapter.tasks(request)
+            self.assertEqual(catalog["capabilities"]["scoreKind"], "scalar")
+
+            request["verify"] = {"output": str(root / "verify-output")}
+            expected = adapter.verification_expectation(request)
+            result = {"sampleRef": request["trial"]["sampleRef"], "episodeId": "synthetic-trial.attempt",
+                      "valid": True, "success": False, "issues": [], "native": {"totalReward": 0.5}}
+            write_json(root / "solve-output/episode/native-result.json", result)
+            write_json(root / "verify-output/verified.json", result)
+            write_json(root / "verify-output/verification.json",
+                       {"sampleRef": result["sampleRef"], "episodeId": result["episodeId"],
+                        "solveRunId": expected["solveRunId"], "trialId": expected["trialId"],
+                        "implementationDigest": expected["verifierDigest"], "expectationDigest": digest(expected)})
+            outcome = adapter.score(request)
+            self.assertFalse(outcome["invalid"])
+            self.assertEqual(outcome["score"], 0.5)
+            self.assertEqual(outcome["metrics"], {"success_rate": 0})
+
     def test_arena_reports_success_and_safety_cost_by_level(self):
         for suite, level, gate, success in (
             ("safety_hazard_avoidance", 0, True, False),

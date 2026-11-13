@@ -194,8 +194,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         raise ValueError("contract fingerprint mismatch")
     reference = contract["identity"].get("reference", {})
     if "parameters" in reference:
-        task = contract["sample"]["taskId"]
-        horizon = reference_horizon(reference, task)
+        sample = contract["sample"]
+        horizon = reference_horizon(reference, sample["taskId"], sample=sample)
         if horizon is not None and contract["horizon"] != horizon:
             raise ValueError("episode horizon differs from the frozen reference")
         if contract["replanSteps"] != reference["parameters"]["replanSteps"]:
@@ -271,6 +271,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if result["valid"] and kind == "bigym2":
         from .bigym2 import verify_bigym2
         verify_bigym2(reference, contract["sample"], controls, result)
+    if result["valid"] and kind == "cliport":
+        from .cliport import verify_cliport
+        verify_cliport(reference, contract["sample"], controls, result)
     if result["valid"] and kind in ("robomimic", "vima-bench"):
         verify_manipulation_stopping(kind, controls, contract["horizon"])
     if result["valid"] and kind == "molmospaces":

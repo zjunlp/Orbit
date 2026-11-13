@@ -963,6 +963,9 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   初态用索引选取确定性构造种子，独立保存场景状态摘要。[接入说明](../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md)
 - **BiGym 2.0**：按 G1 的躯干俯仰动作和本体状态布局分别登记。按任务冻结 100 个种子、控制步数上限和 50 Hz 原生控制，
   并在 CPU 验证中核对原生终止和跌倒状态。[接入说明](../examples/bench-adapters/embodied/benchmarks/bigym2/README.md)
+- **CLIPort**：冻结语言条件测试集的 oracle 合格种子及各样本 reset 后的原生步数上限，转发 RGB-D 和当前子目标。
+  16 个吸盘抓放任务与 2 个铲形末端推扫任务分别登记动作契约。推扫只接收两个世界坐标 XY 端点，CPU 验证核对原生命令和样本上限，
+  并逐步重算累计奖励。[接入说明](../examples/bench-adapters/embodied/benchmarks/cliport/README.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

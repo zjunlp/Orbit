@@ -87,6 +87,66 @@ class CoreTests(unittest.TestCase):
     def verify(self):
         return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
 
+    def test_cliport_evidence_preserves_partial_reward_at_native_horizon(self):
+        from orbit_embodied.cliport import CLIPortBenchmark, verify_cliport
+
+        task = self.sample["taskId"]
+        sample = {**self.sample, "initialStateId": "1", "environmentSeed": 10001}
+        reference = {"environment": {"kind": "cliport", "primitive": "pick-place",
+                                     "environmentSeed": 10001, "tasks": [task],
+                                     "initialStateCounts": {task: 2},
+                                     "testEpisodes": {task: [{"seed": 10001, "horizon": 5},
+                                                             {"seed": 10007, "horizon": 2}]}},
+                     "parameters": {"controlHz": 5}}
+        self.assertEqual(CLIPortBenchmark(reference, {**sample, "initialStateId": "0"}).horizon, 5)
+        self.assertEqual(CLIPortBenchmark(reference, sample).horizon, 2)
+        action = [0.0] * 14
+        controls = [
+            {"reward": 0.25, "action": action, "nativeAction": action, "nativeDone": False,
+             "nativeSuccess": False, "terminated": step == 2,
+             "state": {"instruction": str(step), "totalReward": step * 0.25}}
+            for step in (1, 2)
+        ]
+        native = {"source": "CLIPort test mean reward", "task": task, "seed": 10007,
+                  "primitive": "pick-place", "success": False, "totalReward": 0.5}
+        verify_cliport(reference, sample, controls, {"native": native})
+        for altered in ({"totalReward": 0.0}, {"seed": 10003}):
+            with self.subTest(altered=altered), self.assertRaisesRegex(ValueError, "cumulative reward"):
+                verify_cliport(reference, sample, controls, {"native": {**native, **altered}})
+        with self.assertRaisesRegex(ValueError, "stopping rules"):
+            verify_cliport(reference, sample, [{**controls[0], "nativeDone": True}, controls[1]], {"native": native})
+        with self.assertRaisesRegex(ValueError, "exceed the frozen sample horizon"):
+            verify_cliport(reference, sample, [*controls, controls[-1]], {"native": native})
+        legacy_reference = copy.deepcopy(reference)
+        del legacy_reference["environment"]["testEpisodes"]
+        with self.assertRaisesRegex(ValueError, "regenerate the CLIPort seed catalogue"):
+            CLIPortBenchmark(legacy_reference, sample)
+
+    def test_cliport_push_binding_and_native_command(self):
+        from orbit_embodied.cliport import profile, verify_cliport
+
+        benchmark = profile("native", "push")
+        observation_map = {key: key for key in benchmark["observations"]}
+        resolve_binding(benchmark, profile("policy", "push"), observation_map)
+        with self.assertRaisesRegex(ValueError, "action semantics differ"):
+            resolve_binding(benchmark, profile("policy", "pick-place"), observation_map)
+
+        task = "separating-piles-seen-colors"
+        sample = {**self.sample, "taskId": task, "initialStateId": "0", "environmentSeed": 10001}
+        reference = {"environment": {"kind": "cliport", "primitive": "push", "environmentSeed": 10001,
+                                     "initialStateCounts": {task: 1},
+                                     "testEpisodes": {task: [{"seed": 10001, "horizon": 1}]}}}
+        action = [0.25, -0.1, 0.5, 0.1]
+        native_action = [0.25, -0.1, 0, 0, 0, 0, 1, 0.5, 0.1, 0, 0, 0, 0, 1]
+        control = {"action": action, "nativeAction": native_action, "nativeDone": False,
+                   "terminated": True, "nativeSuccess": False, "reward": 0.25,
+                   "state": {"instruction": "push the pile", "totalReward": 0.25}}
+        result = {"native": {"source": "CLIPort test mean reward", "task": task, "seed": 10001,
+                             "primitive": "push", "success": False, "totalReward": 0.25}}
+        verify_cliport(reference, sample, [control], result)
+        with self.assertRaisesRegex(ValueError, "control evidence differs"):
+            verify_cliport(reference, sample, [{**control, "nativeAction": action}], result)
+
     def test_bigym2_fall_overrides_task_success(self):
         from orbit_embodied.bigym2 import verify_bigym2
 

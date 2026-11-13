@@ -80,13 +80,16 @@ def export_source(source, expected, target, paths):
     archive.unlink()
 
 
-def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths):
+def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths, *, extra_contexts=()):
     with tempfile.TemporaryDirectory(prefix="orbit-" + kind + "-") as temporary:
         context = Path(temporary) / kind
         export_source(source, identity, context, source_paths)
+        contexts = ["--build-context", kind + "=" + str(context)]
+        for name, path in extra_contexts:
+            contexts.extend(["--build-context", name + "=" + str(path)])
         label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
         subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
-                        "--build-context", kind + "=" + str(context), "-f", str(dockerfile),
+                        *contexts, "-f", str(dockerfile),
                         "-t", tag, str(HERE.parents[2])], check=True)
 
 

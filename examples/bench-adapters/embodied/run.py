@@ -10,6 +10,7 @@ import time
 from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.assets import COLOSSEUM_ASSET_ROOT, tree_digest
 from orbit_embodied.binding import reference_horizon
+from orbit_embodied.cliport import GOOGLE_ASSETS
 from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 from orbit_embodied.libero_plus import NATIVE_ROOT as LIBERO_PLUS_ROOT
@@ -19,7 +20,8 @@ from orbit_embodied.vlabench import ASSETS_ROOT as VLABENCH_ASSETS
 
 
 SIMULATOR_ASSET_ROOTS = {"libero-plus": LIBERO_PLUS_ROOT + "/assets", "vlabench": VLABENCH_ASSETS,
-                        "molmospaces": "/molmospaces", "colosseum-v2": COLOSSEUM_ASSET_ROOT}
+                        "molmospaces": "/molmospaces", "colosseum-v2": COLOSSEUM_ASSET_ROOT,
+                        "cliport": GOOGLE_ASSETS}
 
 
 class LazyPolicy:
@@ -187,6 +189,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "bigym2":
         from orbit_embodied.bigym2 import BiGym2Benchmark
         benchmark = BiGym2Benchmark(reference, sample["taskId"])
+    elif kind == "cliport":
+        from orbit_embodied.cliport import CLIPortBenchmark
+        benchmark = CLIPortBenchmark(reference, sample)
     elif kind == "vima-bench":
         from orbit_embodied.vima_bench import VIMABenchBenchmark
         benchmark = VIMABenchBenchmark(reference, sample["taskId"])
@@ -233,8 +238,8 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         suite, name = sample["taskId"].split(":", 1)
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
         benchmark = native(suite, name, settle_steps=reference["parameters"]["settleSteps"])
-    expected_horizon = reference_horizon(reference, sample["taskId"])
-    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84}.get(kind, 256)
+    expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
+    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84, "cliport": 480}.get(kind, 256)
     if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):
         expected_render_size = WIDOWX_AREA_SIZE
     policy = LazyPolicy(request["policy"])
