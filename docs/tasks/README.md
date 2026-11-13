@@ -160,3 +160,4 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261111](20261111-converge-concepts-docs.md) Converge benchmark concepts and organize docs
 - [20261112](20261112-positioning-self-improving-lab.md) Positioning: the lab for self-improving agents
 - [20261112](20261112-evolution-plan.md) Implementation plan: trajectories, export, fork and the evolution gate
+- [20261113](20261113-integrate-branches.md) Integrate embodied expansion, ATIF converters and trial evidence views

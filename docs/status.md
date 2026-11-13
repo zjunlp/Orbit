@@ -1,6 +1,6 @@
 # Orbit status
 
-Updated 2026-11-12. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
+Updated 2026-11-13. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
 
 **Stage.** R0–R2 validated on this machine. R3 benchmarks run: LongDS with one complete native Codex task, Harbor with oracle/empty samples. R4 (multi-node) only as two daemons on one machine. No release blockers.
 
@@ -14,7 +14,7 @@ Updated 2026-11-12. Architecture: [design](design.md). Docs map: [docs/README](R
 - **Agents.** Registry of 12 Agents plus user definitions (`orbit agent …`), installed inside the run when needed. Real runs: codex, claude-code, dsh; the other nine are unverified. Auth profiles per Agent; notifications (Feishu, DingTalk, WeCom, Slack, webhook; Feishu app bot).
 - **Bench core.** Solve + independent verify per trial; valid-only means with task-clustered CI and paired Δ; benchmark's official aggregation shown alongside; closed failure kinds; immutable report revisions; `rescore`, `consolidate`, `usage`, `calibrate`, `coverage`.
 - **Integration.** One adapter protocol behind four integration methods: `harbor`, `manifest`, `sdk`, `native` (design §9.14). Harbor covers compose services, hooks, per-role GPUs and verifier GPU models; TB-Science 70/70 and TB 4.0 56/66 supported.
-- **Describing benchmarks.** Six-dimensional taxonomy, integration method, calibration record (design §9.10). Product library of 39 families ([catalog](catalog.md), [availability](guides/benchmark-availability.md)).
+- **Describing benchmarks.** Six-dimensional taxonomy, integration method, calibration record (design §9.10). Product library of 43 families ([catalog](catalog.md), [availability](guides/benchmark-availability.md)).
 - **Calibrated samples.** Bounded empty/oracle or scripted calibration for HumanEval, EFE MetaWorld+, BFCL, τ²-bench, MiniWoB, LIBERO, TextArena, Cua Bench basic desktop, CUA-Lite MiniWoB; BFCL also has a real CLI Agent check.
 - **GUI.** Private signed GUI service (`orbit-computer` CLI/MCP); Claude Code and Codex verified on sampled MiniWoB/BrowserGym tasks; MCP servers wired into Claude/Codex homes ([GUI guide](guides/gui-bench-web.md)).
 - **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). Harness benchmarks RLE-Bench, EmbodiedCLBench, EmbodiedLab T0 via Agent adapters.
