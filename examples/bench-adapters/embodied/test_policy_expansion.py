@@ -1,5 +1,6 @@
 """Check model-side I/O and frozen recipes with synthetic data."""
 
+from fnmatch import fnmatch
 import importlib.util
 import json
 from pathlib import Path
@@ -22,6 +23,13 @@ def load(relative):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_tests(loader, tests, pattern):
+    for path in sorted((ADAPTER / "policies").glob("*/test_*.py")):
+        if pattern is None or fnmatch(path.name, pattern):
+            tests.addTests(loader.loadTestsFromModule(load(path.relative_to(ADAPTER)), pattern=pattern))
+    return tests
 
 
 class PolicyExpansionTests(unittest.TestCase):
