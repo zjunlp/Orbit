@@ -8,38 +8,57 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from adapter import HERE, digest, file_digest, implementation_digest
-from native_runtime import image_id
+from adapter import HERE, check_source, digest, file_digest, implementation_digest
+from native_runtime import build_policy_image, image_id, policy_manifest, require_image
 from orbit_embodied.assets import tree_digest
 from orbit_embodied.libero_suites import SUITES, LABELS, benchmark_name
 
 
+def runtime_manifest(reference):
+    recipe = Path(__file__).resolve().parent
+    manifest = policy_manifest("groot-n17-policy", {"groot": reference}, recipe / "groot-policy.Dockerfile",
+                               recipe / "serve_groot.py")
+    manifest["entrypoint"] = ["python"]
+    return manifest
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--reference-source", type=Path, required=True)
+    parser.add_argument("--reference-source", dest="source", type=Path, required=True)
+    operation = parser.add_mutually_exclusive_group(required=True)
+    operation.add_argument("--policy-image")
+    operation.add_argument("--build-tag")
+    parser.add_argument("--policy-base")
     parser.add_argument("--benchmark-source", type=Path)
-    parser.add_argument("--weights", type=Path, required=True)
-    parser.add_argument("--profile", choices=("libero", "widowx", "google"), required=True)
+    parser.add_argument("--weights", type=Path)
+    parser.add_argument("--profile", choices=("libero", "widowx", "google"))
     parser.add_argument("--suite", choices=SUITES, default="libero_spatial")
-    parser.add_argument("--policy-image", required=True)
-    parser.add_argument("--benchmark-image", required=True)
+    parser.add_argument("--benchmark-image")
     parser.add_argument("--share-gpu", action="store_true")
     parser.add_argument("--sim-gpu-mem-gb", type=float, default=4.0, help="Simulator memory budget per GPU in GB")
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
+    model_reference = json.loads((HERE / "profiles/groot-model.json").read_text())
+    manifest = runtime_manifest(model_reference)
+    if args.build_tag:
+        if not args.policy_base:
+            parser.error("--build-tag requires --policy-base")
+        check_source(args.source, model_reference, model_reference["files"])
+        build_policy_image(args, "groot", model_reference, Path(__file__).with_name("groot-policy.Dockerfile"),
+                           manifest, source_paths=("gr00t", "LICENSE"))
+        return
+    if not all((args.profile, args.weights, args.benchmark_image, args.output_dir)):
+        parser.error("--policy-image requires --profile, --weights, --benchmark-image and --output-dir")
     if args.profile != "libero" and args.suite != "libero_spatial":
         parser.error("--suite applies only to the LIBERO profile")
     if not math.isfinite(args.sim_gpu_mem_gb) or args.sim_gpu_mem_gb <= 0:
         parser.error("sim-gpu-mem-gb must be finite and positive")
-    model_reference = json.loads((HERE / "profiles/groot-model.json").read_text())
-    for name, expected in model_reference["files"].items():
-        if file_digest(args.reference_source / name) != expected:
-            raise ValueError("model reference source content changed: " + name)
+    check_source(args.source, model_reference, model_reference["files"])
     reference_file = HERE / "reference.json" if args.profile == "libero" else HERE / ("profiles/groot-" + args.profile + ".json")
     reference = json.loads(reference_file.read_text())
     if args.profile == "libero" and args.benchmark_source is None:
         parser.error("LIBERO reuses the pinned OpenPI benchmark; provide --benchmark-source")
-    root = (args.benchmark_source or args.reference_source).resolve()
+    root = (args.benchmark_source or args.source).resolve()
     for name, expected in reference["reference"]["files"].items():
         if file_digest(root / name) != expected:
             raise ValueError("reference source content changed: " + name)
@@ -52,7 +71,7 @@ def main():
     model = tree_digest(checkpoint)
     normalization = file_digest(checkpoint / "statistics.json")
     backbone = tree_digest(args.weights / "hub")
-    model_image, benchmark_image = image_id(args.policy_image), image_id(args.benchmark_image)
+    model_image, benchmark_image = require_image(args.policy_image, manifest), image_id(args.benchmark_image)
     embodiment = {"libero": "LIBERO_PANDA", "widowx": "SIMPLER_ENV_WIDOWX", "google": "SIMPLER_ENV_GOOGLE"}[args.profile]
     name = "groot-n17-" + args.profile
     if args.profile == "libero" and args.suite != "libero_spatial":

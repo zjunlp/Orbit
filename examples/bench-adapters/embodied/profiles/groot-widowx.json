@@ -5,7 +5,7 @@
   "reference": {
     "evaluation": {
       "repository": "https://github.com/NVIDIA/Isaac-GR00T",
-      "commit": "7b304f95b95790490b79bd263ba57015c3c12dfd"
+      "commit": "3b49067943eb1ab2eb2203b93d461c4390c78da3"
     },
     "libero": {
       "commit": "8f1084e3132a39270c3a13ebe37270a43ece2a01"
@@ -17,7 +17,7 @@
     "files": {
       "gr00t/eval/rollout_policy.py": "sha256:e0833d57826f26e5b05e46e202f56eeae53fbb0e22b1c8b7c6b2271320e66132",
       "gr00t/eval/sim/wrapper/multistep_wrapper.py": "sha256:8b2e7b8dea5399c1e1b51e9d9419aa32309aa9b46aaad88223d8dae6b3e56237",
-      "gr00t/policy/server_client.py": "sha256:d29d2e68e97ceae1762243315f23f22e696538da60fecd87d9a1391d20f7f1b9",
+      "gr00t/policy/server_client.py": "sha256:1effb60bb581d1c782fa74876a550a2e6f2b28f52bdc4f555e8b9a0188ab3a4e",
       "gr00t/policy/gr00t_policy.py": "sha256:0a9fd201a23c972bf8c216496e61de32aca945cfdad5222f7dbfc5015f60c89a",
       "gr00t/eval/sim/SimplerEnv/simpler_env.py": "sha256:e7f9a9129bfeb4b5e16410b699a960af742abb28b119608d90c13516cafe0840",
       "external_dependencies/SimplerEnv/simpler_env/__init__.py": "sha256:d12b2be350fb5ff2671e4b1334d67c7afc6bef90919db6e9e15d42abad393c61",
