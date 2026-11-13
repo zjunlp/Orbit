@@ -29,18 +29,18 @@ def check_assets(target, expected):
         raise ValueError("RoboTwin assets differ from the frozen reference")
 
 
-def native_args(root, task, suite):
+def native_args(root, task, suite, config_dir="task_config"):
     import yaml
 
     def read(path):
         return yaml.safe_load((root / path).read_text(encoding="utf-8"))
 
-    args = read(f"task_config/{suite}.yml")
+    args = read(f"{config_dir}/{suite}.yml")
     if args["embodiment"] != ["aloha-agilex"]:
         raise ValueError("expected the RoboTwin Aloha-AgileX embodiment")
-    embodiment = read("task_config/_embodiment_config.yml")["aloha-agilex"]
+    embodiment = read(f"{config_dir}/_embodiment_config.yml")["aloha-agilex"]
     robot = Path(embodiment["file_path"])
-    camera = read("task_config/_camera_config.yml")[args["camera"]["head_camera_type"]]
+    camera = read(f"{config_dir}/_camera_config.yml")[args["camera"]["head_camera_type"]]
     return {
         **args, "task_name": task, "task_config": suite, "eval_mode": True,
         "render_freq": 0, "eval_video_log": False,
@@ -92,7 +92,8 @@ class RoboTwinBenchmark:
         config = self.reference["environment"]
         assets = config["assets"]
         check_assets(assets["target"], assets["digest"])
-        return native_args(Path(assets["target"]).parent, self.task, config["suite"])
+        return native_args(Path(assets["target"]).parent, self.task, config["suite"],
+                           config.get("taskConfigDir", "task_config"))
 
     def _expert_scene(self, seed, args):
         native = importlib.import_module("envs." + self.task)
@@ -155,6 +156,11 @@ class RoboTwinBenchmark:
             return self.task.replace("_", " ")
 
         from generate_episode_instructions import generate_episode_descriptions
+
+        if config.get("instructionSeedMode") == "native-episode-seed":
+            descriptions = generate_episode_descriptions(self.task, [info], config["instructionCount"], seed=self.seed)
+            candidates = descriptions[0].get(config["instructionSplit"]) if descriptions else None
+            return random.Random(f"{self.seed}:select").choice(candidates) if candidates else self.task
 
         random_state = random.getstate()
         try:
