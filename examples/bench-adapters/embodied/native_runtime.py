@@ -105,10 +105,11 @@ def read_native_catalog(image, module):
     return json.loads(line[len(prefix):])
 
 
-def write_benchmark(output_dir, name, source, image, renderer, interpreter, reference, *, gpu_mem=None):
+def write_benchmark(output_dir, name, source, image, renderer, interpreter, reference, *, gpu_mem=None, suite=None):
     benchmark = {"name": name, "path": str(source.resolve()), "adapter": str(HERE / "adapter.py"),
                  "config": {"image": image, "python": interpreter, "renderer": renderer,
                             "simGpus": "1" if gpu_mem is not None else "0",
+                            **({"suite": suite} if suite is not None else {}),
                             **({"simGpuMemGB": str(gpu_mem)} if gpu_mem is not None else {}),
                             "reference": json.dumps(reference, separators=(",", ":")),
                             "profileDigest": digest(reference), "implementationDigest": implementation_digest()}}

@@ -1,9 +1,10 @@
-# Fast-WAM on LIBERO Spatial
+# Fast-WAM on LIBERO
 
 Orbit registers the released optional-IDM checkpoint in two modes, `fast-wam-libero-first-frame`
-and `fast-wam-libero-idm`. Both run in the native `libero-spatial-fast-wam-native` recipe.
-LIBERO renders two 256 × 256 cameras, settles for 30 native steps with seed 42, and ends
-at native success or after 400 controls. Both policies predict 32 actions and execute up
+and `fast-wam-libero-idm`. Both run on the 40 native tasks across Spatial, Object, Goal
+and Long. LIBERO renders two 256 × 256 cameras and settles for 30 native steps with
+seed 42. Episodes end at native success or at the upstream control limit, 400 for
+Spatial, Object and Goal and 700 for Long. Both policies predict 32 actions and execute up
 to ten per query, using the release's scheduler shift of 1.0 and CPU noise seed of 42.
 [Upstream code and protocol](https://github.com/yuantianyuan01/FastWAM/tree/7faa71108368fbb3b6885649f112af607427a2d4)
 
@@ -42,6 +43,12 @@ orbit policy add "$config/policy-first_frame.json"
 orbit policy add "$config/policy-idm.json"
 ```
 
-Freeze Spatial initial states with [the shared planner](../../plan.py) and the generated
-`reference.json`. Use the same plan for both modes when comparing them. Orbit scores
+Repeat the registration with `--suite libero_object`, `--suite libero_goal` or
+`--suite libero_10` for the other suites. Pass the same suite to [the shared planner](../../plan.py)
+with the generated `reference.json`. Use the same plan for both modes when comparing them. Orbit scores
 native LIBERO completion and verifies the saved controls on CPU.
+
+The [LeRobot 0.7.0 image](../lerobot/lerobot-v070.Dockerfile) contains the separate
+LeRobot FastWAM implementation. The native Orbit recipe above uses the published
+optional-IDM checkpoint and its upstream loader. The [LeRobot FastWAM guide](https://huggingface.co/docs/lerobot/fastwam)
+describes its checkpoint layout and optional compiled inference.

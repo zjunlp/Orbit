@@ -57,7 +57,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | OpenVLA-OFT Spatial，`openvla-oft-libero-spatial` | LIBERO-PRO Spatial Language、Spatial Task | 两种扰动各完成一条有效样本，CPU 重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | OpenPI π₀.₅ DROID，`pi05-droid-molmospaces` | MolmoSpaces Pick、Pick-and-Place，DROID 关节控制 | 两条轨道各有一个固定样本使用本地 EGL 开发配置完成，CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | OpenWAM，`openwam-alpha-sim-vlabench` | VLABench Track 1 | 一个真实 episode 与独立 CPU 验证；另做了参考客户端 I/O 和动作转换对照。[记录](../tasks/20261109-openwam.md) |
-| Fast-WAM，`fast-wam-libero-first-frame` / `fast-wam-libero-idm` | LIBERO Spatial，30 步预热、10 步重规划 | `first_frame` 完成两条真实样本，`idm` 复用其中一个初态。两种模式的首个动作块不同，均通过 CPU 验证和重评。[记录](../tasks/20261113-fast-wam.md) |
+| Fast-WAM，`fast-wam-libero-first-frame` / `fast-wam-libero-idm` | LIBERO Spatial、Object、Goal、Long，共 40 个任务，30 步预热、10 步重规划 | Spatial 两种模式均通过 CPU 验证和重评。[Spatial 记录](../tasks/20261113-fast-wam.md) · [扩展验证](../tasks/20261113-fast-wam-libero-suites.md) |
 | DM0.5 Arena，`dm05-vla-arena` | VLA-Arena Static Obstacles L0、L1，10 步重规划与原始约束代价 | 两个冻结样本通过真实批次和 CPU 重评。双相机、状态、指令及预热后动作与上游一致。[记录](../tasks/20261112-dm05-vla-arena.md) |
 | GR00T N1.7 Bridge / Fractal，`groot-n17-widowx` / `groot-n17-google` | SimplerEnv WidowX / Google Robot 的 GR00T recipe | 两套均有真实抽样、批次和独立验证；WidowX 有参考边界抽查，Google 有固定动作对照。[WidowX](../tasks/20261106-embodied-batches.md) · [参考边界](../tasks/20261106-embodied-endpoints.md) · [Google](../tasks/20261107-groot-google.md) |
 | StarVLA QwenGR00T 20K，`starvla-qwen3vl-groot-widowx` | SimplerEnv WidowX Visual Matching，224×224 RGB 配方 | Carrot on Plate 完成一条真实样本，独立 CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |

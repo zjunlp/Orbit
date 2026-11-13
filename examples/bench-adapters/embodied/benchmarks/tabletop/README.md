@@ -65,6 +65,15 @@ docker build --label orbit.task=embodied-eval -f "$adapter/policies/lerobot/lero
   -t orbit/embodied-lerobot-policy:0.5.1 .
 ```
 
+The LeRobot 0.7.0 runtime also serves these checkpoints. To build it, set
+`TORCH_CUDA_BASE` to a PyTorch 2.11 CUDA image with Python 3.12, then use the
+new image tag when generating the policy registrations.
+
+```bash
+docker build --label orbit.task=embodied-eval --build-arg POLICY_BASE="$TORCH_CUDA_BASE" \
+  -f "$adapter/policies/lerobot/lerobot-v070.Dockerfile" -t orbit/embodied-lerobot-policy:0.7.0 .
+```
+
 For ManiSkill3 and Meta-World, check out [RLinf](https://github.com/RLinf/RLinf/tree/1bf78980d9339cbc67497eddceb9a1e3a74e2acc)
 at `1bf78980d9339cbc67497eddceb9a1e3a74e2acc`. Build or reuse the
 [native Gym simulator image](../../policies/groot/README.md) and the [OpenVLA-OFT image](../../policies/openvla-oft/README.md).
