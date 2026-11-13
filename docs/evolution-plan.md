@@ -20,7 +20,7 @@
 
 | 编号 | 工作包 | 依赖 | 规模 | 状态 |
 | --- | --- | --- | --- | --- |
-| T1 | ATIF 契约与 Codex / Claude Code 转换器 | — | 中 | [ ] |
+| T1 | ATIF 契约与 Codex / Claude Code 转换器 | — | 中 | [x] |
 | T2 | 轨迹生成、存储、API 与 CLI；会话视图改为从轨迹派生 | T1 | 中 | [ ] |
 | T3 | Token 记账 | T2 | 小 | [ ] |
 | T4 | 环境侧对齐（GUI、具身、对话） | T2 | 中 | [ ] |
@@ -57,7 +57,7 @@
 - **M4 讲得出**：V4、V5、X2。跨环境准入实验与迁移矩阵；轨迹和判定可以静态分享。
 - **分叉线**与上面并行：F0 随时可做；F1 在 T2 之后；F2–F4 是成本最高、风险最大的部分，排在 M2 之后。
 
-## 2. 现状基线（已对照代码）
+## 2. 实施前基线（T1 开始前，已对照代码）
 
 | 能力 | 现状 | 位置 |
 | --- | --- | --- |
@@ -128,17 +128,19 @@
 
 ### T1 ATIF 契约与两个转换器
 
-分支 `feat/atif-trajectory`。模块：`contracts/atif.ts`（新）、`sessions/`（把 `index.ts` 拆成 `codex.ts`、`claude.ts`、`atif.ts`，
-保持 §3 依赖方向）。
+分支 `feat/atif-trajectory`。模块：`contracts/atif.ts`（新）、`sessions/`（转换逻辑分在 `codex.ts`、`claude.ts`、`atif.ts`，
+`index.ts` 保持公开入口与旧会话兼容；T2 再切换视图来源，保持 §3 依赖方向）。
 
-- [ ] `contracts/atif.ts`：ATIF 的 zod 定义（写 v1.7；读 v1.5–v1.8，未知版本报错而不是猜）与 `extra.orbit` 定义。
-- [ ] Codex rollout → ATIF：`response_item`（message、reasoning、function / custom tool call 与 output）、`token_count`、`compacted`。
-- [ ] Claude Code JSONL → ATIF：`uuid` / `parentUuid` 链、`tool_use` / `tool_result` 配对、`usage`、压缩摘要、sidechain。
-- [ ] 转换器是纯函数；每个带一组脱敏的真实样例作为 golden 测试（样例不含凭据、路径和任务答案）。
-- [ ] 开发检查：用 Harbor 的 `python -m harbor.utils.trajectory_validator` 校验产物（隔离的 Python 环境，不进 CI，不让 daemon 依赖 Python）。
-- [ ] 真实检查：本机各取一次真实的 Codex 与 Claude Code Run，转换后校验通过，工具调用与结果一一配对，token 合计与 CLI 自报一致。
+- [x] `contracts/atif.ts`：ATIF 的 zod 定义（写 v1.7；读 v1.5–v1.8，未知版本报错而不是猜）与 `extra.orbit` 定义。
+- [x] Codex rollout → ATIF：`response_item`（message、reasoning、function / custom tool call 与 output）、`token_count`、`compacted`。
+- [x] Claude Code JSONL → ATIF：`uuid` / `parentUuid` 链、`tool_use` / `tool_result` 配对、`usage`、压缩摘要、sidechain。
+- [x] 转换器是纯函数；每个带一组脱敏的真实样例作为 golden 测试（样例不含凭据、路径和任务答案）。
+- [x] 开发检查：用 Harbor 的 `python -m harbor.utils.trajectory_validator` 校验产物（隔离的 Python 环境，不进 CI，不让 daemon 依赖 Python）。
+- [x] 真实检查：本机各取一次真实的 Codex 与 Claude Code Run，转换后校验通过，工具调用与结果一一配对，token 合计与 CLI 自报一致。
 
 风险：原生格式随 CLI 版本变化。对策：转换器记录见过的 `cli_version`，遇到未知事件类型时保留在 `extra` 并把完整度标为 `truncated`，不静默丢弃。
+
+实现与验证见 [T1 任务记录](tasks/20261112-atif-trajectory.md)。
 
 ### T2 生成、存储、API、CLI
 

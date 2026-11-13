@@ -1,0 +1,166 @@
+{
+  "trajectory": {
+    "schema_version": "ATIF-v1.7",
+    "session_id": "fixture-session",
+    "agent": {
+      "name": "codex",
+      "version": "0.167.0",
+      "model_name": "fixture-model"
+    },
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-11-12T00:00:02Z",
+        "source": "user",
+        "message": "Run the fixture command.",
+        "extra": {
+          "orbit": {
+            "native": {
+              "id": "fixture-turn",
+              "line": 3
+            },
+            "reasoning": "none"
+          }
+        }
+      },
+      {
+        "step_id": 2,
+        "timestamp": "2026-11-12T00:00:03Z",
+        "source": "agent",
+        "model_name": "fixture-model",
+        "reasoning_effort": "medium",
+        "message": "I will run the fixture command.",
+        "tool_calls": [
+          {
+            "tool_call_id": "fixture-call",
+            "function_name": "exec",
+            "arguments": {
+              "input": "tools.exec_command({cmd: 'printf fixture'})"
+            },
+            "extra": {
+              "orbit": {
+                "native_type": "custom_tool_call",
+                "native_line": 5,
+                "raw_arguments": "tools.exec_command({cmd: 'printf fixture'})"
+              }
+            }
+          }
+        ],
+        "observation": {
+          "results": [
+            {
+              "source_call_id": "fixture-call",
+              "content": "{\"output\":\"fixture\",\"exit_code\":0}",
+              "extra": {
+                "orbit": {
+                  "native_line": 6,
+                  "timestamp": "2026-11-12T00:00:05Z"
+                }
+              }
+            }
+          ]
+        },
+        "metrics": {
+          "prompt_tokens": 100,
+          "completion_tokens": 10,
+          "cached_tokens": 50,
+          "extra": {
+            "orbit": {
+              "native_usage": {
+                "input_tokens": 100,
+                "cached_input_tokens": 50,
+                "output_tokens": 10,
+                "reasoning_output_tokens": 0,
+                "total_tokens": 110
+              }
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "orbit": {
+            "native": {
+              "id": "fixture-turn",
+              "line": 4
+            },
+            "reasoning": "none"
+          }
+        }
+      },
+      {
+        "step_id": 3,
+        "timestamp": "2026-11-12T00:00:07Z",
+        "source": "agent",
+        "model_name": "fixture-model",
+        "reasoning_effort": "medium",
+        "message": "The fixture command completed.",
+        "metrics": {
+          "prompt_tokens": 120,
+          "completion_tokens": 12,
+          "cached_tokens": 80,
+          "extra": {
+            "orbit": {
+              "native_usage": {
+                "input_tokens": 120,
+                "cached_input_tokens": 80,
+                "output_tokens": 12,
+                "reasoning_output_tokens": 2,
+                "total_tokens": 132
+              }
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "orbit": {
+            "native": {
+              "id": "fixture-turn",
+              "line": 8
+            },
+            "reasoning": "opaque"
+          }
+        }
+      }
+    ],
+    "final_metrics": {
+      "total_prompt_tokens": 220,
+      "total_completion_tokens": 22,
+      "total_cached_tokens": 130,
+      "total_steps": 3,
+      "extra": {
+        "orbit": {
+          "reported_total": {
+            "input_tokens": 220,
+            "cached_input_tokens": 130,
+            "output_tokens": 22,
+            "reasoning_output_tokens": 2,
+            "total_tokens": 242
+          },
+          "reasoning_output_tokens": 2,
+          "measured_calls": 2,
+          "calls": 2
+        }
+      }
+    },
+    "extra": {
+      "orbit": {
+        "version": 1,
+        "importer": {
+          "name": "codex-rollout",
+          "version": 1
+        },
+        "sources": [
+          {
+            "path": "agent/codex/rollout.jsonl",
+            "sha256": "ca3329e84bb08e2d187eed10f4e5d1343fc4d2f5a88a72a1a4aa9a98385225fd",
+            "bytes": 2326
+          }
+        ],
+        "completeness": "agent-only",
+        "cli_version": "0.167.0",
+        "cli_versions": ["0.167.0"]
+      }
+    }
+  },
+  "media": []
+}

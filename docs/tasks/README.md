@@ -28,6 +28,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Agents, auth, plugins, notifications
 
+- [20261112](20261112-atif-trajectory.md) ATIF contract and native Codex / Claude Code converters
+
 - [20260930](20260930-r2-auth-notify.md) R2: agent auth profiles and notifications
 - [20261008](20261008-agent-plugins.md) Codex, dsh and pi plugin distribution
 - [20261008](20261008-feishu-app.md) Feishu app: phone access through a long connection
