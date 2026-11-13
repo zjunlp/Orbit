@@ -66,6 +66,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | RoboCasa365 Diffusion Policy，`diffusion-policy-robocasa365-shared` | RoboCasa365 Atomic-Seen，双帧八步 recipe | 两个冻结样本覆盖成功停止与步数上限，完成 CPU 验证和选定重评。[记录](../tasks/20261109-robocasa365-diffusion-policy.md) |
 | 社区 RoboTwin π₀.₅，`pi05-robotwin-adjust-bottle-shared` | RoboTwin Clean 单任务 `adjust_bottle` | 两个专家通过场景的真实批次及独立验证，另有原生固定动作对照。[记录](../tasks/20261107-robotwin.md) |
 | LingBot-VLA 4B RoboTwin，`lingbot-vla-4b-robotwin` | RoboTwin Clean，50 步关节控制配方 | `adjust_bottle` 完成一条真实样本，独立 CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
+| LingBot-VA，`lingbot-va-robotwin` | RoboTwin Clean，末端位姿控制与多相机历史 | 同一服务完成两条 `adjust_bottle` 冻结样本，跨 episode 缓存重置、CPU 验证与重评通过。[记录](../tasks/20261113-lingbot-va.md) |
 | Fast-VLA，`fast-vla-robotwin` | RoboTwin Clean、Randomized，带历史头部相机的 50 步关节控制 | Clean 同一模型服务完成两个冻结样本，Randomized 完成一个；三条 CPU 重评一致。发布动作块和跨 episode 缓存重置对照通过。[记录](../tasks/20261112-fast-vla-robotwin.md) |
 | X-VLA，`xvla-robotwin2` | RoboTwin Clean、Randomized 末端位姿协议 | 两套各两个真实样本并重评。[Clean](../tasks/20261108-embodied-calvin-xvla.md) · [Randomized](../tasks/20261109-embodied-benchmark-coverage.md) |
 | RLinf OpenVLA-OFT，`openvla-oft-rlinf-maniskill3` | ManiSkill3 Plate-25 | 两个真实样本通过共享批次、CPU 验证和重评。[记录](../tasks/20261108-embodied-native-expansion.md) |

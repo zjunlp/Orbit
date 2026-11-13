@@ -377,6 +377,22 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(policy.calls, 2)
         self.assertEqual(self.verify()["steps"], 7)
 
+    def test_first_chunk_can_be_shorter_than_the_steady_replan_interval(self):
+        policy = SyntheticPolicy()
+        predict = policy.act
+        def act(observation):
+            actions = predict(observation)
+            return actions[:2 if policy.calls == 1 else 5]
+        policy.act = act
+        parameters = {"firstReplanSteps": 2, "replanSteps": 5}
+        result = self.run_sample(SyntheticBenchmark(), policy, {"reference": {"parameters": parameters}})
+        self.assertTrue(result["valid"])
+        self.assertEqual(policy.calls, 2)
+        self.assertEqual(np.load(self.output / "chunks/0.npy").shape, (2, 7))
+        rows = [json.loads(line) for line in (self.output / "actions.jsonl").read_text().splitlines()]
+        self.assertEqual([row["sourceObservation"] for row in rows], [0, 0, 2, 2, 2, 2, 2])
+        self.assertTrue(self.verify()["valid"])
+
     def test_nonfinite_policy_and_environment_failure_remain_invalid(self):
         result = self.run_sample(SyntheticBenchmark(), SyntheticPolicy(invalid=True))
         self.assertEqual(result["failure"], "policy_act")

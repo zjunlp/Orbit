@@ -43,6 +43,7 @@ COPY --from=openpi /packages/openpi-client /app/packages/openpi-client
 COPY examples/bench-adapters/embodied/runtime/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json
 RUN ln -s ../assets ../task_config /opt/robotwin/envs/ && \
     printf '%s\n' /opt/robotwin /opt/robotwin/description/utils > /.venv/lib/python3.10/site-packages/robotwin.pth
+RUN /.venv/bin/python -c 'import msgpack_numpy; from websockets.sync.client import connect'
 ENV PYTHONUNBUFFERED=1 NVIDIA_DRIVER_CAPABILITIES=graphics,compute,utility
 WORKDIR /opt/robotwin
 ENTRYPOINT ["/.venv/bin/python"]

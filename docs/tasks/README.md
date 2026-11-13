@@ -139,6 +139,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261112](20261112-bigym2.md) Native BiGym 2.0 learned-policy evaluation
 - [20261112](20261112-cliport.md) Native CLIPort language-conditioned evaluation
 - [20261113](20261113-fast-wam.md) Fast-WAM on native LIBERO Spatial
+- [20261113](20261113-lingbot-va.md) LingBot-VA on native RoboTwin 2.0 Clean
 
 ## Web, catalog and taxonomy
 
