@@ -268,6 +268,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if result["valid"] and reference.get("environment", {}).get("kind") == "robocasa-v02":
         verify_robocasa_v02(controls, contract["horizon"])
     kind = reference.get("environment", {}).get("kind")
+    if result["valid"] and kind == "bigym2":
+        from .bigym2 import verify_bigym2
+        verify_bigym2(reference, contract["sample"], controls, result)
     if result["valid"] and kind in ("robomimic", "vima-bench"):
         verify_manipulation_stopping(kind, controls, contract["horizon"])
     if result["valid"] and kind == "molmospaces":

@@ -961,6 +961,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   [接入说明](../examples/bench-adapters/embodied/benchmarks/vla-arena/README.md)
 - **LIBERO-PRO**：固定初版的四套件和五类排行榜扰动。用上游扰动器生成 BDDL，并从同一 BDDL 取得策略指令与原生目标。
   初态用索引选取确定性构造种子，独立保存场景状态摘要。[接入说明](../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md)
+- **BiGym 2.0**：按 G1 的躯干俯仰动作和本体状态布局分别登记。按任务冻结 100 个种子、控制步数上限和 50 Hz 原生控制，
+  并在 CPU 验证中核对原生终止和跌倒状态。[接入说明](../examples/bench-adapters/embodied/benchmarks/bigym2/README.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

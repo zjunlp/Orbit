@@ -132,6 +132,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261111](20261111-embodied-policy-expansion.md) Native embodied policy expansion
 - [20261112](20261112-dm05-vla-arena.md) DM0.5 on native VLA-Arena
 - [20261112](20261112-fast-vla-robotwin.md) Fast-VLA on native RoboTwin 2.0
+- [20261112](20261112-bigym2.md) Native BiGym 2.0 learned-policy evaluation
 
 ## Web, catalog and taxonomy
 

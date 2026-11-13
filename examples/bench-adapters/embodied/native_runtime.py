@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from adapter import HERE, SDK, check_source, file_digest, pinned
+from adapter import HERE, SDK, check_source, digest, file_digest, implementation_digest, pinned
 
 
 ROBOCASA = {"repository": "https://github.com/robocasa/robocasa", "commit": "756598a5be52e052339bb2d957426e39015c2afb"}
@@ -78,6 +78,41 @@ def export_source(source, expected, target, paths):
                     expected["commit"], "--", *paths], check=True)
     subprocess.run(["tar", "-xf", str(archive), "-C", str(target)], check=True)
     archive.unlink()
+
+
+def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths):
+    with tempfile.TemporaryDirectory(prefix="orbit-" + kind + "-") as temporary:
+        context = Path(temporary) / kind
+        export_source(source, identity, context, source_paths)
+        label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
+                        "--build-context", kind + "=" + str(context), "-f", str(dockerfile),
+                        "-t", tag, str(HERE.parents[2])], check=True)
+
+
+def read_native_catalog(image, module):
+    prefix = "ORBIT_NATIVE_CATALOG="
+    code = ("import json; from " + module + " import native_catalog; "
+            + f"print({prefix!r} + json.dumps(native_catalog()))")
+    output = subprocess.check_output(
+        ["docker", "run", "--rm", "--network", "none", "--label", "orbit.task=embodied-eval",
+         "--mount", f"type=bind,src={SDK},dst=/orbit-sdk,readonly", "-e", "PYTHONPATH=/orbit-sdk",
+         image, "-B", "-c", code], text=True)
+    line, = (line for line in output.splitlines() if line.startswith(prefix))
+    return json.loads(line[len(prefix):])
+
+
+def write_benchmark(output_dir, name, source, image, renderer, interpreter, reference, *, gpu_mem=None):
+    benchmark = {"name": name, "path": str(source.resolve()), "adapter": str(HERE / "adapter.py"),
+                 "config": {"image": image, "python": interpreter, "renderer": renderer,
+                            "simGpus": "1" if gpu_mem is not None else "0",
+                            **({"simGpuMemGB": str(gpu_mem)} if gpu_mem is not None else {}),
+                            "reference": json.dumps(reference, separators=(",", ":")),
+                            "profileDigest": digest(reference), "implementationDigest": implementation_digest()}}
+    output = output_dir / name
+    output.mkdir(parents=True, exist_ok=True)
+    for filename, value in (("benchmark.json", benchmark), ("reference.json", reference)):
+        (output / filename).write_text(json.dumps(value, indent=2) + "\n")
 
 
 def check_policy_source(source, expected):

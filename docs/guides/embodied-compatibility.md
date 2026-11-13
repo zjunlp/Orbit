@@ -37,6 +37,7 @@
 | [Colosseum V2](../../examples/bench-adapters/embodied/benchmarks/colosseum-v2/README.md) | 16 个单臂、12 个双臂任务及 21 个原生预设（含无扰动与合并扰动） | 42 个登记共 588 个任务与预设组合，455 个可用，70 个由上游排除，63 个涉及缺资产 | 24 个可用任务通过 GPU reset、观测和一步控制检查；单臂、双臂各有全时限固定动作原生对照。另 4 个任务缺 PartNet 模型 1005 或 1027。[记录](../tasks/20261110-colosseum-v2.md) |
 | [VLA-Arena](../../examples/bench-adapters/embodied/benchmarks/vla-arena/README.md) | 11 个套件、170 个 L0–L2 任务，8,500 个发布初态 | 全部任务与初态，保留原生安全计分和语言、视觉探针 | 5 组短原生对照通过。安全任务固定动作跑满 300 步并经 CPU 重评。DM0.5 完成两个真实样本。官方 OFT 权重待校准。[原生接入](../tasks/20261110-vla-arena.md) · [DM0.5](../tasks/20261112-dm05-vla-arena.md) |
 | [LIBERO-PRO](../../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md) | 初版四个原版套件、五类排行榜扰动，共 200 个目录条目 | 20 个条件全部登记，固定 BDDL 和构造种子生成 10,000 个计划样本 | 200 个条目都通过原生 reset 和一步控制。两组短原生对照、一个 220 步固定动作 episode 和 CPU 重评通过。OpenVLA-OFT 在 Spatial Language 和 Spatial Task 各完成一条有效短测，CPU 重评一致。[原生接入](../tasks/20261110-libero-pro.md) · [模型短测](../tasks/20261111-embodied-policy-expansion.md) |
+| [BiGym 2.0](../../examples/bench-adapters/embodied/benchmarks/bigym2/README.md) | 正式 learned-policy 协议 20 个任务，每任务 100 个种子 | 20 个任务全部接入，按 20D / 21D 动作分成两组登记，共 2,000 个计划样本 | 全部任务做过原生 reset、相机和一步控制。两种动作规格各有一条完整固定动作对照，并通过 CPU 验证和重评。训练权重待补。[记录](../tasks/20261112-bigym2.md) |
 
 ## 真实模型实测
 

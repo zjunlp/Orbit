@@ -9,7 +9,7 @@ from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
                           "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic",
-                          "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro")
+                          "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2")
 
 
 def digest(value):
@@ -145,6 +145,8 @@ def reset_seed(sample, reference=None):
         count = environment["initialStateCounts"].get(sample["taskId"], 0)
         if not 0 <= index < count or not 0 <= seed < 2 ** 32 or seed != environment.get("environmentSeed", seed):
             raise ValueError("sample is outside the frozen initial-state catalog or seed recipe")
+        if environment.get("kind") == "bigym2":
+            return seed + index
         if environment.get("kind") == "vla-arena" and environment.get("protocol") == "dm05":
             seed += environment["catalog"][sample["taskId"]]["index"] * 10000 + sample["repetition"]
             if not 0 <= seed < 2 ** 32:

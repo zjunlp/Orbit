@@ -184,6 +184,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "robomimic":
         from orbit_embodied.robomimic import RoboMimicBenchmark
         benchmark = RoboMimicBenchmark(reference, sample["taskId"])
+    elif kind == "bigym2":
+        from orbit_embodied.bigym2 import BiGym2Benchmark
+        benchmark = BiGym2Benchmark(reference, sample["taskId"])
     elif kind == "vima-bench":
         from orbit_embodied.vima_bench import VIMABenchBenchmark
         benchmark = VIMABenchBenchmark(reference, sample["taskId"])
@@ -231,7 +234,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
         benchmark = native(suite, name, settle_steps=reference["parameters"]["settleSteps"])
     expected_horizon = reference_horizon(reference, sample["taskId"])
-    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128}.get(kind, 256)
+    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84}.get(kind, 256)
     if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):
         expected_render_size = WIDOWX_AREA_SIZE
     policy = LazyPolicy(request["policy"])

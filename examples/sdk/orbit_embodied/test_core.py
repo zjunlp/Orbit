@@ -87,6 +87,27 @@ class CoreTests(unittest.TestCase):
     def verify(self):
         return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
 
+    def test_bigym2_fall_overrides_task_success(self):
+        from orbit_embodied.bigym2 import verify_bigym2
+
+        task = self.sample["taskId"]
+        sample = {**self.sample, "initialStateId": "99", "environmentSeed": 620000}
+        reference = {"environment": {"kind": "bigym2", "environmentSeed": 620000,
+                                     "horizons": {task: 4}, "taskTitles": {task: "Open the drawer."},
+                                     "initialStateCounts": {task: 100}}}
+        action = [0.0] * 20
+        controls = [
+            {"action": action, "nativeAction": action, "nativeDone": step == 2,
+             "terminated": step == 2, "nativeSuccess": False,
+             "state": {"instruction": "Open the drawer.", "taskSucceeded": step == 2,
+                       "fell": True, "truncation": None}} for step in (1, 2)
+        ]
+        native = {"source": "BiGym 2.0 protocol v1", "task": task, "seed": 620099, "termination": "fell",
+                  "success": False, "taskSucceeded": True, "fell": True, "truncation": None}
+        verify_bigym2(reference, sample, controls, {"native": native})
+        with self.assertRaisesRegex(ValueError, "success or stopping"):
+            verify_bigym2(reference, sample, [controls[0], {**controls[1], "nativeSuccess": True}], {"native": native})
+
     def test_calvin_partial_sequence_replans_and_verifies_its_progress(self):
         tasks = ["one", "two", "three", "four", "five"]
 

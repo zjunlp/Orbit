@@ -68,7 +68,8 @@ def settings(req):
     if not pinned(image):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
     kind = reference.get("environment", {}).get("kind")
-    renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",)}.get(kind, ("osmesa", "egl", "vulkan"))
+    renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",),
+                 "bigym2": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -212,7 +213,7 @@ def solve_one(req):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
-                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro"):
+                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")

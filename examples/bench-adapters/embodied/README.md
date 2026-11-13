@@ -37,6 +37,7 @@ from the current recipe.
 | MolmoSpaces-Bench | [MS manipulation tracks](benchmarks/molmospaces/README.md) |
 | Colosseum V2 | [Single-arm and bimanual perturbation protocols](benchmarks/colosseum-v2/README.md) |
 | VLA-Arena | [Difficulty levels and safety scoring](benchmarks/vla-arena/README.md) · [DM0.5](policies/dm05/README.md) |
+| BiGym 2.0 | [G1 learned-policy evaluation](benchmarks/bigym2/README.md) |
 
 The adapter lists native tasks and runs frozen samples. Orbit attaches the independently registered
 model service for Solve. A separate CPU Run verifies the saved evidence for each episode.
