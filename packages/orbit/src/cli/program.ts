@@ -42,6 +42,7 @@ import {
   formatRuns,
 } from "./format.ts";
 import { registerPlugin } from "./plugin.ts";
+import { registerTrajectory } from "./trajectory.ts";
 
 export interface ProgramDeps {
   /** Run the daemon in the foreground; provided by the composition root (src/bin.ts). */
@@ -105,6 +106,7 @@ export function createProgram(deps: ProgramDeps, paths: OrbitPaths = orbitPaths(
     .version(VERSION)
     .enablePositionalOptions();
   const client = () => connect(paths);
+  registerTrajectory(program, client);
   const print = (json: boolean | undefined, value: unknown, text: () => string) =>
     console.log(json ? JSON.stringify(value, null, 2) : text());
 

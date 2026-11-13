@@ -7,7 +7,7 @@ import { finishHarness, resumeAgentCommand } from "../harness/index.ts";
 import { builtinRegistry } from "../harness/registry.ts";
 import { nowIso } from "../lib/ids.ts";
 import { dirBytes } from "../records/index.ts";
-import { loadRunAgentTranscript } from "../sessions/index.ts";
+import { runAgentSession } from "../sessions/index.ts";
 import type { RunContext } from "./context.ts";
 import { UserError } from "./errors.ts";
 
@@ -72,7 +72,7 @@ export async function capture(
     const filesBytes = await dirBytes(root);
     if (filesBytes === null || layerBytes + filesBytes > limit)
       throw new Error("checkpoint files exceed checkpoint size limit");
-    const transcript = await loadRunAgentTranscript(join(root, "orbit", "agent"));
+    const session = await runAgentSession(join(root, "orbit", "agent"));
     const clearEnv = [
       ...new Set([
         ...run.spec.passEnv,
@@ -93,10 +93,7 @@ export async function capture(
       imageId,
       sizeBytes: layerBytes + filesBytes,
       executionMin,
-      session:
-        transcript && (transcript.harness === "codex" || transcript.harness === "claude-code")
-          ? { harness: transcript.harness, sessionId: transcript.sessionId }
-          : null,
+      session,
       createdAt: nowIso(),
       reason: null,
     };

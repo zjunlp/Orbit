@@ -1,7 +1,9 @@
 // The cluster API a node serves to its primary on the exposed address. It only reaches runs that
 // arrived from a primary, and code bundles; local runs and secrets are not exposed.
+
 import { existsSync } from "node:fs";
 import { open } from "node:fs/promises";
+import { join } from "node:path";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import {
@@ -118,6 +120,29 @@ export function createWorkerApp(deps: WorkerDeps): Hono {
     } finally {
       await fh.close();
     }
+  });
+
+  api.get("/runs/:id/trajectory", async (c) => c.json(await runs.trajectory(own(c).id)));
+  api.post("/runs/:id/trajectory/rebuild", async (c) =>
+    c.json(await runs.trajectory(own(c).id, true)),
+  );
+  api.get("/runs/:id/trajectory/files/*", async (c) => {
+    const run = own(c);
+    const rel = decodePath(c.req.path, "/files/");
+    if (!/^media\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(rel))
+      return c.json({ error: "not found" }, 404);
+    const f = await outputFile(
+      runs.dirs(run.id).root,
+      join("orbit", "trajectory", rel),
+      c.req.raw.signal,
+    );
+    if (!f) return c.json({ error: "not found" }, 404);
+    c.header("content-length", String(f.size));
+    if (c.req.method === "HEAD") {
+      await f.body.cancel();
+      return c.body(null);
+    }
+    return c.body(f.body);
   });
 
   api.get("/runs/:id/artifacts", async (c) =>

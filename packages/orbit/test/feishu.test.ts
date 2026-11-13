@@ -56,6 +56,7 @@ function run(id: string, state: Run["state"]): Run {
     note: "",
     folder: "",
     usage: null,
+    trajectory: null,
     services: [],
     after: null,
     phases: [],

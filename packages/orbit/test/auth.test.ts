@@ -240,6 +240,7 @@ function run(id: string, state: Run["state"], group?: string): Run {
     note: "",
     folder: "",
     usage: null,
+    trajectory: null,
     services: [],
     after: null,
     phases: [],

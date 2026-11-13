@@ -13,10 +13,10 @@ Orbit 是让验收有据可依的实验室，位于做决策的 Agent 与负责�
 标题中的 Evolve 需要证据证明进化是真的，Any Environment 是证明的方式：
 跨多类 benchmark 与多种 Agent 是进化门的前提，只在诞生地测过的改进不算验证。
 
-前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 纯转换器及部分环境导入器，尚未接入 Run 生命周期；进化门仍在设计中、尚未写入本文，
+前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期及 API/CLI 接入，环境对齐仍待完成；进化门仍在设计中、尚未写入本文，
 目前只有配置版本、血缘与配对统计（§9.16）。在进化门的设计写入本文之前，§9.16 的"不做方法进化声明"继续有效。
 统一轨迹、导出、分叉、进化门与进化实验的分步计划见 [evolution-plan.md](evolution-plan.md)；它是计划而不是设计，
-各工作包落地时把定稿写回本文；§9.8 已采用 ATIF，生成、存储与 API 留在 T2。
+各工作包落地时把定稿写回本文；§9.8 已采用 ATIF，Run 生成、存储、重建与读取已实现。
 具身设备后端是未来方向。规划、分析与迭代仍由 Agent 主导，Orbit 不提出改动，只提供执行、证据与判定依据。
 
 > Orbit 让 Codex / Claude Code 等 Agent 在隔离的 Docker 中按资源规则运行实验，
@@ -45,7 +45,7 @@ orbit daemon (one per node; single writer of local state)
   ├─ auth        credential profiles per Agent (login / API key / relay base URL)
   ├─ harness     Agent registry: definitions, install, credentials, argv, transcripts
   ├─ records     logs, metrics, artifacts, events, notes
-  ├─ sessions    host Agent session capture (Codex / Claude Code parsers) linked to runs
+  ├─ sessions    native Agent evidence, ATIF conversion, storage and transcript projection
   ├─ bench       adapters, agent profiles + method bundles, trials, outcomes
   └─ cluster     node join, heartbeat, code bundles, remote placement and mirroring (R4)
   ▼
@@ -194,9 +194,10 @@ unknown。纯粹用于展示：准入只看显存占用。
 ```
 
 **Run**：`{ id, spec, state, exitCode?, node, remote, origin?, leaseId?, containerId?, code{commit, dirty, diffRef},
-createdAt/startedAt/endedAt, cleanup: pending|done|failed, usage? }`
+createdAt/startedAt/endedAt, cleanup: pending|done|failed, usage?, trajectory }`
 
 - `state`: `queued → starting → running → succeeded | failed | cancelled | lost`。
+- `trajectory`：`{ schema, steps, completeness, importer: { name, version } } | null`，仅存摘要；完整 ATIF 和媒体留在 Run 文件中（§9.8）。旧记录默认 null。
 - 执行结果（state/exitCode）、清理状态（cleanup）、评测有效性（bench 中）是三个独立字段。
 - `remote`：主节点上的镜像记录，Run 实际在 `node` 上执行；`origin`：worker 上替主节点执行的 Run 的主节点名（§8）。
 - mount 二选一：`source`（本机绝对路径）或 `dataset`（命名数据集，在执行节点解析为本地路径）；
@@ -273,11 +274,12 @@ Docker 应答后固定结果；查询失败（如 daemon 先于 Docker 启动）
 `claude` / `codex` 决定 harness（Agent 相互嵌套时子进程会继承父 Agent 的环境变量），会话 ID 取
 `CLAUDE_CODE_SESSION_ID` / `CODEX_THREAD_ID`；Codex 无 ID 时按 cwd 找最近的会话文件。daemon 读取
 `~/.claude/projects/**/<id>.jsonl` 或 `~/.codex/sessions/YYYY/MM/DD/rollout-*-<id>.jsonl`，
-归一为 `SessionMessage`（text / thinking / tool_call / tool_result），Web 标出提交该 Run 的那一步。
+经同一套原生转换器生成 ATIF，再投影为 `SessionMessage`（text / thinking / tool_call / tool_result），Web 标出提交该 Run 的那一步。
 Run 内运行的 Agent（auth profile、bench solve）的会话随 Agent home 留在 Run 目录（`orbit/agent/{codex,claude}`），
-取其中最新的会话文件（跳过 Claude 的 subagents）。`GET runs/:id/session` 返回 `RunSessions { submitter,
-submitterError, agent }`；Web Session 页两种都有时左右两栏（左提交者、右 Run 内 Agent），只有一种时单独显示
-（带提示列表与侧栏）。远端 Run 的 Agent 会话留在 worker 上，主节点不显示。
+选择最新主会话（跳过 Codex child rollout；Claude subagents 嵌入主轨迹）。`GET runs/:id/session` 从 ATIF 投影，
+返回 `RunSessions { submitter, submitterError, agent, agentError }`；无 Agent 证据返回 null，读取/转换失败明确提示。
+Web 两种都有时左右两栏（左提交者、右 Run 内 Agent），只有一种时单独显示，截断轨迹带提示。
+远端 Run 的 Agent 轨迹与媒体由 worker 提供，经主节点转读；提交者会话仍只在主节点查找。
 
 **失败也要保留证据**：任何终态都先采集日志与 `$ORBIT_OUTPUT`，再清理容器；日志读到 EOF，截断必须标记。
 执行超时计时在确认容器 / 进程退出后立即停止，日志排空、产物采集与用量收尾不计入执行时限；
@@ -315,6 +317,7 @@ oomKilled }`，运行中写库（不发变更事件），终态前再采一次�
 
 `/api/v1`：`health`、`POST login-code`、`resources`、`doctor`、`ledger`（资源 + 活动租约 + 排队原因）、`GET/POST runs`、
 `runs/:id`、`runs/:id/{cancel,note,wait,events,logs,log.txt,metrics,artifacts,files/*,diff,session}`、
+`GET runs/:id/trajectory`、`POST runs/:id/trajectory/rebuild`、`GET runs/:id/trajectory/files/media/*`（§9.8）、
 `POST runs/check`（运行前检查）、`POST runs/delete`、`stream`（SSE：`run` 变化推送，`deleted` 删除推送）、`GET/POST auth`、`DELETE auth/:name`、`POST auth/:name/test`、
 `GET/POST notify`、`DELETE notify/:name`、`POST notify/:name/{test,pair}`，bench 路由（§7），
 `GET/POST cluster/nodes`、`DELETE cluster/nodes/:name`、`GET/POST cluster/expose`、`GET cluster/token`、
@@ -769,7 +772,7 @@ worker 不可达时返回 502。终态且 worker 已完成清理后同步结束�
 
 **已知限制**：bundle 缓存不自动回收；worker 离线期间其上的镜像 Run 保持原状态，直到它恢复或被
 `orbit node rm`（此时记为 `lost`）；worker 重启并重新附着 Run 时镜像日志可能被截断重拉，以 worker 上的
-日志为准；Agent 会话与 diff 只在主节点。
+日志为准；提交者会话与 diff 只在主节点。Agent 轨迹摘要随 Run 同步，结束后重建或补建的摘要在主节点读取时更新。
 
 ## 9. 跨场景评测规范
 
@@ -1109,9 +1112,12 @@ Agent 侧直接采用 Harbor 的 **ATIF**，不再另建封闭的 `events.jsonl`
 Orbit 扩展放在 `extra.orbit`，包含来源文件摘要、导入器版本、CLI 版本、完整度以及步骤的原生游标、思考类别、环境和检查点引用。
 标准规定的 `extra.context_management` 记录压缩边界；原生用量保留在 `metrics.extra`。
 
-**T1 已实现的边界**：`sessions/codex.ts` 与 `sessions/claude.ts` 提供同步纯转换器，输入原生 JSONL 字符串，
+**转换边界**：`sessions/codex.ts` 与 `sessions/claude.ts` 提供同步纯转换器，输入原生 JSONL 字符串，
 返回 `{ trajectory, media }`；`sessions/atif.ts` 共用 JSONL 解析和媒体抽取，`sessions/index.ts` 保持公开入口。
-转换器不读写文件、不启动 Agent、不依赖 Python。现有 `SessionTranscript` 路径保持兼容，T2 接入轨迹后才改为投影视图。
+转换器不读写文件、不启动 Agent、不依赖 Python。`sessions/files.ts` 负责有界文件读取与主会话发现，
+`trajectory.ts` 负责文件转换/存储，`projection.ts` 唯一投影 `SessionTranscript`；旧的逐消息原生解析路径已移除。
+模型失败判定共用原生读取和 JSONL 解码，仅 CLI 自身的响应/错误事件可作为诊断证据；该诊断也保存在轨迹 provenance 中。
+检查点直接读取原生续跑 ID，即使会话尚无消息也不依赖是否能形成 ATIF 步骤。
 
 - Codex 按模型调用合并 message / reasoning / function 或 custom tool call，用 call_id 将结果归回发起步骤。
   重复 token_count 去重，逐次 last_token_usage 求和，原生累计总量保留供核对；compacted 写成压缩边界。
@@ -1126,8 +1132,21 @@ Orbit 扩展放在 `extra.orbit`，包含来源文件摘要、导入器版本、
   `complete` 与 `environment-only` 留给组合证据；GUI、Episode、Conversation 保留各自 schema，通过步骤引用对齐，
   高频动作、视频和数组仍用原格式，不进 sqlite。
 
-**后续接入**：T2 在 Run 收集 Agent home 后生成 `<run>/orbit/trajectory/trajectory.json`，提供存储、重建、API 与 CLI；
-T3 从轨迹记账；T4 对齐环境引用；T5 增加 Harbor / Cua 直通及其他来源。转换失败只记录事件，不改变执行结果、分数或有效性。
+**Run 持久化**：收集 Agent home 并确认执行资源已移除后，在 cleanup 完成前生成
+`<run>/orbit/trajectory/trajectory.json` 和相对 `media/`；摘要写回 Run。原生来源路径相对 `orbit/agent/`，
+附来源 hash 和 run/trial/job/task 关联。媒体仅物化内联内容或 Agent home 内的本地文件，不自动下载远程 URL。
+读取原生 JSONL 有 256 MiB 总量上限，本地单媒体 32 MiB；拒绝越界、符号链接逃逸和非普通文件。
+轨迹字符串经 Run 脱敏器处理后原子替换（0600）；媒体是原始证据，不承诺图片内容脱敏。
+
+`GET /runs/:id/trajectory` 返回 ATIF 或 null；已结束的旧 Run 无文件时按需补建，无可转换 Agent 证据返回 null。
+运行中只返回临时预览，不落盘。`POST /runs/:id/trajectory/rebuild` 仅允许终态且清理完成的 Run，
+从原生文件重建；前版按 `trajectory.<importer>-v<version>.json` 保留首份，失败不覆盖上一份。
+同一个 Run 的生成/重建串行，生成期间禁止删除；转换失败记录 `trajectory_error` 并在读取时提示，
+不改变执行结果、分数、有效性或阻止资源释放。worker 生成/持有原始文件，主节点代理 ATIF、媒体和重建请求。
+CLI：`orbit trajectory show <run> [--json]`、`orbit trajectory rebuild <runs...> [--json]`。
+详细使用见 [轨迹指南](guides/trajectories.md)。
+
+**后续接入**：T3 从轨迹记账；T4 对齐环境引用；T5 增加 Harbor / Cua 直通及其他来源。
 开发期可用隔离环境中的 Harbor validator 校验输出；它不进入 daemon 或 CI 依赖。
 
 P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE MetaWorld+ standard/2.1 的 journal、已执行动作矩阵、最终奖励与 render 视频，

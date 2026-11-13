@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AuthStore } from "../auth/index.ts";
 import { type OrbitPaths, type RunDirs, runDirs } from "../config/paths.ts";
+import type { AtifTrajectory } from "../contracts/index.ts";
 import {
   type AfterStatus,
   type AuthTestResult,
@@ -34,6 +35,7 @@ import { newId, nowIso } from "../lib/ids.ts";
 import { Redactor } from "../lib/redact.ts";
 import { allocateRoles, hostProtection } from "../resources/allocate.ts";
 import { resolveAgentRef } from "../sessions/index.ts";
+import { redactTrajectory, trajectorySummary } from "../sessions/trajectory.ts";
 import type { RunFilter, Store } from "../store/index.ts";
 import type { DatasetRegistry } from "../workspace/datasets.ts";
 import { snapshotProject } from "../workspace/snapshot.ts";
@@ -59,6 +61,7 @@ import { type ReconcileResult, reconcile as reconcileRuns } from "./reconcile.ts
 import * as remoteRuns from "./remote.ts";
 import * as sampling from "./sampling.ts";
 import * as services from "./services.ts";
+import { runTrajectory } from "./trajectory.ts";
 import type { Targets, UsageSampler } from "./usage.ts";
 import * as watch from "./watch.ts";
 
@@ -136,6 +139,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
   private readonly active = new Map<string, Control>();
   private readonly restoring = new Map<string, number>();
   private readonly deleting = new Set<string>();
+  private readonly trajectoryJobs = new Map<string, Promise<AtifTrajectory | null>>();
 
   private readonly deps: RunServiceDeps;
 
@@ -157,6 +161,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       },
       changed: (run, event) => this.changed(run, event),
       cleanup: (run) => this.cleanup(run),
+      trajectory: (id, finalized) => this.trajectory(id, false, finalized),
       cleanupProcess: (run) => this.cleanupProcess(run),
       cleanupServices: (run) => this.cleanupServices(run),
       captureCheckpoint: (id, containerId, executionMin) =>
@@ -333,6 +338,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
    */
   deleteBlocker(run: Run, forJob = false): string | null {
     if (this.deleting.has(run.id)) return `${run.id}: deletion is in progress`;
+    if (this.trajectoryJobs.has(run.id)) return `${run.id}: trajectory is being generated`;
     if (this.restoring.has(run.id)) return `${run.id}: checkpoint is being restored`;
     if (!isTerminal(run.state))
       return `${run.id} is ${run.state}; cancel it and wait for it to end`;
@@ -445,6 +451,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       note: "",
       folder: folder.data,
       usage: null,
+      trajectory: null,
       services: [],
       after: null,
       phases: [],
@@ -1042,6 +1049,46 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     reason: string | null,
   ): Promise<Run> {
     return cleanup.finalize(this.context, run, state, exitCode, reason);
+  }
+
+  async trajectory(id: string, rebuild = false, finalized = false): Promise<AtifTrajectory | null> {
+    const run = this.mustGet(id);
+    if (run.remote) throw new UserError("trajectory belongs to the executing node");
+    if (this.deleting.has(id)) throw new UserError("run is being deleted");
+    if (rebuild && (!isTerminal(run.state) || run.cleanup !== "done"))
+      throw new UserError("trajectory rebuild requires a finished run with confirmed cleanup");
+    const pending = this.trajectoryJobs.get(id);
+    if (pending) {
+      await pending.catch(() => null);
+      if (!rebuild && !finalized) return pending;
+      return this.trajectory(id, rebuild, finalized);
+    }
+    const work = runTrajectory(this.context, id, rebuild, finalized)
+      .then((value) =>
+        value ? redactTrajectory(value, (text) => this.redactor(run).apply(text)) : null,
+      )
+      .catch((error) => {
+        const message = this.redactor(run).apply((error as Error).message);
+        const events = this.store.events(id);
+        if (!events.some((event) => event.kind === "trajectory_error" && event.message === message))
+          this.store.addEvent(id, "trajectory_error", message);
+        throw new UserError(`trajectory unavailable: ${message}`);
+      });
+    this.trajectoryJobs.set(id, work);
+    try {
+      return await work;
+    } finally {
+      if (this.trajectoryJobs.get(id) === work) this.trajectoryJobs.delete(id);
+    }
+  }
+
+  recordTrajectory(id: string, trajectory: AtifTrajectory | null): void {
+    const run = this.mustGet(id);
+    if (!isTerminal(run.state) || run.cleanup !== "done") return;
+    const summary = trajectory ? trajectorySummary(trajectory) : null;
+    if (JSON.stringify(run.trajectory) === JSON.stringify(summary)) return;
+    run.trajectory = summary;
+    this.save(run);
   }
 
   /** Remove credential files from the Agent home; keep a refreshed Codex login. */

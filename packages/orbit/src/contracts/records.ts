@@ -57,6 +57,7 @@ export const SessionTranscript = z.object({
   sessionId: z.string(),
   file: z.string().nullable(),
   messages: z.array(SessionMessage),
+  completeness: z.enum(["complete", "truncated", "agent-only", "environment-only"]).optional(),
 });
 export type SessionTranscript = z.infer<typeof SessionTranscript>;
 /**
@@ -68,5 +69,6 @@ export const RunSessions = z.object({
   /** Why the submitter's transcript is missing although the run is linked to one. */
   submitterError: z.string().nullable(),
   agent: SessionTranscript.nullable(),
+  agentError: z.string().nullable().optional(),
 });
 export type RunSessions = z.infer<typeof RunSessions>;

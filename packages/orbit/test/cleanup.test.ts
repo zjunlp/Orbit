@@ -74,6 +74,7 @@ function fixture(backend: "docker" | "process" = "docker") {
     cleanupProcess: vi.fn(async () => true),
     cleanupServices: vi.fn(async () => true),
     measure: vi.fn(async () => {}),
+    trajectory: vi.fn(async () => null),
   } as unknown as Parameters<typeof cleanup>[0];
   return { store, run, ctx, events };
 }
@@ -84,6 +85,7 @@ it("keeps the lease while container removal fails and releases it once removal s
   await cleanup(f.ctx, f.run);
   expect(f.store.getRun("r")).toMatchObject({ cleanup: "failed", lease: { state: "active" } });
   expect(f.store.activeLeases().map((l) => l.id)).toEqual(["lease"]);
+  expect(f.ctx.trajectory).not.toHaveBeenCalled();
   expect(f.events).toEqual(["container removal failed; lease kept until it succeeds"]);
 
   // A retry that fails again records nothing new.
@@ -110,4 +112,36 @@ it("keeps a process run's lease until its process and child containers are gone"
   await cleanup(f.ctx, f.store.getRun("r") as Run);
   expect(f.store.getRun("r")?.cleanup).toBe("done");
   expect(f.store.activeLeases()).toEqual([]);
+});
+
+it("persists the generated summary before cleanup and keeps execution and cleanup independent of conversion failures", async () => {
+  const f = fixture();
+  const summary = {
+    schema: "ATIF-v1.7" as const,
+    steps: 1,
+    completeness: "complete" as const,
+    importer: { name: "codex-rollout", version: 1 },
+  };
+  vi.mocked(f.ctx.trajectory).mockImplementationOnce(async (id, finalized) => {
+    expect(finalized).toBe(true);
+    expect(docker.removeContainer).toHaveBeenCalled();
+    expect(f.store.activeLeases()).toHaveLength(1);
+    f.store.putRun({ ...f.ctx.mustGet(id), trajectory: summary });
+    return null;
+  });
+  await cleanup(f.ctx, f.run);
+  expect(f.store.getRun("r")).toMatchObject({
+    state: "succeeded",
+    cleanup: "done",
+    trajectory: summary,
+  });
+  const failed = fixture();
+  vi.mocked(failed.ctx.trajectory).mockRejectedValueOnce(new Error("invalid session"));
+  await cleanup(failed.ctx, failed.run);
+  expect(failed.store.getRun("r")).toMatchObject({
+    state: "succeeded",
+    cleanup: "done",
+    trajectory: null,
+  });
+  expect(failed.store.activeLeases()).toEqual([]);
 });

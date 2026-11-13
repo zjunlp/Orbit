@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -20,7 +21,7 @@ import {
   readLog,
   readMetrics,
 } from "../../records/index.ts";
-import { loadRunAgentTranscript, loadTranscript } from "../../sessions/index.ts";
+import { loadTranscript, projectTranscript } from "../../sessions/index.ts";
 import type { AppDeps } from "../app.ts";
 import { must, num, remoteRecords } from "../http.ts";
 
@@ -199,16 +200,85 @@ export function registerRunsRoutes(api: Hono, deps: AppDeps): void {
     return c.json(await readDiff(runs.dirs(run.id).diff));
   });
 
+  const trajectory = async (run: Run, rebuild = false) => {
+    const result = run.remote
+      ? await remoteRecords(() => cluster.trajectory(run, rebuild))
+      : await runs.trajectory(run.id, rebuild);
+    if (run.remote) runs.recordTrajectory(run.id, result);
+    return result;
+  };
+  api.get("/runs/:id/trajectory", async (c) => {
+    c.header("cache-control", "no-store");
+    return c.json(await trajectory(must(runs.get(c.req.param("id")))));
+  });
+  api.post("/runs/:id/trajectory/rebuild", async (c) => {
+    c.header("cache-control", "no-store");
+    return c.json(await trajectory(must(runs.get(c.req.param("id"))), true));
+  });
+  api.get("/runs/:id/trajectory/files/*", async (c) => {
+    const run = must(runs.get(c.req.param("id")));
+    const rel = decodePath(c.req.path, "/files/");
+    if (!/^media\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(rel))
+      return c.json({ error: "not found" }, 404);
+    c.header("content-security-policy", ARTIFACT_CSP);
+    c.header("x-content-type-options", "nosniff");
+    c.header("content-type", contentType(rel));
+    c.header("cache-control", "no-store");
+    if (run.remote) {
+      const res = await remoteRecords(() => cluster.trajectoryFile(run, rel));
+      if (res.status === 404) return c.json({ error: "not found" }, 404);
+      c.header("content-length", res.headers.get("content-length") ?? undefined);
+      if (c.req.method === "HEAD") {
+        await res.body?.cancel();
+        return c.body(null);
+      }
+      return c.body(res.body as ReadableStream);
+    }
+    const file = await outputFile(
+      runs.dirs(run.id).root,
+      join("orbit", "trajectory", rel),
+      c.req.raw.signal,
+    );
+    if (!file) return c.json({ error: "not found" }, 404);
+    c.header("content-length", String(file.size));
+    if (c.req.method === "HEAD") {
+      await file.body.cancel();
+      return c.body(null);
+    }
+    return c.body(file.body);
+  });
+
   api.get("/runs/:id/session", async (c) => {
     const run = must(runs.get(c.req.param("id")));
-    const submitter = run.spec.agent ? await loadTranscript(run.spec.agent) : null;
-    // A run executed on a worker keeps its Agent home there: only local runs have one here.
-    const agent = run.remote ? null : await loadRunAgentTranscript(runs.dirs(run.id).agent);
+    let submitterError: string | null = null;
+    const submitter = run.spec.agent
+      ? await loadTranscript(run.spec.agent).catch((error) => {
+          submitterError = runs.redactor(run).apply((error as Error).message);
+          return null;
+        })
+      : null;
+    let agentError: string | null = null;
+    const atif = await trajectory(run).catch((error) => {
+      agentError = runs.redactor(run).apply((error as Error).message);
+      return null;
+    });
+    const agent = atif ? projectTranscript(atif) : null;
+    // The same redactor is used for stored trajectories and host submitter previews.
+    const redact = (t: typeof submitter) =>
+      t
+        ? {
+            ...t,
+            messages: t.messages.map((m) => ({ ...m, text: runs.redactor(run).apply(m.text) })),
+          }
+        : null;
+    c.header("cache-control", "no-store");
     return c.json<RunSessions>({
-      submitter,
+      submitter: redact(submitter),
       submitterError:
-        run.spec.agent && !submitter ? "session transcript not found on this node" : null,
+        submitterError ??
+        (run.spec.agent && !submitter ? "session transcript not found on this node" : null),
       agent,
+      agentError,
     });
   });
 

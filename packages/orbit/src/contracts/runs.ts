@@ -624,6 +624,14 @@ export const RunPhase = z.object({
 });
 export type RunPhase = z.infer<typeof RunPhase>;
 
+export const RunTrajectory = z.object({
+  schema: z.enum(["ATIF-v1.5", "ATIF-v1.6", "ATIF-v1.7", "ATIF-v1.8"]),
+  steps: z.number().int().nonnegative(),
+  completeness: z.enum(["complete", "truncated", "agent-only", "environment-only"]),
+  importer: z.object({ name: z.string(), version: z.number().int().positive() }),
+});
+export type RunTrajectory = z.infer<typeof RunTrajectory>;
+
 export const Run = z.object({
   id: z.string(),
   spec: RunSpec,
@@ -651,6 +659,7 @@ export const Run = z.object({
   /** Folder for organizing (movable; a bench run follows its job). */
   folder: Folder.default(""),
   usage: RunUsage.nullable().default(null),
+  trajectory: RunTrajectory.nullable().default(null),
   /** The run's service containers; `failure` says how one broke while the run was going. */
   services: z
     .array(

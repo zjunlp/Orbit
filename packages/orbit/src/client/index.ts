@@ -10,6 +10,7 @@ import {
   AgentList,
   API_PREFIX,
   Artifacts,
+  AtifTrajectory,
   AuthProfile,
   type AuthProfileInput,
   AuthTestResult,
@@ -164,6 +165,9 @@ export class OrbitClient {
   diff = (id: string) => this.call(CodeDiff, `/runs/${enc(id)}/diff`);
   deleteRuns = (ids: string[]) =>
     this.call(RunDeletion, "/runs/delete", { method: "POST", body: { ids }, timeoutMs: 600_000 });
+  trajectory = (id: string) => this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory`);
+  rebuildTrajectory = (id: string) =>
+    this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory/rebuild`, { method: "POST" });
   session = (id: string) => this.call(RunSessions, `/runs/${enc(id)}/session`);
 
   authList = () =>

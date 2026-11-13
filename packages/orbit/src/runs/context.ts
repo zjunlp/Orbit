@@ -1,6 +1,7 @@
 import type { OrbitPaths, RunDirs } from "../config/paths.ts";
 import type {
   AfterStatus,
+  AtifTrajectory,
   DoctorCheck,
   NodeResources,
   RemoteSubmit,
@@ -27,6 +28,7 @@ export interface RunContext {
   readonly cgroupDirs: Map<string, string>;
   changed(run: Run, event?: RunEvent): void;
   cleanup(run: Run): Promise<void>;
+  trajectory(id: string, finalized?: boolean): Promise<AtifTrajectory | null>;
   cleanupProcess(run: Run): Promise<boolean>;
   cleanupServices(run: Run): Promise<boolean>;
   captureCheckpoint(id: string, containerId: string, executionMin: number): Promise<void>;

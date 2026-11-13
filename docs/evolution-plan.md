@@ -21,7 +21,7 @@
 | 编号 | 工作包 | 依赖 | 规模 | 状态 |
 | --- | --- | --- | --- | --- |
 | T1 | ATIF 契约与 Codex / Claude Code 转换器 | — | 中 | [x] |
-| T2 | 轨迹生成、存储、API 与 CLI；会话视图改为从轨迹派生 | T1 | 中 | [ ] |
+| T2 | 轨迹生成、存储、API 与 CLI；会话视图改为从轨迹派生 | T1 | 中 | [x] |
 | T3 | Token 记账 | T2 | 小 | [ ] |
 | T4 | 环境侧对齐（GUI、具身、对话） | T2 | 中 | [ ] |
 | T5 | 更多导入器（dsh、pi、Harbor / Cua ATIF 直通等） | T2 | 按需 | [ ] |
@@ -146,13 +146,15 @@
 
 分支 `feat/run-trajectory`。模块：`runs/cleanup.ts`（收集 Agent home 之后生成）、`contracts/runs.ts`、`daemon/routes/runs.ts`、`client/`、`cli/`、Web 类型。
 
-- [ ] Run 结束阶段生成轨迹文件；`Run.trajectory = { schema, steps, completeness, importer } | null`。
-- [ ] `GET /runs/:id/trajectory`；`POST /runs/:id/trajectory/rebuild`（转换器升级后重建，旧文件按版本保留一份）。
-- [ ] `orbit trajectory show <run> [--json]`、`orbit trajectory rebuild <run…>`。
-- [ ] `GET /runs/:id/session` 改为从轨迹投影出 `SessionTranscript`，删除第二套解析路径；`runAgentFailure` 等调用点一并迁移。
-- [ ] 多节点：worker 生成，按现有产物读取路径经主节点访问。
-- [ ] 测试：老 Run（无轨迹文件）按需生成；无 Agent 的 Run 返回 `null` 而不是空轨迹。
-- [ ] 真实检查：一个真实 bench trial 结束后，CLI 与 Web 读到同一份轨迹。
+- [x] Run 结束阶段生成轨迹文件；`Run.trajectory = { schema, steps, completeness, importer } | null`。
+- [x] `GET /runs/:id/trajectory`；`POST /runs/:id/trajectory/rebuild`（转换器升级后重建，旧文件按版本保留一份）。
+- [x] `orbit trajectory show <run> [--json]`、`orbit trajectory rebuild <run…>`。
+- [x] `GET /runs/:id/session` 改为从轨迹投影出 `SessionTranscript`，删除第二套解析路径；`runAgentFailure` 等调用点一并迁移。
+- [x] 多节点：worker 生成，按现有产物读取路径经主节点访问。
+- [x] 测试：老 Run（无轨迹文件）按需生成；无 Agent 的 Run 返回 `null` 而不是空轨迹。
+- [x] 真实检查：一个真实 bench trial 结束后，CLI 与 Web 读到同一份轨迹。
+
+实现与验证见 [T2 任务记录](tasks/20261113-run-trajectory.md)。真实 bench 检查覆盖失败终态的自动落盘、CLI/Web 一致性和重建，模型调用受已有认证/服务问题影响，未宣称成功解题。
 
 ### T3 Token 记账
 

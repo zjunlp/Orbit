@@ -25,6 +25,7 @@ type Context = Pick<
   | "stopped"
   | "store"
   | "tick"
+  | "trajectory"
 >;
 
 export async function removeDir(ctx: Context, run: Run): Promise<boolean> {
@@ -102,6 +103,9 @@ export async function cleanup(ctx: Context, run: Run): Promise<void> {
     }
     return;
   }
+  await ctx.trajectory(run.id, true).catch(() => null);
+  // Re-read after trajectory persistence so cleanup cannot overwrite its summary.
+  fresh.trajectory = ctx.mustGet(run.id).trajectory;
   fresh.cleanup = "done";
   const lease = fresh.lease;
   ctx.store.tx(() => {

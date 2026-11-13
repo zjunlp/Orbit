@@ -30,6 +30,6 @@ The retired C1–C7 categories, L0/L1/L2 tiers and fidelity levels appear only i
 | --- | --- |
 | Benchmarks | [Add a benchmark](guides/bench-adapter.md) · [Availability of original protocols](guides/benchmark-availability.md) · [GUI evaluation in Web](guides/gui-bench-web.md) · [Python SDK](../examples/sdk/README.md) · [Adapter examples](../examples/bench-adapters/) |
 | Embodied | [Quickstart](guides/embodied-quickstart.md) · [Coverage and verified policies](guides/embodied-compatibility.md) · [Onboarding templates](guides/embodied-onboarding.md) · [Fixed batches](guides/embodied-batches.md) · [Policy integration checks](guides/policy-integration-checks.md) · [LIBERO suites](guides/libero-suites.md) · [Development checks](guides/embodied-development.md) |
-| Runs and machines | [Checkpoints](guides/checkpoints.md) · [Multi-node](guides/multi-node.md) · [Docker userns-remap](guides/docker-userns-remap.md) |
+| Runs and machines | [Trajectories](guides/trajectories.md) · [Checkpoints](guides/checkpoints.md) · [Multi-node](guides/multi-node.md) · [Docker userns-remap](guides/docker-userns-remap.md) |
 | Agents and notifications | [Plugins](../plugin/README.md) · [Notifications](guides/notifications.md) |
 | Maintainers | [Releasing](guides/releasing.md) |

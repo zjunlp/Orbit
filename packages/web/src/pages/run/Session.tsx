@@ -35,7 +35,16 @@ export function SessionTab({ run }: { run: Run }) {
       </Empty>
     );
   if (!s.data) return <Loading what="Loading session" />;
-  const { submitter, submitterError, agent } = s.data;
+  const { submitter, submitterError, agent, agentError } = s.data;
+  if (agentError && !agent)
+    return (
+      <>
+        <Empty title="Agent trajectory unavailable" icon={<IconBot size={30} />}>
+          <p>{agentError}</p>
+        </Empty>
+        {submitter && <SessionView run={run} t={submitter} kind="submitter" />}
+      </>
+    );
   if (submitter && agent)
     return (
       <div className="session-split">
@@ -168,6 +177,11 @@ function SessionView(props: {
 
   const transcript = (
     <div ref={box} className="transcript">
+      {t.completeness === "truncated" && (
+        <p className="muted">
+          This session is incomplete. Some records or usage could not be recovered.
+        </p>
+      )}
       <div className="toolbar session-toolbar">
         <IconBot size={14} />
         <span className="faint">{ROLE_LABEL[kind]}</span>

@@ -435,6 +435,13 @@ export class ClusterService implements RemotePlacement {
     return this.runClient(run).artifacts(run.id);
   }
 
+  trajectory(run: Run, rebuild = false) {
+    return this.runClient(run).trajectory(run.id, rebuild);
+  }
+  trajectoryFile(run: Run, rel: string) {
+    return this.runClient(run).trajectoryFile(run.id, rel);
+  }
+
   file(run: Run, rel: string): Promise<Response> {
     return this.runClient(run).file(run.id, rel);
   }

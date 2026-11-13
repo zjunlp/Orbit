@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 import type { z } from "zod";
 import {
   type Artifacts,
+  AtifTrajectory,
   CLUSTER_PREFIX,
   NodeInfo,
   type RemoteSubmit,
@@ -133,6 +134,21 @@ export class NodeClient {
     const res = await this.request(`/runs/${encodeURIComponent(id)}/artifacts`);
     if (res.status === 404) return null;
     return (await res.json()) as Artifacts;
+  }
+
+  async trajectory(id: string, rebuild = false): Promise<AtifTrajectory | null> {
+    const response = await this.request(
+      `/runs/${encodeURIComponent(id)}/trajectory${rebuild ? "/rebuild" : ""}`,
+      rebuild ? { method: "POST" } : undefined,
+    );
+    if (response.status === 404)
+      throw new NodeError("worker trajectory endpoint or run is unavailable", 404);
+    return AtifTrajectory.nullable().parse(await response.json());
+  }
+  trajectoryFile(id: string, rel: string): Promise<Response> {
+    return this.request(
+      `/runs/${encodeURIComponent(id)}/trajectory/files/${rel.split("/").map(encodeURIComponent).join("/")}`,
+    );
   }
 
   /** A file under the run's output directory, streamed (404 passes through). */
