@@ -184,7 +184,7 @@
 
 按"真的要跑这个 Agent 或 benchmark 时再做"的顺序，每个一个小分支：
 
-- [ ] Harbor / Cua 产出的 ATIF 直通：校验后采纳，补 `extra.orbit`。
+- [x] Harbor / Cua 产出的 ATIF 直通：校验后采纳，补 `extra.orbit`。实现与验证见 [T5 第一包任务记录](tasks/20261113-native-atif-import.md)。
 - [ ] dsh（会话格式 v4，带压缩帧，需用其自带的读取方式）、pi（`id` / `parentId` 树）。〔先验证〕两者的格式细节只在调研中读过文档。
 - [ ] §9.8 原列表中的环境侧来源：MobileWorld、OSWorld、BrowserGym / AgentLab、vla-eval。
 

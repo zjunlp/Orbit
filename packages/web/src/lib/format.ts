@@ -137,6 +137,7 @@ export function cliCommand(r: Run): string {
   if (s.auth) a.push("--auth", s.auth);
   if (!s.snapshot) a.push("--no-snapshot");
   if (s.root) a.push("--root");
+  if (s.trajectory) a.push("--trajectory", s.trajectory.path);
   if (s.commandUser) a.push("--command-user", s.commandUser);
   if (s.timeoutMin) a.push("--timeout", String(s.timeoutMin));
   for (const [k, v] of Object.entries(s.tags)) a.push("-t", `${k}=${v}`);

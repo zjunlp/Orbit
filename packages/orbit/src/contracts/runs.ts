@@ -29,6 +29,24 @@ export const Mount = z
   });
 export type Mount = z.infer<typeof Mount>;
 
+/** Explicit ATIF source below the Run output directory. */
+export const AtifSource = z.object({
+  format: z.literal("atif"),
+  path: z
+    .string()
+    .min(1)
+    .max(4096)
+    .refine(
+      (path) =>
+        !/^[a-z][a-z\d+.-]*:/i.test(path) &&
+        !path.includes("\\") &&
+        !Array.from(path).some((char) => char.charCodeAt(0) < 32) &&
+        path.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+      "ATIF source must stay inside Run output",
+    ),
+});
+export type AtifSource = z.infer<typeof AtifSource>;
+
 export const AgentRef = z.object({
   /** An Agent name (`contracts/agent.ts`), or `other` for an unrecognized submitter. */
   harness: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
@@ -306,6 +324,7 @@ export const RunSpec = z
     params: z.record(z.string(), z.string()).default({}),
     parentId: z.string().optional(),
     agent: AgentRef.optional(),
+    trajectory: AtifSource.optional(),
     /**
      * `docker` runs `command` in one container; `process` runs it on the host (a native benchmark
      * runner) with a private HOME, the leased GPUs in CUDA_VISIBLE_DEVICES and a `docker` shim that
@@ -646,6 +665,7 @@ export const TokenUsage = z.object({
 export type TokenUsage = z.infer<typeof TokenUsage>;
 
 export const RunTrajectory = z.object({
+  source: AtifSource.optional(),
   schema: z.enum(["ATIF-v1.5", "ATIF-v1.6", "ATIF-v1.7", "ATIF-v1.8"]),
   steps: z.number().int().nonnegative(),
   completeness: z.enum(["complete", "truncated", "agent-only", "environment-only"]),

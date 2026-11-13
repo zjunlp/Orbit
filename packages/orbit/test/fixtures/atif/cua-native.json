@@ -1,0 +1,55 @@
+{
+  "schema_version": "ATIF-v1.8",
+  "session_id": "upstream-fixture",
+  "agent": {
+    "name": "fixture-agent",
+    "version": "cua-bench",
+    "model_name": "fixture-model"
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "timestamp": "2026-11-13T00:00:00Z",
+      "source": "user",
+      "message": [
+        {
+          "type": "text",
+          "text": "Reusable interoperability check"
+        },
+        {
+          "type": "image",
+          "source": {
+            "media_type": "image/png",
+            "path": "imgs/atif_0_0.png"
+          }
+        }
+      ]
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-11-13T00:00:01Z",
+      "source": "agent",
+      "message": "Fixture response",
+      "model_name": "fixture-model",
+      "metrics": {
+        "prompt_tokens": 10,
+        "completion_tokens": 2
+      }
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-11-13T00:00:02Z",
+      "source": "system",
+      "message": "evaluate() returned [1.0]"
+    }
+  ],
+  "final_metrics": {
+    "total_steps": 1,
+    "total_prompt_tokens": 10,
+    "total_completion_tokens": 2,
+    "extra": {
+      "reward": 1,
+      "evaluation": [1]
+    }
+  }
+}

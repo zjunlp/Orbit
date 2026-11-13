@@ -133,7 +133,8 @@ def solve(req):
         if not path.is_dir():
             raise ValueError('agentDir must be a directory')
         mounts.append({'source': str(path), 'target': '/agent', 'mode': 'ro'})
-    return {'spec': {'image': c.get('image', 'orbit-cua-bench:2829e00b1'),
+    return {'spec': {'trajectory': {'format': 'atif', 'path': 'native/trajectory.json'},
+                    'image': c.get('image', 'orbit-cua-bench:2829e00b1'),
                     'root': True, 'command': ['python', '/adapter/runtime.py', '/adapter/plan.json'],
                     'mounts': mounts, 'resources': resources, 'timeoutMin': t.get('timeoutMin') or 10,
                     'env': {'PYTHONPATH': '/upstream:/agent', 'PYTHONDONTWRITEBYTECODE': '1',

@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
-import { type AtifTrajectory, EnvironmentKind } from "../contracts/index.ts";
+import { AtifSource, type AtifTrajectory, EnvironmentKind } from "../contracts/index.ts";
 
 function summary(value: AtifTrajectory | null): string {
   if (!value) return "No agent trajectory recorded.";
@@ -14,6 +14,17 @@ export function registerTrajectory(program: Command, client: () => Promise<Orbit
     .option("--json", "print ATIF JSON")
     .action(async (id: string, opts: { json?: boolean }) => {
       const value = await (await client()).trajectory(id);
+      console.log(opts.json ? JSON.stringify(value, null, 2) : summary(value));
+    });
+  group
+    .command("import <run> <path>")
+    .description("adopt native ATIF from a saved output file; preserve the previous trajectory")
+    .option("--json", "print imported ATIF JSON")
+    .action(async (id: string, path: string, opts: { json?: boolean }) => {
+      const value = await (await client()).rebuildTrajectory(
+        id,
+        AtifSource.parse({ format: "atif", path }),
+      );
       console.log(opts.json ? JSON.stringify(value, null, 2) : summary(value));
     });
   group

@@ -6,6 +6,7 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
+  AtifSource,
   EnvironmentKind,
   isTerminal,
   type Run,
@@ -202,10 +203,10 @@ export function registerRunsRoutes(api: Hono, deps: AppDeps): void {
     return c.json(await readDiff(runs.dirs(run.id).diff));
   });
 
-  const trajectory = async (run: Run, rebuild = false) => {
+  const trajectory = async (run: Run, rebuild = false, source?: AtifSource) => {
     const result = run.remote
-      ? await remoteRecords(() => cluster.trajectory(run, rebuild))
-      : await runs.trajectory(run.id, rebuild);
+      ? await remoteRecords(() => cluster.trajectory(run, rebuild, source))
+      : await runs.trajectory(run.id, rebuild, false, source);
     if (run.remote) runs.recordTrajectory(run.id, result);
     return result;
   };
@@ -276,12 +277,16 @@ export function registerRunsRoutes(api: Hono, deps: AppDeps): void {
   });
   api.post("/runs/:id/trajectory/rebuild", async (c) => {
     c.header("cache-control", "no-store");
-    return c.json(await trajectory(must(runs.get(c.req.param("id"))), true));
+    const text = await c.req.text();
+    const { source } = z
+      .object({ source: AtifSource.optional() })
+      .parse(text ? JSON.parse(text) : {});
+    return c.json(await trajectory(must(runs.get(c.req.param("id"))), true, source));
   });
   api.get("/runs/:id/trajectory/files/*", async (c) => {
     const run = must(runs.get(c.req.param("id")));
     const rel = decodePath(c.req.path, "/files/");
-    if (!/^media\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(rel))
+    if (!/^media\/[a-f0-9]{64}\.(png|jpg|gif|webp|wav|mp3|m4a|aac|ogg|flac|weba|aiff)$/.test(rel))
       return c.json({ error: "not found" }, 404);
     c.header("content-security-policy", ARTIFACT_CSP);
     c.header("x-content-type-options", "nosniff");
@@ -382,6 +387,14 @@ function attachment(path: string): string {
 }
 
 const TYPES: Record<string, string> = {
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  ogg: "audio/ogg",
+  flac: "audio/flac",
+  aiff: "audio/aiff",
+  weba: "audio/webm",
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",

@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 import type { z } from "zod";
 import {
   type Artifacts,
+  AtifSource,
   AtifTrajectory,
   CLUSTER_PREFIX,
   NodeInfo,
@@ -136,14 +137,33 @@ export class NodeClient {
     return (await res.json()) as Artifacts;
   }
 
-  async trajectory(id: string, rebuild = false): Promise<AtifTrajectory | null> {
+  async trajectory(
+    id: string,
+    rebuild = false,
+    source?: AtifSource,
+  ): Promise<AtifTrajectory | null> {
     const response = await this.request(
       `/runs/${encodeURIComponent(id)}/trajectory${rebuild ? "/rebuild" : ""}`,
-      rebuild ? { method: "POST" } : undefined,
+      rebuild
+        ? {
+            method: "POST",
+            body: JSON.stringify({ source }),
+            headers: { "content-type": "application/json" },
+          }
+        : undefined,
     );
     if (response.status === 404)
       throw new NodeError("worker trajectory endpoint or run is unavailable", 404);
-    return AtifTrajectory.nullable().parse(await response.json());
+    const trajectory = AtifTrajectory.nullable().parse(await response.json());
+    if (source) {
+      const adopted = AtifSource.safeParse(trajectory?.extra?.orbit?.metadata?.source);
+      if (!adopted.success || adopted.data.path !== source.path)
+        throw new NodeError(
+          "worker did not adopt the requested ATIF source; update the worker",
+          409,
+        );
+    }
+    return trajectory;
   }
   trajectoryFile(id: string, rel: string): Promise<Response> {
     return this.request(

@@ -1,8 +1,9 @@
 import { join } from "node:path";
-import { type AtifTrajectory, isTerminal } from "../contracts/index.ts";
+import { type AtifSource, type AtifTrajectory, isTerminal } from "../contracts/index.ts";
 import { trajectoryTokens } from "../sessions/tokens.ts";
 import {
   loadAgentTrajectory,
+  loadAtifTrajectory,
   readTrajectory,
   saveTrajectory,
   trajectorySummary,
@@ -16,6 +17,7 @@ export async function runTrajectory(
   id: string,
   rebuild: boolean,
   finalized: boolean,
+  source?: AtifSource,
 ): Promise<AtifTrajectory | null> {
   const run = ctx.mustGet(id);
   const dirs = ctx.dirs(id);
@@ -28,7 +30,10 @@ export async function runTrajectory(
     }
     return previous;
   }
-  const result = await loadAgentTrajectory(dirs.agent);
+  const input = source ?? run.trajectory?.source ?? run.spec.trajectory;
+  const result = input
+    ? await loadAtifTrajectory(dirs.output, input)
+    : await loadAgentTrajectory(dirs.agent);
   if (!result) {
     if (previous && rebuild)
       throw new Error("native Agent session is missing or empty; previous trajectory retained");

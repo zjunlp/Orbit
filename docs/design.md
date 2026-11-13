@@ -1124,7 +1124,7 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
 ### 9.8 统一轨迹
 
 Agent 侧直接采用 Harbor 的 **ATIF**，不再另建封闭的 `events.jsonl` 事件格式。`contracts/atif.ts`
-定义严格的 zod 契约：读取 v1.5–v1.8，转换器写 v1.7，未知版本或未知标准字段报错。
+定义严格的 zod 契约：读取 v1.5–v1.8，原生会话转换器写 v1.7，直通导入保留上游版本；未知版本或未知标准字段报错。
 校验连续 step_id、Agent 专属字段、同一步的工具结果引用、嵌入子轨迹 ID 与多模态内容；旧版子轨迹引用兼容其 session_id 语义。
 Orbit 扩展放在 `extra.orbit`，包含来源文件摘要、导入器版本、CLI 版本、完整度以及步骤的原生游标、思考类别、环境和检查点引用。
 标准规定的 `extra.context_management` 记录压缩边界；原生用量保留在 `metrics.extra`。
@@ -1185,7 +1185,16 @@ EFE 新索引直接保存步骤 ID；旧 `sessionMessageIndexes` 按当前同一
 `complete` 表示两侧证据齐全，不保证每条环境记录都有唯一会话匹配。读取 Agent 失败时仍返回原环境内容并标截断。
 CLI `trajectory environment` 与三类 Web 回放读取同一关联结果；Web 按步骤 ID 选会话消息，保留旧索引/GUI 动作 ID 兼容。
 
-**后续接入**：T5 增加 Harbor / Cua 直通及其他来源。
+**ATIF 直通（T5 第一包）**：`sessions/import.ts` 校验 Harbor/Cua 原生 ATIF 并补齐 `extra.orbit`；保留上游版本、步骤 ID、工具配对、子轨迹、用量和其他标准字段，仅将媒体路径改为内容哈希路径。
+原有 Orbit provenance 保存在 `metadata.upstream_orbit`，本次来源文件的 hash、字节数与输出相对路径单独记录。未配对的工具调用标截断，不猜测缺失结果。
+`RunSpec.trajectory = { format: "atif", path }` 明确指定 Run 输出下的文件，优先于原生 CLI 会话；Cua adapter 声明 `native/trajectory.json`。
+CLI `run --trajectory <path>` 配置同一来源；`trajectory import <run> <path>` 给已结束且清理完成的 Run 手动选择来源，复用重建的锁、备份、脱敏、原子写入与 worker 代理。
+`POST /runs/:id/trajectory/rebuild` 可带 `{ source: { format: "atif", path } }`；不传 body 的旧客户端兼容。
+导入成功后 `Run.trajectory.source` 保留来源，后续重建继续读取该文件；不改原 RunSpec 或原始产物。失败保留上一份轨迹，不改变评分与资源释放。
+图片/音频只读取输出根内的普通文件或图片内联数据，不下载远程 URL；单媒体 32 MiB，JSON+媒体合计 256 MiB，拒绝目录/文件链接逃逸。
+媒体按实际字节生成 SHA-256 地址，重建会识别同路径文件的内容变化。沿用 Run/Session/环境关联/Token 统计路径，未知用量继续为 null。
+
+**后续接入**：T5 的 dsh/pi 和其他环境来源按实际使用逐包接入。
 开发期可用隔离环境中的 Harbor validator 校验输出；它不进入 daemon 或 CI 依赖。
 
 P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE MetaWorld+ standard/2.1 的 journal、已执行动作矩阵、最终奖励与 render 视频，

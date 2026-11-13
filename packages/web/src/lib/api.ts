@@ -4,6 +4,7 @@ import type {
   AgentCatalog,
   AgentList,
   Artifacts,
+  AtifSource,
   AtifTrajectory,
   AuthProfile,
   AuthTestResult,
@@ -159,8 +160,11 @@ export const api = {
       `/runs/${enc(id)}/environment?${new URLSearchParams({ path, kind, session })}`,
     ),
   trajectory: (id: string) => req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory`),
-  rebuildTrajectory: (id: string) =>
-    req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory/rebuild`, { method: "POST" }),
+  rebuildTrajectory: (id: string, source?: AtifSource) =>
+    req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory/rebuild`, {
+      method: "POST",
+      body: JSON.stringify({ source }),
+    }),
   session: (id: string) => req<RunSessions>(`/runs/${enc(id)}/session`),
   ledger: () => req<Ledger>("/ledger"),
   doctor: () => req<DoctorReport>("/doctor"),

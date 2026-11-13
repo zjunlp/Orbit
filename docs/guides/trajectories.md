@@ -79,3 +79,32 @@ remain unchanged. Preview limits are 2 MiB for GUI/episode and 16 MiB for conver
 worker reads. Environment-only records stay viewable; missing or damaged Agent evidence never
 changes rewards or evaluation validity. `complete` means both records are available, while individual
 records can still have no unique match. Subagent-local step IDs are not root-session references.
+
+## Native ATIF from Harbor or Cua
+
+```sh
+orbit run --image <image> --trajectory native/trajectory.json -- <command>
+orbit trajectory import <finished-run> native/trajectory.json --json
+orbit trajectory rebuild <finished-run>
+```
+
+`--trajectory` names an ATIF file inside the Run output directory. Adapters can declare the same
+source with `spec.trajectory = {"format":"atif","path":"native/trajectory.json"}`. The Cua Bench
+adapter declares its native output automatically. Source selection is explicit; arbitrary JSON files
+are not searched. A declared file takes precedence over native CLI sessions.
+
+For old Runs, `trajectory import` selects a saved output file and uses the normal rebuild operation.
+It requires completed cleanup, preserves a backup and remembers the successful source for later
+rebuilds. It does not modify the original Run specification or output files. Existing Session, token
+usage and environment views then read the imported trajectory. Import failures retain the previous
+trajectory and leave evaluation results unchanged.
+
+The importer accepts ATIF v1.5–v1.8 and preserves the source version. Unknown versions/standard fields
+are rejected. Orbit adds source hashes and provenance; existing `extra.orbit` is retained under
+`extra.orbit.metadata.upstream_orbit`. Child trajectories and reported metrics are preserved.
+
+Media paths are resolved beside the source JSON and must stay under Run output. `/orbit/output/…`
+paths are supported for container captures. Images and audio are copied to content-addressed local
+paths; referenced bytes are checked again when rebuilding. Remote URLs must be collected locally
+before import. Limits are 32 MiB per media file and 256 MiB for JSON plus media. Original native
+files remain available through Outputs.

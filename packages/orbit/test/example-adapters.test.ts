@@ -60,6 +60,7 @@ finally:
   );
   const response = AdapterSpecResponse.parse(JSON.parse(result));
   const spec = RunSpec.parse(response.spec);
+  expect(spec.trajectory).toEqual({ format: "atif", path: "native/trajectory.json" });
   expect(spec.services[0]?.healthcheck?.command).toEqual([
     "sh",
     "-c",

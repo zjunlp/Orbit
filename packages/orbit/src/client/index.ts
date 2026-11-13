@@ -10,6 +10,7 @@ import {
   AgentList,
   API_PREFIX,
   Artifacts,
+  type AtifSource,
   AtifTrajectory,
   AuthProfile,
   type AuthProfileInput,
@@ -169,8 +170,11 @@ export class OrbitClient {
   deleteRuns = (ids: string[]) =>
     this.call(RunDeletion, "/runs/delete", { method: "POST", body: { ids }, timeoutMs: 600_000 });
   trajectory = (id: string) => this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory`);
-  rebuildTrajectory = (id: string) =>
-    this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory/rebuild`, { method: "POST" });
+  rebuildTrajectory = (id: string, source?: AtifSource) =>
+    this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory/rebuild`, {
+      method: "POST",
+      body: { source },
+    });
   environment = <K extends EnvironmentKind>(
     id: string,
     path: string,

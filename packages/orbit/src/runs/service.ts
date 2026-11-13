@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AuthStore } from "../auth/index.ts";
 import { type OrbitPaths, type RunDirs, runDirs } from "../config/paths.ts";
-import type { AtifTrajectory } from "../contracts/index.ts";
+import type { AtifSource, AtifTrajectory } from "../contracts/index.ts";
 import {
   type AfterStatus,
   type AuthTestResult,
@@ -1053,19 +1053,26 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     return cleanup.finalize(this.context, run, state, exitCode, reason);
   }
 
-  async trajectory(id: string, rebuild = false, finalized = false): Promise<AtifTrajectory | null> {
+  async trajectory(
+    id: string,
+    rebuild = false,
+    finalized = false,
+    source?: AtifSource,
+  ): Promise<AtifTrajectory | null> {
     const run = this.mustGet(id);
     if (run.remote) throw new UserError("trajectory belongs to the executing node");
     if (this.deleting.has(id)) throw new UserError("run is being deleted");
     if (rebuild && (!isTerminal(run.state) || run.cleanup !== "done"))
       throw new UserError("trajectory rebuild requires a finished run with confirmed cleanup");
+    if (source && !rebuild)
+      throw new UserError("an explicit ATIF import requires rebuilding a finished run");
     const pending = this.trajectoryJobs.get(id);
     if (pending) {
       await pending.catch(() => null);
       if (!rebuild && !finalized) return pending;
-      return this.trajectory(id, rebuild, finalized);
+      return this.trajectory(id, rebuild, finalized, source);
     }
-    const work = runTrajectory(this.context, id, rebuild, finalized)
+    const work = runTrajectory(this.context, id, rebuild, finalized, source)
       .then((value) =>
         value ? redactTrajectory(value, (text) => this.redactor(run).apply(text)) : null,
       )

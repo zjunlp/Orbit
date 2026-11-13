@@ -32,6 +32,7 @@ export interface RunOpts {
   commandUser?: string;
   timeout?: number;
   checkpoint?: number;
+  trajectory?: string;
   tag: string[];
   json?: boolean;
   wait?: boolean;
@@ -89,6 +90,10 @@ export function addRunOptions(cmd: Command): Command {
       "--checkpoint <GB>",
       "save a failure checkpoint up to this size (shared image layers excluded)",
       num,
+    )
+    .option(
+      "--trajectory <path>",
+      "import native ATIF from this relative output path after execution",
     )
     .option("--root", "run as root instead of your user")
     .option(
@@ -209,6 +214,7 @@ export async function buildSpec(
     snapshot: o.snapshot,
     root: o.root ?? false,
     commandUser: o.commandUser,
+    trajectory: o.trajectory ? { format: "atif", path: o.trajectory } : undefined,
     timeoutMin: o.timeout,
     checkpoint: o.checkpoint === undefined ? undefined : { maxSizeGB: o.checkpoint },
     tags: kv(o.tag, "--tag"),

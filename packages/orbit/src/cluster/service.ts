@@ -5,6 +5,7 @@ import { appendFileSync, existsSync, statSync, truncateSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { type ServerType, serve } from "@hono/node-server";
 import {
+  type AtifSource,
   CLUSTER_PROTOCOL,
   type ExposeStatus,
   isTerminal,
@@ -435,8 +436,8 @@ export class ClusterService implements RemotePlacement {
     return this.runClient(run).artifacts(run.id);
   }
 
-  trajectory(run: Run, rebuild = false) {
-    return this.runClient(run).trajectory(run.id, rebuild);
+  trajectory(run: Run, rebuild = false, source?: AtifSource) {
+    return this.runClient(run).trajectory(run.id, rebuild, source);
   }
   trajectoryFile(run: Run, rel: string) {
     return this.runClient(run).trajectoryFile(run.id, rel);

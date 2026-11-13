@@ -20,7 +20,7 @@ import { NodeClient } from "../src/cluster/client.ts";
 import type { ClusterService } from "../src/cluster/service.ts";
 import { createWorkerApp } from "../src/cluster/worker.ts";
 import { orbitPaths } from "../src/config/paths.ts";
-import { Run } from "../src/contracts/index.ts";
+import { type AtifSource, Run } from "../src/contracts/index.ts";
 import { type AppDeps, createApp } from "../src/daemon/app.ts";
 import { RunService } from "../src/runs/service.ts";
 import { projectTranscript, runAgentFailure } from "../src/sessions/index.ts";
@@ -252,7 +252,8 @@ describe("Run trajectories", () => {
     const primary = fixture("remote-run");
     primary.store.putRun({ ...primary.run, remote: true, node: "worker" });
     const cluster = {
-      trajectory: (run: Run, rebuild: boolean) => node.trajectory(run.id, rebuild),
+      trajectory: (run: Run, rebuild: boolean, source?: AtifSource) =>
+        node.trajectory(run.id, rebuild, source),
       trajectoryFile: (run: Run, path: string) => node.trajectoryFile(run.id, path),
     } as ClusterService;
     const { app, c } = client(primary, cluster);
@@ -274,6 +275,20 @@ describe("Run trajectories", () => {
     );
     expect((await c.session(primary.run.id)).agent).toEqual(projectTranscript(t));
     expect(await c.rebuildTrajectory(primary.run.id)).toEqual(t);
+    mkdirSync(worker.runs.dirs(worker.run.id).output, { recursive: true });
+    writeFileSync(join(worker.runs.dirs(worker.run.id).output, "native.json"), JSON.stringify(t));
+    const imported = await c.rebuildTrajectory(primary.run.id, {
+      format: "atif",
+      path: "native.json",
+    });
+    expect(imported?.extra?.orbit?.importer.name).toBe("atif-import");
+    expect(primary.runs.get(primary.run.id)?.trajectory?.source).toEqual({
+      format: "atif",
+      path: "native.json",
+    });
+    expect(worker.runs.get(worker.run.id)?.trajectory?.source).toEqual(
+      primary.runs.get(primary.run.id)?.trajectory?.source,
+    );
     worker.store.putRun({ ...worker.run, origin: null });
     expect(
       (

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import {
+  AtifSource,
   CLUSTER_PREFIX,
   CLUSTER_PROTOCOL,
   type NodeInfo,
@@ -123,13 +124,17 @@ export function createWorkerApp(deps: WorkerDeps): Hono {
   });
 
   api.get("/runs/:id/trajectory", async (c) => c.json(await runs.trajectory(own(c).id)));
-  api.post("/runs/:id/trajectory/rebuild", async (c) =>
-    c.json(await runs.trajectory(own(c).id, true)),
-  );
+  api.post("/runs/:id/trajectory/rebuild", async (c) => {
+    const text = await c.req.text();
+    const { source } = z
+      .object({ source: AtifSource.optional() })
+      .parse(text ? JSON.parse(text) : {});
+    return c.json(await runs.trajectory(own(c).id, true, false, source));
+  });
   api.get("/runs/:id/trajectory/files/*", async (c) => {
     const run = own(c);
     const rel = decodePath(c.req.path, "/files/");
-    if (!/^media\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(rel))
+    if (!/^media\/[a-f0-9]{64}\.(png|jpg|gif|webp|wav|mp3|m4a|aac|ogg|flac|weba|aiff)$/.test(rel))
       return c.json({ error: "not found" }, 404);
     const f = await outputFile(
       runs.dirs(run.id).root,
