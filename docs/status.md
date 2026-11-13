@@ -14,18 +14,18 @@ Updated 2026-11-13. Architecture: [design](design.md). Docs map: [docs/README](R
 - **Agents.** Registry of 12 Agents plus user definitions (`orbit agent …`), installed inside the run when needed. Real runs: codex, claude-code, dsh; the other nine are unverified. Auth profiles per Agent; notifications (Feishu, DingTalk, WeCom, Slack, webhook; Feishu app bot).
 - **Bench core.** Solve + independent verify per trial; valid-only means with task-clustered CI and paired Δ; benchmark's official aggregation shown alongside; closed failure kinds; immutable report revisions; `rescore`, `consolidate`, `usage`, `calibrate`, `coverage`.
 - **Integration.** One adapter protocol behind four integration methods: `harbor`, `manifest`, `sdk`, `native` (design §9.14). Harbor covers compose services, hooks, per-role GPUs and verifier GPU models; TB-Science 70/70 and TB 4.0 56/66 supported.
-- **Describing benchmarks.** Six-dimensional taxonomy, integration method, calibration record (design §9.10). Product library of 43 families ([catalog](catalog.md), [availability](guides/benchmark-availability.md)).
+- **Describing benchmarks.** Six-dimensional taxonomy, integration method, calibration record (design §9.10). Product library of 45 families ([catalog](catalog.md), [availability](guides/benchmark-availability.md)).
 - **Calibrated samples.** Bounded empty/oracle or scripted calibration for HumanEval, EFE MetaWorld+, BFCL, τ²-bench, MiniWoB, LIBERO, TextArena, Cua Bench basic desktop, CUA-Lite MiniWoB; BFCL also has a real CLI Agent check.
 - **GUI.** Private signed GUI service (`orbit-computer` CLI/MCP); Claude Code and Codex verified on sampled MiniWoB/BrowserGym tasks; MCP servers wired into Claude/Codex homes ([GUI guide](guides/gui-bench-web.md)).
-- **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). Harness benchmarks RLE-Bench, EmbodiedCLBench, EmbodiedLab T0 via Agent adapters.
+- **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). BEHAVIOR-1K uses its native R1Pro evaluator; RobotAgentBench adds raw-22 Agent tools alongside RLE-Bench, EmbodiedCLBench and EmbodiedLab T0 (new native calibration pending).
 - **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial views follow evidence shapes, including RoboDojo/RoboLab timelines and recorded TextArena conversations; evaluation configurations grouped by content revision.
 - **Multi-node.** Workers join by token; placement, hashed code bundles, named datasets, mirrored logs and artifacts ([guide](guides/multi-node.md)).
 
 ## Main gaps
 
 - **Validation.** Native embodied checks include sampled simulator runs, real-policy rollouts and short upstream comparisons. Full-suite statistical equivalence with upstream evaluators remains unverified. [Coverage and evidence](guides/embodied-compatibility.md).
-- **Not run for real.** MobileWorld / OSWorld-V2 KVM calibration; EFE GPU tasks; EmbodiedLab experiments (RTX startup); WebVoyager and Web judge calibration; R4 on two machines; LongDS Claude continuation.
-- **Missing.** Environment pools and `slots`; episode importers beyond EFE, RoboTwin, LIBERO, RoboDojo and RoboLab; licensed-data volumes (BEHAVIOR, ManiGuard); allowlist networks, multi-step Harbor tasks, Harbor MCP tool sets; MCP server; native Policy view in Agents; bundle cache eviction.
+- **Not run for real.** MobileWorld / OSWorld-V2 KVM calibration; EFE GPU tasks; EmbodiedLab / BEHAVIOR-1K / RobotAgentBench native calibration; WebVoyager and Web judge calibration; R4 on two machines; LongDS Claude continuation.
+- **Missing.** Environment pools and `slots`; episode importers beyond EFE, RoboTwin, LIBERO, RoboDojo and RoboLab; Harbor licensed-data volumes (ManiGuard); allowlist networks, multi-step Harbor tasks, Harbor MCP tool sets; MCP server; native Policy view in Agents; bundle cache eviction.
 - **Known issues.** Docker [`userns-remap`](guides/docker-userns-remap.md) breaks Run output writes and is not detected; daemons of different users on one machine can lease the same free GPU.
 
 ## Next

@@ -173,6 +173,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     if sample["benchmarkProfile"] != reference["id"]:
         raise ValueError("sample evaluation profile differs from the frozen reference")
     kind = reference.get("environment", {}).get("kind")
+    if kind == "behavior1k":
+        from orbit_embodied.behavior1k import run_native_episode
+        return run_native_episode(request, destination, LazyPolicy(request["policy"]), prepare=prepare, cancelled=cancelled)
     if kind == "registered-gym":
         from orbit_embodied.gym import GymBenchmark, SimplerPolicyTerminationBenchmark
         native = SimplerPolicyTerminationBenchmark if reference["environment"].get("policyTermination") else GymBenchmark

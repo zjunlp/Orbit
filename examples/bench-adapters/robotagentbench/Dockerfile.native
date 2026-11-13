@@ -1,0 +1,5 @@
+ARG ROBOTAGENT_BASE
+FROM ${ROBOTAGENT_BASE}
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+LABEL org.orbit.robotagentbench.source="fa207f52d8da139f591f9dc590eb002c58f72383"

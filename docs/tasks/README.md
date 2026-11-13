@@ -95,6 +95,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Embodied: policies and native benchmarks
 
+- [20261113](20261113-behavior-robotagent.md) BEHAVIOR-1K and RobotAgentBench integration
+
 - [20261103](20261103-embodied-infra-research.md) 具身评测与调度基础设施源码调研
 - [20261104](20261104-p4-policy.md) P4：Policy 路线与按角色分配 GPU
 - [20261105](20261105-embodied-eval.md) Independent policies and native embodied benchmarks
