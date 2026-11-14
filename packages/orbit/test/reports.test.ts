@@ -248,3 +248,79 @@ describe("failure kinds", () => {
     expect(classify(oom, verify, ScoreResult.parse({ score: 1 })).failure).toBe("budget_exceeded");
   });
 });
+
+describe("immutable solve-cost evidence", () => {
+  it("freezes shared and prior attempts, preserving unknown records and copied token values", () => {
+    const j = job();
+    const a = trial("first", "a", 1, outcome("valid", 1));
+    a.solveRunId = "shared";
+    a.priorAttempts = [
+      { solveRunId: "missing-prior", verifyRunId: null, outcome: null, history: [] },
+    ];
+    const b = trial("second", "b", 1, outcome("valid", 1));
+    b.solveRunId = "shared";
+    const run = Run.parse({
+      id: "shared",
+      spec: { backend: "process", command: ["true"] },
+      state: "succeeded",
+      reason: null,
+      exitCode: 0,
+      node: "fixture",
+      image: null,
+      containerId: null,
+      lease: null,
+      code: null,
+      cleanup: "done",
+      note: "",
+      createdAt: at,
+      startedAt: at,
+      endedAt: "2026-01-01T00:00:10Z",
+      tokens: {
+        input: 10,
+        output: 5,
+        cachedInput: 0,
+        cacheWrite: 0,
+        reasoning: 0,
+        calls: 1,
+        source: "session",
+      },
+    });
+    const lookup = (id: string) => (id === run.id ? run : null);
+    const first = buildReport(j, [a, b], "finished", 1, at, lookup);
+    expect(first.methods[0]?.costs).toEqual([
+      { run: "missing-prior", tasks: ["a"], complete: true, wallSeconds: null, tokens: null },
+      { run: "shared", tasks: ["a", "b"], complete: true, wallSeconds: 10, tokens: run.tokens },
+    ]);
+    if (!run.tokens) throw new Error("missing fixture tokens");
+    run.tokens.input = 999;
+    expect(first.methods[0]?.costs?.[1]?.tokens?.input).toBe(10);
+    expect(first.methods[0]?.entries[0]?.tokens?.input).toBe(10);
+    const next = buildReport(j, [a, b], "rescore", 2, at, lookup);
+    expect(sameReport(first, next)).toBe(false);
+    run.endedAt = "2025-01-01T00:00:00Z";
+    expect(
+      buildReport(j, [a], "rescore", 3, at, lookup).methods[0]?.costs?.find(
+        (c) => c.run === "shared",
+      )?.wallSeconds,
+    ).toBeNull();
+    a.batch = {
+      index: 0,
+      plan: {
+        version: 1,
+        id: "fixture-batch",
+        attemptId: "fixture-attempt",
+        method: "m",
+        randomness: "service",
+        members: [
+          { trialId: "outside", sampleRef: `sha256:${"a".repeat(64)}`, episodeId: "outside" },
+        ],
+        digest: `sha256:${"b".repeat(64)}`,
+      },
+    };
+    expect(
+      buildReport(j, [a], "rescore", 4, at, lookup).methods[0]?.costs?.find(
+        (c) => c.run === "shared",
+      )?.complete,
+    ).toBe(false);
+  });
+});

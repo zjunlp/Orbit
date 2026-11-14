@@ -185,3 +185,138 @@ export function fmtCi(s: MetricStat | null | undefined, m: MetricDef): string {
   const h = (s.ci[1] - s.ci[0]) / 2;
   return `±${m.unit === "%" ? h.toFixed(1) : fmtNumber(h)}`;
 }
+
+/** Per-round type-I budget; rounds start at one and share one predeclared total alpha. */
+export function alphaAt(round: number, alpha: number): number {
+  if (
+    !Number.isSafeInteger(round) ||
+    round < 1 ||
+    !Number.isFinite(alpha) ||
+    alpha <= 0 ||
+    alpha >= 0.5
+  )
+    throw new RangeError(
+      "round must be a positive safe integer and alpha must be between 0 and 0.5",
+    );
+  return (alpha * 6) / (Math.PI ** 2 * round ** 2);
+}
+
+function logGamma(z: number): number {
+  const coefficients = [
+    676.5203681218851, -1259.1392167224028, 771.3234287776531, -176.6150291621406,
+    12.507343278686905, -0.13857109526572012, 9.984369578019572e-6, 1.5056327351493116e-7,
+  ];
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z);
+  const x = z - 1;
+  let series = 0.9999999999998099;
+  for (const [i, c] of coefficients.entries()) series += c / (x + i + 1);
+  const t = x + 7.5;
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(series);
+}
+
+function betaFraction(x: number, a: number, b: number): number {
+  const tiny = 1e-300;
+  const bounded = (v: number) => (Math.abs(v) < tiny ? (v < 0 ? -tiny : tiny) : v);
+  let c = 1;
+  let d = 1 / bounded(1 - ((a + b) * x) / (a + 1));
+  let h = d;
+  for (let m = 1; m <= 400; m++) {
+    for (const [index, coefficient] of [
+      (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m)),
+      -((a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1)),
+    ].entries()) {
+      d = 1 / bounded(1 + coefficient * d);
+      c = bounded(1 + coefficient / c);
+      const change = c * d;
+      h *= change;
+      if (index === 1 && Math.abs(change - 1) < 3e-14) return h;
+    }
+  }
+  return Number.NaN;
+}
+
+function betaProbability(x: number, a: number, b: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const factor = Math.exp(
+    logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log1p(-x),
+  );
+  const value =
+    x < (a + 1) / (a + b + 2)
+      ? (factor * betaFraction(x, a, b)) / a
+      : 1 - (factor * betaFraction(1 - x, b, a)) / b;
+  return Math.min(1, Math.max(0, value));
+}
+
+const criticalValues = new Map<string, number>();
+function tCritical(alpha: number, df: number): number {
+  const key = `${alpha}/${df}`;
+  const cached = criticalValues.get(key);
+  if (cached !== undefined) return cached;
+  const tail = (t: number) => betaProbability(df / (df + t * t), df / 2, 0.5) / 2;
+  let lo = 0;
+  let hi = 1;
+  while (tail(hi) > alpha && hi < 1e150) hi *= 2;
+  for (let i = 0; i < 70; i++) {
+    const mid = (lo + hi) / 2;
+    if (tail(mid) > alpha) lo = mid;
+    else hi = mid;
+  }
+  const result = (lo + hi) / 2;
+  if (
+    !Number.isFinite(tail(result)) ||
+    Math.abs(tail(result) - alpha) > Math.max(1e-12, alpha * 1e-6)
+  )
+    return Number.NaN;
+  if (criticalValues.size >= 256) {
+    const first = criticalValues.keys().next().value;
+    if (first !== undefined) criticalValues.delete(first);
+  }
+  criticalValues.set(key, result);
+  return result;
+}
+
+/** Student-t bound on task-level paired differences; the display-only 95% ci is not reused. */
+export function lowerBound(diff: MetricStat | null, alpha: number): number | null {
+  if (!Number.isFinite(alpha) || alpha <= 0 || alpha >= 0.5)
+    throw new RangeError("alpha must be between 0 and 0.5");
+  if (
+    !diff ||
+    diff.tasks < 2 ||
+    !Number.isSafeInteger(diff.tasks) ||
+    !Number.isFinite(diff.mean) ||
+    diff.se === null ||
+    !Number.isFinite(diff.se) ||
+    diff.se < 0
+  )
+    return null;
+  const bound = diff.mean - tCritical(alpha, diff.tasks - 1) * diff.se;
+  return Number.isFinite(bound) ? bound : null;
+}
+export function upperBound(diff: MetricStat | null, alpha: number): number | null {
+  const bound = lowerBound(diff ? { ...diff, mean: -diff.mean } : null, alpha);
+  return bound === null ? null : -bound;
+}
+export function nonInferior(
+  diff: MetricStat | null,
+  margin: number,
+  alpha: number,
+): "pass" | "fail" | "insufficient" {
+  if (!Number.isFinite(margin) || margin < 0) throw new RangeError("margin must be nonnegative");
+  const lower = lowerBound(diff, alpha);
+  const upper = upperBound(diff, alpha);
+  if (lower === null || upper === null) return "insufficient";
+  return lower > -margin ? "pass" : upper < -margin ? "fail" : "insufficient";
+}
+
+/** Exact binomial tails of discordant binary task pairs, with gains oriented toward the child. */
+export function mcnemarExact(
+  gains: number,
+  losses: number,
+): { greater: number; less: number; twoSided: number } {
+  if (![gains, losses, gains + losses].every((n) => Number.isSafeInteger(n) && n >= 0))
+    throw new RangeError("discordant counts must be nonnegative safe integers");
+  const greater = gains === 0 ? 1 : betaProbability(0.5, gains, losses + 1);
+  const less = losses === 0 ? 1 : betaProbability(0.5, losses, gains + 1);
+  return { greater, less, twoSided: Math.min(1, 2 * Math.min(greater, less)) };
+}

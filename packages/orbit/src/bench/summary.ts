@@ -13,7 +13,13 @@ import type {
   Run,
   Trial,
 } from "../contracts/index.ts";
-import { planRank, sampleIdentity, sampleKey, sampleOrder } from "../contracts/index.ts";
+import {
+  isTerminal,
+  planRank,
+  sampleIdentity,
+  sampleKey,
+  sampleOrder,
+} from "../contracts/index.ts";
 import {
   aggregate,
   metricValue,
@@ -54,7 +60,7 @@ export function executionBudget(
 }
 
 /** Frozen execution conditions, excluding registration metadata and resource-file locations. */
-function evaluationConditions(job: PlanConditions, tasks: string[]) {
+export function evaluationConditions(job: PlanConditions, tasks: string[]) {
   const snapshot = job.benchmarkSnapshot;
   return {
     benchmark: snapshot
@@ -144,7 +150,9 @@ function entry(t: Trial, metric: string, getRun?: (id: string) => Run | null): R
     evaluation: t.outcome?.evaluation ?? "pending",
     ...(t.outcome?.failure ? { failure: t.outcome.failure } : {}),
     value: t.outcome ? metricValue(t.outcome, metric) : null,
-    ...(getRun ? { tokens: t.solveRunId ? (getRun(t.solveRunId)?.tokens ?? null) : null } : {}),
+    ...(getRun
+      ? { tokens: structuredClone(t.solveRunId ? (getRun(t.solveRunId)?.tokens ?? null) : null) }
+      : {}),
   };
 }
 
@@ -267,10 +275,59 @@ export function buildReport(
           ? officialValue(officialEntries, rule, officialMetric(rule, job.metrics))
           : null,
         entries,
-        ...(getRun ? { tokenUsage: tokenUsage(solveRuns(ts, getRun)) } : {}),
+        ...(getRun
+          ? { tokenUsage: tokenUsage(solveRuns(ts, getRun)), costs: reportCosts(job, ts, getRun) }
+          : {}),
       };
     }),
   };
+}
+
+/** Freeze every solve attempt, including missing records, and deduplicate shared batch Runs. */
+function reportCosts(
+  job: BenchJob,
+  trials: Trial[],
+  getRun: (id: string) => Run | null,
+): NonNullable<BenchReport["methods"][number]["costs"]> {
+  const owners = new Map<string, { tasks: Set<string>; complete: boolean }>();
+  const byTrial = new Map(trials.map((t) => [t.id, t.task]));
+  const bySample = new Map(job.spec.samplePlan?.items.map((s) => [s.sampleId, s.taskId]));
+  for (const trial of trials)
+    for (const attempt of [trial, ...(trial.priorAttempts ?? [])]) {
+      const id = attempt.solveRunId;
+      if (!id) continue;
+      const own = owners.get(id) ?? { tasks: new Set<string>(), complete: true };
+      own.tasks.add(trial.task);
+      for (const member of attempt.batch?.plan.members ?? []) {
+        const task = bySample.get(member.sampleRef) ?? byTrial.get(member.trialId);
+        if (task) own.tasks.add(task);
+        else own.complete = false;
+      }
+      owners.set(id, own);
+    }
+  return [...owners]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, own]) => {
+      const run = getRun(id);
+      const start = run?.startedAt ? Date.parse(run.startedAt) : Number.NaN;
+      const end = run?.endedAt ? Date.parse(run.endedAt) : Number.NaN;
+      const wallSeconds =
+        run &&
+        isTerminal(run.state) &&
+        run.cleanup === "done" &&
+        Number.isFinite(start) &&
+        Number.isFinite(end) &&
+        end >= start
+          ? (end - start) / 1000
+          : null;
+      return {
+        run: id,
+        tasks: [...own.tasks].sort(),
+        complete: own.complete,
+        wallSeconds,
+        tokens: run?.tokens ? { ...run.tokens } : null,
+      };
+    });
 }
 
 /** Whether two reports say the same thing (plan, rule and every entry); then no new revision. */

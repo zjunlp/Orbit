@@ -958,6 +958,17 @@ export const BenchReport = z.object({
       official: OfficialValue.nullable(),
       entries: z.array(ReportEntry),
       tokenUsage: TokenUsage.optional(),
+      costs: z
+        .array(
+          z.object({
+            run: z.string(),
+            tasks: z.array(z.string()).min(1),
+            complete: z.boolean(),
+            wallSeconds: z.number().nonnegative().nullable(),
+            tokens: RunTokens.nullable(),
+          }),
+        )
+        .optional(),
     }),
   ),
 });

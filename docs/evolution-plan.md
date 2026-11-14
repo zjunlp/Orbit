@@ -35,7 +35,7 @@
 | F3 | 步级分叉与 Web 入口 | F2、T6 | 中 | [ ] |
 | F4 | 分叉结果的独立验收（反事实研究用） | F3 | 中 | [ ] |
 | E1 | 任务集划分与冻结 | — | 小 | [x] |
-| E2 | 判定核心（纯函数与统计） | E1 | 中 | [ ] |
+| E2 | 判定核心（纯函数与统计） | E1 | 中 | [x] |
 | E3 | 策略文件、`orbit bench gate`、判定记录 | E2、T3 | 中 | [ ] |
 | E4 | 分级流程助手与静态检查 | E3 | 小 | [ ] |
 | E5 | Web：版本链上的判定与证据 | E3 | 中 | [ ] |
@@ -369,14 +369,14 @@ orbit trajectory export --run <id> --format chat-jsonl --reasoning none --out /p
 
 ### E2 判定核心
 
-分支 `feat/gate-core`。模块：`contracts/gate.ts`（`GatePolicy`、`GateVerdict`）、`contracts/metrics.ts`（新增统计函数，Web 可复用）、`bench/gate.ts`（纯函数）。
+已实现于 `feat/run-trajectory`（[核心说明](guides/gate-core.md)、design §7）。模块：`contracts/gate.ts`（`GatePolicy`、`GateVerdict`）、`contracts/metrics.ts`（新增统计函数，Web 可复用）、`bench/gate.ts`（纯函数）。
 
-- [ ] `lowerBound(diff, alpha)`、`nonInferior(diff, margin, alpha)`、`alphaAt(round, alpha)`；二值指标另给精确 McNemar 的 p 值作对照。
-- [ ] `gate(parent, child, policy, reports) → GateVerdict`：
+- [x] `lowerBound(diff, alpha)`、`nonInferior(diff, margin, alpha)`、`alphaAt(round, alpha)`；二值指标另给精确 McNemar 的 p 值作对照。
+- [x] `gate(parent, child, policy, reports) → GateVerdict`：
       `{ decision, level, checks[], regressions[]（父通过而子失败的任务）, alpha: { round, level }, inputs: { parent, child, reports[{ job, revision }], policyDigest, taskSets } }`。
-- [ ] `informedBy` 闭包剔除；前提检查逐条给出原因。
-- [ ] 模拟测试：在合成的配对结果上重复抽样，无差异时接受率不超过 α；已知提升下的功效与 §7.2 的估计同量级；多轮接受率受 α 消耗控制。
-- [ ] 不读文件、不访问 daemon 状态，便于在 Web 和测试里复用。
+- [x] `informedBy` 闭包剔除；前提检查逐条给出原因。
+- [x] 模拟测试：在合成的配对结果上重复抽样，无差异时接受率不超过 α；已知提升下的功效与 §7.2 的估计同量级；多轮接受率受 α 消耗控制。
+- [x] 不读文件、不访问 daemon 状态，便于在 Web 和测试里复用。
 
 ### E3 策略文件、CLI 与判定记录
 

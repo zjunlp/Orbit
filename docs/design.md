@@ -13,8 +13,8 @@ Orbit 是让验收有据可依的实验室，位于做决策的 Agent 与负责�
 标题中的 Evolve 需要证据证明进化是真的，Any Environment 是证明的方式：
 跨多类 benchmark 与多种 Agent 是进化门的前提，只在诞生地测过的改进不算验证。
 
-前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期、API/CLI、环境对齐与训练数据导出；进化门仍在设计中、尚未写入本文，
-目前只有配置版本、血缘与配对统计（§9.16）。在进化门的设计写入本文之前，§9.16 的"不做方法进化声明"继续有效。
+前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期、API/CLI、环境对齐与训练数据导出；进化门已有任务集冻结和纯判定核心（§7），CLI 与判定存储仍待 E3 接入，
+当前产品的配置版本/血缘（§9.16）仍不作方法进化声明。
 统一轨迹、导出、分叉、进化门与进化实验的分步计划见 [evolution-plan.md](evolution-plan.md)；它是计划而不是设计，
 各工作包落地时把定稿写回本文；§9.8 已采用 ATIF，Run 生成、存储、重建与读取已实现。
 具身设备后端是未来方向。规划、分析与迭代仍由 Agent 主导，Orbit 不提出改动，只提供执行、证据与判定依据。
@@ -542,7 +542,17 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   新作业持久化 `BenchJob.taskSet`，沿用原 Hub 的有序去重 ID 规范 JSON SHA-256 前 12 位；文件提交还保存 taskFile 的完整文件哈希和可选清单，不保存内容或客户端路径。
   Hub 优先读已保存摘要；旧作业缺省回退既有计算且不在读取时重写。文件作业禁止归并追加任务；普通作业追加时更新摘要，无任务变动的旧作业保持原样。
   任务文件 8 MiB、清单 1 MiB、至多 100000 个任务；普通文件有界读取。输出必须不存在、父目录存在且位于 Orbit home/data 之外，私有临时目录验证后发布，文件 0600、目录 0700。
-  详细使用见 [任务集指南](guides/task-sets.md)。E2/E3 的准入判定仍待实现。
+  详细使用见 [任务集指南](guides/task-sets.md)。准入判定核心见下文 E2，CLI 与存储由 E3 接入。
+- **进化判定纯核心（E2）**：`contracts/gate.ts` 定义 GatePolicy/GateEvidence/GateVerdict，`bench/gate.ts` 接收父/子配置修订、规范策略和显式证据；不读文件、store、Run 当前值或时钟，不提交任务。
+  证据是作业冻结元数据、不可变报告修订、任务文件内容快照及每个集合的显式父/子报告引用；调用方提供完整相关历史，不自动选最优作业或报告。
+  校验 E1 文件 SHA/taskSet、配置 basis 摘要、报告 plan/metric/aggregator/样本矩阵、版本与执行条件；仅接受已知且除 bundle 外一致的基础项，dirty/approximate 为证据不足。
+  按相同 sample ID 配对有效值，再对 task 内均值之差做 Student-t 单侧区间（n−1 自由度）；既有显示用 95% 正态 CI 不参与判定。metrics.ts 导出 lowerBound/upperBound/nonInferior/alphaAt，Web 可复用；二值任务给出精确 McNemar 对照 p 值，不代替主检验。
+  准入下界 > 0、各守护下界 > −margin 且成本均通过才接受；区间跨边界为 insufficient，上界严格低于边界才 reject。前提不足优先 insufficient；终测只升级等级，不改变准入决定。
+  子版本/全部祖先 informedBy 的任务按 benchmark 身份剔除；终测 Agent 自己的血缘也检查。未知引用/缺祖先/环/冲突、配对任务数不足、覆盖不足都逐项说明。默认最少 30 任务、0.9 覆盖率；不可用样本率允许增加的绝对比例冻结为 max_invalid_increase（默认 0.05）。
+  α_k = α·6/(π²k²)，按同一准入文件哈希和根血缘下已形成报告的不同子版本首次提交顺序计轮，含兄弟候选；根父版本与重评分/补建报告不重复计轮，不增账本。
+  新报告方法内的可选 costs 保存所有 solve Run（含先前失败重试）的任务归属/完整性、执行墙钟与 token，批次 Run 去重，缺失 Run 保留 null；复制 token 值，不改旧报告。
+  仅在终态且 cleanup done、起止时间有效时记录执行墙钟，不含排队/清理等待；token 用 input+output，缓存/reasoning 不重加、不估价。成本缺项、未知归属或共享 Run 跨被剔除任务时 not_checked，不当通过。
+  结果包含 accept/reject/insufficient、in-domain/cross-domain/transferable、checks、退步任务、轮次/α、策略摘要、报告引用和剔除清单。CLI/API/保存判定属于 E3；真实校准属于 E6。详见 [核心说明](guides/gate-core.md)。
 - **重新评分**（`POST /bench/jobs/:id/rescore`，`orbit bench rescore <job> [-t task] [-m method] [--trial id]`，
   Web job 页与 trial 页的 Rescore）：不重跑 Agent。只对已结束 job 中已完成、solve 输出仍在本机且需要 verify 的
   trial；当前 `{verifyRunId, outcome, endedAt}` 移入 `Trial.history`，trial 回到 `solving`（solve Run 不变），

@@ -8,6 +8,7 @@ export * from "./cluster.ts";
 export { API_PREFIX, ApiError, Health, LoginCode, ProfileName } from "./common.ts";
 export * from "./embodied.ts";
 export * from "./folders.ts";
+export * from "./gate.ts";
 export * from "./hub.ts";
 export { autoRunName, planRank, runDisplayName, sampleLabel, sampleOrder } from "./naming.ts";
 export * from "./records.ts";
