@@ -70,7 +70,8 @@ def settings(req):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
     kind = reference.get("environment", {}).get("kind")
     renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",),
-                 "cliport": ("pybullet-direct",), "bigym2": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
+                 "cliport": ("pybullet-direct",), "bigym2": ("egl",),
+                 "eb-navigation": ("vulkan",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -169,6 +170,12 @@ def tasks(req):
         metrics = [{"name": "success_rate", "label": "Reward above 0.99", "unit": "ratio", "range": [0, 1]}]
     elif kind == "colosseum-v2":
         metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
+    elif kind == "eb-navigation":
+        from orbit_embodied.eb_navigation import SPLITS
+        metrics = [{"name": "distance_to_target", "label": "Final distance to target", "unit": "m",
+                    "higherIsBetter": False}, {"name": "steps", "label": "Control steps", "higherIsBetter": False}]
+        metrics.extend({"name": split + "_success", "label": split.replace("_", " ") + " success",
+                        "unit": "ratio", "range": [0, 1]} for split in SPLITS)
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
             "capabilities": {"embodied": {
@@ -177,7 +184,8 @@ def tasks(req):
                                  "replanSteps": reference["parameters"]["replanSteps"],
                                  **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
                              }, "methods": ["policy"],
-                             "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],
+                             "taxonomy": {"domains": ["robotics"],
+                                          "taskTypes": ["navigation" if kind == "eb-navigation" else "manipulation"],
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
@@ -221,7 +229,8 @@ def solve_one(req):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
-                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport"):
+                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
+                                  "eb-navigation"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -250,6 +259,12 @@ def solve_one(req):
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
     memory_gb = 20 if environment.get("kind") == "robocasa-v02" else 8
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
+    if environment.get("kind") == "eb-navigation":
+        gpu = trial.get("options", {}).get("gpuId")
+        if gpu is not None:
+            if not gpu or "," in gpu or resources["gpus"] != 1:
+                raise ValueError("EB-Navigation gpuId must name a single GPU")
+            resources["gpuIds"] = [gpu]
     if "simGpuMemGB" in config:
         memory = float(config["simGpuMemGB"])
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
@@ -260,14 +275,16 @@ def solve_one(req):
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
     libero_kind = environment.get("kind")
     libero_path = "/opt/" + libero_kind + ":" if libero_kind in ("libero-pro", "libero-mem") else ""
+    native_path = "/opt/seenav:" if libero_kind == "eb-navigation" else ""
     assets = environment.get("assets")
     if assets:
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
-                     "env": {"PYTHONPATH": "/orbit-embodied/python:" + libero_path + "/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
+                     "env": {"PYTHONPATH": "/orbit-embodied/python:" + native_path + libero_path + "/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
                              **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
-                                if gl_platform not in ("xvfb-glx", "pybullet-direct") else {})},
+                                if gl_platform not in ("xvfb-glx", "pybullet-direct")
+                                and environment.get("kind") != "eb-navigation" else {})},
                      "resources": resources,
                      **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") in ("robotwin", "robodojo") else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
@@ -440,6 +457,11 @@ def score(req):
                 metrics.update({"safety_cost": cost, f"safety_cost_l{level}": cost})
         elif kind == "colosseum-v2":
             metrics = {"success_at_end": int(result["native"]["successAtEnd"])}
+        elif kind == "eb-navigation":
+            task = req["trial"]["sample"]["taskId"]
+            split = environment["taskTags"][task]["split"]
+            metrics = {split + "_success": success, "steps": result["steps"],
+                       "distance_to_target": result["native"]["distanceToTarget"]}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

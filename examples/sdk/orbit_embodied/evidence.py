@@ -279,6 +279,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if result["valid"] and kind == "cliport":
         from .cliport import verify_cliport
         verify_cliport(reference, contract["sample"], controls, result)
+    if result["valid"] and kind == "eb-navigation":
+        from .eb_navigation import verify_navigation
+        verify_navigation(reference, contract["sample"], initial["state"], controls, result)
     if result["valid"] and kind in ("robomimic", "vima-bench"):
         verify_manipulation_stopping(kind, controls, contract["horizon"])
     if result["valid"] and kind == "molmospaces":
