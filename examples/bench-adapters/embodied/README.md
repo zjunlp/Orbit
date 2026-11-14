@@ -20,21 +20,22 @@ from the current recipe.
 
 | Benchmark or runtime | Setup |
 | --- | --- |
-| LIBERO | [OpenPI π₀.₅](benchmarks/libero/README.md) · [All suites](../../../docs/guides/libero-suites.md) · [GR00T N1.7](policies/groot/README.md) · [OpenVLA-OFT](policies/openvla-oft/README.md) · [SmolVLA and MolmoAct2](benchmarks/tabletop/README.md) |
+| LIBERO | [OpenPI π₀.₅](benchmarks/libero/README.md) · [All suites](../../../docs/guides/libero-suites.md) · [GR00T N1.7](policies/groot/README.md) · [OpenVLA-OFT](policies/openvla-oft/README.md) · [SmolVLA and MolmoAct2](benchmarks/tabletop/README.md) · [Fast-WAM](policies/fast-wam/README.md) |
 | LIBERO-Plus | [Perturbation suites and OFT](benchmarks/libero-plus/README.md) |
 | LIBERO-PRO | [Original leaderboard perturbations](benchmarks/libero-pro/README.md) |
+| LIBERO-Mem | [Ordered subgoals and π₀.₅](benchmarks/libero-mem/README.md) |
 | VLABench | [Native tracks and OpenWAM](benchmarks/vlabench/README.md) |
 | SimplerEnv | [Native catalogs and scene grids](benchmarks/simpler-env/README.md) · [GR00T N1.7](policies/groot/README.md) · [StarVLA QwenGR00T](policies/starvla/README.md) |
 | RoboCasa v0.2 | [Atomic-24](benchmarks/robocasa-v02/README.md) |
-| RoboCasa365 | [Multitask, Lifelong, π₀.₅, GR00T N1.5 and Diffusion Policy](benchmarks/robocasa365/README.md) |
-| RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) · [LingBot-VLA](policies/lingbot-vla/README.md) · [Fast-VLA](policies/fast-vla/README.md) |
+| RoboCasa365 | [Multitask, Lifelong, π₀.₅, GR00T N1.5 and Diffusion Policy](benchmarks/robocasa365/README.md) · [Xiaomi-Robotics-1](policies/xiaomi-robotics-1/README.md) · [GigaWorld-Policy-0.1](policies/gigaworld-policy-01/README.md) |
+| RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) · [LingBot-VLA](policies/lingbot-vla/README.md) · [LingBot-VLA 2.0](policies/lingbot-vla-v2/README.md) · [Fast-VLA](policies/fast-vla/README.md) · [LingBot-VA](policies/lingbot-va/README.md) |
 | ManiSkill3 and Meta-World | [Tabletop, Plate-25 and MT50](benchmarks/tabletop/README.md) |
 | RLBench | [MT100 and RVT-18](benchmarks/rlbench/README.md) |
 | CALVIN | [ABC→D](benchmarks/calvin/README.md) |
 | RoboDojo and RoboLab | [RoboDojo](benchmarks/robodojo/README.md) · [RoboLab](benchmarks/robolab/README.md) |
 | RoboMimic | [PH low-dimensional and RGB profiles](benchmarks/robomimic/README.md) |
 | VIMA-Bench | [Test partitions and VIMA 20M](benchmarks/vima-bench/README.md) |
-| MolmoSpaces-Bench | [MS manipulation tracks](benchmarks/molmospaces/README.md) |
+| MolmoSpaces-Bench | [MS v1 and MolmoBot v2 tracks](benchmarks/molmospaces/README.md) |
 | Colosseum V2 | [Single-arm and bimanual perturbation protocols](benchmarks/colosseum-v2/README.md) |
 | VLA-Arena | [Difficulty levels and safety scoring](benchmarks/vla-arena/README.md) · [DM0.5](policies/dm05/README.md) |
 | BiGym 2.0 | [G1 learned-policy evaluation](benchmarks/bigym2/README.md) |

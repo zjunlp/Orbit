@@ -53,8 +53,11 @@ def configured_resources(root, *, shared, profile="widowx", simulator_memory=Non
         argv.extend(["--sim-gpu-mem-gb", str(simulator_memory)])
     with patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()), \
             patch.object(config, "image_id", return_value="sha256:" + "a" * 64), \
+            patch.object(config, "require_image", return_value="sha256:" + "b" * 64), \
+            patch.object(config, "check_source") as check_source, \
             patch.object(config, "file_digest", side_effect=lambda path: audit[Path(path).resolve()] if Path(path).resolve() in audit else original_digest(path)):
         config.main()
+        check_source.assert_called_once_with(source, model, model["files"])
     benchmark = json.loads((output / "benchmark.json").read_text())
     policy = json.loads((output / "policy.json").read_text())
     from orbit_embodied import digest, resolve_binding

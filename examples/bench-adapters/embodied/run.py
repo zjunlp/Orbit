@@ -138,7 +138,7 @@ def main(argv):
         kind = expected["reference"].get("environment", {}).get("kind")
         if kind is None and expected["sample"]["taskId"].partition(":")[0] in HORIZONS:
             kind = "libero"
-        if kind == "libero-plus":
+        if kind in ("libero-plus", "libero-mem"):
             kind = "libero"
         if result["valid"]:
             # The review index is optional: a kind without one, or a failure to build it, leaves the verdict alone.
@@ -178,8 +178,11 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         native = SimplerPolicyTerminationBenchmark if reference["environment"].get("policyTermination") else GymBenchmark
         benchmark = native(reference, sample["taskId"])
     elif kind == "robocasa365":
-        from orbit_embodied.robocasa import RoboCasaBenchmark, RoboCasaDiffusionBenchmark
-        native = RoboCasaDiffusionBenchmark if reference["environment"].get("protocol") == "diffusion-policy" else RoboCasaBenchmark
+        from orbit_embodied.robocasa import (RoboCasaBenchmark, RoboCasaDiffusionBenchmark,
+                                             RoboCasaGigaWorldBenchmark, RoboCasaXiaomiBenchmark)
+        native = {"diffusion-policy": RoboCasaDiffusionBenchmark,
+                  "gigaworld-policy-01": RoboCasaGigaWorldBenchmark,
+                  "xiaomi-robotics-1": RoboCasaXiaomiBenchmark}.get(reference["environment"].get("protocol"), RoboCasaBenchmark)
         benchmark = native(reference, sample["taskId"])
     elif kind == "robocasa-v02":
         from orbit_embodied.robocasa_v02 import RoboCasaV02Benchmark
@@ -205,6 +208,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "vla-arena":
         from orbit_embodied.vla_arena import VLAArenaBenchmark
         benchmark = VLAArenaBenchmark(reference, sample["taskId"])
+    elif kind == "libero-mem":
+        from orbit_embodied.libero_mem import LiberoMemBenchmark
+        benchmark = LiberoMemBenchmark(reference, sample["taskId"])
     elif kind == "libero-pro":
         from orbit_embodied.libero_pro import LiberoProBenchmark
         benchmark = LiberoProBenchmark(reference, sample["taskId"])
@@ -212,8 +218,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         from orbit_embodied.rlbench import RLBenchBenchmark
         benchmark = RLBenchBenchmark(reference, sample["taskId"])
     elif kind == "robotwin":
-        from orbit_embodied.robotwin import RoboTwinBenchmark, RoboTwinCartesianBenchmark
-        native = RoboTwinCartesianBenchmark if reference["environment"].get("controller") == "ee" else RoboTwinBenchmark
+        from orbit_embodied.robotwin import RoboTwinBenchmark, RoboTwinCartesianBenchmark, RoboTwinLingBotBenchmark
+        controller = reference["environment"].get("controller")
+        native = {"ee": RoboTwinCartesianBenchmark, "lingbot-va-ee": RoboTwinLingBotBenchmark}.get(controller, RoboTwinBenchmark)
         benchmark = native(reference, sample["taskId"])
     elif kind in ("maniskill3", "metaworld"):
         from orbit_embodied.tabletop import ManiSkillBenchmark, MetaWorldBenchmark
@@ -238,7 +245,12 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         from orbit_embodied.libero import LiberoBenchmark, LiberoPlusBenchmark
         suite, name = sample["taskId"].split(":", 1)
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
-        benchmark = native(suite, name, settle_steps=reference["parameters"]["settleSteps"])
+        options = {"settle_steps": reference["parameters"]["settleSteps"]}
+        if reference.get("environment", {}).get("protocol") == "fast-wam":
+            if sample["environmentSeed"] != reference["parameters"]["environmentSeed"]:
+                raise ValueError("Fast-WAM requires the frozen LIBERO environment seed")
+            options["horizon"] = reference["horizons"][suite]
+        benchmark = native(suite, name, **options)
     expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
     expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84, "cliport": 480}.get(kind, 256)
     if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):

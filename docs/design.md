@@ -916,8 +916,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
-- **随机性**：OpenPI/GR00T/OFT 服务没有远端 RNG reset，按 service 作用域声明（JAX key 0 / Torch seed 0），不宣称与参考 runner
-  任意 episode 的随机状态等价。
+- **随机性**：模型可声明服务级随机流。OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务
+  可以登记发布配方的初始种子，例如 GigaWorld 的 42。批次按冻结顺序推进服务的随机流，样本中的 `policySeed` 保持为 0。
 - **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
   转换，亦接 SimplerEnv WidowX 七个任务与 Google Robot 六个任务）、`openvla-ws`（官方 OFT 推理在模型端，`libero-oft-native` 是独立评测 recipe）。
   `policy-ws` 把 Binding 选出的观测交给 Policy 服务，由服务负责图像、状态、语言与动作转换，返回 benchmark 控制器使用的动作块。
@@ -927,6 +927,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
+  Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。
 - **RoboCasa365**：Atomic-Seen 使用原生 PandaOmron Gymnasium 环境。每个样本以 `environmentSeed + initialStateId` 创建首个
   rollout，仿真资产经摘要核对并以只读数据集挂载，临时 XML 写入容器内的链接视图。`robocasa-native` I/O 保留原生 12 维动作，
   以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/robocasa365/README.md)
@@ -945,6 +946,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/benchmarks/robotwin/README.md)
   X-VLA 在 Clean 和 Randomized 各使用独立的末端位姿配置，沿用原生场景和专家筛选逻辑。策略输出转换为 16 维原生控制目标，每 30 步重规划。
+  LingBot-VA Clean 同样走原生末端位姿控制。首个动作块执行 16 步，后续每块最多 32 步，仿真每四步采集一组相机帧，供模型更新其 episode 内的缓存。
 - **ManiSkill3 与 Meta-World**：两个 RLinf recipe 分别使用原生 SAPIEN WidowX 和 MuJoCo Sawyer 环境。冻结样本种子、观测和控制语义，
   以原生 `info.success` 判定 episode。Meta-World 用同一个 `environmentSeed + initialStateId` 生成 MT1 目标并重置环境。
   Policy 服务分别提供 OFT 和 π₀.₅ 推理。
@@ -970,6 +972,10 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **CLIPort**：冻结语言条件测试集的 oracle 合格种子及各样本 reset 后的原生步数上限，转发 RGB-D 和当前子目标。
   16 个吸盘抓放任务与 2 个铲形末端推扫任务分别登记动作契约。推扫只接收两个世界坐标 XY 端点，CPU 验证核对原生命令和样本上限，
   并逐步重算累计奖励。[接入说明](../examples/bench-adapters/embodied/benchmarks/cliport/README.md)
+- **LIBERO-Mem**：在评测目录中冻结合法的 BDDL 子目标分支。每个控制步保存保留原生对象 ID 的已完成谓词序列和展示文本。
+  CPU verifier 核对序列是否逐步增长且始终匹配合法分支的前缀，并复核停止信号、已完成数和任务分母。
+  报告按 episode 计算子目标完成比例，并提供完整序列成功率。
+  [接入说明](../examples/bench-adapters/embodied/benchmarks/libero-mem/README.md)
 - **RoboDojo 与 RoboLab**：两者沿用原生具身 driver 和独立 Policy，使用各自固定的 Isaac Sim 运行时及只读资产，并要求 RTX GPU。
   RoboDojo 的 `environmentSeed` 选择原生布局分区，`initialStateId` 是分区内按文件数字排序的布局序号，不能相加为新种子。
   目录保留缺布局任务的不可用原因；成功记 1，否则按原生过程分数除以 100，仿真拒绝的布局保留为 `sample_rejected`。

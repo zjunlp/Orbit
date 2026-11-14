@@ -46,6 +46,10 @@ class StepResult:
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity,
                 *, prepare=None, cancelled=None, deadline=None, seal_before_media=False):
     check_sample(sample, sample["sampleId"])
+    reference = identity.get("reference", {})
+    first_replan = reference.get("parameters", {}).get("firstReplanSteps", policy.replan_steps)
+    if type(first_replan) is not int or not 0 < first_replan <= policy.replan_steps:
+        raise ValueError("initial replan interval must fit the policy chunk")
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
     write_json(directory / "resolved-binding.json", binding)
@@ -53,7 +57,6 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     start = time.monotonic()
     # Seconds from start; the verifier rejects valid results whose control steps end past it.
     budget = None if deadline is None else deadline - start
-    reference = identity.get("reference", {})
     version = 2 if "execution" in identity else 1
     if reference.get("environment", {}).get("protocol") == "diffusion-policy":
         version = 3
@@ -148,9 +151,10 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                         timing["conversion"] = conversion
                     np.save(chunks / (str(call) + ".npy"), requested, allow_pickle=False)
                     write_json(chunks / (str(call) + ".json"), timing)
-                    if requested.ndim != 2 or requested.shape[1] != benchmark.action_size or len(requested) < policy.replan_steps or not np.isfinite(requested).all():
+                    required = first_replan if call == 0 else policy.replan_steps
+                    if requested.ndim != 2 or requested.shape[1] != benchmark.action_size or len(requested) < required or not np.isfinite(requested).all():
                         raise ValueError("policy action chunk has invalid shape, length or non-finite values")
-                    chunk, chunk_index = requested[:policy.replan_steps], 0
+                    chunk, chunk_index = requested[:required], 0
                 action = chunk[chunk_index]
                 check_control()
                 stage = "env_step"

@@ -17,6 +17,8 @@ SOURCE = {"repository": "https://github.com/omarrayyann/openpi",
 POLICY = Path(__file__).resolve().parent
 DOCKERFILE = POLICY / "droid-policy.Dockerfile"
 INTERPRETER = "/.venv/bin/python"
+WEIGHTS_DATASET = "pi05-droid-molmospaces"
+RANDCAM_CAMERA = "randomized_zed2_analogue_1"
 
 
 def main():
@@ -30,6 +32,8 @@ def main():
     parser.add_argument("--reference-file", type=Path)
     parser.add_argument("--weights", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--share-gpu", action="store_true",
+                        help="run the policy on the simulator GPU (requires a GPU simulator)")
     args = parser.parse_args()
     manifest = policy_manifest("openpi-droid-policy", {"openpi": SOURCE}, DOCKERFILE, POLICY / "serve_droid.py",
                                interpreter=INTERPRETER)
@@ -46,21 +50,28 @@ def main():
     image = require_image(args.policy_image, manifest)
     reference = json.loads(args.reference_file.read_text())
     profile = reference["benchmarkProfile"]
-    if profile["id"] != "molmospaces-franka-droid/1" or reference["parameters"]["replanSteps"] != 8:
+    randcam = profile["id"] == "molmospaces-franka-droid-exocentric/1"
+    if (profile["id"] not in ("molmospaces-franka-droid/1", "molmospaces-franka-droid-exocentric/1")
+            or reference["parameters"]["replanSteps"] != 8):
         raise ValueError("expected the frozen eight-step MolmoSpaces DROID recipe")
+    if randcam and (reference["environment"].get("frontCamera") != RANDCAM_CAMERA
+                    or profile["observations"]["front_rgb"].get("camera") != RANDCAM_CAMERA):
+        raise ValueError("expected the published MolmoBot RandCam exocentric camera")
     if not (args.weights / "params/manifest.ocdbt").is_file() or list(args.weights.rglob("*.partial")):
         raise ValueError("DROID checkpoint download is incomplete")
     checkpoint = tree_digest(args.weights)
     normalization = file_digest(args.weights / "assets/droid/norm_stats.json")
-    name = "pi05-droid-molmospaces"
+    name = WEIGHTS_DATASET + "-randcam" if randcam else WEIGHTS_DATASET
+    profile_id = "pi05-droid-jointpos-randcam-input/1" if randcam else "pi05-droid-jointpos-input/1"
+    placement = {"gpusOf": "main", "gpus": 0} if args.share_gpu else {"role": "policy", "gpus": 1}
     policy = {
         "name": name, "version": "1", "connector": "policy-ws", "replanSteps": 8,
-        "profile": {**profile, "id": "pi05-droid-jointpos-input/1"},
+        "profile": {**profile, "id": profile_id},
         "checkpointDigest": checkpoint, "normalizationDigest": normalization,
         "randomness": {"backend": "jax", "initialKey": 0, "scope": "service"},
-        "weights": {"dataset": name, "target": "/weights"},
+        "weights": {"dataset": WEIGHTS_DATASET, "target": "/weights"},
         "service": {
-            "name": "policy", "image": image, "role": "policy", "gpus": 1,
+            "name": "policy", "image": image, **placement,
             "gpuMemGB": 32, "memGB": 32, "cpus": 4,
             "env": {"JAX_PLATFORMS": "cuda", "XLA_PYTHON_CLIENT_PREALLOCATE": "false"},
             "command": ["--checkpoint", "/weights", "--checkpoint-digest", checkpoint,

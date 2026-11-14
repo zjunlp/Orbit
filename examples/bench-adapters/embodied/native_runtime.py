@@ -80,7 +80,7 @@ def export_source(source, expected, target, paths):
     archive.unlink()
 
 
-def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths, *, extra_contexts=()):
+def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths, *, extra_contexts=(), build_args=()):
     with tempfile.TemporaryDirectory(prefix="orbit-" + kind + "-") as temporary:
         context = Path(temporary) / kind
         export_source(source, identity, context, source_paths)
@@ -88,27 +88,29 @@ def build_native_image(tag, kind, source, identity, dockerfile, manifest, source
         for name, path in extra_contexts:
             contexts.extend(["--build-context", name + "=" + str(path)])
         label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        arguments = [part for item in build_args for part in ("--build-arg", item)]
         subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
-                        *contexts, "-f", str(dockerfile),
+                        *contexts, *arguments, "-f", str(dockerfile),
                         "-t", tag, str(HERE.parents[2])], check=True)
 
 
-def read_native_catalog(image, module):
+def read_native_catalog(image, module, *, python_path="/orbit-sdk"):
     prefix = "ORBIT_NATIVE_CATALOG="
     code = ("import json; from " + module + " import native_catalog; "
             + f"print({prefix!r} + json.dumps(native_catalog()))")
     output = subprocess.check_output(
         ["docker", "run", "--rm", "--network", "none", "--label", "orbit.task=embodied-eval",
-         "--mount", f"type=bind,src={SDK},dst=/orbit-sdk,readonly", "-e", "PYTHONPATH=/orbit-sdk",
+         "--mount", f"type=bind,src={SDK},dst=/orbit-sdk,readonly", "-e", "PYTHONPATH=" + python_path,
          image, "-B", "-c", code], text=True)
     line, = (line for line in output.splitlines() if line.startswith(prefix))
     return json.loads(line[len(prefix):])
 
 
-def write_benchmark(output_dir, name, source, image, renderer, interpreter, reference, *, gpu_mem=None):
+def write_benchmark(output_dir, name, source, image, renderer, interpreter, reference, *, gpu_mem=None, suite=None):
     benchmark = {"name": name, "path": str(source.resolve()), "adapter": str(HERE / "adapter.py"),
                  "config": {"image": image, "python": interpreter, "renderer": renderer,
                             "simGpus": "1" if gpu_mem is not None else "0",
+                            **({"suite": suite} if suite is not None else {}),
                             **({"simGpuMemGB": str(gpu_mem)} if gpu_mem is not None else {}),
                             "reference": json.dumps(reference, separators=(",", ":")),
                             "profileDigest": digest(reference), "implementationDigest": implementation_digest()}}
@@ -138,7 +140,8 @@ def policy_manifest(kind, sources, dockerfile, server, *, interpreter="python"):
     }
 
 
-def build_policy_image(args, context_name, source, dockerfile, manifest, *, source_paths=(), extra_contexts=()):
+def build_policy_image(args, context_name, source, dockerfile, manifest, *, source_paths=(), extra_contexts=(),
+                       build_args=()):
     with tempfile.TemporaryDirectory(prefix="orbit-native-policy-") as temporary:
         context = Path(temporary) / context_name
         export_source(args.source, source, context, source_paths)
@@ -146,9 +149,10 @@ def build_policy_image(args, context_name, source, dockerfile, manifest, *, sour
         for name, path in extra_contexts:
             contexts.extend(["--build-context", name + "=" + str(path)])
         label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        arguments = [part for item in build_args for part in ("--build-arg", item)]
         subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
                         *contexts,
-                        "--build-arg", "POLICY_BASE=" + args.policy_base,
+                        "--build-arg", "POLICY_BASE=" + args.policy_base, *arguments,
                         "-f", str(dockerfile), "-t", args.build_tag, str(HERE.parents[2])], check=True)
 
 

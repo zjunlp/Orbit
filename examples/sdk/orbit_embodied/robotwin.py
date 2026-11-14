@@ -29,18 +29,18 @@ def check_assets(target, expected):
         raise ValueError("RoboTwin assets differ from the frozen reference")
 
 
-def native_args(root, task, suite):
+def native_args(root, task, suite, config_dir="task_config"):
     import yaml
 
     def read(path):
         return yaml.safe_load((root / path).read_text(encoding="utf-8"))
 
-    args = read(f"task_config/{suite}.yml")
+    args = read(f"{config_dir}/{suite}.yml")
     if args["embodiment"] != ["aloha-agilex"]:
         raise ValueError("expected the RoboTwin Aloha-AgileX embodiment")
-    embodiment = read("task_config/_embodiment_config.yml")["aloha-agilex"]
+    embodiment = read(f"{config_dir}/_embodiment_config.yml")["aloha-agilex"]
     robot = Path(embodiment["file_path"])
-    camera = read("task_config/_camera_config.yml")[args["camera"]["head_camera_type"]]
+    camera = read(f"{config_dir}/_camera_config.yml")[args["camera"]["head_camera_type"]]
     return {
         **args, "task_name": task, "task_config": suite, "eval_mode": True,
         "render_freq": 0, "eval_video_log": False,
@@ -92,7 +92,8 @@ class RoboTwinBenchmark:
         config = self.reference["environment"]
         assets = config["assets"]
         check_assets(assets["target"], assets["digest"])
-        return native_args(Path(assets["target"]).parent, self.task, config["suite"])
+        return native_args(Path(assets["target"]).parent, self.task, config["suite"],
+                           config.get("taskConfigDir", "task_config"))
 
     def _expert_scene(self, seed, args):
         native = importlib.import_module("envs." + self.task)
@@ -156,6 +157,11 @@ class RoboTwinBenchmark:
 
         from generate_episode_instructions import generate_episode_descriptions
 
+        if config.get("instructionSeedMode") == "native-episode-seed":
+            descriptions = generate_episode_descriptions(self.task, [info], config["instructionCount"], seed=self.seed)
+            candidates = descriptions[0].get(config["instructionSplit"]) if descriptions else None
+            return random.Random(f"{self.seed}:select").choice(candidates) if candidates else self.task
+
         random_state = random.getstate()
         try:
             random.seed(self.seed)
@@ -183,13 +189,17 @@ class RoboTwinBenchmark:
     def state(observation):
         return {"joint_state": observation["joint_state"].tolist(), "instruction": observation["instruction"]}
 
-    def step(self, action):
+    def apply_action(self, action):
         previous = self.env.take_action_cnt
         self.env.take_action(action, action_type=self.action_type)
         if self.env.take_action_cnt != previous + 1:
             raise ValueError("native RoboTwin controller did not execute the requested action")
         success = bool(self.env.eval_success)
         terminated = success or self.env.take_action_cnt == self.horizon
+        return success, terminated
+
+    def step(self, action):
+        success, terminated = self.apply_action(action)
         raw = self.env.get_obs()
         if (self.head_history_steps and not terminated
                 and self.env.take_action_cnt % self.reference["parameters"]["replanSteps"] == 0):
@@ -256,3 +266,65 @@ class RoboTwinCartesianBenchmark(RoboTwinBenchmark):
         if not self.env.actor_pose and not verdict["success"]:
             verdict["termination"] = "actor_pose"
         return verdict
+
+
+class RoboTwinLingBotBenchmark(RoboTwinBenchmark):
+    """RoboTwin's end-effector controller and LingBot-VA's observed keyframes."""
+
+    action_size = 16
+    action_type = "ee"
+    frame_stride = 4
+    initial_controls = 16
+    chunk_controls = 32
+    camera_names = ("head_camera", "left_camera", "right_camera")
+
+    def reset(self, sample):
+        super().reset(sample)
+        pose = self.env.now_obs["endpose"]
+        self.initial_pose = np.r_[pose["left_endpose"], pose["left_gripper"],
+                                 pose["right_endpose"], pose["right_gripper"]].astype(np.float64)
+        self.keyframes = deque(maxlen=self.chunk_controls // self.frame_stride)
+        self.latest = self.observation(self.env.get_obs())
+        self.capture(self.latest)
+        return self.with_history(self.latest)
+
+    def capture(self, observation):
+        self.keyframes.append(tuple(np.array(observation[camera], copy=True) for camera in self.camera_names))
+
+    def with_history(self, observation):
+        padding = [self.keyframes[0]] * (self.keyframes.maxlen - len(self.keyframes))
+        history = [*padding, *self.keyframes]
+        return {**observation, "initial_ee_pose": self.initial_pose,
+                **{camera + "_history": np.stack(frames)
+                   for camera, frames in zip(self.camera_names, zip(*history))}}
+
+    def step(self, action):
+        success, terminated = self.apply_action(action)
+        step = self.env.take_action_cnt
+        if step % self.frame_stride == 0:
+            self.latest = self.observation(self.env.get_obs())
+            self.capture(self.latest)
+        robot = self.env.robot
+        observation = {**self.latest, "joint_state": np.asarray(
+            robot.get_left_arm_jointState() + robot.get_right_arm_jointState(), dtype=np.float64)}
+        if not terminated and (step - self.initial_controls) % self.chunk_controls == 0:
+            observation = self.with_history(observation)
+        return StepResult(observation, float(success), terminated, success, native_action=action.tolist())
+
+    def state(self, observation):
+        return {**super().state(observation), "initial_ee_pose": self.initial_pose.tolist()}
+
+
+def verify_lingbot_controls(controls, horizon, initial_state):
+    first, chunk = RoboTwinLingBotBenchmark.initial_controls, RoboTwinLingBotBenchmark.chunk_controls
+    for row in controls:
+        step = row["step"]
+        source = 0 if step < first else first + ((step - first) // chunk) * chunk
+        if row["sourceObservation"] != source or row["chunkIndex"] != step - source:
+            raise ValueError("RoboTwin LingBot-VA control differs from the reference chunk schedule")
+        if row["nativeAction"] != row["action"] or row["state"]["initial_ee_pose"] != initial_state["initial_ee_pose"]:
+            raise ValueError("RoboTwin LingBot-VA action or episode pose differs from native control evidence")
+    if (any(row["terminated"] or row["nativeSuccess"] for row in controls[:-1])
+            or not controls[-1]["terminated"]
+            or (not controls[-1]["nativeSuccess"] and len(controls) != horizon)):
+        raise ValueError("RoboTwin LingBot-VA stopped outside the native success or horizon boundary")

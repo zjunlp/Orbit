@@ -6,6 +6,8 @@ codec. The same connector also accepts flat, ordered observations from NVIDIA's 
 SimplerEnv wrapper. Neither path imports vla-eval or starts an upstream rollout scheduler.
 
 `profiles/groot-model.json` pins the model implementation and NVIDIA checkpoint revisions.
+The [current Isaac-GR00T source](https://github.com/NVIDIA/Isaac-GR00T/tree/3b49067943eb1ab2eb2203b93d461c4390c78da3)
+is verified against the policy image build manifest at registration.
 `profiles/groot-widowx.json` pins the SimplerEnv/ManiSkill source, seven WidowX Visual Matching
 tasks, control semantics and success reduction. LIBERO keeps `reference.json`, including its
 OpenPI-pinned simulator, 10 settle steps, suite horizons and 5-step replanning. The GR00T LIBERO
@@ -37,9 +39,8 @@ python3 examples/bench-adapters/embodied/policies/groot/fetch_groot.py --models 
 
 docker build --label orbit.task=embodied-eval -f examples/bench-adapters/embodied/policies/groot/groot-base.Dockerfile \
   -t orbit/groot-deps:reference .
-docker build --label orbit.task=embodied-eval --build-context groot="$GROOT_SOURCE" \
-  --build-arg POLICY_BASE=orbit/groot-deps:reference \
-  -f examples/bench-adapters/embodied/policies/groot/groot-policy.Dockerfile -t orbit/groot-policy:reference .
+PYTHONPATH=examples/sdk python3 -B examples/bench-adapters/embodied/policies/groot/configure_groot.py \
+  --reference-source "$GROOT_SOURCE" --policy-base orbit/groot-deps:reference --build-tag orbit/groot-policy:reference
 docker build --label orbit.task=embodied-eval --build-context groot="$GROOT_SOURCE" \
   -f examples/bench-adapters/embodied/benchmarks/simpler-env/native-gym.Dockerfile -t orbit/simpler-native:reference .
 docker build --label orbit.task=embodied-eval --build-arg BENCHMARK_BASE=orbit/libero-native:reference \

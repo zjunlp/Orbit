@@ -11,7 +11,9 @@ import numpy as np
 from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.evidence import seal, verify_manipulation_stopping, write_json
 from orbit_embodied.driver import SampleRejected
+from orbit_embodied.libero_mem import verify_mem_episode
 from orbit_embodied.openpi import quaternion_to_axis_angle
+from orbit_embodied.robocasa import verify_robocasa_stopping
 
 
 class SyntheticBenchmark:
@@ -86,6 +88,107 @@ class CoreTests(unittest.TestCase):
 
     def verify(self):
         return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
+
+    def test_libero_mem_partial_progress_is_scored_without_terminating(self):
+        first = ["and", ["in", "cream_cheese_1", "basket_1_contain_region"]]
+        empty_basket = ["and", ["on", "basket_2", "kitchen_table_the_center"]]
+        reference = {"environment": {"catalog": {"task": {
+            "subgoals": 2, "instruction": "ordered task", "goalBranches": [[first, empty_basket]],
+        }}}}
+        sample = {"taskId": "task"}
+        initial = {"instruction": "ordered task", "satisfiedSubgoals": [], "satisfiedPredicates": [], "overshot": False}
+        partial = {**initial, "satisfiedSubgoals": ["first goal"], "satisfiedPredicates": [first]}
+        controls = [{"state": partial, "nativeSuccess": False, "terminated": False}]
+        result = {"native": {"completedSubgoals": 1, "totalSubgoals": 2,
+                             "satisfiedSubgoals": ["first goal"], "satisfiedPredicates": [first], "overshot": False}}
+        verify_mem_episode(reference, sample, initial, controls, result)
+        with self.assertRaisesRegex(ValueError, "native success or stopping"):
+            verify_mem_episode(reference, sample, initial, [{**controls[0], "terminated": True}], result)
+        with self.assertRaisesRegex(ValueError, "native score"):
+            verify_mem_episode(reference, sample, initial, controls,
+                               {"native": {**result["native"], "totalSubgoals": 1}})
+
+    def test_libero_mem_distinguishes_branches_with_the_same_display_labels(self):
+        in_basket = [["and", ["in", "cream_cheese_1", f"basket_{i}_contain_region"]] for i in (1, 2)]
+        on_table = [["and", ["on", f"basket_{i}", "kitchen_table_the_center"]] for i in (1, 2)]
+        branches = [[in_basket[0], on_table[1]], [in_basket[1], on_table[0]]]
+        reference = {"environment": {"catalog": {"task": {
+            "subgoals": 2, "instruction": "move the empty basket", "goalBranches": branches,
+        }}}}
+        sample = {"taskId": "task"}
+        initial = {"instruction": "move the empty basket", "satisfiedSubgoals": [],
+                   "satisfiedPredicates": [], "overshot": False}
+        for index, branch in enumerate(branches):
+            with self.subTest(branch=index):
+                partial = {**initial, "satisfiedSubgoals": ["fill basket"], "satisfiedPredicates": branch[:1]}
+                completed = {**partial, "satisfiedSubgoals": ["fill basket", "move basket"],
+                             "satisfiedPredicates": branch}
+                controls = [{"state": partial, "nativeSuccess": False, "terminated": False},
+                            {"state": completed, "nativeSuccess": True, "terminated": True}]
+                result = {"native": {**completed, "completedSubgoals": 2, "totalSubgoals": 2}}
+                verify_mem_episode(reference, sample, initial, controls, result)
+                wrong_branch = [branch[0], on_table[index]]
+                controls[-1]["state"] = {**completed, "satisfiedPredicates": wrong_branch}
+                result["native"]["satisfiedPredicates"] = wrong_branch
+                with self.assertRaisesRegex(ValueError, "ordered subgoal evidence"):
+                    verify_mem_episode(reference, sample, initial, controls, result)
+
+    def test_robocasa_stopping_preserves_policy_recipe(self):
+        failed = {"chunk": 0, "chunkIndex": 0, "nativeDone": True, "nativeSuccess": False, "terminated": True}
+        verify_robocasa_stopping([failed], 2, "xiaomi-robotics-1", 16)
+        continued = {**failed, "nativeDone": False, "terminated": False}
+        succeeded = {**continued, "nativeSuccess": True, "terminated": True}
+        verify_robocasa_stopping([continued, {**succeeded, "chunkIndex": 1}], 2, "xiaomi-robotics-1", 16)
+        with self.assertRaisesRegex(ValueError, "before its native stopping"):
+            verify_robocasa_stopping([continued], 2, "xiaomi-robotics-1", 16)
+
+    def check_robocasa_replanning(self, protocol, replan_steps):
+        class ReplanningBenchmark(SyntheticBenchmark):
+            def step(self, action):
+                step = super().step(action)
+                step.replan = self.replan_early
+                step.native_done = False
+                return step
+
+        class FullChunkPolicy(SyntheticPolicy):
+            def act(self, observation):
+                return np.zeros((self.replan_steps, 7))
+
+        self.output = self.output.parent / protocol
+        policy = FullChunkPolicy()
+        policy.replan_steps = replan_steps
+        success_at = replan_steps + 2
+        benchmark = ReplanningBenchmark(success_at=success_at)
+        benchmark.horizon = success_at + 1
+        reference = {"environment": {"kind": "robocasa365", "protocol": protocol, "horizon": benchmark.horizon},
+                     "parameters": {"replanSteps": replan_steps}}
+        benchmark.replan_early = False
+        self.run_sample(benchmark, policy, {"reference": reference})
+        self.assertEqual(self.verify()["steps"], success_at)
+
+        self.output = self.output.parent / (protocol + "-early")
+        benchmark = ReplanningBenchmark()
+        benchmark.replan_early = True
+        reference["environment"]["horizon"] = benchmark.horizon
+        self.run_sample(benchmark, policy, {"reference": reference})
+        with self.assertRaisesRegex(ValueError, "fixed chunk schedule"):
+            self.verify()
+
+    def test_xiaomi_rejects_early_replanning(self):
+        self.check_robocasa_replanning("xiaomi-robotics-1", 16)
+
+    def test_gigaworld_stops_on_success_or_horizon(self):
+        failed = {"chunk": 0, "chunkIndex": 0, "nativeDone": True, "nativeSuccess": False, "terminated": True}
+        with self.assertRaisesRegex(ValueError, "native control flags"):
+            verify_robocasa_stopping([failed], 2, "gigaworld-policy-01", 20)
+        continued = {**failed, "terminated": False}
+        succeeded = {**failed, "nativeSuccess": True}
+        verify_robocasa_stopping([continued, {**succeeded, "chunkIndex": 1}], 2, "gigaworld-policy-01", 20)
+        with self.assertRaisesRegex(ValueError, "before its native stopping"):
+            verify_robocasa_stopping([continued], 2, "gigaworld-policy-01", 20)
+
+    def test_gigaworld_rejects_early_replanning(self):
+        self.check_robocasa_replanning("gigaworld-policy-01", 20)
 
     def test_cliport_evidence_preserves_partial_reward_at_native_horizon(self):
         from orbit_embodied.cliport import CLIPortBenchmark, verify_cliport
@@ -376,6 +479,22 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(policy.calls, 2)
         self.assertEqual(self.verify()["steps"], 7)
+
+    def test_first_chunk_can_be_shorter_than_the_steady_replan_interval(self):
+        policy = SyntheticPolicy()
+        predict = policy.act
+        def act(observation):
+            actions = predict(observation)
+            return actions[:2 if policy.calls == 1 else 5]
+        policy.act = act
+        parameters = {"firstReplanSteps": 2, "replanSteps": 5}
+        result = self.run_sample(SyntheticBenchmark(), policy, {"reference": {"parameters": parameters}})
+        self.assertTrue(result["valid"])
+        self.assertEqual(policy.calls, 2)
+        self.assertEqual(np.load(self.output / "chunks/0.npy").shape, (2, 7))
+        rows = [json.loads(line) for line in (self.output / "actions.jsonl").read_text().splitlines()]
+        self.assertEqual([row["sourceObservation"] for row in rows], [0, 0, 2, 2, 2, 2, 2])
+        self.assertTrue(self.verify()["valid"])
 
     def test_nonfinite_policy_and_environment_failure_remain_invalid(self):
         result = self.run_sample(SyntheticBenchmark(), SyntheticPolicy(invalid=True))

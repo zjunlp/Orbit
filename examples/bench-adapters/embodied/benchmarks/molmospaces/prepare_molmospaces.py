@@ -6,12 +6,25 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 
-from molmospaces_resources import R2RemoteStorage, setup_resource_manager
+from molmospaces_resources import GCRemoteStorage, R2RemoteStorage, setup_resource_manager
+
+
+SCENE_OBJECT_MANIFEST = "orbit-scene-objects.json"
 
 
 def hardlink(source, destination):
     return os.link(Path(source).resolve(strict=True), destination)
+
+
+def scene_object_paths(links):
+    """Collect the shared meshes and textures needed by the installed scene XMLs."""
+    for scene in (links / "scenes").glob("*/*.xml"):
+        for element in ET.parse(scene).iter():
+            parts = Path(element.get("file", "")).parts
+            if len(parts) >= 6 and parts[:4] == ("..", "..", "objects", "objaverse"):
+                yield Path(*parts[2:])
 
 
 def prepare(root, versions, catalogs):
@@ -22,8 +35,11 @@ def prepare(root, versions, catalogs):
         work = Path(temporary)
         links = work / "links"
         links.mkdir()
-        manager = setup_resource_manager(R2RemoteStorage("mujoco-thor-resources"),
-                                         links, versions, root / "cache", cache_lock=True)
+        if "procthor-objaverse-val" in versions["scenes"]:
+            remote = GCRemoteStorage("molmospaces-mujoco")
+        else:
+            remote = R2RemoteStorage("mujoco-thor-resources")
+        manager = setup_resource_manager(remote, links, versions, root / "cache", cache_lock=True)
         scenes = {}
         added_objects = set()
         for catalog in catalogs:
@@ -45,18 +61,25 @@ def prepare(root, versions, catalogs):
             packages[source] = sorted(archives)
         manager.install_packages("scenes", packages)
         manager.install_all_for_source("scenes", "refs")
-        objaverse = sorted(path.relative_to("objects/objaverse") for path in added_objects
-                           if path.parts[:2] == ("objects", "objaverse"))
+        scene_objects = set(scene_object_paths(links))
+        # The meshes and textures for one object are packaged with its root MJCF.
+        object_files = {path.relative_to("objects/objaverse") for path in added_objects
+                        if path.parts[:2] == ("objects", "objaverse")}
+        object_files.update(Path(path.parts[2], f"{path.parts[2]}.xml") for path in scene_objects)
+        objaverse = sorted(object_files)
         if objaverse:
             archives = manager.find_archives("objects", "objaverse", objaverse)
             manager.install_packages("objects", {"objaverse": archives})
-        for path in sorted(added_objects):
+        for path in sorted(added_objects | scene_objects):
             if not (links / path).is_file():
-                raise ValueError(f"MolmoSpaces asset bundle lacks the recorded object {path}")
+                raise ValueError(f"MolmoSpaces asset bundle lacks the referenced object asset {path}")
 
         materialized = work / "materialized"
         shutil.copytree(links, materialized, ignore=shutil.ignore_patterns(".lmdb", "*.lock"),
                         copy_function=hardlink)
+        if scene_objects:
+            (materialized / SCENE_OBJECT_MANIFEST).write_text(
+                json.dumps(sorted(path.as_posix() for path in scene_objects)) + "\n")
         materialized.rename(assets)
 
 

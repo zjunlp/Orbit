@@ -7,15 +7,15 @@ import unittest
 from unittest.mock import call, patch
 
 
-ADAPTER = Path(__file__).resolve().parent
+POLICY = Path(__file__).resolve().parent
+ADAPTER = POLICY.parents[1]
 
 
 class OpenVLABuildTests(unittest.TestCase):
     def test_cli_reads_profile_and_passes_pinned_sources_to_docker(self):
-        policy = ADAPTER / "policies/openvla-oft"
         sources = json.loads((ADAPTER / "profiles/openvla-model.json").read_text())["sources"]
         with TemporaryDirectory() as directory:
-            argv = [str(policy / "build_openvla.py"), "--tag", "orbit/openvla-oft:test"]
+            argv = [str(POLICY / "build_openvla.py"), "--tag", "orbit/openvla-oft:test"]
             git_calls, git_replies, contexts = [], [], []
             for name, source in sources.items():
                 path = str(Path(directory).resolve() / name)
@@ -35,7 +35,7 @@ class OpenVLABuildTests(unittest.TestCase):
             self.assertEqual(git.call_args_list, git_calls)
             docker.assert_called_once_with(
                 ["docker", "build", "--label", "orbit.task=embodied-eval", "--progress=plain", *contexts,
-                 "-t", "orbit/openvla-oft:test", "-f", str(policy / "openvla-policy.Dockerfile"),
+                 "-t", "orbit/openvla-oft:test", "-f", str(POLICY / "openvla-policy.Dockerfile"),
                  str(ADAPTER.parents[2])],
                 check=True,
             )

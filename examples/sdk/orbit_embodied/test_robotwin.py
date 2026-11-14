@@ -3,6 +3,7 @@
 from argparse import Namespace
 import json
 from pathlib import Path
+import random
 import sys
 import tempfile
 from types import ModuleType
@@ -25,6 +26,25 @@ def reference():
 
 
 class RobotwinTests(unittest.TestCase):
+    def test_september_instruction_uses_native_split_and_is_independent_of_global_rng(self):
+        profile = reference()
+        profile["environment"].update(instructionSeedMode="native-episode-seed", instructionSplit="seen")
+        benchmark = RoboTwinBenchmark(profile, "adjust_bottle")
+        benchmark.seed = 100000
+        info = {"object": "bottle"}
+        candidates = ["move the bottle", "straighten the bottle", "adjust the bottle"]
+        native = ModuleType("generate_episode_instructions")
+        native.generate_episode_descriptions = Mock(return_value=[{"seen": candidates, "unseen": ["unseen prompt"]}])
+        with patch.dict(sys.modules, {native.__name__: native}):
+            prompt = benchmark._instruction(info)
+            with patch.object(random, "choice", return_value="global prompt"), \
+                    patch.object(np.random, "choice", return_value="global prompt"):
+                self.assertEqual(benchmark._instruction(info), prompt)
+        self.assertIn(prompt, candidates)
+        native.generate_episode_descriptions.assert_called_with(
+            "adjust_bottle", [info], profile["environment"]["instructionCount"], seed=100000,
+        )
+
     def test_fast_vla_refreshes_replan_observation_and_keeps_history_at_control_offsets(self):
         profile = reference()
         profile["environment"]["headCameraHistorySteps"] = [17, 8]

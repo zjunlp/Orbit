@@ -57,6 +57,29 @@ Omit `--suite` in both asset preparation and registration to reproduce the legac
 `robotwin-demo-clean-native` and its single `adjust_bottle` task. Register those legacy
 assets under `robotwin-demo-clean-assets`.
 
+### September 2026 revision
+
+Use `--revision september-2026` to register the [updated upstream evaluator](https://github.com/RoboTwin-Platform/RoboTwin/tree/ea8b21121ebb3cd201ff5b3fe361944ac94eda3f)
+with all 50 tasks per suite. The simulator revision changes scene and instruction
+generation. Its native defaults select seen instructions in Clean and unseen
+instructions in Randomized. Generate new plans for the updated registrations.
+
+```bash
+recipe=examples/bench-adapters/embodied/benchmarks/robotwin
+git clone https://github.com/RoboTwin-Platform/RoboTwin.git "$ROBOTWIN_SEPTEMBER_SOURCE"
+git -C "$ROBOTWIN_SEPTEMBER_SOURCE" checkout ea8b21121ebb3cd201ff5b3fe361944ac94eda3f
+python3 -B "$recipe/configure_robotwin.py" build-september \
+  --robotwin-source "$ROBOTWIN_SEPTEMBER_SOURCE" --base-image orbit/robotwin-simulator:reference \
+  --tag orbit/robotwin-simulator:ea8b211
+python3 -B "$recipe/configure_robotwin.py" benchmark --revision september-2026 \
+  --suite "$ROBOTWIN_SUITE" --robotwin-source "$ROBOTWIN_SEPTEMBER_SOURCE" --assets "$ROBOTWIN_ASSETS" \
+  --benchmark-image orbit/robotwin-simulator:ea8b211 --output-dir "$ROBOTWIN_CONFIG"
+orbit bench add-file "$ROBOTWIN_CONFIG/benchmark.json"
+```
+
+Use the matching suite's existing asset bundle and the planner below with the
+September image. The registration name ends in `-september-2026-native`.
+
 The native planner uses the evaluator's candidate stream starting at `100000 * (1 + seed)`.
 It runs the upstream expert in order for each task and freezes only the first accepted scenes.
 By default it selects all 50 tasks and 100 accepted scenes per task. Use an explicit small task

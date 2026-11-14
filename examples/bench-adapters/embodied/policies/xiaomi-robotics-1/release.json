@@ -1,0 +1,20 @@
+{
+  "added_tokens.json": "b54f9135e44c1e81047e8d05cb027af8bc039eed",
+  "chat_template.jinja": "124386803f142761528f710e77ae483f5f8c4fc4",
+  "config.json": "42fbed1c382da0aa2136a6ac3fd7747a344f6250",
+  "configuration_mibot.py": "01259250bdc00950cd819e0073caee26c5b77f1c",
+  "merges.txt": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+  "model-00001-of-00003.safetensors": "5c9412f29facda098d5dcf1a58c06830edeeba7c0c59799480dd28b35c3fcc53",
+  "model-00002-of-00003.safetensors": "72884ec9b026794df9e3b5c1eb75341e503ae94f0e2555d1178157e3290b7f7d",
+  "model-00003-of-00003.safetensors": "5859c4408351a0b894c6175cf6f7a41e5e431637517a1d45587ad94f03d29cac",
+  "model.safetensors.index.json": "1c4431e06fc781c3195b389dcff5593cb10628a9",
+  "modeling_mibot.py": "97c67990149b78594c2f74094157b59e82df57e7",
+  "preprocessor_config.json": "6b69bbb60bc6999f413b9ff64c80ef81fc98097c",
+  "processing_mibot.py": "4205e028312e08eb77118f77fc79be792065e5ee",
+  "processor_config.json": "5ddb3c3926ede08c54880aa4d9179ef642749036",
+  "special_tokens_map.json": "ac23c0aaa2434523c494330aeb79c58395378103",
+  "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+  "tokenizer_config.json": "c3221c4b0b7bc61def178bcbb0b7e17df4734807",
+  "video_preprocessor_config.json": "0fad1491f1c2448959e63a7180756e99f9f55322",
+  "vocab.json": "4783fe10ac3adce15ac8f358ef5462739852c569"
+}

@@ -211,6 +211,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
                 raise ValueError("settle actions differ from the reference protocol")
     if len(controls) != result["steps"] or [row["step"] for row in controls] != list(range(result["steps"])):
         raise ValueError("executed action sequence is incomplete")
+    first_replan = reference.get("parameters", {}).get("firstReplanSteps", contract["replanSteps"])
+    if type(first_replan) is not int or not 0 < first_replan <= contract["replanSteps"]:
+        raise ValueError("invalid initial replan interval in episode evidence")
     for row in controls:
         chunk_path = "chunks/" + str(row["chunk"]) + ".npy"
         timing_path = "chunks/" + str(row["chunk"]) + ".json"
@@ -227,7 +230,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
             if not np.array_equal(CONVERSIONS[timing["conversion"]](raw), chunk):
                 raise ValueError("native actions differ from the recorded conversion of the model output")
         index = row["chunkIndex"]
-        if not isinstance(index, int) or not 0 <= index < min(len(chunk), contract["replanSteps"]):
+        limit = first_replan if row["chunk"] == 0 else contract["replanSteps"]
+        if not isinstance(index, int) or not 0 <= index < min(len(chunk), limit):
             raise ValueError("executed action has an invalid chunk index")
         if not np.array_equal(np.asarray(row["action"]), chunk[index]) or not np.isfinite(chunk).all():
             raise ValueError("executed action differs from the requested action")
@@ -291,6 +295,13 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
                 or native["successOnce"] is not success
                 or native["successAtEnd"] is not controls[-1]["nativeSuccess"]):
             raise ValueError("Colosseum V2 horizon or success flags differ from the controls")
+    protocol = reference.get("environment", {}).get("protocol")
+    if result["valid"] and protocol in ("xiaomi-robotics-1", "gigaworld-policy-01"):
+        from .robocasa import verify_robocasa_stopping
+        verify_robocasa_stopping(controls, contract["horizon"], protocol, contract["replanSteps"])
+    if result["valid"] and kind == "libero-mem":
+        from .libero_mem import verify_mem_episode
+        verify_mem_episode(reference, contract["sample"], initial["state"], controls, result)
     if result["valid"] and kind == "libero-pro":
         task = contract["sample"]["taskId"]
         environment = reference["environment"]
@@ -303,6 +314,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         reset_digest = initial["state"].get("resetStateDigest")
         if not reset_digest or any(row["state"].get("resetStateDigest") != reset_digest for row in controls):
             raise ValueError("LIBERO-PRO constructor state differs across the recorded episode")
+    if result["valid"] and reference.get("environment", {}).get("controller") == "lingbot-va-ee":
+        from .robotwin import verify_lingbot_controls
+        verify_lingbot_controls(controls, contract["horizon"], initial["state"])
     if result["valid"] and reference.get("environment", {}).get("policyTermination"):
         verify_simpler_termination(controls, initial["state"], contract["horizon"])
     if (result["valid"] and contract.get("version") == 3

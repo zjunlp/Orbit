@@ -304,7 +304,7 @@ def sdk_live(plan, source, destination):
         measured = archive_implementation(source, destination.parent / "implementation-candidate")
         equal(measured, plan["orbitImplementationDigest"], "production driver fingerprint")
         suite, task = plan["sample"]["taskId"].split(":", 1)
-        result = run_episode(LiberoBenchmark(suite, task), driver.LazyOpenPI(definition), plan["sample"],
+        result = run_episode(LiberoBenchmark(suite, task), driver.LazyPolicy(definition), plan["sample"],
                              plan["binding"], destination, "parity-live-candidate",
                              {"reference": plan["reference"], "policy": definition,
                               "implementationDigest": measured, "comparison": "shared compiled model; independent stream"})

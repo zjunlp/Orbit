@@ -2,9 +2,9 @@
   "version": 1,
   "id": "groot-n17-policy-reference/1",
   "repository": "https://github.com/NVIDIA/Isaac-GR00T",
-  "commit": "7b304f95b95790490b79bd263ba57015c3c12dfd",
+  "commit": "3b49067943eb1ab2eb2203b93d461c4390c78da3",
   "files": {
-    "gr00t/policy/server_client.py": "sha256:d29d2e68e97ceae1762243315f23f22e696538da60fecd87d9a1391d20f7f1b9",
+    "gr00t/policy/server_client.py": "sha256:1effb60bb581d1c782fa74876a550a2e6f2b28f52bdc4f555e8b9a0188ab3a4e",
     "gr00t/policy/gr00t_policy.py": "sha256:0a9fd201a23c972bf8c216496e61de32aca945cfdad5222f7dbfc5015f60c89a",
     "gr00t/eval/run_gr00t_server.py": "sha256:b94d8f879bc83b97120cfcf3e3c9d7a506d93f633a036474c7f60db81792705d",
     "gr00t/model/modules/qwen3_backbone.py": "sha256:e3902c8385d586fb9f079abf58d37795cbcefc55f2f506f761c4b78a5afbaf52",
@@ -19,12 +19,12 @@
   "models": {
     "libero_spatial": {
       "repository": "nvidia/GR00T-N1.7-LIBERO",
-      "revision": "2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21",
+      "revision": "658540327860f93dd2cb9c1ed3e3b10fb792a0eb",
       "prefix": "libero_spatial/"
     },
     "bridge": {
       "repository": "nvidia/GR00T-N1.7-SimplerEnv-Bridge",
-      "revision": "940134b3c2948ccfdf8e7393f2d2ca869dc42833",
+      "revision": "31733e3dc9981c13dba8c4e6bf374c982c4ba8c3",
       "prefix": ""
     },
     "backbone": {
@@ -34,22 +34,22 @@
     },
     "fractal": {
       "repository": "nvidia/GR00T-N1.7-SimplerEnv-Fractal",
-      "revision": "fb8357ff66e3cc8dec369e2bf7dbe9e6740511b2",
+      "revision": "265afd7f9eec13a367db8ebf3be6905f9890c66b",
       "prefix": ""
     },
     "libero_object": {
       "repository": "nvidia/GR00T-N1.7-LIBERO",
-      "revision": "2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21",
+      "revision": "658540327860f93dd2cb9c1ed3e3b10fb792a0eb",
       "prefix": "libero_object/"
     },
     "libero_goal": {
       "repository": "nvidia/GR00T-N1.7-LIBERO",
-      "revision": "2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21",
+      "revision": "658540327860f93dd2cb9c1ed3e3b10fb792a0eb",
       "prefix": "libero_goal/"
     },
     "libero_10": {
       "repository": "nvidia/GR00T-N1.7-LIBERO",
-      "revision": "2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21",
+      "revision": "658540327860f93dd2cb9c1ed3e3b10fb792a0eb",
       "prefix": "libero_10/"
     }
   }
