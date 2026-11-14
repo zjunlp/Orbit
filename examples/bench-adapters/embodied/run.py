@@ -178,8 +178,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         native = SimplerPolicyTerminationBenchmark if reference["environment"].get("policyTermination") else GymBenchmark
         benchmark = native(reference, sample["taskId"])
     elif kind == "robocasa365":
-        from orbit_embodied.robocasa import RoboCasaBenchmark, RoboCasaDiffusionBenchmark
-        native = RoboCasaDiffusionBenchmark if reference["environment"].get("protocol") == "diffusion-policy" else RoboCasaBenchmark
+        from orbit_embodied.robocasa import RoboCasaBenchmark, RoboCasaDiffusionBenchmark, RoboCasaXiaomiBenchmark
+        native = {"diffusion-policy": RoboCasaDiffusionBenchmark,
+                  "xiaomi-robotics-1": RoboCasaXiaomiBenchmark}.get(reference["environment"].get("protocol"), RoboCasaBenchmark)
         benchmark = native(reference, sample["taskId"])
     elif kind == "robocasa-v02":
         from orbit_embodied.robocasa_v02 import RoboCasaV02Benchmark

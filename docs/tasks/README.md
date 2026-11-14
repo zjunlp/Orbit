@@ -146,6 +146,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261113](20261113-molmobot-v2.md) Native MolmoBot v2 evaluation
 - [20261113](20261113-lingbot-vla-v2.md) LingBot-VLA 2.0 on native RoboTwin
 - [20261114](20261114-libero-mem.md) Native LIBERO-Mem with ordered subgoals
+- [20261114](20261114-xiaomi-robocasa365.md) Xiaomi-Robotics-1 on native RoboCasa365
 
 ## Web, catalog and taxonomy
 

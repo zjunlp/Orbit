@@ -75,6 +75,20 @@ def set_benchmark_scope(reference, root, task_set, split, recipe):
     return name + "-native"
 
 
+def panda_omron_v101_reference(robocasa, assets, evaluation):
+    reference = json.loads((HERE / "profiles/robocasa365-atomic-seen.json").read_text())
+    baseline = json.loads((HERE / "profiles/robocasa365-gr00t-n15.json").read_text())
+    source = reference["reference"]
+    source["robocasa"]["commit"] = baseline["benchmark"]["robocasaCommit"]
+    source["files"].update(baseline["benchmark"]["files"])
+    source["evaluation"] = evaluation
+    check_source(robocasa, source["robocasa"], source["files"])
+    reference["scoreErrors"] = "exclude"
+    reference["parameters"].pop("resizeSize")
+    reference["environment"]["assets"]["digest"] = tree_digest(assets)
+    return reference
+
+
 def groot_reference(reference, model):
     reference["scoreErrors"] = "exclude"
     source = reference["reference"]

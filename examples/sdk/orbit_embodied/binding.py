@@ -38,12 +38,15 @@ def seed_asset(reference, task):
     reset = ("layouts[task][environmentSeed][initialStateId]" if reference["environment"].get("kind") == "robodojo"
              else "environmentSeed,sceneGrid[initialStateId]" if "simplerScenes" in reference["environment"]
              else "environmentSeed+initialStateId")
+    if environment.get("protocol") == "xiaomi-robotics-1":
+        reset = "environmentSeed+50*taskSetIndex+initialStateId"
     if "vlabenchEpisodeCounts" in reference["environment"]:
         reset = "officialTrack[taskId][initialStateId],environmentSeed+initialStateId"
     if reference["environment"].get("protocol") == "rvt-test":
         reset = "testDemo[taskId][initialStateId]"
     if "initialStateCounts" in environment:
-        reset = "fixedInitialState[taskId][initialStateId],environmentSeed"
+        if environment.get("protocol") != "xiaomi-robotics-1":
+            reset = "fixedInitialState[taskId][initialStateId],environmentSeed"
         if "initialStateDigests" in environment and task not in environment.get("unsupported", {}):
             return environment["initialStateDigests"][task]
     return digest({"reset": reset, "task": task, "profile": digest(reference)})
@@ -148,6 +151,11 @@ def reset_seed(sample, reference=None):
     if "simplerScenes" in environment:
         return sample["environmentSeed"]
     index = int(sample["initialStateId"])
+    if environment.get("protocol") == "xiaomi-robotics-1":
+        task_index = environment["taskIndexes"].get(sample["taskId"])
+        if sample["environmentSeed"] != environment["environmentSeed"] or task_index is None or not 0 <= index < 50:
+            raise ValueError("Xiaomi RoboCasa365 requires the frozen task set index, seed and trial")
+        return sample["environmentSeed"] + task_index * 50 + index
     if "initialStateCounts" in environment:
         seed = sample["environmentSeed"]
         count = environment["initialStateCounts"].get(sample["taskId"], 0)

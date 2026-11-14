@@ -13,6 +13,7 @@ from orbit_embodied.evidence import seal, verify_manipulation_stopping, write_js
 from orbit_embodied.driver import SampleRejected
 from orbit_embodied.libero_mem import verify_mem_episode
 from orbit_embodied.openpi import quaternion_to_axis_angle
+from orbit_embodied.robocasa import verify_robocasa_stopping
 
 
 class SyntheticBenchmark:
@@ -131,6 +132,50 @@ class CoreTests(unittest.TestCase):
                 result["native"]["satisfiedPredicates"] = wrong_branch
                 with self.assertRaisesRegex(ValueError, "ordered subgoal evidence"):
                     verify_mem_episode(reference, sample, initial, controls, result)
+
+    def test_robocasa_stopping_preserves_policy_recipe(self):
+        failed = {"chunk": 0, "chunkIndex": 0, "nativeDone": True, "nativeSuccess": False, "terminated": True}
+        verify_robocasa_stopping([failed], 2, "xiaomi-robotics-1", 16)
+        continued = {**failed, "nativeDone": False, "terminated": False}
+        succeeded = {**continued, "nativeSuccess": True, "terminated": True}
+        verify_robocasa_stopping([continued, {**succeeded, "chunkIndex": 1}], 2, "xiaomi-robotics-1", 16)
+        with self.assertRaisesRegex(ValueError, "before its native stopping"):
+            verify_robocasa_stopping([continued], 2, "xiaomi-robotics-1", 16)
+
+    def check_robocasa_replanning(self, protocol, replan_steps):
+        class ReplanningBenchmark(SyntheticBenchmark):
+            def step(self, action):
+                step = super().step(action)
+                step.replan = self.replan_early
+                step.native_done = False
+                return step
+
+        class FullChunkPolicy(SyntheticPolicy):
+            def act(self, observation):
+                return np.zeros((self.replan_steps, 7))
+
+        self.output = self.output.parent / protocol
+        policy = FullChunkPolicy()
+        policy.replan_steps = replan_steps
+        success_at = replan_steps + 2
+        benchmark = ReplanningBenchmark(success_at=success_at)
+        benchmark.horizon = success_at + 1
+        reference = {"environment": {"kind": "robocasa365", "protocol": protocol, "horizon": benchmark.horizon},
+                     "parameters": {"replanSteps": replan_steps}}
+        benchmark.replan_early = False
+        self.run_sample(benchmark, policy, {"reference": reference})
+        self.assertEqual(self.verify()["steps"], success_at)
+
+        self.output = self.output.parent / (protocol + "-early")
+        benchmark = ReplanningBenchmark()
+        benchmark.replan_early = True
+        reference["environment"]["horizon"] = benchmark.horizon
+        self.run_sample(benchmark, policy, {"reference": reference})
+        with self.assertRaisesRegex(ValueError, "fixed chunk schedule"):
+            self.verify()
+
+    def test_xiaomi_rejects_early_replanning(self):
+        self.check_robocasa_replanning("xiaomi-robotics-1", 16)
 
     def test_cliport_evidence_preserves_partial_reward_at_native_horizon(self):
         from orbit_embodied.cliport import CLIPortBenchmark, verify_cliport

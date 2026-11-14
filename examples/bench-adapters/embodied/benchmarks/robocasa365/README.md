@@ -21,6 +21,9 @@ multitask setup. `--split target` selects held-out kitchens and objects and adds
 `-native` in the registration name. Each registration freezes the task IDs, per-task horizons,
 scene split and asset digest in the sample-plan reference.
 
+The [Xiaomi-Robotics-1](../../policies/xiaomi-robotics-1/README.md) setup guide covers its
+observation history, reset and stopping recipe for the 50 Multitask task IDs.
+
 `all_tasks`, `all_atomic_tasks` and `all_composite_tasks` use the fixed-version dataset registry
 and its native task horizons. The full catalog has 317 entries, including the 50 multitask tasks.
 `lifelong_learning_phase1` through `lifelong_learning_phase4` register the four disjoint phases

@@ -226,6 +226,10 @@ def solve_one(req):
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
+    if environment.get("protocol") == "xiaomi-robotics-1":
+        if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
+            raise ValueError("sample differs from the frozen RoboCasa365 catalog")
+        reset_seed(sample, reference)
     if environment.get("kind") == "libero-plus":
         if sample["taskId"].partition(":")[0] != environment["suite"] or sample["initialStateId"] != "0":
             raise ValueError("LIBERO-Plus requires the selected suite and one initial state per task")
