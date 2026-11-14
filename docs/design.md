@@ -946,6 +946,10 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   Google Robot 固定矩形相机、xyzw 状态、单步重规划及原生 sticky gripper，复用 Gym driver。
   SimplerEnv 固定网格可独立登记 RT-1/Octo 的策略终止协议，直接执行 7 维原生动作并另收终止信号，最终一步的原生 done 决定成功。
   原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
+- **EB-Navigation** 使用 AI2-THOR 5.0.0 的无头 Vulkan 渲染，按原生 8 个离散动作控制，目标水平距离不超过 1 米或第 20 步时结束。
+  SeeNav 和原版 Qwen2.5-VL 在相同的标注双视角、动作反馈及提示词下运行。CPU 验证根据冻结目标和逐步位置复核距离与停止判定，
+  Web 复用现有时间轴，同步播放原始第一视角、俯视和送入模型的标注双视角视频。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/eb-navigation/README.md)
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
   Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。

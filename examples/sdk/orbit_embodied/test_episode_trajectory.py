@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from orbit_embodied import episode_trajectory
+from orbit_embodied.eb_navigation import POLICY_VIDEO, semantic_profile
 from orbit_embodied.episode_trajectory import write_trajectory
 from orbit_embodied.evidence import write_json
 
@@ -80,6 +81,30 @@ class EpisodeTrajectoryTests(unittest.TestCase):
         output = self.directory / "orbit-trajectory.json"
         write_trajectory(self.directory, output, {"success": True, "issues": []}, {}, kind="calvin")
         self.assertFalse(output.exists())
+
+    def test_eb_navigation_indexes_the_policy_view_only_when_recorded(self):
+        profile = semantic_profile()
+        state = {"instruction": "Find the bread.", "navigation_pose": [1, 2, 90, 0]}
+        output = episode(self.directory, [state, state], action=[2], horizon=20, initial=state)
+        (self.directory / "overhead.mp4").write_bytes(b"synthetic")
+        expected = {"sample": {"taskId": "base:01"}, "binding": {"benchmarkProfile": profile},
+                    "reference": {"environment": {"controlHz": 5}}, "batch": {"index": 0}}
+        result = {"success": True, "issues": []}
+
+        write_trajectory(self.directory, output, result, expected, kind="eb-navigation")
+        self.assertEqual([camera["name"] for camera in json.loads(output.read_text())["cameras"]],
+                         ["front_rgb", "overhead_rgb"])
+
+        (self.directory / POLICY_VIDEO).write_bytes(b"synthetic")
+        write_trajectory(self.directory, output, result, expected, kind="eb-navigation")
+        trace = json.loads(output.read_text())
+        self.assertTrue(trace["frameBeforeAction"])
+        self.assertEqual([camera["name"] for camera in trace["cameras"]],
+                         ["front_rgb", "overhead_rgb", "navigation_views"])
+        self.assertEqual(trace["cameras"][-1]["video"]["path"], "episodes/trial.attempt/" + POLICY_VIDEO)
+        for camera in trace["cameras"]:
+            self.assertEqual(camera["video"]["timeMap"],
+                             [{"time": 0, "videoTime": 0.1}, {"time": 0.2, "videoTime": 0.3}])
 
     def test_longest_robolab_horizon_with_full_precision_vectors_fits_without_sampling(self):
         expected = expectation("robolab-native.json", "BananaInBowlTask")

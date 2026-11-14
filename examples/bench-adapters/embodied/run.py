@@ -196,6 +196,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "cliport":
         from orbit_embodied.cliport import CLIPortBenchmark
         benchmark = CLIPortBenchmark(reference, sample)
+    elif kind == "eb-navigation":
+        from orbit_embodied.eb_navigation import EBNavigationBenchmark
+        benchmark = EBNavigationBenchmark(reference, sample["taskId"])
     elif kind == "vima-bench":
         from orbit_embodied.vima_bench import VIMABenchBenchmark
         benchmark = VIMABenchBenchmark(reference, sample["taskId"])
@@ -252,7 +255,8 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
             options["horizon"] = reference["horizons"][suite]
         benchmark = native(suite, name, **options)
     expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
-    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84, "cliport": 480}.get(kind, 256)
+    expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84,
+                            "cliport": 480, "eb-navigation": 500}.get(kind, 256)
     if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):
         expected_render_size = WIDOWX_AREA_SIZE
     policy = LazyPolicy(request["policy"])
