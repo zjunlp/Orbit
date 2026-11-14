@@ -1,6 +1,6 @@
 # Orbit status
 
-Updated 2026-11-13. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
+Updated 2026-11-14. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
 
 **Stage.** R0–R2 validated on this machine. R3 benchmarks run: LongDS with one complete native Codex task, Harbor with oracle/empty samples. R4 (multi-node) only as two daemons on one machine. No release blockers.
 
@@ -17,7 +17,7 @@ Updated 2026-11-13. Architecture: [design](design.md). Docs map: [docs/README](R
 - **Describing benchmarks.** Six-dimensional taxonomy, integration method, calibration record (design §9.10). Product library of 45 families ([catalog](catalog.md), [availability](guides/benchmark-availability.md)).
 - **Calibrated samples.** Bounded empty/oracle or scripted calibration for HumanEval, EFE MetaWorld+, BFCL, τ²-bench, MiniWoB, LIBERO, TextArena, Cua Bench basic desktop, CUA-Lite MiniWoB; BFCL also has a real CLI Agent check.
 - **GUI.** Private signed GUI service (`orbit-computer` CLI/MCP); Claude Code and Codex verified on sampled MiniWoB/BrowserGym tasks; MCP servers wired into Claude/Codex homes ([GUI guide](guides/gui-bench-web.md)).
-- **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). BEHAVIOR-1K uses its native R1Pro evaluator; RobotAgentBench adds raw-22 Agent tools alongside RLE-Bench, EmbodiedCLBench and EmbodiedLab T0 (new native calibration pending).
+- **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). BEHAVIOR-1K uses its native R1Pro evaluator; RobotAgentBench adds raw-22 Agent tools alongside RLE-Bench, EmbodiedCLBench and EmbodiedLab T0 (BEHAVIOR / RobotAgentBench native preparation and calibration deferred).
 - **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial views follow evidence shapes, including RoboDojo/RoboLab timelines and recorded TextArena conversations; evaluation configurations grouped by content revision.
 - **Multi-node.** Workers join by token; placement, hashed code bundles, named datasets, mirrored logs and artifacts ([guide](guides/multi-node.md)).
 
