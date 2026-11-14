@@ -226,7 +226,7 @@ def solve_one(req):
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
         reset_seed(sample, reference)
-    if environment.get("protocol") == "xiaomi-robotics-1":
+    if environment.get("protocol") in ("xiaomi-robotics-1", "gigaworld-policy-01"):
         if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
             raise ValueError("sample differs from the frozen RoboCasa365 catalog")
         reset_seed(sample, reference)

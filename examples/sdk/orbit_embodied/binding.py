@@ -40,12 +40,14 @@ def seed_asset(reference, task):
              else "environmentSeed+initialStateId")
     if environment.get("protocol") == "xiaomi-robotics-1":
         reset = "environmentSeed+50*taskSetIndex+initialStateId"
+    elif environment.get("protocol") == "gigaworld-policy-01":
+        reset = "constructorSeed=environmentSeed,resetSeed=null if initialStateId=0 else environmentSeed+initialStateId"
     if "vlabenchEpisodeCounts" in reference["environment"]:
         reset = "officialTrack[taskId][initialStateId],environmentSeed+initialStateId"
     if reference["environment"].get("protocol") == "rvt-test":
         reset = "testDemo[taskId][initialStateId]"
     if "initialStateCounts" in environment:
-        if environment.get("protocol") != "xiaomi-robotics-1":
+        if environment.get("protocol") not in ("xiaomi-robotics-1", "gigaworld-policy-01"):
             reset = "fixedInitialState[taskId][initialStateId],environmentSeed"
         if "initialStateDigests" in environment and task not in environment.get("unsupported", {}):
             return environment["initialStateDigests"][task]
@@ -69,7 +71,7 @@ def reference_horizon(reference, task, *, sample=None):
 
 def robocasa_horizon(horizon, environment):
     scaled = horizon * environment.get("horizonScale", 1.5)
-    return int(scaled) if environment.get("protocol") == "diffusion-policy" else math.ceil(scaled)
+    return int(scaled) if environment.get("protocol") in ("diffusion-policy", "gigaworld-policy-01") else math.ceil(scaled)
 
 
 def resolve_binding(benchmark, policy, observation_map):
@@ -161,7 +163,7 @@ def reset_seed(sample, reference=None):
         count = environment["initialStateCounts"].get(sample["taskId"], 0)
         if not 0 <= index < count or not 0 <= seed < 2 ** 32 or seed != environment.get("environmentSeed", seed):
             raise ValueError("sample is outside the frozen initial-state catalog or seed recipe")
-        if environment.get("kind") == "bigym2":
+        if environment.get("kind") == "bigym2" or environment.get("protocol") == "gigaworld-policy-01":
             return seed + index
         if environment.get("kind") == "cliport":
             return cliport_episode(environment, sample)["seed"]

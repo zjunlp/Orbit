@@ -119,10 +119,24 @@ it("admits explicit GR00T identities and main-GPU sharing without changing saved
     { ...input, backboneDigest: undefined },
     { ...input, replanSteps: undefined },
     { ...input, randomness: original.randomness },
+    { ...input, randomness: { ...input.randomness, initialSeed: 42 } },
     { ...input, service: { ...input.service, role: "policy" } },
     { ...input, service: { ...input.service, gpusOf: "sim" } },
   ])
     expect(registrable(changed)).toBe(false);
+});
+
+it("preserves a custom policy's declared service-scoped Torch seed", () => {
+  const input = {
+    ...policy(),
+    connector: "policy-ws",
+    replanSteps: 20,
+    randomness: { backend: "torch", initialSeed: 42, scope: "service" },
+  };
+  expect(registrable(input)).toBe(true);
+  expect(PolicyDefinition.parse(input).randomness).toEqual(input.randomness);
+  for (const initialSeed of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1])
+    expect(registrable({ ...input, randomness: { ...input.randomness, initialSeed } })).toBe(false);
 });
 
 it("freezes the OpenVLA-OFT recipe without adding fields to existing policy snapshots", () => {

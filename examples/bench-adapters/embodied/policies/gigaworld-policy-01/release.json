@@ -1,0 +1,28 @@
+{
+  "checkpoint": {
+    "model.pt": "6963e912bf870910c4b52b23502c8d632c408fc54a82b834e00e445baf5713a1"
+  },
+  "normalization": {
+    "norm_stats_delta.json": "4dbae3100bcf290eff827b5247c1b2c43024ec58d3aff7a4b88ab7a828987ee4"
+  },
+  "backbone": {
+    "text_encoder/config.json": "a2bcb24699f6c009a2427432bdd483ef8b2b42a712abc9503759cdc77d171f07",
+    "text_encoder/model-00001-of-00003.safetensors": "a8e861969c7433e707cc5a74065d795d36cca07ec96eb6763eb4083df7248f58",
+    "text_encoder/model-00002-of-00003.safetensors": "d57d948ece4837d850b7a859a4415121d57cacf8b9ee1d4db200c67f592902d7",
+    "text_encoder/model-00003-of-00003.safetensors": "0da9ee284e21d1406df708788db1d502d95d75f69faa25cd26151bf8829b7c5f",
+    "text_encoder/model.safetensors.index.json": "31c4c7bcce679eaa0dd4667462394ddb013dc2f748e0bffc893dc9146a320dab",
+    "tokenizer/special_tokens_map.json": "456b58fd240a06c743a7c2cf8008bec501240d68ebd1fc4018ea569505fea270",
+    "tokenizer/spiece.model": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458",
+    "tokenizer/tokenizer.json": "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef",
+    "tokenizer/tokenizer_config.json": "1d8d2a216bf8e70ac15b7ddcea566c4dd0433c024b39a58ca5e4c66bd78defbd",
+    "transformer/config.json": "dc00d9866e72cf77db6b531aaa33be4dc7148fef9338442bd0ae9181f7075e9b",
+    "transformer/diffusion_pytorch_model-00001-of-00005.safetensors": "511bec832a201caa410d09c5ce7dbbf8ad2708c345d82038f684fc74cce982be",
+    "transformer/diffusion_pytorch_model-00002-of-00005.safetensors": "7c42724912b1911429125dc50c0e9a49ccbada5a601b657d4ed2e15e7597c193",
+    "transformer/diffusion_pytorch_model-00003-of-00005.safetensors": "e9c3d0c76de786566382f8258101fea973ae37681c6e9fe0e5fe1fb93b806424",
+    "transformer/diffusion_pytorch_model-00004-of-00005.safetensors": "a331121771790939678db6f585553fd5184609f7d02593c699a4d241b0d834c5",
+    "transformer/diffusion_pytorch_model-00005-of-00005.safetensors": "78b655685c47efdb2349f36826bb101264e9f212a16325d584aeb5f53c88e719",
+    "transformer/diffusion_pytorch_model.safetensors.index.json": "d6c1f72d86fbddef8fb5ef1c03f5b56b2bfdb6ae58032db98c6019fd1dae9021",
+    "vae/config.json": "d996c340fe9a7df5d7371f76a7d8d6956f6c98256080074d8434fa5eeac11360",
+    "vae/diffusion_pytorch_model.safetensors": "62cd18f19438e35b32ac63020e2852f566e9b02f46b6cdbd87972a356e3c6f4b"
+  }
+}

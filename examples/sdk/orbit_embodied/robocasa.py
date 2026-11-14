@@ -139,6 +139,13 @@ class RoboCasaSeededBenchmark(RoboCasaBenchmark):
         return observation
 
 
+class RoboCasaGigaWorldBenchmark(RoboCasaSeededBenchmark):
+    def reset_native(self, seed):
+        if seed == self.constructor_seed(seed):
+            return RoboCasaBenchmark.reset_native(self, seed)
+        return super().reset_native(seed)
+
+
 class RoboCasaXiaomiBenchmark(RoboCasaSeededBenchmark):
     def reset(self, sample):
         self.history = deque(maxlen=7)

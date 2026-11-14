@@ -27,7 +27,7 @@ from the current recipe.
 | VLABench | [Native tracks and OpenWAM](benchmarks/vlabench/README.md) |
 | SimplerEnv | [Native catalogs and scene grids](benchmarks/simpler-env/README.md) · [GR00T N1.7](policies/groot/README.md) · [StarVLA QwenGR00T](policies/starvla/README.md) |
 | RoboCasa v0.2 | [Atomic-24](benchmarks/robocasa-v02/README.md) |
-| RoboCasa365 | [Multitask, Lifelong, π₀.₅, GR00T N1.5 and Diffusion Policy](benchmarks/robocasa365/README.md) · [Xiaomi-Robotics-1](policies/xiaomi-robotics-1/README.md) |
+| RoboCasa365 | [Multitask, Lifelong, π₀.₅, GR00T N1.5 and Diffusion Policy](benchmarks/robocasa365/README.md) · [Xiaomi-Robotics-1](policies/xiaomi-robotics-1/README.md) · [GigaWorld-Policy-0.1](policies/gigaworld-policy-01/README.md) |
 | RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) · [LingBot-VLA](policies/lingbot-vla/README.md) · [LingBot-VLA 2.0](policies/lingbot-vla-v2/README.md) · [Fast-VLA](policies/fast-vla/README.md) · [LingBot-VA](policies/lingbot-va/README.md) |
 | ManiSkill3 and Meta-World | [Tabletop, Plate-25 and MT50](benchmarks/tabletop/README.md) |
 | RLBench | [MT100 and RVT-18](benchmarks/rlbench/README.md) |

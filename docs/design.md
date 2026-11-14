@@ -916,8 +916,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
-- **随机性**：OpenPI/GR00T/OFT 服务没有远端 RNG reset，按 service 作用域声明（JAX key 0 / Torch seed 0），不宣称与参考 runner
-  任意 episode 的随机状态等价。
+- **随机性**：模型可声明服务级随机流。OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务
+  可以登记发布配方的初始种子，例如 GigaWorld 的 42。批次按冻结顺序推进服务的随机流，样本中的 `policySeed` 保持为 0。
 - **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
   转换，亦接 SimplerEnv WidowX 七个任务与 Google Robot 六个任务）、`openvla-ws`（官方 OFT 推理在模型端，`libero-oft-native` 是独立评测 recipe）。
   `policy-ws` 把 Binding 选出的观测交给 Policy 服务，由服务负责图像、状态、语言与动作转换，返回 benchmark 控制器使用的动作块。

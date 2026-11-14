@@ -140,7 +140,8 @@ def policy_manifest(kind, sources, dockerfile, server, *, interpreter="python"):
     }
 
 
-def build_policy_image(args, context_name, source, dockerfile, manifest, *, source_paths=(), extra_contexts=()):
+def build_policy_image(args, context_name, source, dockerfile, manifest, *, source_paths=(), extra_contexts=(),
+                       build_args=()):
     with tempfile.TemporaryDirectory(prefix="orbit-native-policy-") as temporary:
         context = Path(temporary) / context_name
         export_source(args.source, source, context, source_paths)
@@ -148,9 +149,10 @@ def build_policy_image(args, context_name, source, dockerfile, manifest, *, sour
         for name, path in extra_contexts:
             contexts.extend(["--build-context", name + "=" + str(path)])
         label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        arguments = [part for item in build_args for part in ("--build-arg", item)]
         subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
                         *contexts,
-                        "--build-arg", "POLICY_BASE=" + args.policy_base,
+                        "--build-arg", "POLICY_BASE=" + args.policy_base, *arguments,
                         "-f", str(dockerfile), "-t", args.build_tag, str(HERE.parents[2])], check=True)
 
 

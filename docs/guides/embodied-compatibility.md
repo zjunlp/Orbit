@@ -67,6 +67,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | RoboCasa365 GR00T N1.5，`groot-n15-robocasa365-shared` | RoboCasa365 Atomic-Seen 与 `target50` pretrain 中的两个 Composite 组 | Atomic 两个样本与官方多步 wrapper 对照；两个 Composite 组各一个真实样本，均有独立验证与重评。[Atomic](../tasks/20261107-robocasa365-gr00t-n15.md) · [Composite](../tasks/20261109-embodied-benchmark-coverage.md) |
 | RoboCasa365 Diffusion Policy，`diffusion-policy-robocasa365-shared` | RoboCasa365 Atomic-Seen，双帧八步 recipe | 两个冻结样本覆盖成功停止与步数上限，完成 CPU 验证和选定重评。[记录](../tasks/20261109-robocasa365-diffusion-policy.md) |
 | Xiaomi-Robotics-1，`xiaomi-robotics-1-robocasa365` | RoboCasa365 Target50，四帧历史、两步采样间隔、16 步重规划 | 一个冻结样本完成真实模型推理和 900 步原生仿真，通过 CPU 验证和重评。[记录](../tasks/20261114-xiaomi-robocasa365.md) |
+| GigaWorld-Policy-0.1，`gigaworld-policy-01-robocasa365` | RoboCasa365 Target50，三相机 T 形输入，24 步动作块、20 步重规划 | 一个冻结样本完成真实模型推理和 1,350 步原生仿真，CPU 验证和重评一致。[记录](../tasks/20261114-gigaworld-robocasa365.md) |
 | 社区 RoboTwin π₀.₅，`pi05-robotwin-adjust-bottle-shared` | RoboTwin Clean 单任务 `adjust_bottle` | 两个专家通过场景的真实批次及独立验证，另有原生固定动作对照。[记录](../tasks/20261107-robotwin.md) |
 | LingBot-VLA 4B RoboTwin，`lingbot-vla-4b-robotwin` | RoboTwin Clean，50 步关节控制配方 | `adjust_bottle` 完成一条真实样本，独立 CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | LingBot-VLA 2.0，`lingbot-vla-v2-robotwin` | RoboTwin 原版 Clean、Randomized，50 步关节控制配方 | 两种模式的 `adjust_bottle` 各完成一条真实样本，CPU 验证与重评一致。[验证记录](../tasks/20261113-lingbot-vla-v2.md) |

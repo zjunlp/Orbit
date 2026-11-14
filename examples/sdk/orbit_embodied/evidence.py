@@ -296,7 +296,7 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
                 or native["successAtEnd"] is not controls[-1]["nativeSuccess"]):
             raise ValueError("Colosseum V2 horizon or success flags differ from the controls")
     protocol = reference.get("environment", {}).get("protocol")
-    if result["valid"] and protocol == "xiaomi-robotics-1":
+    if result["valid"] and protocol in ("xiaomi-robotics-1", "gigaworld-policy-01"):
         from .robocasa import verify_robocasa_stopping
         verify_robocasa_stopping(controls, contract["horizon"], protocol, contract["replanSteps"])
     if result["valid"] and kind == "libero-mem":

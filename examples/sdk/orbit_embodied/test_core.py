@@ -177,6 +177,19 @@ class CoreTests(unittest.TestCase):
     def test_xiaomi_rejects_early_replanning(self):
         self.check_robocasa_replanning("xiaomi-robotics-1", 16)
 
+    def test_gigaworld_stops_on_success_or_horizon(self):
+        failed = {"chunk": 0, "chunkIndex": 0, "nativeDone": True, "nativeSuccess": False, "terminated": True}
+        with self.assertRaisesRegex(ValueError, "native control flags"):
+            verify_robocasa_stopping([failed], 2, "gigaworld-policy-01", 20)
+        continued = {**failed, "terminated": False}
+        succeeded = {**failed, "nativeSuccess": True}
+        verify_robocasa_stopping([continued, {**succeeded, "chunkIndex": 1}], 2, "gigaworld-policy-01", 20)
+        with self.assertRaisesRegex(ValueError, "before its native stopping"):
+            verify_robocasa_stopping([continued], 2, "gigaworld-policy-01", 20)
+
+    def test_gigaworld_rejects_early_replanning(self):
+        self.check_robocasa_replanning("gigaworld-policy-01", 20)
+
     def test_cliport_evidence_preserves_partial_reward_at_native_horizon(self):
         from orbit_embodied.cliport import CLIPortBenchmark, verify_cliport
 

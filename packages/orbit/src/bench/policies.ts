@@ -17,6 +17,9 @@ const CONNECTOR_RULES: Record<PolicyDefinition["connector"], (d: PolicyDefinitio
     ...(d.kind === "model" && d.randomness.backend !== "torch"
       ? ["OpenVLA-OFT models require a torch random-stream declaration"]
       : []),
+    ...(d.randomness.backend === "torch" && d.randomness.initialSeed !== 0
+      ? ["OpenVLA-OFT requires the torch seed-0 reference stream"]
+      : []),
   ],
   "groot-zmq": (d) => [
     ...(!d.replanSteps ||
@@ -26,6 +29,9 @@ const CONNECTOR_RULES: Record<PolicyDefinition["connector"], (d: PolicyDefinitio
       : []),
     ...(d.kind === "model" && (d.randomness.backend !== "torch" || !d.backboneDigest)
       ? ["GR00T models require a torch random-stream declaration and backbone digest"]
+      : []),
+    ...(d.randomness.backend === "torch" && d.randomness.initialSeed !== 0
+      ? ["GR00T requires the torch seed-0 reference stream"]
       : []),
   ],
 };
