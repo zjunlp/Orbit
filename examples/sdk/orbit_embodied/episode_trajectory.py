@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 
+from .eb_navigation import POLICY_VIDEO as EB_NAV_POLICY_VIDEO
 from .evidence import write_json
 from .libero import VIDEO_FPS as LIBERO_FPS
 from .robodojo import VIDEO_FPS as ROBODOJO_FPS
@@ -23,6 +24,8 @@ VIDEOS = {
     "robotwin": (ROBOTWIN_CAMERAS, ROBOTWIN_FPS),
     "robodojo": ({"cam_head": "video.mp4"}, ROBODOJO_FPS),
     "robolab": ({"front_rgb": "video.mp4"}, None),
+    "eb-navigation": ({"front_rgb": "video.mp4", "overhead_rgb": "overhead.mp4",
+                       "navigation_views": EB_NAV_POLICY_VIDEO}, None),
 }
 PREVIEW_LIMIT = 2 * 1024 * 1024
 

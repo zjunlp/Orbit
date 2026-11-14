@@ -1,0 +1,40 @@
+{
+  "qwen25vl-3b": {
+    "files": {
+      "chat_template.json": "732bd68bc5427d1fb6c06a59b3bf2456b2155d24",
+      "config.json": "0ae1866f05ab0153ad293bdc92bb1b842c4d95b1",
+      "generation_config.json": "1dfafa23e24b68b694722c6211e7da36730e9917",
+      "merges.txt": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0",
+      "model-00001-of-00002.safetensors": "41a8895c164b4d32bae6b302f4603fcbc1797f32dafa45c7e9bcda23c6755df8",
+      "model-00002-of-00002.safetensors": "365531ff8752420e89dee707b79d021fb2d6e25abafe486f080555a4fe6972e4",
+      "model.safetensors.index.json": "7a3ec4f48662e38593f8cab48fe12a4f28003aba",
+      "preprocessor_config.json": "7f3b746825e5eef53ed8ed57a91df9e86ee62c0a",
+      "tokenizer.json": "443909a61d429dff23010e5bddd28ff530edda00",
+      "tokenizer_config.json": "91684ea3dc135a7d815e2c932054ce88c1aab41f",
+      "vocab.json": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    },
+    "repository": "Qwen/Qwen2.5-VL-3B-Instruct",
+    "revision": "66285546d2b821cf421d4f5eb2576359d3770cd3"
+  },
+  "seenav": {
+    "files": {
+      "added_tokens.json": "482ced4679301bf287ebb310bdd1790eb4514232",
+      "chat_template.json": "13303be6f396b038cf397b34a8096819d403836b",
+      "config.json": "ae0ea878221b60772976f71903d0daf686e9aab8",
+      "generation_config.json": "4740fe23db9a8c97428fe02b329de1ebeb917a6e",
+      "merges.txt": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+      "model-00001-of-00004.safetensors": "e09e5fa609e4f549139ccc512282edc208d31edcc2f29d83d72cdf27e241d9d7",
+      "model-00002-of-00004.safetensors": "b7b39bcb865ca320b487fd23b8a324412bcf634a45d2093dc147c3b92dee254d",
+      "model-00003-of-00004.safetensors": "16332bdbcfd30de3ef10eba41d2371c827a67c94561e392c7777b86cb0451f43",
+      "model-00004-of-00004.safetensors": "cc32c28ccbc9b62065cefc87001b5f9e721bc71f1fdb2532615b3af035fa6a0f",
+      "model.safetensors.index.json": "f7b913f348be6c1db06142943c11aaac181a8578",
+      "preprocessor_config.json": "ee08cdd031dd2f138ce236b0c995b34b4b34a6a4",
+      "special_tokens_map.json": "ac23c0aaa2434523c494330aeb79c58395378103",
+      "tokenizer.json": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+      "tokenizer_config.json": "a2631ad3ed255e1c20d0639115a97752819452f4",
+      "vocab.json": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    },
+    "repository": "wangzc9865/SeeNav-Agent",
+    "revision": "b1024343452d2cf42bd23b4dc6e8efe01313b549"
+  }
+}
