@@ -13,7 +13,7 @@ Orbit 是让验收有据可依的实验室，位于做决策的 Agent 与负责�
 标题中的 Evolve 需要证据证明进化是真的，Any Environment 是证明的方式：
 跨多类 benchmark 与多种 Agent 是进化门的前提，只在诞生地测过的改进不算验证。
 
-前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期及 API/CLI 接入，环境对齐仍待完成；进化门仍在设计中、尚未写入本文，
+前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期、API/CLI、环境对齐与训练数据导出；进化门仍在设计中、尚未写入本文，
 目前只有配置版本、血缘与配对统计（§9.16）。在进化门的设计写入本文之前，§9.16 的"不做方法进化声明"继续有效。
 统一轨迹、导出、分叉、进化门与进化实验的分步计划见 [evolution-plan.md](evolution-plan.md)；它是计划而不是设计，
 各工作包落地时把定稿写回本文；§9.8 已采用 ATIF，Run 生成、存储、重建与读取已实现。
@@ -1103,7 +1103,7 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
 剩余不足 5 GB 时本机不启动新 Run；同时处于 starting 的 Run 超过 `ORBIT_MAX_STARTING`（默认 4）时其余排队并写明原因
 （镜像拉取、构建、VM 解包不再同时发生）。多节点放置对设备与 GPU 型号逐角色判定（`remoteBlocker` → `infeasible` 带角色）。
 **后置（有具体 hub 需要时再做）**：第 4 条 `slots`（目前没有需要内部并发的 hub）；第 5 条 pooled / singleton 实例账本
-（需要新的实例状态机，等 WebArena 共享后端或 OSWorld VM 复用接入时与其一起设计与验收）；高级回放与 LeRobot/ATIF 导出
+（需要新的实例状态机，等 WebArena 共享后端或 OSWorld VM 复用接入时与其一起设计与验收）；高级回放与 LeRobot 导出
 （统一轨迹导入器更多后）；两台真机验收（无第二台机器）。
 
 ### 9.7 结果、有效性与可复现
@@ -1199,6 +1199,21 @@ CLI `run --trajectory <path>` 配置同一来源；`trajectory import <run> <pat
 导入成功后 `Run.trajectory.source` 保留来源，后续重建继续读取该文件；不改原 RunSpec 或原始产物。失败保留上一份轨迹，不改变评分与资源释放。
 图片/音频只读取输出根内的普通文件或图片内联数据，不下载远程 URL；单媒体 32 MiB，JSON+媒体合计 256 MiB，拒绝目录/文件链接逃逸。
 媒体按实际字节生成 SHA-256 地址，重建会识别同路径文件的内容变化。沿用 Run/Session/环境关联/Token 统计路径，未知用量继续为 null。
+
+**轨迹导出（X1）**：`POST /trajectory/export` 接收 `contracts/trajectory-export.ts` 的契约，由 daemon 写入本机新目录；CLI 为 `orbit trajectory export`，不复用整目录 `orbit export`。
+`bench/trajectory-export.ts` 同步冻结选择与评分，支持互斥的 Run / trial / job ID 列表及任务、method、valid-only、pass/fail 交集筛选。
+trial/job 取当前 solve；显式 Run 可取旧执行/验证，关联对应 attempt/scoring。pass 指 valid 且 score ≥ maxScore，fail 指 valid 且 score < maxScore；均要求已记录分数和正 maxScore，invalid/unknown 不作为失败。
+仅导出已结束且 cleanup done 的 Run；共享批次 Run 去重并保留各 trial 上下文，若只选中其部分 trial 则拒绝，防止跨任务数据混入训练切分。
+`sessions/export/` 负责纯转换与检查，`runs/trajectory-export.ts` 编排既有本地/worker ATIF 和媒体读取；不新增存储或执行路径。
+ATIF 每 Run 一个编号目录，保留标准字段、步骤、工具配对与嵌入子轨迹，媒体相对该目录；Chat JSONL 每根/子轨迹一行，保留完整 messages/tools/原调用 ID，媒体相对导出根。
+Chat 多媒体使用 ATIF content parts；无来源调用 ID 的观察标 user+observation，不伪造缺失工具结果，不声明兼容任一训练供应商的直接上传。
+manifest 记录导出器版本、筛选、任务/配置修订与 sample、执行/清理、独立评分有效性/分数、源轨迹 token/完整性及每个载荷文件 SHA-256/字节数；manifest 自身不做自引用 hash，附固定再分发许可提示。
+reasoning 默认 summary，仅保留显式摘要；raw 允许标准字段的原文/未标记思考，none 移除。所有模式移除加密/opaque 思考、签名及其他原生思考 metadata，不修改源文件。
+所有文本复用 redactor 后再扫描常见密钥/令牌/私钥/密码模式，命中只报告位置并失败，不静默掩盖命中；媒体字节也扫描，已知凭据命中时拒绝修改二进制。
+不对像素/音频做 OCR 或语义脱敏。安全哈希媒体不符、缺文件、外置子轨迹或 worker 不可读时整体失败，不导出半份数据。
+输出目录必须不存在、父目录存在且位于 Orbit home/data 之外（按真实路径检查）；同级私有临时目录写完检查后发布，失败清理临时目录；文件 0600、目录 0700。
+上限为 1000 Runs / 1 GiB，单媒体 32 MiB；不自动下载远程媒体或延续会话。CLI、typed client 和 Web API helper 共用契约，导出 UI 留待后续。
+使用见 [导出指南](guides/trajectory-export.md)。
 
 **后续接入**：T5 的 dsh/pi 和其他环境来源按实际使用逐包接入。
 开发期可用隔离环境中的 Harbor validator 校验输出；它不进入 daemon 或 CI 依赖。

@@ -40,6 +40,8 @@ import type {
   RunEvent,
   RunList,
   RunSessions,
+  TrajectoryExportInput,
+  TrajectoryExportResult,
 } from "@zjunlp/orbit/contracts";
 
 export type {
@@ -91,6 +93,8 @@ export type {
   Scoring,
   SessionMessage,
   SessionTranscript,
+  TrajectoryExportInput,
+  TrajectoryExportResult,
   Trial,
 } from "@zjunlp/orbit/contracts";
 
@@ -159,6 +163,11 @@ export const api = {
     req<EnvironmentByKind[K]>(
       `/runs/${enc(id)}/environment?${new URLSearchParams({ path, kind, session })}`,
     ),
+  exportTrajectories: (input: TrajectoryExportInput) =>
+    req<TrajectoryExportResult>("/trajectory/export", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   trajectory: (id: string) => req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory`),
   rebuildTrajectory: (id: string, source?: AtifSource) =>
     req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory/rebuild`, {

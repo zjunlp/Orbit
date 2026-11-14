@@ -22,11 +22,11 @@
 | --- | --- | --- | --- | --- |
 | T1 | ATIF 契约与 Codex / Claude Code 转换器 | — | 中 | [x] |
 | T2 | 轨迹生成、存储、API 与 CLI；会话视图改为从轨迹派生 | T1 | 中 | [x] |
-| T3 | Token 记账 | T2 | 小 | [ ] |
-| T4 | 环境侧对齐（GUI、具身、对话） | T2 | 中 | [ ] |
-| T5 | 更多导入器（dsh、pi、Harbor / Cua ATIF 直通等） | T2 | 按需 | [ ] |
+| T3 | Token 记账 | T2 | 小 | [x] |
+| T4 | 环境侧对齐（GUI、具身、对话） | T2 | 中 | [x] |
+| T5 | 更多导入器（dsh、pi、Harbor / Cua ATIF 直通等） | T2 | 按需 | 原生 ATIF 已实现；其余按需 |
 | T6 | Web 统一轨迹视图（逐步复盘） | T2、T3 | 中 | [ ] |
-| X1 | 导出：ATIF 包与 Chat JSONL，含脱敏与筛选 | T2 | 中 | [ ] |
+| X1 | 导出：ATIF 包与 Chat JSONL，含脱敏与筛选 | T2 | 中 | [x] |
 | X2 | 导出：自包含 HTML | T6、X1 | 中 | [ ] |
 | X3 | 导出：OTLP、LeRobot | X1 | 小 / 中 | [ ] |
 | F0 | 分叉机制验证（Claude Code、Codex） | — | 小 | [ ] |
@@ -209,16 +209,16 @@ orbit trajectory export --run <id> --format chat-jsonl --reasoning none --out /p
 
 ### X1 ATIF 包与 Chat JSONL
 
-分支 `feat/trajectory-export`。模块：`sessions/export/`（纯转换）、`bench/`（按 job / trial 选取）、daemon 路由、client、CLI。
+已实现于 `feat/run-trajectory`（[设计 §9.8](design.md#98-统一轨迹)、[使用指南](guides/trajectory-export.md)）。模块：`sessions/export/`（纯转换）、`bench/`（按 job / trial 选取）、daemon 路由、client、CLI。
 
-- [ ] 选择器：`--run`、`--trial`、`--job`，可加 `--tasks-file`、`--method`、`--valid-only`、`--outcome pass|fail`。
-- [ ] `atif`：每条轨迹一个目录（`trajectory.json` 与 `media/`），外加 `manifest.json`：任务、配置修订号、执行结果、评分有效性、分数、
+- [x] 选择器：`--run`、`--trial`、`--job`，可加 `--tasks-file`、`--method`、`--valid-only`、`--outcome pass|fail`。
+- [x] `atif`：每条轨迹一个目录（`trajectory.json` 与 `media/`），外加 `manifest.json`：任务、配置修订号、执行结果、评分有效性、分数、
   token、各文件 SHA-256、所用筛选条件、导出器版本。执行结果与有效性分开写。
-- [ ] `chat-jsonl`：每行一条 `messages`（含 `tools` 与工具调用），供监督微调使用；加密思考一律不导出。
-- [ ] 脱敏：复用现有 redactor，再对导出内容做一遍密钥模式扫描；命中即失败并指出位置，不静默替换后继续。
-- [ ] `--reasoning raw|summary|none`，默认 `summary`。
-- [ ] `manifest.json` 带一段固定说明：轨迹可能包含上游 benchmark 内容与模型生成内容，再分发前需自行核对许可。
-- [ ] 测试：导出再读回，步骤数与工具配对不变；含密钥的夹具导出失败。
+- [x] `chat-jsonl`：每行一条 `messages`（含 `tools` 与工具调用），供监督微调使用；加密思考一律不导出。
+- [x] 脱敏：复用现有 redactor，再对导出内容做一遍密钥模式扫描；命中即失败并指出位置，不静默替换后继续。
+- [x] `--reasoning raw|summary|none`，默认 `summary`。
+- [x] `manifest.json` 带一段固定说明：轨迹可能包含上游 benchmark 内容与模型生成内容，再分发前需自行核对许可。
+- [x] 测试：导出再读回，步骤数与工具配对不变；含密钥的夹具导出失败。
 
 ### X2 自包含 HTML
 

@@ -15,3 +15,4 @@ export * from "./resources.ts";
 export * from "./runs.ts";
 export * from "./taxonomy.ts";
 export * from "./trajectory.ts";
+export * from "./trajectory-export.ts";

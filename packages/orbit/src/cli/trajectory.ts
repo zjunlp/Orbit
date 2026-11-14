@@ -1,6 +1,14 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
-import { AtifSource, type AtifTrajectory, EnvironmentKind } from "../contracts/index.ts";
+import {
+  AtifSource,
+  type AtifTrajectory,
+  EnvironmentKind,
+  TrajectoryExportRequest,
+} from "../contracts/index.ts";
+import { collect } from "./options.ts";
 
 function summary(value: AtifTrajectory | null): string {
   if (!value) return "No agent trajectory recorded.";
@@ -8,7 +16,64 @@ function summary(value: AtifTrajectory | null): string {
   return `${value.schema_version} · ${value.agent.name} · ${value.steps.length} steps · ${orbit?.completeness ?? "unknown"}\nSession: ${value.session_id ?? "unknown"}\nImporter: ${orbit?.importer.name ?? "unknown"} v${orbit?.importer.version ?? "?"}`;
 }
 export function registerTrajectory(program: Command, client: () => Promise<OrbitClient>): void {
-  const group = program.command("trajectory").description("inspect or rebuild an Agent trajectory");
+  const group = program
+    .command("trajectory")
+    .description("inspect, rebuild or export Agent trajectories");
+  group
+    .command("export")
+    .description("export ATIF packages or Chat JSONL on the daemon host")
+    .option("--run <id>", "select a Run (repeatable)", collect, [])
+    .option("--trial <id>", "select a trial's solve Run (repeatable)", collect, [])
+    .option("--job <id>", "select a job's solve Runs (repeatable)", collect, [])
+    .option("--tasks-file <path>", "UTF-8 task IDs, one per line")
+    .option("--method <name>", "filter method name (repeatable)", collect, [])
+    .option("--valid-only", "include only valid evaluations")
+    .option("--outcome <result>", "pass or fail (valid scores only)")
+    .option("--format <format>", "atif or chat-jsonl", "atif")
+    .option("--reasoning <policy>", "raw, summary or none", "summary")
+    .requiredOption("--out <directory>", "new output directory on the daemon host")
+    .option("--json", "print export result as JSON")
+    .action(
+      async (opts: {
+        run: string[];
+        trial: string[];
+        job: string[];
+        method: string[];
+        tasksFile?: string;
+        validOnly?: boolean;
+        outcome?: string;
+        format: string;
+        reasoning: string;
+        out: string;
+        json?: boolean;
+      }) => {
+        const tasks = opts.tasksFile
+          ? readFileSync(opts.tasksFile, "utf8")
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter(Boolean)
+          : [];
+        if (opts.tasksFile && !tasks.length) throw new Error("tasks file is empty");
+        const input = TrajectoryExportRequest.parse({
+          runs: opts.run,
+          trials: opts.trial,
+          jobs: opts.job,
+          tasks,
+          methods: opts.method,
+          validOnly: opts.validOnly,
+          outcome: opts.outcome,
+          format: opts.format,
+          reasoning: opts.reasoning,
+          out: resolve(opts.out),
+        });
+        const result = await (await client()).exportTrajectories(input);
+        console.log(
+          opts.json
+            ? JSON.stringify(result, null, 2)
+            : `Exported ${result.runs} Runs to ${result.out}\nManifest: ${result.manifest}`,
+        );
+      },
+    );
   group
     .command("show <run>")
     .option("--json", "print ATIF JSON")

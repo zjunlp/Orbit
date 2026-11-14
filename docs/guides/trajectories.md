@@ -54,6 +54,7 @@ Report entries show their selected solve Run's full usage; entries sharing a bat
 Usage never changes scores or confidence intervals. Old saved reports remain unchanged; new reports
 and rescore revisions include the available usage.
 
+For portable ATIF packages and Chat JSONL training files, see [trajectory export](trajectory-export.md).
 The unified step viewer is a separate work package.
 
 ## Environment records

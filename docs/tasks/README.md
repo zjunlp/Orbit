@@ -28,6 +28,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Agents, auth, plugins, notifications
 
+- [20261114](20261114-trajectory-export.md) X1: filtered ATIF packages and Chat JSONL export
+
 - [20261113](20261113-run-trajectory.md) Run trajectory generation, storage, API/CLI and session projection
 - [20261113](20261113-native-atif-import.md) T5 first package: native Harbor/Cua ATIF adoption
 - [20261113](20261113-trajectory-environment.md) T4: environment records linked to ATIF steps

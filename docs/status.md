@@ -1,6 +1,6 @@
 # Orbit status
 
-Updated 2026-11-13. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
+Updated 2026-11-14. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
 
 **Stage.** R0–R2 validated on this machine. R3 benchmarks run: LongDS with one complete native Codex task, Harbor with oracle/empty samples. R4 (multi-node) only as two daemons on one machine. No release blockers.
 
@@ -10,7 +10,7 @@ Updated 2026-11-13. Architecture: [design](design.md). Docs map: [docs/README](R
 - **Daemon and CLI.** Auto-started local daemon (127.0.0.1, token/cookie, single writer per home); `orbit run / sweep / ps / show / logs / wait / cancel / note / resources / doctor / web / auth / notify / bench / node / data`; `pnpm verify` gates changes.
 - **Resources.** Leases with queue reasons; outside use respected (busy GPUs, CPU, `MemAvailable`); `orbit reconcile` every 10 min; at most `ORBIT_MAX_STARTING` (4) starts and none under 5 GB free disk; GPU holders and device leases in CLI/Web; KVM/DRI/TUN/adb/serial probes.
 - **Execution.** Docker with code snapshot, CDI GPU mapping checked against the lease, execution-only timeouts, durable ending phases, evidence collected before cleanup; opt-in failure [checkpoints](guides/checkpoints.md) and `orbit resume`; `--check` / `--smoke` preflight; separate data directory and logical folders.
-- **Trajectories.** ATIF v1.5–v1.8 contract; Codex / Claude Code conversion, native Harbor/Cua ATIF adoption and automatic Run storage, lazy legacy backfill, versioned rebuild, API/CLI and worker forwarding. Session views and token accounting derive from ATIF; CLI, reports and comparison views show usage with missing-data coverage; GUI, episode and conversation reviews link to ATIF steps ([guide](guides/trajectories.md)).
+- **Trajectories.** ATIF v1.5–v1.8 contract; Codex / Claude Code conversion, native Harbor/Cua ATIF adoption and automatic Run storage, lazy legacy backfill, versioned rebuild, API/CLI and worker forwarding. Session views and token accounting derive from ATIF; CLI, reports and comparison views show usage with missing-data coverage; GUI, episode and conversation reviews link to ATIF steps ([guide](guides/trajectories.md)); filtered ATIF/Chat JSONL exports include media, integrity manifests and secret checks ([export](guides/trajectory-export.md)).
 - **Agents.** Registry of 12 Agents plus user definitions (`orbit agent …`), installed inside the run when needed. Real runs: codex, claude-code, dsh; the other nine are unverified. Auth profiles per Agent; notifications (Feishu, DingTalk, WeCom, Slack, webhook; Feishu app bot).
 - **Bench core.** Solve + independent verify per trial; valid-only means with task-clustered CI and paired Δ; benchmark's official aggregation shown alongside; closed failure kinds; immutable report revisions; `rescore`, `consolidate`, `usage`, `calibrate`, `coverage`.
 - **Integration.** One adapter protocol behind four integration methods: `harbor`, `manifest`, `sdk`, `native` (design §9.14). Harbor covers compose services, hooks, per-role GPUs and verifier GPU models; TB-Science 70/70 and TB 4.0 56/66 supported.
@@ -33,4 +33,4 @@ Updated 2026-11-13. Architecture: [design](design.md). Docs map: [docs/README](R
 1. Web: Catalog filter memoization, abort stale `useAsync` requests, virtualize long conversations.
 2. EFE GPU tasks, licensed-data volumes, KVM calibration of MobileWorld / OSWorld-V2.
 3. Real Agent bench jobs (RCB first); R4 on two machines; later, official-runner comparison for a few classic benchmarks.
-4. Evolution line: T1–T4 implemented; T5 native ATIF adoption implemented; dsh/pi and other environment importers remain on demand, followed by T6 and export ([plan](evolution-plan.md)).
+4. Evolution line: T1–T4, T5 native ATIF adoption and X1 export implemented; next E1–E3/E6, then V0–V2/T6; additional importers remain on demand ([plan](evolution-plan.md)).

@@ -23,6 +23,7 @@ import { registerClusterRoutes } from "./routes/cluster.ts";
 import { registerFoldersRoutes } from "./routes/folders.ts";
 import { registerRunsRoutes } from "./routes/runs.ts";
 import { registerSettingsRoutes } from "./routes/settings.ts";
+import { registerTrajectoryExportRoutes } from "./routes/trajectory-export.ts";
 
 export interface AppDeps {
   token: string;
@@ -75,6 +76,7 @@ export function createApp(deps: AppDeps): Hono {
     return c.json<LoginCode>({ code, expiresAt: new Date(expires).toISOString() });
   });
   registerRunsRoutes(api, deps);
+  registerTrajectoryExportRoutes(api, deps);
   registerFoldersRoutes(api, deps);
   registerClusterRoutes(api, deps);
   registerSettingsRoutes(api, deps);

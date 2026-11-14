@@ -69,6 +69,8 @@ import {
   RunSessions,
   type RunSpecInput,
   type RunState,
+  type TrajectoryExportInput,
+  TrajectoryExportResult,
 } from "../contracts/index.ts";
 
 const Ok = z.object({ ok: z.boolean() });
@@ -169,6 +171,12 @@ export class OrbitClient {
   diff = (id: string) => this.call(CodeDiff, `/runs/${enc(id)}/diff`);
   deleteRuns = (ids: string[]) =>
     this.call(RunDeletion, "/runs/delete", { method: "POST", body: { ids }, timeoutMs: 600_000 });
+  exportTrajectories = (input: TrajectoryExportInput) =>
+    this.call(TrajectoryExportResult, "/trajectory/export", {
+      method: "POST",
+      body: input,
+      timeoutMs: 600_000,
+    });
   trajectory = (id: string) => this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory`);
   rebuildTrajectory = (id: string, source?: AtifSource) =>
     this.call(AtifTrajectory.nullable(), `/runs/${enc(id)}/trajectory/rebuild`, {
