@@ -20,6 +20,7 @@
 | --- | --- | --- | --- |
 | [LIBERO](libero-suites.md) | 5 个套件，130 个任务 | 5 个套件全部接入，包含 LIBERO-90 | 130 个任务做过 reset 和控制步检查。[Spatial](../tasks/20261109-embodied-benchmark-coverage.md) · [Object、Goal、Long](../tasks/20261107-libero-suites.md) · [LIBERO-90](../tasks/20261108-libero-90.md) |
 | [LIBERO-Plus](../../examples/bench-adapters/embodied/benchmarks/libero-plus/README.md) | 4 个套件，10,030 个扰动变体 | 全部变体，每变体 1 个原生初态 | 核对全部初态文件解析，原生 GPU 检查覆盖每套 7 个扰动类别，共 28 个变体。[记录](../tasks/20261109-libero-plus.md) |
+| [LIBERO-Mem](../../examples/bench-adapters/embodied/benchmarks/libero-mem/README.md) | 10 个有序操作任务，每任务 20 个发布初态 | 10 个任务与全部 200 个初态，按原生子目标进度计分 | 全部任务通过原生 reset、观测和控制检查。π₀.₅ 冻结样本通过 CPU 证据校验和重评。[记录](../tasks/20261114-libero-mem.md) |
 | [VLABench](../../examples/bench-adapters/embodied/benchmarks/vlabench/README.md) | 6 条 Policy 轨道。五条固定轨道共 2,460 个场景，Cross Task 开放轨道有 96 个任务 ID | 6 条轨道全接入，Cross Task 按选定种子生成场景 | 全量核对轨道目录，6 条轨道均有抽样 reset、渲染和控制检查。[记录](../tasks/20261109-vlabench.md) |
 | [SimplerEnv](../../examples/bench-adapters/embodied/benchmarks/simpler-env/README.md) | Prepackaged 为 Google 21、WidowX 7 个任务；固定网格分别有 1,164（Google Visual Matching）、1,992（Google Variant Aggregation）和 96（WidowX Visual Matching）个初态 | 两套 Prepackaged、三套网格、三套网格的策略终止协议，另有 GR00T 专用登记 | 141 次原生检查覆盖任务 ID 和代表性场景设置；三套网格做过脚本停止与证据检查。Google 的 OptiX 降噪异常可用独立关闭降噪配置。[目录](../tasks/20261108-simplerenv-task-sets.md) · [终止协议](../tasks/20261109-embodied-benchmark-coverage.md) |
 | [RoboCasa v0.2](../../examples/bench-adapters/embodied/benchmarks/robocasa-v02/README.md) | Atomic-24，24 个任务，每任务 50 个种子 | 24 个任务，完整计划 1,200 个样本 | 24 个任务通过 CPU reset、相机和原生控制。另有固定动作对照及脚本 episode 重评。[记录](../tasks/20261109-robocasa-v02.md) |
@@ -49,6 +50,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | Policy / 权重 | 已实测的 benchmark 协议 | 真实模型样本与参考证据 |
 | --- | --- | --- |
 | π₀.₅ 官方 LIBERO，`pi05-libero` 或共享 GPU 登记 | LIBERO Spatial、Object、Goal、Long 的 OpenPI recipe | 四套件均有抽样；Spatial 的固定输入、动作及共享编译模型控制通过，独立 GPU 进程逐位对照失败。[Spatial](../tasks/20261105-embodied-eval.md) · [扩展](../tasks/20261107-libero-suites.md) |
+| π₀.₅ 官方 LIBERO，八步重规划登记 | LIBERO-Mem | 首个任务用 GPU 完成一个冻结样本并通过 CPU 证据校验；同一初态另经 Orbit 的完整 CPU 流水线和重评。[记录](../tasks/20261114-libero-mem.md) |
 | GR00T N1.7 的套件权重，`groot-n17-libero[-<suite>]` | LIBERO Spatial、Object、Goal、Long 的 OpenPI recipe | 四套件均有抽样；Spatial 有短参考边界检查。[Spatial](../tasks/20261106-embodied-endpoints.md) · [扩展](../tasks/20261107-libero-suites.md) |
 | OpenVLA-OFT，`openvla-oft-libero-spatial` 与 `openvla-oft-libero-combined-<suite>` | LIBERO OFT recipe，Spatial 专用权重及 Spatial、Object、Goal、Long 联合权重 | 专用和联合 checkpoint 分别实测，另有确定性 I/O 对照；联合权重按套件选择归一化键。[接口](../tasks/20261106-embodied-endpoints.md) · [套件](../tasks/20261107-libero-suites.md) |
 | RLinf OpenVLA-OFT，`openvla-oft-rlinf-libero-90` | LIBERO-90 OFT recipe | 两个冻结任务的真实批次、CPU 验证与重评。[记录](../tasks/20261108-libero-90-rlinf.md) |

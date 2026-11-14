@@ -23,6 +23,7 @@ from the current recipe.
 | LIBERO | [OpenPI π₀.₅](benchmarks/libero/README.md) · [All suites](../../../docs/guides/libero-suites.md) · [GR00T N1.7](policies/groot/README.md) · [OpenVLA-OFT](policies/openvla-oft/README.md) · [SmolVLA and MolmoAct2](benchmarks/tabletop/README.md) · [Fast-WAM](policies/fast-wam/README.md) |
 | LIBERO-Plus | [Perturbation suites and OFT](benchmarks/libero-plus/README.md) |
 | LIBERO-PRO | [Original leaderboard perturbations](benchmarks/libero-pro/README.md) |
+| LIBERO-Mem | [Ordered subgoals and π₀.₅](benchmarks/libero-mem/README.md) |
 | VLABench | [Native tracks and OpenWAM](benchmarks/vlabench/README.md) |
 | SimplerEnv | [Native catalogs and scene grids](benchmarks/simpler-env/README.md) · [GR00T N1.7](policies/groot/README.md) · [StarVLA QwenGR00T](policies/starvla/README.md) |
 | RoboCasa v0.2 | [Atomic-24](benchmarks/robocasa-v02/README.md) |

@@ -11,6 +11,7 @@ import numpy as np
 from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.evidence import seal, verify_manipulation_stopping, write_json
 from orbit_embodied.driver import SampleRejected
+from orbit_embodied.libero_mem import verify_mem_episode
 from orbit_embodied.openpi import quaternion_to_axis_angle
 
 
@@ -86,6 +87,50 @@ class CoreTests(unittest.TestCase):
 
     def verify(self):
         return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
+
+    def test_libero_mem_partial_progress_is_scored_without_terminating(self):
+        first = ["and", ["in", "cream_cheese_1", "basket_1_contain_region"]]
+        empty_basket = ["and", ["on", "basket_2", "kitchen_table_the_center"]]
+        reference = {"environment": {"catalog": {"task": {
+            "subgoals": 2, "instruction": "ordered task", "goalBranches": [[first, empty_basket]],
+        }}}}
+        sample = {"taskId": "task"}
+        initial = {"instruction": "ordered task", "satisfiedSubgoals": [], "satisfiedPredicates": [], "overshot": False}
+        partial = {**initial, "satisfiedSubgoals": ["first goal"], "satisfiedPredicates": [first]}
+        controls = [{"state": partial, "nativeSuccess": False, "terminated": False}]
+        result = {"native": {"completedSubgoals": 1, "totalSubgoals": 2,
+                             "satisfiedSubgoals": ["first goal"], "satisfiedPredicates": [first], "overshot": False}}
+        verify_mem_episode(reference, sample, initial, controls, result)
+        with self.assertRaisesRegex(ValueError, "native success or stopping"):
+            verify_mem_episode(reference, sample, initial, [{**controls[0], "terminated": True}], result)
+        with self.assertRaisesRegex(ValueError, "native score"):
+            verify_mem_episode(reference, sample, initial, controls,
+                               {"native": {**result["native"], "totalSubgoals": 1}})
+
+    def test_libero_mem_distinguishes_branches_with_the_same_display_labels(self):
+        in_basket = [["and", ["in", "cream_cheese_1", f"basket_{i}_contain_region"]] for i in (1, 2)]
+        on_table = [["and", ["on", f"basket_{i}", "kitchen_table_the_center"]] for i in (1, 2)]
+        branches = [[in_basket[0], on_table[1]], [in_basket[1], on_table[0]]]
+        reference = {"environment": {"catalog": {"task": {
+            "subgoals": 2, "instruction": "move the empty basket", "goalBranches": branches,
+        }}}}
+        sample = {"taskId": "task"}
+        initial = {"instruction": "move the empty basket", "satisfiedSubgoals": [],
+                   "satisfiedPredicates": [], "overshot": False}
+        for index, branch in enumerate(branches):
+            with self.subTest(branch=index):
+                partial = {**initial, "satisfiedSubgoals": ["fill basket"], "satisfiedPredicates": branch[:1]}
+                completed = {**partial, "satisfiedSubgoals": ["fill basket", "move basket"],
+                             "satisfiedPredicates": branch}
+                controls = [{"state": partial, "nativeSuccess": False, "terminated": False},
+                            {"state": completed, "nativeSuccess": True, "terminated": True}]
+                result = {"native": {**completed, "completedSubgoals": 2, "totalSubgoals": 2}}
+                verify_mem_episode(reference, sample, initial, controls, result)
+                wrong_branch = [branch[0], on_table[index]]
+                controls[-1]["state"] = {**completed, "satisfiedPredicates": wrong_branch}
+                result["native"]["satisfiedPredicates"] = wrong_branch
+                with self.assertRaisesRegex(ValueError, "ordered subgoal evidence"):
+                    verify_mem_episode(reference, sample, initial, controls, result)
 
     def test_cliport_evidence_preserves_partial_reward_at_native_horizon(self):
         from orbit_embodied.cliport import CLIPortBenchmark, verify_cliport

@@ -80,7 +80,7 @@ def export_source(source, expected, target, paths):
     archive.unlink()
 
 
-def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths, *, extra_contexts=()):
+def build_native_image(tag, kind, source, identity, dockerfile, manifest, source_paths, *, extra_contexts=(), build_args=()):
     with tempfile.TemporaryDirectory(prefix="orbit-" + kind + "-") as temporary:
         context = Path(temporary) / kind
         export_source(source, identity, context, source_paths)
@@ -88,18 +88,19 @@ def build_native_image(tag, kind, source, identity, dockerfile, manifest, source
         for name, path in extra_contexts:
             contexts.extend(["--build-context", name + "=" + str(path)])
         label = MANIFEST_LABEL + "=" + json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        arguments = [part for item in build_args for part in ("--build-arg", item)]
         subprocess.run(["docker", "build", "--label", "orbit.task=embodied-eval", "--label", label,
-                        *contexts, "-f", str(dockerfile),
+                        *contexts, *arguments, "-f", str(dockerfile),
                         "-t", tag, str(HERE.parents[2])], check=True)
 
 
-def read_native_catalog(image, module):
+def read_native_catalog(image, module, *, python_path="/orbit-sdk"):
     prefix = "ORBIT_NATIVE_CATALOG="
     code = ("import json; from " + module + " import native_catalog; "
             + f"print({prefix!r} + json.dumps(native_catalog()))")
     output = subprocess.check_output(
         ["docker", "run", "--rm", "--network", "none", "--label", "orbit.task=embodied-eval",
-         "--mount", f"type=bind,src={SDK},dst=/orbit-sdk,readonly", "-e", "PYTHONPATH=/orbit-sdk",
+         "--mount", f"type=bind,src={SDK},dst=/orbit-sdk,readonly", "-e", "PYTHONPATH=" + python_path,
          image, "-B", "-c", code], text=True)
     line, = (line for line in output.splitlines() if line.startswith(prefix))
     return json.loads(line[len(prefix):])

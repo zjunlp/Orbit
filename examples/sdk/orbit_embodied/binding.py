@@ -9,7 +9,7 @@ from pathlib import Path
 
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
                           "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic",
-                          "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "bigym2", "cliport")
+                          "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport")
 
 
 def digest(value):

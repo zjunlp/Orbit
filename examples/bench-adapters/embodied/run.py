@@ -138,7 +138,7 @@ def main(argv):
         kind = expected["reference"].get("environment", {}).get("kind")
         if kind is None and expected["sample"]["taskId"].partition(":")[0] in HORIZONS:
             kind = "libero"
-        if kind == "libero-plus":
+        if kind in ("libero-plus", "libero-mem"):
             kind = "libero"
         if result["valid"]:
             # The review index is optional: a kind without one, or a failure to build it, leaves the verdict alone.
@@ -205,6 +205,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "vla-arena":
         from orbit_embodied.vla_arena import VLAArenaBenchmark
         benchmark = VLAArenaBenchmark(reference, sample["taskId"])
+    elif kind == "libero-mem":
+        from orbit_embodied.libero_mem import LiberoMemBenchmark
+        benchmark = LiberoMemBenchmark(reference, sample["taskId"])
     elif kind == "libero-pro":
         from orbit_embodied.libero_pro import LiberoProBenchmark
         benchmark = LiberoProBenchmark(reference, sample["taskId"])

@@ -295,6 +295,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
                 or native["successOnce"] is not success
                 or native["successAtEnd"] is not controls[-1]["nativeSuccess"]):
             raise ValueError("Colosseum V2 horizon or success flags differ from the controls")
+    if result["valid"] and kind == "libero-mem":
+        from .libero_mem import verify_mem_episode
+        verify_mem_episode(reference, contract["sample"], initial["state"], controls, result)
     if result["valid"] and kind == "libero-pro":
         task = contract["sample"]["taskId"]
         environment = reference["environment"]
