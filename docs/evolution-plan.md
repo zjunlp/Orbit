@@ -34,7 +34,7 @@
 | F2 | 步级快照（可选开启） | F1 | 大 | [ ] |
 | F3 | 步级分叉与 Web 入口 | F2、T6 | 中 | [ ] |
 | F4 | 分叉结果的独立验收（反事实研究用） | F3 | 中 | [ ] |
-| E1 | 任务集划分与冻结 | — | 小 | [ ] |
+| E1 | 任务集划分与冻结 | — | 小 | [x] |
 | E2 | 判定核心（纯函数与统计） | E1 | 中 | [ ] |
 | E3 | 策略文件、`orbit bench gate`、判定记录 | E2、T3 | 中 | [ ] |
 | E4 | 分级流程助手与静态检查 | E3 | 小 | [ ] |
@@ -359,13 +359,13 @@ orbit trajectory export --run <id> --format chat-jsonl --reasoning none --out /p
 
 ### E1 任务集划分与冻结
 
-分支 `feat/bench-task-sets`。
+已实现于 `feat/run-trajectory`，见 [任务集指南](guides/task-sets.md) 和 design §7。
 
-- [ ] `orbit bench split <benchmark> --evolve <p> --gate <p> --final <p> --seed <n> [--stratify suite] --out DIR`：
+- [x] `orbit bench split <benchmark> --evolve <p> --gate <p> --final <p> --seed <n> [--stratify suite] --out DIR`：
       写出各任务集文件与 `split.json`（benchmark 身份与版本、随机种子、每个文件的 SHA-256）。划分确定、可复现。
-- [ ] `orbit bench run --tasks-file <file>`，与 `-t` 互斥；作业记录任务集摘要（`hub.ts` 已有 `taskSet`，改为随作业保存）。
-- [ ] 任务集文件归用户所有，daemon 不保存"任务集"实体。
-- [ ] 测试：同一种子两次划分结果相同；各集合互不相交；任务文件与作业摘要不一致时拒绝。
+- [x] `orbit bench run --tasks-file <file>`，与 `-t` 互斥；作业记录任务集摘要（`hub.ts` 已有 `taskSet`，改为随作业保存）。
+- [x] 任务集文件归用户所有，daemon 不保存"任务集"实体。
+- [x] 测试：同一种子两次划分结果相同；各集合互不相交；任务文件与作业摘要不一致时拒绝。
 
 ### E2 判定核心
 

@@ -253,6 +253,23 @@ it("uses effective timeout for adopted tasks and retains budgets when appending 
   expect(f.bench.job("target").job.resources?.d).toEqual({ cpus: 4, memGB: 8, timeoutMin: 30 });
 });
 
+it("preserves task-file freezes when consolidating and refreshes ordinary task-set digests", async () => {
+  const f = fixture();
+  const target = f.store.getJob("target");
+  if (!target) throw new Error("missing fixture");
+  f.store.putJob({ ...target, taskFile: { sha256: "a".repeat(64) } });
+  f.job("extra", ["d"]);
+  f.trial("extra", "d", true);
+  await expect(
+    f.bench.consolidate("target", { sources: ["extra"], appendTasks: true }),
+  ).rejects.toThrow(/cannot append tasks/);
+  expect(f.store.getJob("extra")).not.toBeNull();
+  expect(f.store.getJob("target")?.spec.tasks).toEqual(target.spec.tasks);
+  f.store.putJob(target);
+  await f.bench.consolidate("target", { sources: ["extra"], appendTasks: true, dryRun: false });
+  expect(f.store.getJob("target")?.taskSet).toMatch(/^[a-f0-9]{12}$/);
+});
+
 function fixture(planned = false) {
   const home = mkdtempSync(join(tmpdir(), "orbit-consolidate-"));
   homes.push(home);

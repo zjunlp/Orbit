@@ -11,6 +11,7 @@ import {
   type Benchmark,
   BenchmarkInput,
   type BenchReport,
+  BenchSplitRequest,
   type BenchTask,
   BenchTaxonomy,
   type BenchUsage,
@@ -29,6 +30,7 @@ import { calibrate } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
 import { formatTokens, formatTokenUsage, compactTable as table } from "./format.ts";
 import { kv, numericOption } from "./options.ts";
+import { readTaskFile } from "./task-file.ts";
 
 type Job = BenchJobList["jobs"][number];
 
@@ -465,6 +467,41 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     });
 
   bench
+    .command("split <benchmark>")
+    .description("freeze supported tasks into evolve, gate and final files on the daemon host")
+    .requiredOption("--evolve <p>", "evolve proportion (0–1)", numericOption())
+    .requiredOption("--gate <p>", "gate proportion (0–1)", numericOption())
+    .requiredOption("--final <p>", "final proportion (0–1)", numericOption())
+    .requiredOption("--seed <n>", "nonnegative integer split seed", numericOption())
+    .option("--stratify <tag>", "preserve suite representation (suite)")
+    .requiredOption("--out <directory>", "new directory on the daemon host; parent must exist")
+    .option("--json", "print result as JSON")
+    .action(
+      async (
+        name: string,
+        opts: {
+          evolve: number;
+          gate: number;
+          final: number;
+          seed: number;
+          stratify?: string;
+          out: string;
+          json?: boolean;
+        },
+      ) => {
+        const { json: _json, ...options } = opts;
+        const request = BenchSplitRequest.parse({ ...options, out: resolve(opts.out) });
+        const result = await (await client()).benchSplit(name, request);
+        print(
+          opts.json,
+          result,
+          () =>
+            `Saved task split to ${result.out}: evolve ${result.manifest.files.evolve.count}, gate ${result.manifest.files.gate.count}, final ${result.manifest.files.final.count}`,
+        );
+      },
+    );
+
+  bench
     .command("coverage <benchmark>")
     .description("count supported tasks by suite and the reasons the others cannot run")
     .option("--all", "list every reason")
@@ -575,6 +612,10 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
       "legacy repetitions per task × method (default: 1)",
       numericOption("integer"),
     )
+    .option(
+      "--tasks-file <file>",
+      "UTF-8 task IDs; checks adjacent split.json when present; mutually exclusive with --task",
+    )
     .option("--sample-plan <file>", "frozen C6 sample plan JSON; mutually exclusive with --seeds")
     .option(
       "--batch-size <n>",
@@ -614,6 +655,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           method: string[];
           methodsFile?: string;
           task: string[];
+          tasksFile?: string;
           seeds?: number;
           samplePlan?: string;
           batchSize?: number;
@@ -625,6 +667,9 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           json?: boolean;
         },
       ) => {
+        if (o.tasksFile && o.task.length)
+          throw new Error("--tasks-file and --task are mutually exclusive");
+        const taskFile = o.tasksFile ? readTaskFile(resolve(o.tasksFile)) : undefined;
         if (o.samplePlan && o.seeds !== undefined)
           throw new Error("--sample-plan and --seeds are mutually exclusive");
         if (o.batchSize !== undefined && !o.samplePlan)
@@ -657,7 +702,15 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           {
             name: o.name,
             benchmark: name,
-            tasks: o.task,
+            tasks: taskFile?.tasks ?? o.task,
+            ...(taskFile
+              ? {
+                  tasksFile: taskFile.tasksFile,
+                  taskSet:
+                    taskFile.tasksFile.frozen?.manifest.files[taskFile.tasksFile.frozen.partition]
+                      .taskSet,
+                }
+              : {}),
             methods: methods as never,
             ...(samplePlan
               ? { samplePlan, ...(o.batchSize === undefined ? {} : { batchSize: o.batchSize }) }

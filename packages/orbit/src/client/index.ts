@@ -23,7 +23,7 @@ import {
   BenchJob,
   BenchJobDetail,
   BenchJobList,
-  type BenchJobSpecInput,
+  type BenchJobSubmissionInput,
   type BenchLabels,
   Benchmark,
   type BenchmarkInput,
@@ -31,6 +31,8 @@ import {
   BenchReport,
   type BenchRescoreInput,
   BenchRescoreResult,
+  type BenchSplitRequest,
+  BenchSplitResult,
   BenchTaskList,
   BenchUsage,
   type CalibrationRequestInput,
@@ -254,7 +256,13 @@ export class OrbitClient {
   benchInfo = (name: string) =>
     this.call(BenchTaskList, `/benchmarks/${enc(name)}/tasks`, { timeoutMs: 180_000 });
   benchTasks = (name: string) => this.benchInfo(name).then((r) => r.tasks);
-  benchSubmit = (spec: BenchJobSpecInput, folder?: string) =>
+  benchSplit = (name: string, body: BenchSplitRequest) =>
+    this.call(BenchSplitResult, `/benchmarks/${enc(name)}/split`, {
+      method: "POST",
+      body,
+      timeoutMs: 180_000,
+    });
+  benchSubmit = (spec: BenchJobSubmissionInput, folder?: string) =>
     this.call(BenchJob, `/bench/jobs${folderQuery(folder)}`, {
       method: "POST",
       body: spec,

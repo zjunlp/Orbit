@@ -13,6 +13,7 @@ export { autoRunName, planRank, runDisplayName, sampleLabel, sampleOrder } from 
 export * from "./records.ts";
 export * from "./resources.ts";
 export * from "./runs.ts";
+export * from "./task-sets.ts";
 export * from "./taxonomy.ts";
 export * from "./trajectory.ts";
 export * from "./trajectory-export.ts";

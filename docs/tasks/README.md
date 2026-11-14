@@ -28,6 +28,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Agents, auth, plugins, notifications
 
+- [20261114](20261114-bench-task-sets.md) E1: reproducible task splits and frozen job selections
+
 - [20261114](20261114-trajectory-export.md) X1: filtered ATIF packages and Chat JSONL export
 
 - [20261113](20261113-run-trajectory.md) Run trajectory generation, storage, API/CLI and session projection

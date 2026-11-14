@@ -20,14 +20,17 @@ import {
   type BenchJob,
   type BenchJobDetail,
   type BenchJobList,
-  BenchJobSpec,
-  type BenchJobSpecInput,
+  type BenchJobSpec,
+  BenchJobSubmission,
+  type BenchJobSubmissionInput,
   BenchLabels,
   type Benchmark,
   type BenchReport,
   BenchRescore,
   type BenchRescoreInput,
   type BenchRescoreResult,
+  BenchSplitRequest,
+  type BenchSplitResult,
   type BenchTask,
   type BenchUsage,
   CalibrationRequest,
@@ -90,6 +93,13 @@ import {
   trialSlots,
 } from "./submit-validation.ts";
 import { buildReport, sameReport } from "./summary.ts";
+import {
+  resolveTaskFile,
+  splitTasks,
+  taskBenchmark,
+  taskSetDigest,
+  writeTaskSplit,
+} from "./task-sets.ts";
 import { TrialMachine } from "./trials.ts";
 
 export interface BenchServiceDeps {
@@ -209,17 +219,30 @@ export class BenchService {
     return (await this.infoOf(this.benchmark(name))).tasks;
   }
 
+  async split(name: string, input: unknown): Promise<BenchSplitResult> {
+    const request = BenchSplitRequest.parse(input);
+    const b = this.benchmark(name);
+    const info = await this.infoOf(b);
+    const fingerprint = taskBenchmark(b, info, await gitSource(b.path));
+    return writeTaskSplit(this.deps.paths, request, splitTasks(info.tasks, request, fingerprint));
+  }
+
   // ---- jobs ----
 
-  async submit(input: BenchJobSpecInput, opts: { folder?: string } = {}): Promise<BenchJob> {
-    const parsed = BenchJobSpec.safeParse(input);
+  async submit(input: BenchJobSubmissionInput, opts: { folder?: string } = {}): Promise<BenchJob> {
+    const parsed = BenchJobSubmission.safeParse(input);
     if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
     const folder = Folder.safeParse(opts.folder ?? "");
     if (!folder.success) throw new UserError(folder.error.issues[0]?.message ?? "invalid folder");
-    const spec = parsed.data;
+    const { tasksFile, taskSet: expectedTaskSet, ...spec } = parsed.data;
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
     const all = info.tasks;
+    const source = await gitSource(b.path);
+    const file = tasksFile
+      ? resolveTaskFile(tasksFile, spec.tasks, all, taskBenchmark(b, info, source))
+      : undefined;
+    if (file) spec.tasks = file.tasks;
     if (
       spec.batchSize &&
       (!info.capabilities?.embodied?.batch ||
@@ -263,6 +286,12 @@ export class BenchService {
     }
     resolveTaskSelection(spec, all);
     checkTasksExist(spec, all, b.name);
+    if (new Set(spec.tasks).size !== spec.tasks.length) throw new UserError("duplicate task IDs");
+    const taskSet = taskSetDigest(spec.tasks);
+    if (expectedTaskSet && expectedTaskSet !== taskSet)
+      throw new UserError(
+        "submitted task-set digest does not match the task file or selected tasks",
+      );
     checkPlanAgainstBenchmark(spec, all, info.capabilities);
     this.checkLineage(spec);
     const revisions = await this.revisions(spec.methods);
@@ -286,6 +315,8 @@ export class BenchService {
     const job: BenchJob = {
       id: newId(),
       spec,
+      taskSet,
+      ...(file ? { taskFile: file.record } : {}),
       benchmarkSnapshot: structuredClone(b),
       ...(spec.samplePlan ? { resolvedBindings } : {}),
       ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
@@ -294,7 +325,7 @@ export class BenchService {
       resources,
       folder: folder.data,
       metrics: resolveMetrics(info.metrics),
-      source: await gitSource(b.path),
+      source,
       state: "running",
       createdAt: nowIso(),
       endedAt: null,

@@ -532,6 +532,17 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   SQL 聚合查询取得各方法计数和有效 trial 的精简指标字段，再用共享指标函数计算逐任务均值与跨任务统计，
   保留原来的浮点累加顺序与响应形状，不加载或 zod 解析完整 trial。
   取消先保存 cancelled job 并取消关联 Run，再在后台串行推进 trial；HTTP 不等待适配器评分，CLI / Web 仍显示 job 状态。已持久化 cancel 意图的 Run 不重复取消，避免更新事件反复触发同一请求。
+- **任务集划分与冻结（E1）**：`orbit bench split <benchmark> --evolve p --gate p --final p --seed n [--stratify suite] --out DIR`
+  经 `POST /benchmarks/:name/split` 读取当前 supported 任务，由 daemon 在用户新目录生成 evolve/gate/final.txt 与 split.json；比例为 0–1 且和为 1。
+  `bench/task-sets.ts` 以 SHA-256(seed, suite, task ID) 排序，用最大余数法确定全局任务数，suite 配额和余数调整保持总数精确；不依赖 listing 顺序或平台 PRNG。
+  清单记录算法版本、benchmark 身份/声明版本、可用 Git commit/dirty、执行设置摘要、种子、分层、支持任务清单摘要和逐文件 SHA-256/任务数/任务集摘要。
+  无时间戳或输出路径；未声明版本/非 Git 来源为 null，dirty 不代表冻结了完整源码。文件归用户管理，不新增任务集实体。
+  `bench run --tasks-file` 与 `-t` 互斥；CLI 读取 UTF-8 内容快照并核对相邻 split.json，daemon 验证原始字节哈希、任务集/任务数、benchmark 元数据及清单，并按种子/比例/分层重算三个集合的摘要。
+  `BenchJobSubmission` 在既有 job spec 外接收 transient tasksFile 与可选预期 taskSet；不一致时在创建作业/trial 前拒绝。已有样本计划仍校验所选任务。
+  新作业持久化 `BenchJob.taskSet`，沿用原 Hub 的有序去重 ID 规范 JSON SHA-256 前 12 位；文件提交还保存 taskFile 的完整文件哈希和可选清单，不保存内容或客户端路径。
+  Hub 优先读已保存摘要；旧作业缺省回退既有计算且不在读取时重写。文件作业禁止归并追加任务；普通作业追加时更新摘要，无任务变动的旧作业保持原样。
+  任务文件 8 MiB、清单 1 MiB、至多 100000 个任务；普通文件有界读取。输出必须不存在、父目录存在且位于 Orbit home/data 之外，私有临时目录验证后发布，文件 0600、目录 0700。
+  详细使用见 [任务集指南](guides/task-sets.md)。E2/E3 的准入判定仍待实现。
 - **重新评分**（`POST /bench/jobs/:id/rescore`，`orbit bench rescore <job> [-t task] [-m method] [--trial id]`，
   Web job 页与 trial 页的 Rescore）：不重跑 Agent。只对已结束 job 中已完成、solve 输出仍在本机且需要 verify 的
   trial；当前 `{verifyRunId, outcome, endedAt}` 移入 `Trial.history`，trial 回到 `solving`（solve Run 不变），
@@ -1484,7 +1495,7 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   （`orbit bench run --parent … --note … --informed-by …`）。旧作业的 approximate revision 也可作为来源版本；未改变的配置不能引用自身为来源。
   Trial 的 “Adjust configuration” 只复制当前 trial 对应的配置，并保留原任务选择供调整；无效 trial 可用原配置重试。
   这些字段记录配置复用和参考证据，不定义方法谱系。
-- 兼容 API `GET /methods?metric=<name>` 返回配置名称下各版本及结果；缺省指标为 benchmark 主指标。结果包含评测条件摘要、任务集摘要、
+- 兼容 API `GET /methods?metric=<name>` 返回配置名称下各版本及结果；缺省指标为 benchmark 主指标。结果包含评测条件摘要、随新作业保存的任务集摘要（旧作业按原方式计算）、
   指标声明与已有不可变报告修订。条件包含 benchmark 源版本、运行配置、seed 与评分规则；不同条件不自动给出进步 Δ。
   dirty 源码的内容无法由 commit 标识，跨作业不自动比较。主指标存在匹配计划的报告时，从冻结 entries 计算汇总与 Δ；
   其他指标或无报告时用当前 trial，并返回 `reportRevision: null`，不冒充不可变历史。

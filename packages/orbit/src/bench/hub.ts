@@ -355,7 +355,7 @@ export function methodLines(
         method: m.name,
         at: j.createdAt,
         tasks: tasks.size,
-        taskSet: stableDigest([...tasks].sort()),
+        taskSet: j.taskSet ?? stableDigest([...tasks].sort()),
         condition,
         metric,
         metrics,

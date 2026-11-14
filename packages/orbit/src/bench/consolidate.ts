@@ -20,6 +20,7 @@ import { batchConditions } from "./batches.ts";
 import { agentFailureIssue, agentFailureKind, shouldCheckAgentFailure } from "./classify.ts";
 import { executionCapabilities } from "./revision.ts";
 import { executionBudget, isValid } from "./summary.ts";
+import { taskSetDigest } from "./task-sets.ts";
 
 /** Group of a job's runs, so the run list and notifications see a job as one group. */
 export const benchGroup = (jobId: string) => `bench-${jobId}`;
@@ -333,8 +334,16 @@ export function planConsolidation(input: {
       moved.push(r);
     }
   }
+  if (target.job.taskFile && taskSetDigest(taskIds) !== taskSetDigest(target.job.spec.tasks))
+    throw new UserError(
+      "cannot append tasks to a job submitted from a task file; submit a new job",
+    );
   const job = {
     ...target.job,
+    ...(target.job.taskSet !== undefined ||
+    taskSetDigest(taskIds) !== taskSetDigest(target.job.spec.tasks)
+      ? { taskSet: taskSetDigest(taskIds) }
+      : {}),
     spec: { ...target.job.spec, tasks: [...taskIds] },
     resources: Object.keys(resources).length ? resources : null,
     state: "done" as const,

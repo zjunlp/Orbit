@@ -16,12 +16,14 @@ import type {
   BenchJob,
   BenchJobDetail,
   BenchJobList,
-  BenchJobSpecInput,
+  BenchJobSubmissionInput,
   BenchLabels,
   Benchmark,
   BenchReport,
   BenchRescoreInput,
   BenchRescoreResult,
+  BenchSplitRequest,
+  BenchSplitResult,
   BenchTaskList,
   CalibrationRequestInput,
   DoctorReport,
@@ -190,7 +192,12 @@ export const api = {
   benchmarks: () => req<{ benchmarks: Benchmark[] }>("/benchmarks").then((r) => r.benchmarks),
   benchInfo: (name: string) => req<BenchTaskList>(`/benchmarks/${enc(name)}/tasks`),
   benchTasks: (name: string) => api.benchInfo(name).then((r) => r.tasks),
-  benchSubmit: (spec: BenchJobSpecInput, folder = "") =>
+  benchSplit: (name: string, body: BenchSplitRequest) =>
+    req<BenchSplitResult>(`/benchmarks/${enc(name)}/split`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  benchSubmit: (spec: BenchJobSubmissionInput, folder = "") =>
     req<BenchJob>(`/bench/jobs${folder ? `?folder=${enc(folder)}` : ""}`, {
       method: "POST",
       body: JSON.stringify(spec),

@@ -10,6 +10,7 @@ import {
 } from "./embodied.ts";
 import { Folder } from "./folders.ts";
 import { CheckpointPolicy, RunTokens, TokenUsage } from "./runs.ts";
+import { TaskFileInput, TaskFileRecord, TaskSetDigest } from "./task-sets.ts";
 import { TAXONOMY_VALUES } from "./taxonomy.ts";
 
 /** Adapters shipped with Orbit (`orbit __adapter <name>`). */
@@ -479,6 +480,10 @@ export const BenchJobSpec = z
   );
 export type BenchJobSpec = z.infer<typeof BenchJobSpec>;
 export type BenchJobSpecInput = z.input<typeof BenchJobSpec>;
+export const BenchJobSubmission = BenchJobSpec.and(
+  z.object({ tasksFile: TaskFileInput.optional(), taskSet: TaskSetDigest.optional() }),
+);
+export type BenchJobSubmissionInput = z.input<typeof BenchJobSubmission>;
 
 export const Evaluation = z.enum(["valid", "invalid", "unknown"]);
 export type Evaluation = z.infer<typeof Evaluation>;
@@ -817,6 +822,8 @@ export type ResourceOverride = z.infer<typeof ResourceOverride>;
 
 export const BenchJob = z.object({
   id: z.string(),
+  taskSet: TaskSetDigest.optional(),
+  taskFile: TaskFileRecord.optional(),
   spec: BenchJobSpec,
   /** Non-secret registration fixed at submission; absent only for legacy jobs. */
   benchmarkSnapshot: Benchmark.optional(),

@@ -62,6 +62,9 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.get("/benchmarks/:name/tasks", async (c) =>
     c.json(await bench.infoOf(bench.benchmark(c.req.param("name")))),
   );
+  api.post("/benchmarks/:name/split", async (c) =>
+    c.json(await bench.split(c.req.param("name"), await c.req.json())),
+  );
   api.patch("/benchmarks/:name/labels", async (c) =>
     c.json(bench.label(c.req.param("name"), BenchLabels.parse(await c.req.json()))),
   );
