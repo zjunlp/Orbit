@@ -7,12 +7,12 @@ import math
 import os
 from pathlib import Path
 
-import numpy as np
-
 from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed, robodojo_layout
 
 
 def validate_action_chunk(chunk, width, required):
+    import numpy as np
+
     if (chunk.dtype.kind not in "buif" or chunk.ndim != 2 or chunk.shape[1] != width
             or len(chunk) < required or not np.isfinite(chunk).all()):
         raise ValueError("policy action chunk has invalid shape, length or non-finite values")
@@ -108,6 +108,8 @@ def verify_simpler_termination(controls, initial, horizon):
 
 
 def verify_manipulation_stopping(kind, controls, horizon):
+    import numpy as np
+
     for step, row in enumerate(controls, start=1):
         done, success = row.get("nativeDone"), row["nativeSuccess"]
         stopped = done is True or step == horizon or (kind == "robomimic" and success is True)
@@ -152,6 +154,8 @@ def verify_diffusion_stopping(controls, horizon, replan_steps):
 
 
 def verify_episode(directory, sample_ref, episode_id, expected=None):
+    import numpy as np
+
     directory = Path(directory).resolve()
     manifest = json.loads((directory / "evidence-manifest.json").read_text())
     if manifest.get("version") != 1 or manifest.get("sampleRef") != sample_ref or manifest.get("episodeId") != episode_id:

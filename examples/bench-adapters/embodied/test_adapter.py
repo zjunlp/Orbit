@@ -38,6 +38,11 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_hssd_configurator_help_works_without_site_packages(self):
+        path = ADAPTER.parent / "benchmarks/hssd-ov/configure_hssd_ov.py"
+        output = subprocess.check_output([sys.executable, "-B", "-E", "-S", str(path), "--help"], text=True)
+        self.assertIn("--prepare-assets", output)
+
     def test_hssd_preparation_and_registration_reject_unpublished_shader_changes(self):
         path = ADAPTER.parent / "benchmarks/hssd-ov/configure_hssd_ov.py"
         spec = importlib.util.spec_from_file_location("configure_hssd_fixture", path)
