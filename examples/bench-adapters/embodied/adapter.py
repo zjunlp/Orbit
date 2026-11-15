@@ -214,8 +214,14 @@ def tasks(req):
 def stage(req):
     destination = Path(req["trial"]["staging"])
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(SDK / "orbit_embodied", destination / "python/orbit_embodied", dirs_exist_ok=True,
+    source = SDK / "orbit_embodied"
+    staged_sdk = destination / "python/orbit_embodied"
+    shutil.copytree(source, staged_sdk, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "test_*.py"))
+    # Retries reuse the trial directory; a deleted module must not enter the new archive.
+    for module in staged_sdk.glob("*.py"):
+        if not (source / module.name).is_file():
+            module.unlink(missing_ok=True)
     shutil.copy2(HERE / "run.py", destination / "run.py")
     shutil.copy2(HERE / "adapter.py", destination / "adapter.py")
     return destination

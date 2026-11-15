@@ -533,6 +533,22 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertNotIn("services", verifier)
             self.assertFalse(verifier["network"])
 
+    def test_restaging_drops_removed_sdk_modules_without_removing_trial_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = {"trial": {"staging": str(root / "staging")}}
+            staging = adapter.stage(request)
+            removed = staging / "python/orbit_embodied/removed.py"
+            removed.write_text("# previous SDK version\n")
+            payload = staging / "request.json"
+            payload.write_text("{}")
+
+            adapter.stage(request)
+            self.assertFalse(removed.exists())
+            self.assertEqual(payload.read_text(), "{}")
+            measured = archive_implementation(staging, root / "implementation")
+            self.assertEqual(measured, adapter.implementation_digest())
+
     def test_navigation_solve_pins_one_gpu_and_verify_uses_cpu(self):
         profile_modules = (
             ("chores", "vulkan", "chores", "navigation_pose", "image"),
