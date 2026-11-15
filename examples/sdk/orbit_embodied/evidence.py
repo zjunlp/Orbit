@@ -214,6 +214,7 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     first_replan = reference.get("parameters", {}).get("firstReplanSteps", contract["replanSteps"])
     if type(first_replan) is not int or not 0 < first_replan <= contract["replanSteps"]:
         raise ValueError("invalid initial replan interval in episode evidence")
+    frozen_conversion = contract["identity"].get("policy", {}).get("actionConversion")
     for row in controls:
         chunk_path = "chunks/" + str(row["chunk"]) + ".npy"
         timing_path = "chunks/" + str(row["chunk"]) + ".json"
@@ -221,8 +222,10 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
             raise ValueError("requested action chunk is missing")
         chunk = np.load(directory / chunk_path, allow_pickle=False)
         timing = json.loads((directory / timing_path).read_text())
+        if frozen_conversion is not None and timing.get("conversion") != frozen_conversion:
+            raise ValueError("action conversion differs from the frozen policy")
         if "conversion" in timing:
-            from .openpi import CONVERSIONS
+            from .conversions import CONVERSIONS
             raw_path = "chunks/" + str(row["chunk"]) + ".raw.npy"
             if timing["conversion"] not in CONVERSIONS or raw_path not in manifest["files"]:
                 raise ValueError("converted action chunk lacks its raw model output")
@@ -282,6 +285,11 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if result["valid"] and kind == "chores":
         from .chores import verify_chores
         verify_chores(reference, contract["sample"], initial["state"], controls, result)
+    if result["valid"] and kind == "hssd-ov":
+        if not {"navigation.navmesh", "goal-viewpoints.json"} <= manifest["files"].keys():
+            raise ValueError("HSSD-OV scoring evidence is missing")
+        from .hssd_ov import verify_hssd
+        verify_hssd(reference, contract["sample"], initial["state"], controls, result, directory)
     if result["valid"] and kind == "eb-navigation":
         from .eb_navigation import verify_navigation
         verify_navigation(reference, contract["sample"], initial["state"], controls, result)

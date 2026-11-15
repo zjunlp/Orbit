@@ -38,6 +38,57 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_hssd_preparation_and_registration_reject_unpublished_shader_changes(self):
+        path = ADAPTER.parent / "benchmarks/hssd-ov/configure_hssd_ov.py"
+        spec = importlib.util.spec_from_file_location("configure_hssd_fixture", path)
+        config = importlib.util.module_from_spec(spec)
+        with patch.object(sys, "path", sys.path.copy()):
+            spec.loader.exec_module(config)
+        with tempfile.TemporaryDirectory() as temporary:
+            assets = Path(temporary)
+            scenes = assets / "scenes/hssd-hab"
+            template = {"render_asset": "cube.glb"}
+            original_config = scenes / "hssd-hab.scene_dataset_config.json"
+            template_path = scenes / "objects/cube.object_config.json"
+            write_json(template_path, template)
+            write_json(original_config, {"scene_instances": {"paths": {".json": ["scenes"]}}})
+            write_json(scenes / "stages/room.stage_config.json", {"render_asset": "room.glb"})
+            write_json(scenes / "scenes/room.scene_instance.json", {
+                "stage_instance": {"template_name": "stages/room"},
+                "object_instances": [{"template_name": "cube", "motion_type": "STATIC"}],
+            })
+            for name in ("objects/cube.glb", "stages/room.glb"):
+                (scenes / name).write_bytes(b"fixture geometry")
+            source_config = assets / "configs/eval_hssdov.yaml"
+            source_config.parent.mkdir()
+            source_config.write_text("# fixture\n")
+            catalog = {"room:0": {"scene": "room.scene_instance.json", "category": "cube"}}
+            published, generated = config.scene_bundle(assets, catalog)
+            release = {"sceneManifestDigest": digest(published), "evaluation": {}}
+            self.assertEqual(published["files"][original_config.relative_to(assets).as_posix()],
+                             adapter.file_digest(original_config))
+            manifest_path = assets / "orbit-hssd-ov-scenes.json"
+
+            write_json(template_path, {**template, "shader_type": "flat"})
+            with self.assertRaisesRegex(ValueError, "scene bundle differs from the pinned release"):
+                config.prepare_scenes(assets, catalog, release)
+            self.assertFalse(manifest_path.exists())
+            self.assertFalse((scenes / "derived_scenes").exists())
+
+            write_json(template_path, template)
+            config.prepare_scenes(assets, catalog, release)
+            for output, expected in generated.items():
+                self.assertEqual(output.read_bytes(), expected)
+            reference = config.reference(assets, assets, catalog, release)
+            self.assertEqual(reference["environment"]["assets"]["digest"], release["sceneManifestDigest"])
+
+            write_json(template_path, {**template, "shader_type": "flat"})
+            local, _ = config.scene_bundle(assets, catalog)
+            self.assertEqual(local["source"], published["source"])
+            write_json(manifest_path, local)
+            with self.assertRaisesRegex(ValueError, "scene bundle differs from the pinned release"):
+                config.reference(assets, assets, catalog, release)
+
     def test_default_libero_reference_passes_simulator_asset_preflight(self):
         spec = importlib.util.spec_from_file_location("native_embodied_run", ADAPTER.with_name("run.py"))
         runner = importlib.util.module_from_spec(spec)
@@ -485,6 +536,7 @@ class AdapterPlanningTests(unittest.TestCase):
     def test_navigation_solve_pins_one_gpu_and_verify_uses_cpu(self):
         profile_modules = (
             ("chores", "vulkan", "chores", "navigation_pose", "image"),
+            ("hssd-ov", "egl", "hssd_ov", "agent_position", None),
         )
         for kind, renderer, module, diagnostic, workdir in profile_modules:
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:

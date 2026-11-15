@@ -71,7 +71,7 @@ def settings(req):
     kind = reference.get("environment", {}).get("kind")
     renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",),
                  "cliport": ("pybullet-direct",), "bigym2": ("egl",),
-                 "eb-navigation": ("vulkan",), "chores": ("vulkan",)}.get(kind, ("osmesa", "egl", "vulkan"))
+                 "eb-navigation": ("vulkan",), "chores": ("vulkan",), "hssd-ov": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -176,9 +176,14 @@ def tasks(req):
                     "higherIsBetter": False}, {"name": "steps", "label": "Control steps", "higherIsBetter": False}]
         metrics.extend({"name": split + "_success", "label": split.replace("_", " ") + " success",
                         "unit": "ratio", "range": [0, 1]} for split in SPLITS)
-    elif kind == "chores":
-        metrics = [{"name": "steps", "label": "Control steps", "higherIsBetter": False},
-                   {"name": "sel", "label": "Success weighted by episode length", "unit": "ratio", "range": [0, 1]}]
+    elif kind in ("chores", "hssd-ov"):
+        metrics = [{"name": "steps", "label": "Control steps", "higherIsBetter": False}]
+        if kind == "chores":
+            metrics.append({"name": "sel", "label": "Success weighted by episode length", "unit": "ratio", "range": [0, 1]})
+        else:
+            metrics.extend([{"name": "distance_to_target", "label": "Final geodesic distance", "unit": "m",
+                             "higherIsBetter": False},
+                            {"name": "spl", "label": "Success weighted by path length", "unit": "ratio", "range": [0, 1]}])
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
             "capabilities": {"embodied": {
@@ -189,7 +194,7 @@ def tasks(req):
                              }, "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"],
                                           "taskTypes": (["navigation", "manipulation"] if kind == "chores" else
-                                                        ["navigation"] if kind == "eb-navigation" else ["manipulation"]),
+                                                        ["navigation"] if kind in ("eb-navigation", "hssd-ov") else ["manipulation"]),
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
@@ -234,7 +239,7 @@ def solve_one(req):
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
                                   "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
-                                  "eb-navigation", "chores"):
+                                  "eb-navigation", "chores", "hssd-ov"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -261,9 +266,9 @@ def solve_one(req):
                "implementationDigest": config["implementationDigest"]}
     (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    memory_gb = {"robocasa-v02": 20, "chores": 16}.get(environment.get("kind"), 8)
+    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16}.get(environment.get("kind"), 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
-    if environment.get("kind") in ("eb-navigation", "chores"):
+    if environment.get("kind") in ("eb-navigation", "chores", "hssd-ov"):
         gpu = trial.get("options", {}).get("gpuId")
         if gpu is not None:
             if not gpu or "," in gpu or resources["gpus"] != 1:
@@ -469,6 +474,11 @@ def score(req):
                        "distance_to_target": result["native"]["distanceToTarget"]}
         elif kind == "chores":
             metrics = {"steps": result["steps"], "sel": result["native"]["successWeightedLength"]}
+        elif kind == "hssd-ov":
+            metrics = {"steps": result["steps"], "spl": result["native"]["spl"]}
+            distance = result["native"]["distanceToTarget"]
+            if distance is not None:
+                metrics["distance_to_target"] = distance
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

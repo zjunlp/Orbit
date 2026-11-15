@@ -469,6 +469,30 @@ it("checks connector requirements when a policy is registered", () => {
   ).toThrow(/torch random-stream declaration and backbone digest/);
   expect(registry.list()).toEqual([]);
   expect(registry.put(native).connector).toBe("policy-ws");
+  const actionConversion = "lightnav-hssd-velocity/1" as const;
+  expect(() => registry.put({ ...base, actionConversion })).toThrow(/requires the policy-ws/);
+  expect(() => registry.put({ ...native, actionConversion })).toThrow(/HSSD-OV discrete action/);
+  const action = {
+    semantic: "discrete_navigation_action_id",
+    shape: [1],
+    order: ["action_id"],
+    controller: "habitat-stretch-25cm-30deg-stop/1",
+    frame: "agent",
+    unit: "index",
+    rotation: "30-deg-yaw",
+    gripper: "none",
+  };
+  const profile = { ...native.profile, action };
+  const lightNav = { ...native, actionConversion, replanSteps: 1, profile };
+  for (const invalid of [
+    { ...lightNav, replanSteps: 4 },
+    { ...lightNav, profile: { ...profile, action: { ...action, shape: [7] } } },
+    { ...lightNav, profile: { ...profile, action: { ...action, controller: "other" } } },
+    { ...lightNav, profile: { ...profile, action: { ...action, frame: "world" } } },
+  ])
+    expect(() => registry.put(invalid)).toThrow(/HSSD-OV discrete action/);
+  expect(registry.put(lightNav).actionConversion).toBe(actionConversion);
+  expect(registry.get(lightNav.name)?.actionConversion).toBe(actionConversion);
   expect(registry.put(base).connector).toBe("openpi-ws");
 });
 

@@ -25,6 +25,7 @@ VIDEOS = {
     "robodojo": ({"cam_head": "video.mp4"}, ROBODOJO_FPS),
     "robolab": ({"front_rgb": "video.mp4"}, None),
     "chores": ({"raw_navigation_camera": "video.mp4", "raw_manipulation_camera": "arm.mp4"}, None),
+    "hssd-ov": ({"rgb": "video.mp4"}, None),
     "eb-navigation": ({"front_rgb": "video.mp4", "overhead_rgb": "overhead.mp4",
                        "navigation_views": EB_NAV_POLICY_VIDEO}, None),
 }

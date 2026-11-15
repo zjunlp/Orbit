@@ -9,7 +9,7 @@ import time
 
 from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.assets import COLOSSEUM_ASSET_ROOT, tree_digest
-from orbit_embodied.binding import reference_horizon
+from orbit_embodied.binding import file_digest, reference_horizon
 from orbit_embodied.cliport import GOOGLE_ASSETS
 from orbit_embodied.evidence import write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
@@ -53,7 +53,8 @@ class LazyPolicy:
             from orbit_embodied.policy_ws import PolicyClient
             self.client = PolicyClient("ws://policy:" + str(self.definition["port"]),
                                        timeout=self.definition["callTimeoutSec"], replan_steps=self.replan_steps,
-                                       action_size=self.definition["profile"]["action"]["shape"][0])
+                                       action_size=self.definition["profile"]["action"]["shape"][0],
+                                       conversion=self.definition.get("actionConversion"))
         else:
             raise ValueError("unsupported policy connector")
         if (self.client.metadata.get("calibration") is True) != (self.definition["kind"] == "calibration"):
@@ -105,6 +106,19 @@ def verify_simulator_assets(requests):
             raise ValueError("mounted simulator manifest differs from the frozen registration")
         verify_asset_files(root, environment["catalog"], (request["sample"]["taskId"] for request in requests),
                            manifest)
+    elif environment.get("kind") == "hssd-ov":
+        assets = environment["assets"]
+        root = Path(assets["target"])
+        manifest = json.loads((root / "orbit-hssd-ov-scenes.json").read_text())
+        if digest(manifest) != assets["digest"]:
+            raise ValueError("mounted simulator manifest differs from the frozen registration")
+        selected = {Path(environment["catalog"][request["sample"]["taskId"]]["scene"]).name
+                    for request in requests}
+        files = set(manifest["shared"]).union(*(manifest["scenes"][name] for name in selected))
+        checksums = {**environment["evaluationFiles"], **{name: manifest["files"][name] for name in files}}
+        for name, checksum in checksums.items():
+            if file_digest(root / name) != checksum:
+                raise ValueError("HSSD-OV mounted asset differs: " + name)
     for root, checksum in expected.items():
         if tree_digest(root) != checksum:
             raise ValueError("mounted simulator asset digest mismatch: " + root)
@@ -209,6 +223,10 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "chores":
         from orbit_embodied.chores import ChoresBenchmark
         benchmark = ChoresBenchmark(reference, sample["taskId"])
+    elif kind == "hssd-ov":
+        from orbit_embodied.hssd_ov import HssdOvBenchmark
+        benchmark = HssdOvBenchmark(reference, sample["taskId"])
+        benchmark.set_evidence_directory(Path(destination))
     elif kind == "eb-navigation":
         from orbit_embodied.eb_navigation import EBNavigationBenchmark
         benchmark = EBNavigationBenchmark(reference, sample["taskId"])
@@ -269,7 +287,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         benchmark = native(suite, name, **options)
     expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
     expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84,
-                            "cliport": 480, "eb-navigation": 500, "chores": 224}.get(kind, 256)
+                            "cliport": 480, "eb-navigation": 500, "chores": 224, "hssd-ov": 360}.get(kind, 256)
     if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):
         expected_render_size = WIDOWX_AREA_SIZE
     policy = LazyPolicy(request["policy"])

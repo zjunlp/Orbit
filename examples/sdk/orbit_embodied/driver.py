@@ -144,7 +144,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     timing = {"sourceObservation": step, "inferSeconds": elapsed}
                     conversion = getattr(policy, "conversion", None)
                     if conversion is not None:
-                        from .openpi import CONVERSIONS
+                        from .conversions import CONVERSIONS
                         # Keep the model's own output so a rescore can audit the native conversion.
                         np.save(chunks / (str(call) + ".raw.npy"), requested, allow_pickle=False)
                         requested = CONVERSIONS[conversion](requested)

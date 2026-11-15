@@ -954,6 +954,11 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   读取相同的双 RGB、指令和抓持状态。CPU 校验核对原生终止条件和 SEL，并按 `sub_done` 动作重建 RoomVisit 已确认房间。
   Web 同步播放双相机视频并显示动作和位姿。
   [评测协议](../examples/bench-adapters/embodied/benchmarks/chores/README.md)
+- **HSSD-OV** 按 StopWatch 协议冻结目标类别、初始位姿、可接受的实例视点和 navmesh 摘要。CPU 校验按轨迹复算
+  Habitat 动作对应的位姿、测地距离、STOP 判定和 SPL。LightNav-0 Policy 将上游速度输出投影到同一套 Habitat 离散动作。
+  场景准备和登记均核对固定的发布资产清单摘要，覆盖原始文件与派生场景。
+  策略登记冻结投影版本并校验单步 HSSD-OV 动作契约，每个动作块封存归一化速度和解码状态，CPU 重评根据原始动作块复算离散动作。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/hssd-ov/README.md)
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
   Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。

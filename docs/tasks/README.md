@@ -156,7 +156,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261114](20261114-libero-mem.md) Native LIBERO-Mem with ordered subgoals
 - [20261114](20261114-eb-navigation.md) Native EB-Navigation and matched SeeNav/Qwen policies
 - [20261114](20261114-eb-navigation-review.md) EB-Navigation policy input video and planner regression
-- [20261114](20261114-vln-chores-hssd.md) Native CHORES with SPOC and FLaRe
+- [20261114](20261114-vln-chores-hssd.md) Native CHORES and HSSD-OV with SPOC, FLaRe and LightNav-0
 - [20261114](20261114-xiaomi-robocasa365.md) Xiaomi-Robotics-1 on native RoboCasa365
 - [20261114](20261114-gigaworld-robocasa365.md) GigaWorld-Policy-0.1 on native RoboCasa365
 

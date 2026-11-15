@@ -88,6 +88,7 @@ export const PolicyDefinition = z.strictObject({
   ioAdapter: z
     .enum(["gr00t-flat", "libero-native", "robocasa-native", "robotwin-native"])
     .optional(),
+  actionConversion: z.literal("lightnav-hssd-velocity/1").optional(),
   replanSteps: z.number().int().positive().optional(),
   backboneDigest: ContentDigest.optional(),
   randomness: z
