@@ -341,10 +341,12 @@ class AdapterPlanningTests(unittest.TestCase):
                 asset = assets / "texture"
                 asset.write_bytes(b"frozen texture")
                 checksum = run.tree_digest(assets)
-                episode = {"reference": {"environment": {"kind": kind, "assets": {
+                reference = {"environment": {"kind": kind, "assets": {
                     "target": str(assets), "digest": checksum,
-                }}}, "implementationDigest": "driver"}
-                payload = episode if operation == "solve" else {"plan": {}, "episodes": [episode, episode]}
+                }}}
+                episode = {"implementationDigest": "driver"}
+                payload = {"reference": reference, "referenceDigest": digest(reference),
+                           **(episode if operation == "solve" else {"plan": {}, "episodes": [episode, episode]})}
                 request = root / "request.json"
                 write_json(request, payload)
                 def prepare_only(request, destination, *, prepare):
@@ -422,11 +424,18 @@ class AdapterPlanningTests(unittest.TestCase):
                     directory = root / "solve/episode"
                     directory.mkdir(parents=True)
                     episode(directory, [state] * 2, action=[0.0] * action_size, horizon=2, initial=state)
-                    write_json(directory / "contract.json", {"horizon": 2, "identity": {}})
+                    identity = {}
                     expected = expectation(kind + "-native.json", "synthetic")
                     expected["sample"]["sampleId"] = "synthetic-sample"
                     expected.update(evidenceVersion=1, solveRunId="synthetic-solve", trialId="synthetic-trial",
-                                    verifierDigest=archive_implementation(staging, root / "probe"))
+                                    verifierDigest=archive_implementation(staging, directory.parent / "implementation"))
+                    if kind == "robolab":
+                        reference = expected.pop("reference")
+                        expected.update(referenceDigest=digest(reference), evidenceVersion=2)
+                        identity.update(referenceDigest=expected["referenceDigest"], implementationArchive=True,
+                                        implementationDigest=expected["verifierDigest"])
+                        write_json(directory.parent / "reference.json", reference)
+                    write_json(directory / "contract.json", {"horizon": 2, "identity": identity})
                     write_json(root / "expected.json", expected)
                     result = {"episodeId": "synthetic-trial.attempt", "valid": valid, "success": False, "issues": []}
                     write_json(directory / "native-result.json", result)
@@ -450,7 +459,13 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertEqual(reply["timeoutMin"], 40)
             self.assertEqual(reply["tags"]["embodied_evidence"], "3")
             payload = json.loads((root / "staging/batch-request.json").read_text())
+            self.assertEqual(payload["reference"], reference)
+            self.assertEqual(payload["referenceDigest"], reply["tags"]["embodied_reference"])
             self.assertEqual([item["sample"]["initialStateId"] for item in payload["episodes"]], ["0", "1"])
+            self.assertTrue(all("reference" not in item and "batch" not in item for item in payload["episodes"]))
+            self.assertFalse((root / "staging/request.json").exists())
+            self.assertFalse((root / "second-staging").exists())
+            request["solve"]["run"]["spec"]["tags"].update(reply["tags"])
             request["trial"] = request["batch"]["trials"][1]
             request["trial"]["id"] = "consolidated-second"
             verify = adapter.verify(request)["spec"]
@@ -458,8 +473,67 @@ class AdapterPlanningTests(unittest.TestCase):
             expected = json.loads((root / "second-staging/verify-request.json").read_text())
             self.assertEqual(expected["executionTrialId"], "synthetic-second")
             self.assertEqual(expected["batch"]["index"], 1)
+            self.assertEqual(expected["referenceDigest"], digest(reference))
+            self.assertNotIn("reference", expected)
             self.assertEqual(verify["resources"]["gpus"], 0)
             self.assertNotIn("services", verify)
+
+    def test_solve_archives_one_reference_and_verifies_each_episode(self):
+        from orbit_embodied.test_core import SyntheticBenchmark, SyntheticPolicy
+
+        for batched in (False, True):
+            with self.subTest(batched=batched), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                request = self.batch_request(root) if batched else self.request(root)
+                config = request["benchmark"]["config"]
+                trials = request["batch"]["trials"] if batched else [request["trial"]]
+                profile = {"id": "synthetic/1", "observations": {
+                    "state": {"semantic": "fixture-state", "dtype": "float64", "shape": [3]},
+                }, "action": json.loads(config["reference"])["benchmarkProfile"]["action"]}
+                reference = {"id": trials[0]["sample"]["benchmarkProfile"], "benchmarkProfile": profile,
+                             "observationMap": {"state": "state"}, "horizons": {"synthetic": 7},
+                             "parameters": {"settleSteps": 0, "replanSteps": 5, "renderSize": 256}}
+                config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+                for trial in trials:
+                    trial["binding"] = resolve_binding(profile, profile, reference["observationMap"])
+                    trial["method"]["policySnapshot"] = {"profile": profile, "connector": "policy-ws"}
+                with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                    solve = adapter.solve(request)["spec"]
+                staging = root / "staging"
+                spec = importlib.util.spec_from_file_location("staged_run", staging / "run.py")
+                run = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(run)
+                request["solve"]["run"]["spec"]["tags"].update(solve["tags"])
+                output = Path(request["solve"]["output"])
+
+                def benchmark(*args, **kwargs):
+                    endpoint = SyntheticBenchmark(success_at=1)
+                    endpoint.settle_steps = 0
+                    return endpoint
+
+                mode, payload = ("batch", "batch-request.json") if batched else ("solve", "request.json")
+                destination = output if batched else output / "episode"
+                with patch("orbit_embodied.libero.LiberoBenchmark", side_effect=benchmark), \
+                        patch.object(run, "LazyPolicy", side_effect=lambda _: SyntheticPolicy()), \
+                        patch.dict("os.environ", {"ORBIT_RUN_ID": "source-run"}):
+                    run.main([mode, str(staging / payload), str(destination)])
+                self.assertEqual(list(output.rglob("reference.json")), [output / "reference.json"])
+                self.assertEqual(json.loads((output / "reference.json").read_text()), reference)
+                for index, trial in enumerate(trials):
+                    request["trial"] = trial
+                    episode = output / adapter.episode_path(request)
+                    identity = json.loads((episode / "contract.json").read_text())["identity"]
+                    self.assertNotIn("reference", identity)
+                    self.assertEqual(identity["referenceDigest"], digest(reference))
+                    adapter.verify(request)
+                    expected = Path(trial["staging"]) / "verify-request.json"
+                    verify = root / f"verify-{index}"
+                    args = ["verify", str(episode), str(verify / "verified.json"), str(expected)]
+                    run.main(args)
+                    self.assertEqual(adapter.score({**request, "verify": {"output": str(verify)}})["score"], 1)
+                write_json(output / "reference.json", {**reference, "other": True})
+                with self.assertRaisesRegex(ValueError, "shared reference digest"):
+                    run.main(args)
 
     def test_diffusion_solve_requires_native_done_evidence_with_or_without_batch(self):
         for batched in (False, True):

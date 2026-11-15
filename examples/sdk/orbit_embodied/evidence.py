@@ -153,7 +153,16 @@ def verify_diffusion_stopping(controls, horizon, replan_steps):
         previous_success = row["nativeSuccess"]
 
 
-def verify_episode(directory, sample_ref, episode_id, expected=None):
+def read_episode_reference(directory, *, batched):
+    directory = Path(directory).resolve()
+    root = directory.parents[1] if batched else directory.parent
+    path = root / "reference.json"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("missing regular frozen reference archive")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def verify_episode(directory, sample_ref, episode_id, expected=None, *, reference=None):
     import numpy as np
 
     directory = Path(directory).resolve()
@@ -173,10 +182,14 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     binding = json.loads((directory / "resolved-binding.json").read_text())
     result = json.loads((directory / "native-result.json").read_text())
     check_sample(contract["sample"], sample_ref)
+    identity = contract["identity"]
+    shared_reference = "referenceDigest" in identity
     if expected is not None:
-        identity = contract["identity"]
+        if shared_reference != ("referenceDigest" in expected):
+            raise ValueError("evidence reference format differs from the frozen solve Run")
+        reference_key = "referenceDigest" if shared_reference else "reference"
         for name, actual in (("sample", contract["sample"]), ("binding", binding),
-                             ("reference", identity.get("reference")), ("policy", identity.get("policy"))):
+                             (reference_key, identity.get(reference_key)), ("policy", identity.get("policy"))):
             if actual != expected[name]:
                 raise ValueError("evidence differs from the frozen " + name)
         if identity.get("implementationDigest") != expected["solveImplementationDigest"]:
@@ -203,7 +216,15 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
             raise ValueError("contract/result identity mismatch")
     if contract["bindingDigest"] != binding["digest"] or digest(contract["sample"]) != contract["sampleDigest"]:
         raise ValueError("contract fingerprint mismatch")
-    reference = contract["identity"].get("reference", {})
+    if shared_reference:
+        if "reference" in identity:
+            raise ValueError("episode has conflicting frozen reference representations")
+        if reference is None:
+            reference = read_episode_reference(directory, batched=bool(identity.get("batch")))
+        if digest(reference) != identity["referenceDigest"]:
+            raise ValueError("shared reference digest differs from the frozen episode")
+    else:
+        reference = identity.get("reference", {})
     if "parameters" in reference:
         sample = contract["sample"]
         horizon = reference_horizon(reference, sample["taskId"], sample=sample)
@@ -214,7 +235,7 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     actions = [json.loads(line) for line in (directory / "actions.jsonl").read_text().splitlines()]
     controls = [row for row in actions if row["phase"] == "control"]
     if result["valid"]:
-        settling = contract["identity"].get("reference", {}).get("parameters", {}).get("settleSteps")
+        settling = reference.get("parameters", {}).get("settleSteps")
         if settling is not None:
             reset_actions = [row for row in actions if row["phase"] == "settle"]
             if len(reset_actions) != settling or [row["step"] for row in reset_actions] != list(range(settling)):
@@ -274,7 +295,7 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         initial = json.loads((directory / "initial-state.json").read_text())
         if initial["sampleRef"] != sample_ref or initial["initialStateId"] != contract["sample"].get("initialStateId") or initial["initialStateDigest"] != contract["sample"].get("initialStateDigest"):
             raise ValueError("initial-state evidence differs from the sample plan")
-    rule = contract["identity"].get("reference", {}).get("parameters", {}).get("successRule", "last")
+    rule = reference.get("parameters", {}).get("successRule", "last")
     if rule not in ("last", "any", "chunk-last-any"):
         raise ValueError("unsupported native success aggregation")
     if rule == "chunk-last-any":

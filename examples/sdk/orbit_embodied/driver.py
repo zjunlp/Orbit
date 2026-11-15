@@ -44,9 +44,10 @@ class StepResult:
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity,
-                *, prepare=None, cancelled=None, deadline=None, seal_before_media=False):
+                *, reference=None, prepare=None, cancelled=None, deadline=None, seal_before_media=False):
     check_sample(sample, sample["sampleId"])
-    reference = identity.get("reference", {})
+    if reference is None:
+        reference = identity.get("reference", {})
     first_replan = reference.get("parameters", {}).get("firstReplanSteps", policy.replan_steps)
     if type(first_replan) is not int or not 0 < first_replan <= policy.replan_steps:
         raise ValueError("initial replan interval must fit the policy chunk")

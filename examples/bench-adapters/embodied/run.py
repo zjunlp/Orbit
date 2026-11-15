@@ -11,7 +11,7 @@ from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.assets import COLOSSEUM_ASSET_ROOT, tree_digest
 from orbit_embodied.binding import file_digest, reference_horizon
 from orbit_embodied.cliport import GOOGLE_ASSETS
-from orbit_embodied.evidence import write_json
+from orbit_embodied.evidence import read_episode_reference, write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
 from orbit_embodied.libero_plus import NATIVE_ROOT as LIBERO_PLUS_ROOT
 from orbit_embodied.libero_suites import HORIZONS
@@ -146,9 +146,11 @@ def main(argv):
             if plan != expected["batch"]["plan"]:
                 raise ValueError("saved batch plan differs from frozen membership")
         result = json.loads((Path(directory) / "native-result.json").read_text())
+        reference = (read_episode_reference(directory, batched=bool(expected.get("batch")))
+                     if "referenceDigest" in expected else expected["reference"])
         reading_seconds = time.monotonic() - started
-        write_json(destination, verify_episode(directory, sample_ref, result["episodeId"], expected))
-        environment = expected["reference"].get("environment", {})
+        write_json(destination, verify_episode(directory, sample_ref, result["episodeId"], expected, reference=reference))
+        environment = reference.get("environment", {})
         stopping = {}
         if environment.get("protocol") == "diffusion-policy":
             stopping["diffusionStoppingVerified"] = result["valid"] and expected["evidenceVersion"] == 4
@@ -159,7 +161,7 @@ def main(argv):
                    "timing": {"readAndArchiveSeconds": reading_seconds,
                               "verifySeconds": time.monotonic() - started - reading_seconds,
                               "totalSeconds": time.monotonic() - started}})
-        kind = expected["reference"].get("environment", {}).get("kind")
+        kind = environment.get("kind")
         if kind is None and expected["sample"]["taskId"].partition(":")[0] in HORIZONS:
             kind = "libero"
         if kind in ("libero-plus", "libero-mem"):
@@ -168,26 +170,37 @@ def main(argv):
             # The review index is optional: a kind without one, or a failure to build it, leaves the verdict alone.
             try:
                 from orbit_embodied.episode_trajectory import write_trajectory
-                write_trajectory(directory, Path(destination).with_name("orbit-trajectory.json"), result, expected,
-                                 kind=kind)
+                write_trajectory(directory, Path(destination).with_name("orbit-trajectory.json"), result,
+                                 {**expected, "reference": reference}, kind=kind)
             except (ImportError, OSError, ValueError, KeyError, TypeError) as exc:
                 print("Native trajectory unavailable: " + str(exc), file=sys.stderr)
         return
     request = json.loads(Path(argv[1]).read_text())
     root = Path(argv[2]) if argv[0] == "batch" else Path(argv[2]).parent
+    reference = request["reference"]
+    reference_digest = request["referenceDigest"]
+    if digest(reference) != reference_digest:
+        raise ValueError("solve reference differs from its frozen digest")
     measured = archive_implementation(Path(__file__).parent, root / "implementation")
     if argv[0] == "batch":
         from orbit_embodied.batch import run_batch
         if any(item["implementationDigest"] != measured for item in request["episodes"]):
             raise ValueError("batch implementation changed after planning")
+        plan = request["plan"]
+        episodes = [{**episode, "reference": reference, "referenceDigest": reference_digest,
+                     "batch": {"plan": plan, "index": index}}
+                    for index, episode in enumerate(request["episodes"])]
+        write_json(root / "reference.json", reference, compact=True)
+
         @lru_cache(maxsize=1)
         def prepare():
-            verify_simulator_assets(request["episodes"])
+            verify_simulator_assets(episodes)
 
-        run_batch(request["plan"], request["episodes"], root, partial(execute_episode, prepare=prepare))
+        run_batch(plan, episodes, root, partial(execute_episode, prepare=prepare))
         return
     if measured != request["implementationDigest"]:
         raise ValueError("driver implementation changed after planning")
+    write_json(root / "reference.json", reference, compact=True)
     execute_episode(request, argv[2], prepare=lambda: verify_simulator_assets([request]))
 
 
@@ -300,11 +313,11 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
             or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],
-                {"reference": request["reference"], "policy": request["policy"],
+                {"referenceDigest": request["referenceDigest"], "policy": request["policy"],
                  "execution": {"runId": os.environ["ORBIT_RUN_ID"], "trialId": request["trialId"]},
                  "implementationDigest": request["implementationDigest"], "implementationArchive": True,
                  **({"batch": request["batch"]} if request.get("batch") else {})},
-                prepare=prepare, cancelled=cancelled,
+                reference=reference, prepare=prepare, cancelled=cancelled,
                 deadline=time.monotonic() + 60 * request.get("timeoutMin", 20) if cancelled is not None else None,
                 seal_before_media=cancelled is not None)
 

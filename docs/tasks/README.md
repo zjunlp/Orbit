@@ -158,6 +158,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261114](20261114-eb-navigation-review.md) EB-Navigation policy input video and planner regression
 - [20261114](20261114-vln-chores-hssd.md) Native CHORES and HSSD-OV with SPOC, FLaRe and LightNav-0
 - [20261115](20261115-embodied-evidence-coverage.md) Native embodied verification and official score coverage
+- [20261115](20261115-embodied-shared-reference.md) Shared frozen reference in native embodied Solve evidence
 - [20261114](20261114-xiaomi-robocasa365.md) Xiaomi-Robotics-1 on native RoboCasa365
 - [20261114](20261114-gigaworld-robocasa365.md) GigaWorld-Policy-0.1 on native RoboCasa365
 

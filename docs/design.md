@@ -939,6 +939,9 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
+- **冻结目录归档**：固定批量的 Solve 请求只保存一份冻结 reference 与一份批次计划，模拟器和 SDK 共用同一次准备。
+  每个 Solve Run 在输出根目录归档一份 `reference.json`。episode contract 和 CPU Verify 请求只保存该 reference 的摘要，
+  CPU 重评从只读 Solve 输出加载目录，并核对登记、Run 和 contract 的摘要。旧 Run 继续从 episode 内嵌 reference 重评。
 - **随机性**：模型可声明服务级随机流。OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务
   可以登记发布配方的初始种子，例如 GigaWorld 的 42。批次按冻结顺序推进服务的随机流，样本中的 `policySeed` 保持为 0。
 - **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
