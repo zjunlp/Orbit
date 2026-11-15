@@ -100,6 +100,18 @@ class ChoresProtocolTests(unittest.TestCase):
             truncated[0].update(terminated=True, nativeDone=True)
             with self.assertRaisesRegex(ValueError, "native rule"):
                 verify_chores(reference, sample, initial, truncated, result)
+            for name in ACTIONS[8:]:
+                with self.subTest(manipulation=name):
+                    manipulated = copy.deepcopy(controls)
+                    action = [ACTIONS.index(name)]
+                    manipulated[0].update(action=action, nativeAction=action)
+                    for step in manipulated:
+                        step["state"]["navigation_pose"] = [0.02, -0.01, 0.8, 27.4]
+                    verify_chores(reference, sample, initial, manipulated, result)
+                    for step in manipulated:
+                        step["state"]["navigation_pose"] = [100.0, 100.0, 0.0, 27.4]
+                    with self.assertRaisesRegex(ValueError, "base pose transition"):
+                        verify_chores(reference, sample, initial, manipulated, result)
             controls[-1]["state"]["goalEvidence"]["visibleTargets"] = ["plate"]
             log.write_text("".join(json.dumps(line) + "\n" for line in controls))
             seal(directory, result)
@@ -134,6 +146,10 @@ class ChoresProtocolTests(unittest.TestCase):
                     step("sub_done", rooms[1]), step("end", rooms[1])]
         result = {"native": {"success": True, "successWeightedLength": 1.0}}
         verify_chores(reference, sample, initial, controls, result)
+        impossible = copy.deepcopy(controls)
+        impossible[-1]["state"]["navigation_pose"] = [100., 100., 0., 0.]
+        with self.assertRaisesRegex(ValueError, "base pose transition"):
+            verify_chores(reference, sample, initial, impossible, result)
         for invalid in ([controls[-1]], [*controls[:3], controls[-1]]):
             # A repeated confirmation of the same room does not confirm another room.
             with self.assertRaisesRegex(ValueError, "confirmations differ"):

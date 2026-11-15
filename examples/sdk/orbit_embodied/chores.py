@@ -288,9 +288,11 @@ def verify_chores(reference, sample, initial, controls, result):
     if initial["instruction"] != row["natural_language_spec"] or initial["goalEvidence"] is not None:
         raise ValueError("CHORES initial evidence has an unexpected instruction or goal reading")
     limit = horizon(row["task_type"])
+    previous = pose
     for index, step in enumerate(controls, 1):
         action = action_index(step["action"])
-        stopped = ACTIONS[action] == "end"
+        name = ACTIONS[action]
+        stopped = name == "end"
         evidence = step["state"]["goalEvidence"]
         done = stopped or index == limit
         if stopped != (evidence is not None):
@@ -303,9 +305,32 @@ def verify_chores(reference, sample, initial, controls, result):
                 or step["terminated"] is not done or step["nativeDone"] is not done
                 or done != (index == len(controls))):
             raise ValueError("CHORES action, stopping or goal evidence differs from the native rule")
+        verify_base_transition(previous, pose, name)
+        previous = pose
     if row["task_type"] == "SimpleExploreHouse":
         verify_room_visit(environment, row, initial, controls)
     native = result["native"]
     if (native["success"] is not success
             or native["successWeightedLength"] != success_weighted_length(row, success, len(controls))):
         raise ValueError("CHORES result differs from the verified trace")
+
+
+def verify_base_transition(previous, pose, action):
+    dx, dz, yaw, pitch = (after - before for before, after in zip(previous, pose))
+    yaw, pitch = (yaw + 180) % 360 - 180, (pitch + 180) % 360 - 180
+    distance = math.hypot(dx, dz)
+    tolerance = 1e-3
+    # Stretch can stop partway through a motion and drift slightly under physics.
+    if action in ("m", "b"):
+        plausible = distance <= 0.23 and abs(yaw) <= 2 and abs(pitch) <= tolerance
+    elif action in ("r", "l", "rs", "ls"):
+        signed_yaw = yaw if action in ("r", "rs") else -yaw
+        plausible = (distance <= tolerance and abs(pitch) <= tolerance
+                     and -2 <= signed_yaw <= (8 if action in ("rs", "ls") else 32))
+    elif action in ("end", "sub_done"):
+        plausible = max(distance, abs(yaw), abs(pitch)) <= tolerance
+    else:
+        # Manipulation does not command the base. Releasing an object also advances physics.
+        plausible = distance <= 0.05 and abs(yaw) <= 2 and abs(pitch) <= tolerance
+    if not plausible:
+        raise ValueError("CHORES base pose transition differs from the recorded action")
