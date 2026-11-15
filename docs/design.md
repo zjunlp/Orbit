@@ -934,6 +934,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   有效样本；Web 对比把后端未配对的任务列为 “No paired result”。新旧作业不直接归并，归并逐样本核对冻结预算。
 - **SDK 与证据**：Benchmark adapter、PolicyClient、connector、driver、证据写入分离；SDK 核心只依赖标准库与 NumPy。原生判定与
   Orbit 有效性分开，可选媒体失败不改变分数。证据原子封存，含 contract、binding、初态、逐步动作、请求的动作块、源码包摘要；
+  CPU 验证使用 Solve 的动作块形状、最小长度和数值规则，逐步核对消费顺序及重规划边界。
+  固定步长评测按冻结间隔重规划。CALVIN 可在原生子任务完成时提前重规划，验证器复核完成信号和子任务进度。
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。

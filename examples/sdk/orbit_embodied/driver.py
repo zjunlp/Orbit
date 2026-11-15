@@ -11,7 +11,7 @@ from typing import Optional
 import numpy as np
 
 from .binding import check_sample, digest, validate_observation
-from .evidence import seal, write_json
+from .evidence import seal, validate_action_chunk, write_json
 
 
 class EpisodeFailure(RuntimeError):
@@ -152,8 +152,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     np.save(chunks / (str(call) + ".npy"), requested, allow_pickle=False)
                     write_json(chunks / (str(call) + ".json"), timing)
                     required = first_replan if call == 0 else policy.replan_steps
-                    if requested.ndim != 2 or requested.shape[1] != benchmark.action_size or len(requested) < required or not np.isfinite(requested).all():
-                        raise ValueError("policy action chunk has invalid shape, length or non-finite values")
+                    validate_action_chunk(requested, benchmark.action_size, required)
                     chunk, chunk_index = requested[:required], 0
                 action = chunk[chunk_index]
                 check_control()
@@ -169,6 +168,8 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     row["nativeAction"] = native.native_action
                 if native.native_done is not None:
                     row["nativeDone"] = native.native_done
+                if native.replan:
+                    row["replan"] = True
                 log.write(json.dumps(row, allow_nan=False) + "\n")
                 log.flush()
                 result["steps"] = step + 1

@@ -12,6 +12,12 @@ import numpy as np
 from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed, robodojo_layout
 
 
+def validate_action_chunk(chunk, width, required):
+    if (chunk.dtype.kind not in "buif" or chunk.ndim != 2 or chunk.shape[1] != width
+            or len(chunk) < required or not np.isfinite(chunk).all()):
+        raise ValueError("policy action chunk has invalid shape, length or non-finite values")
+
+
 def write_json(path, value, *, compact=False):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -215,31 +221,42 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if type(first_replan) is not int or not 0 < first_replan <= contract["replanSteps"]:
         raise ValueError("invalid initial replan interval in episode evidence")
     frozen_conversion = contract["identity"].get("policy", {}).get("actionConversion")
+    calvin = reference.get("environment", {}).get("kind") == "calvin"
+    width, = binding["benchmarkProfile"]["action"]["shape"]
+    chunk_id, index, limit = 0, 0, first_replan
     for row in controls:
-        chunk_path = "chunks/" + str(row["chunk"]) + ".npy"
-        timing_path = "chunks/" + str(row["chunk"]) + ".json"
-        if chunk_path not in manifest["files"] or timing_path not in manifest["files"]:
-            raise ValueError("requested action chunk is missing")
-        chunk = np.load(directory / chunk_path, allow_pickle=False)
-        timing = json.loads((directory / timing_path).read_text())
-        if frozen_conversion is not None and timing.get("conversion") != frozen_conversion:
-            raise ValueError("action conversion differs from the frozen policy")
-        if "conversion" in timing:
-            from .conversions import CONVERSIONS
-            raw_path = "chunks/" + str(row["chunk"]) + ".raw.npy"
-            if timing["conversion"] not in CONVERSIONS or raw_path not in manifest["files"]:
-                raise ValueError("converted action chunk lacks its raw model output")
-            raw = np.load(directory / raw_path, allow_pickle=False)
-            if not np.array_equal(CONVERSIONS[timing["conversion"]](raw), chunk):
-                raise ValueError("native actions differ from the recorded conversion of the model output")
-        index = row["chunkIndex"]
-        limit = first_replan if row["chunk"] == 0 else contract["replanSteps"]
-        if not isinstance(index, int) or not 0 <= index < min(len(chunk), limit):
-            raise ValueError("executed action has an invalid chunk index")
-        if not np.array_equal(np.asarray(row["action"]), chunk[index]) or not np.isfinite(chunk).all():
+        if (type(row["chunk"]) is not int or type(row["chunkIndex"]) is not int
+                or row["chunk"] != chunk_id or row["chunkIndex"] != index):
+            raise ValueError("executed action has an invalid chunk sequence")
+        if index == 0:
+            prefix = "chunks/" + str(chunk_id)
+            chunk_path, timing_path = prefix + ".npy", prefix + ".json"
+            if chunk_path not in manifest["files"] or timing_path not in manifest["files"]:
+                raise ValueError("requested action chunk is missing")
+            chunk = np.load(directory / chunk_path, allow_pickle=False)
+            validate_action_chunk(chunk, width, limit)
+            timing = json.loads((directory / timing_path).read_text())
+            if frozen_conversion is not None and timing.get("conversion") != frozen_conversion:
+                raise ValueError("action conversion differs from the frozen policy")
+            if "conversion" in timing:
+                from .conversions import CONVERSIONS
+                raw_path = prefix + ".raw.npy"
+                if timing["conversion"] not in CONVERSIONS or raw_path not in manifest["files"]:
+                    raise ValueError("converted action chunk lacks its raw model output")
+                raw = np.load(directory / raw_path, allow_pickle=False)
+                if not np.array_equal(CONVERSIONS[timing["conversion"]](raw), chunk):
+                    raise ValueError("native actions differ from the recorded conversion of the model output")
+        if not np.array_equal(np.asarray(row["action"]), chunk[index]):
             raise ValueError("executed action differs from the requested action")
         if row["sourceObservation"] != timing["sourceObservation"] or row["sourceObservation"] + index != row["step"]:
             raise ValueError("action is linked to the wrong observation")
+        # Only CALVIN can replan early. Its sequence verifier checks the completion signal.
+        replan = calvin and row["reward"] == 1
+        if row.get("replan", replan) is not replan:
+            raise ValueError("invalid action chunk replan evidence")
+        index += 1
+        if replan or index == limit:
+            chunk_id, index, limit = chunk_id + 1, 0, contract["replanSteps"]
     if not isinstance(result["success"], bool) or not isinstance(result["valid"], bool):
         raise ValueError("invalid native verdict")
     if result["valid"] and (result.get("failure") or not controls or result["steps"] > contract["horizon"]):
@@ -336,6 +353,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if (result["valid"] and contract.get("version") == 3
             and reference.get("environment", {}).get("protocol") == "diffusion-policy"):
         verify_diffusion_stopping(controls, contract["horizon"], contract["replanSteps"])
+    if any(row["terminated"] for row in controls[:-1]):
+        raise ValueError("control steps follow a terminal step")
     # A valid failure ends at the horizon or at a native termination (e.g. Gym truncation).
     if (result["valid"] and not result["success"] and result["steps"] != contract["horizon"]
             and not controls[-1]["terminated"]):
