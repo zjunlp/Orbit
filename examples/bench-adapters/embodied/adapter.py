@@ -71,7 +71,7 @@ def settings(req):
     kind = reference.get("environment", {}).get("kind")
     renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",),
                  "cliport": ("pybullet-direct",), "bigym2": ("egl",),
-                 "eb-navigation": ("vulkan",)}.get(kind, ("osmesa", "egl", "vulkan"))
+                 "eb-navigation": ("vulkan",), "chores": ("vulkan",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -176,6 +176,9 @@ def tasks(req):
                     "higherIsBetter": False}, {"name": "steps", "label": "Control steps", "higherIsBetter": False}]
         metrics.extend({"name": split + "_success", "label": split.replace("_", " ") + " success",
                         "unit": "ratio", "range": [0, 1]} for split in SPLITS)
+    elif kind == "chores":
+        metrics = [{"name": "steps", "label": "Control steps", "higherIsBetter": False},
+                   {"name": "sel", "label": "Success weighted by episode length", "unit": "ratio", "range": [0, 1]}]
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
             "capabilities": {"embodied": {
@@ -185,7 +188,8 @@ def tasks(req):
                                  **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
                              }, "methods": ["policy"],
                              "taxonomy": {"domains": ["robotics"],
-                                          "taskTypes": ["navigation" if kind == "eb-navigation" else "manipulation"],
+                                          "taskTypes": (["navigation", "manipulation"] if kind == "chores" else
+                                                        ["navigation"] if kind == "eb-navigation" else ["manipulation"]),
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
@@ -230,7 +234,7 @@ def solve_one(req):
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
                                   "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
-                                  "eb-navigation"):
+                                  "eb-navigation", "chores"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -257,13 +261,13 @@ def solve_one(req):
                "implementationDigest": config["implementationDigest"]}
     (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    memory_gb = 20 if environment.get("kind") == "robocasa-v02" else 8
+    memory_gb = {"robocasa-v02": 20, "chores": 16}.get(environment.get("kind"), 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
-    if environment.get("kind") == "eb-navigation":
+    if environment.get("kind") in ("eb-navigation", "chores"):
         gpu = trial.get("options", {}).get("gpuId")
         if gpu is not None:
             if not gpu or "," in gpu or resources["gpus"] != 1:
-                raise ValueError("EB-Navigation gpuId must name a single GPU")
+                raise ValueError("gpuId must name a single GPU for the native navigation runtime")
             resources["gpuIds"] = [gpu]
     if "simGpuMemGB" in config:
         memory = float(config["simGpuMemGB"])
@@ -286,7 +290,8 @@ def solve_one(req):
                                 if gl_platform not in ("xvfb-glx", "pybullet-direct")
                                 and environment.get("kind") != "eb-navigation" else {})},
                      "resources": resources,
-                     **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") in ("robotwin", "robodojo") else {}),
+                     **({"workdir": str(Path(assets["target"]).parent)} if libero_kind in ("robotwin", "robodojo") else {}),
+                     **({"workdir": "image"} if libero_kind == "chores" else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
                      "tags": {"embodied_evidence": "4" if environment.get("protocol") == "diffusion-policy" else "2"},
                      "mounts": mounts}}
@@ -462,6 +467,8 @@ def score(req):
             split = environment["taskTags"][task]["split"]
             metrics = {split + "_success": success, "steps": result["steps"],
                        "distance_to_target": result["native"]["distanceToTarget"]}
+        elif kind == "chores":
+            metrics = {"steps": result["steps"], "sel": result["native"]["successWeightedLength"]}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

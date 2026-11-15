@@ -1,0 +1,31 @@
+{
+  "catalog": {
+    "chores-large/FetchType.jsonl.gz": "sha256:4de2a9759cbb6a38fd1b95a9bd587ac12178b93f49bb767ad9a422f1cec53b8c",
+    "chores-large/ObjectNavAffordance.jsonl.gz": "sha256:0929e7a6447362baa3f8ae957cc29fbbc23261e35596d94fe50dec213fe7f97a",
+    "chores-large/ObjectNavLocalRef.jsonl.gz": "sha256:8b269fb1cf09a03c7e28d365d740a0ed38540304e00e39e7b21f1c7ec84783f4",
+    "chores-large/ObjectNavOpenVocab.jsonl.gz": "sha256:46493d0efcae01b260881f8d3a80c1e9581cc4cbaa2f22b34c16652eca2e3814",
+    "chores-large/ObjectNavRelAttribute.jsonl.gz": "sha256:373d15e051a956b78990393f1bbfbec71a09f2cefe248f6f23e701a54b15bcad",
+    "chores-large/ObjectNavRoom.jsonl.gz": "sha256:cbf387c0c19bb6d57092772f4ddb5838f73ca119107fca05f710f5c060100434",
+    "chores-large/ObjectNavType.jsonl.gz": "sha256:a6b569746263964279ecd562eb9fb11e1ca761680099310ec540867b10a56e20",
+    "chores-large/PickupType.jsonl.gz": "sha256:4c23773e3a851ca774b40e49cfd533c5d2f4e34cf5374862e2edcf2e21489e81",
+    "chores-large/RoomNav.jsonl.gz": "sha256:ad01ea691d613588348a02aa9e021552edf624057a7afc3d084efa18644ee956",
+    "chores-large/SimpleExploreHouse.jsonl.gz": "sha256:6dceac69331d41d7006a9b1defb110690746b59c78364e95386ca135612c7539",
+    "chores-small/FetchType.jsonl.gz": "sha256:29011cf96fc83dea23ce8e58afaeffe3e959030bdb43a8af0bea35f5fc25e835",
+    "chores-small/ObjectNavAffordance.jsonl.gz": "sha256:fc29aa34726b6a421c1e91c29e4a674b5bb1214df47f4706b2266f2236c6e6b7",
+    "chores-small/ObjectNavLocalRef.jsonl.gz": "sha256:dc74e06fad2996cdefce7821ac01f5c19cb07a754aa3ab2d785d90486942ddfb",
+    "chores-small/ObjectNavOpenVocab.jsonl.gz": "sha256:827e3d045519810ca0f24afca73367f773e25c0a95a2e9d6a46d5905c2b81e01",
+    "chores-small/ObjectNavRelAttribute.jsonl.gz": "sha256:f09cc933a93a6e018b60c91164706e597425ff01a059497dc5691acdb28d2a0c",
+    "chores-small/ObjectNavRoom.jsonl.gz": "sha256:d1850261348c91c05b2d91d3ad0ca673ec1af877de84532bbc7584d0efbdd261",
+    "chores-small/ObjectNavType.jsonl.gz": "sha256:862908337810f52289500f2b538bd544d8d0be451d627a1c474023efc1ade5d6",
+    "chores-small/PickupType.jsonl.gz": "sha256:eef904cf76b1afeb7c06055afd6c88175151173dccef665a72fba2c6ff4ed3f3",
+    "chores-small/RoomNav.jsonl.gz": "sha256:826768aed77f66bfbdcf8132a4682d74fe58c5ff979fea18f9bb62c33bd27d26",
+    "chores-small/SimpleExploreHouse.jsonl.gz": "sha256:5b594cb947a0b932915014176fd9e67dd7cf7ef4d720d982165221f74627163f"
+  },
+  "assets": {
+    "assets.tar": "sha256:ffef4ea8fa59f7a6482d3b86e98da3313290fb096372750a4b927242135a6266",
+    "val.jsonl.gz": "sha256:8555f4d97ae0d25a7c3503d0d7f423048910467b4d88e5c78e906ac36fb5746e",
+    "annotations.json.gz": "sha256:1e4611dfc798288f4e0d926b086606341b414118d21380f23b855bf90dec6b54"
+  },
+  "thor": "sha256:626a71b9348e6b909416856c6d4dcea8f58394a731fe70d48f50a34b00a24cc3",
+  "assetArchiveBytes": 27998209024
+}

@@ -950,6 +950,10 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   SeeNav 和原版 Qwen2.5-VL 在相同的标注双视角、动作反馈及提示词下运行。CPU 验证根据冻结目标和逐步位置复核距离与停止判定，
   Web 复用现有时间轴，同步播放原始第一视角、俯视和送入模型的标注双视角视频。
   [评测协议](../examples/bench-adapters/embodied/benchmarks/eb-navigation/README.md)
+- **CHORES-S / CHORES-L** 共用原生 Stretch 仿真和 20 个离散动作，按任务冻结初态、目标和步数上限。SPOC 和 FLaRe
+  读取相同的双 RGB、指令和抓持状态。CPU 校验核对原生终止条件和 SEL，并按 `sub_done` 动作重建 RoomVisit 已确认房间。
+  Web 同步播放双相机视频并显示动作和位姿。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/chores/README.md)
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
   Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。

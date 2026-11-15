@@ -95,6 +95,16 @@ def verify_simulator_assets(requests):
             raise ValueError("missing frozen simulator asset identity for " + root)
         if expected.setdefault(root, assets["digest"]) != assets["digest"]:
             raise ValueError("conflicting simulator asset digests in solve batch")
+    environment = requests[0]["reference"].get("environment", {})
+    if environment.get("kind") == "chores":
+        from orbit_embodied.chores import read_asset_manifest, verify_asset_files
+        assets = environment["assets"]
+        root = Path(assets["target"])
+        manifest = read_asset_manifest(root)
+        if digest(manifest) != assets["digest"]:
+            raise ValueError("mounted simulator manifest differs from the frozen registration")
+        verify_asset_files(root, environment["catalog"], (request["sample"]["taskId"] for request in requests),
+                           manifest)
     for root, checksum in expected.items():
         if tree_digest(root) != checksum:
             raise ValueError("mounted simulator asset digest mismatch: " + root)
@@ -196,6 +206,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "cliport":
         from orbit_embodied.cliport import CLIPortBenchmark
         benchmark = CLIPortBenchmark(reference, sample)
+    elif kind == "chores":
+        from orbit_embodied.chores import ChoresBenchmark
+        benchmark = ChoresBenchmark(reference, sample["taskId"])
     elif kind == "eb-navigation":
         from orbit_embodied.eb_navigation import EBNavigationBenchmark
         benchmark = EBNavigationBenchmark(reference, sample["taskId"])
@@ -256,7 +269,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         benchmark = native(suite, name, **options)
     expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
     expected_render_size = {"vlabench": 480, "robocasa-v02": 128, "rlbench": 128, "bigym2": 84,
-                            "cliport": 480, "eb-navigation": 500}.get(kind, 256)
+                            "cliport": 480, "eb-navigation": 500, "chores": 224}.get(kind, 256)
     if kind == "registered-gym" and reference["environment"].get("widowxAreaResize"):
         expected_render_size = WIDOWX_AREA_SIZE
     policy = LazyPolicy(request["policy"])

@@ -2,10 +2,13 @@
 
 import importlib.util
 import copy
+import gzip
+import io
 import json
 from itertools import product
 from pathlib import Path
 import shutil
+import tarfile
 import tempfile
 import subprocess
 import sys
@@ -17,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "examples/sdk"))
 
 from orbit_embodied import digest, resolve_binding  # noqa: E402
+from orbit_embodied.assets import tree_digest  # noqa: E402
 from orbit_embodied.binding import (  # noqa: E402
     check_distinct_resets,
     reference_horizon,
@@ -34,6 +38,99 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_default_libero_reference_passes_simulator_asset_preflight(self):
+        spec = importlib.util.spec_from_file_location("native_embodied_run", ADAPTER.with_name("run.py"))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        request = {"reference": json.loads(ADAPTER.with_name("reference.json").read_text())}
+        self.assertNotIn("environment", request["reference"])
+        runner.verify_simulator_assets([request])
+        runner.verify_simulator_assets([request, request])
+
+    def test_chores_preparation_and_registration_require_the_published_archive(self):
+        path = ADAPTER.parent / "benchmarks/chores/configure_chores.py"
+        spec = importlib.util.spec_from_file_location("configure_chores_fixture", path)
+        config = importlib.util.module_from_spec(spec)
+        with patch.object(sys, "path", sys.path.copy()):
+            spec.loader.exec_module(config)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "assets.tar"
+            prepared = root / "prepared"
+            catalog = {"ObjectNavType:000": {"house_index": 0, "task_type": "ObjectNavType",
+                                            "natural_language_spec": "Find the cube."}}
+            for name, value in (("val.jsonl.gz", {"objects": [{"assetId": "cube"}]}),
+                                ("annotations.json.gz", {"cube": {}})):
+                with gzip.open(root / name, "wt", encoding="utf-8") as stream:
+                    stream.write(json.dumps(value) + "\n")
+            for name in ("online_evaluation/max_episode_configs.py", "tasks/multi_task_eval_sampler.py"):
+                file = root / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("# fixture\n")
+
+            def write_archive(texture):
+                with tarfile.open(archive, "w") as tar:
+                    for name, content in (("cube.json", b"{}"), ("albedo.jpg", texture)):
+                        member = tarfile.TarInfo(f"processed_2023_07_28/cube/{name}")
+                        member.size = len(content)
+                        tar.addfile(member, io.BytesIO(content))
+
+            write_archive(b"original")
+            release = {"catalog": {}, "thor": "fixture", "assetArchiveBytes": archive.stat().st_size,
+                       "assets": {name: adapter.file_digest(root / name)
+                                  for name in ("assets.tar", "val.jsonl.gz", "annotations.json.gz")}}
+            with patch.object(config, "read_catalog", return_value=catalog):
+                config.prepare(root, prepared, release)
+                manifest_path = prepared / "manifest.json"
+                manifest = json.loads(manifest_path.read_text())
+                self.assertEqual(manifest["inputs"], release["assets"])
+                config.reference(root, root, prepared, "chores-small", release)
+
+                write_archive(b"modified")
+                self.assertEqual(archive.stat().st_size, release["assetArchiveBytes"])
+                with self.assertRaisesRegex(ValueError, "release file differs: assets.tar"):
+                    config.prepare(root, root / "rejected", release)
+                self.assertFalse((root / "rejected").exists())
+                manifest["inputs"]["assets.tar"] = adapter.file_digest(archive)
+                write_json(manifest_path, manifest)
+                with self.assertRaisesRegex(ValueError, "asset bundle was prepared from different releases"):
+                    config.reference(root, root, prepared, "chores-small", release)
+
+    def test_chores_preflight_checks_prepared_object_files_for_selected_houses(self):
+        spec = importlib.util.spec_from_file_location("native_embodied_run", ADAPTER.with_name("run.py"))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            chair, bowl = (root / "assets" / uid for uid in ("chair", "bowl"))
+            chair.mkdir(parents=True)
+            bowl.mkdir()
+            (chair / "chair.pkl.gz").write_bytes(b"mesh and collider")
+            texture = chair / "albedo.jpg"
+            texture.write_bytes(b"published texture")
+            bowl_model = bowl / "bowl.pkl.gz"
+            bowl_model.write_bytes(b"published bowl")
+            manifest = {"version": 2,
+                        "houses": {"7": {"assetIds": ["chair", "native"]},
+                                   "8": {"assetIds": ["chair", "bowl"]}},
+                        "objectDigests": {"chair": tree_digest(chair), "bowl": tree_digest(bowl), "native": None}}
+            write_json(root / "manifest.json", manifest)
+            reference = {"environment": {"kind": "chores", "assets": {"target": str(root), "digest": digest(manifest)},
+                                         "catalog": {"task-a": {"house_index": 7}, "task-b": {"house_index": 8}}}}
+            first, second = [{"reference": reference, "sample": {"taskId": task}} for task in ("task-a", "task-b")]
+            with patch("orbit_embodied.chores.tree_digest", wraps=tree_digest) as measured:
+                runner.verify_simulator_assets([first, second, first])
+                self.assertCountEqual([call.args[0] for call in measured.call_args_list], [chair, bowl])
+            texture.write_bytes(b"changed texture")
+            with self.assertRaisesRegex(ValueError, "mounted object asset differs: chair"):
+                runner.verify_simulator_assets([first])
+            texture.write_bytes(b"published texture")
+            bowl_model.unlink()
+            bowl.rmdir()
+            runner.verify_simulator_assets([first])
+            with self.assertRaisesRegex(ValueError, "mounted object asset differs: bowl"):
+                runner.verify_simulator_assets([first, second])
+
     def test_policy_build_exports_the_pinned_source_and_labels_the_image(self):
         with patch.object(sys, "path", [str(ADAPTER.parent), *sys.path]):
             import native_runtime
@@ -384,6 +481,51 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertEqual(verifier["resources"]["gpus"], 0)
             self.assertNotIn("services", verifier)
             self.assertFalse(verifier["network"])
+
+    def test_navigation_solve_pins_one_gpu_and_verify_uses_cpu(self):
+        profile_modules = (
+            ("chores", "vulkan", "chores", "navigation_pose", "image"),
+        )
+        for kind, renderer, module, diagnostic, workdir in profile_modules:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                benchmark = __import__("orbit_embodied." + module, fromlist=["semantic_profile"])
+                profile = benchmark.semantic_profile()
+                observations = {name: field for name, field in profile["observations"].items() if name != diagnostic}
+                policy_profile = {**profile, "observations": observations}
+                mapping = {name: name for name in observations}
+                root = Path(temporary)
+                request = self.request(root)
+                trial = request["trial"]
+                task = trial["sample"]["taskId"]
+                asset = trial["sample"]["initialStateDigest"]
+                reference = {
+                    "id": kind + "/1", "benchmarkProfile": profile, "observationMap": mapping,
+                    "parameters": {"settleSteps": 0, "replanSteps": 1},
+                    "environment": {"kind": kind, "tasks": [task], "initialStateCounts": {task: 1},
+                                    "initialStateDigests": {task: asset}, "horizon": 500, "environmentSeed": 7,
+                                    "assets": {"dataset": kind, "target": "/" + kind, "digest": asset}},
+                }
+                sample = {key: value for key, value in trial["sample"].items() if key != "sampleId"}
+                sample["benchmarkProfile"] = reference["id"]
+                sample["sampleId"] = digest(sample)
+                trial.update(options={"gpuId": "GPU-explicit"}, sample=sample, sampleRef=sample["sampleId"],
+                             binding=resolve_binding(profile, policy_profile, mapping))
+                trial["method"]["policySnapshot"]["profile"] = policy_profile
+                request["solve"]["run"]["spec"]["params"]["sampleRef"] = sample["sampleId"]
+                config = request["benchmark"]["config"]
+                config.update(reference=json.dumps(reference), profileDigest=digest(reference), renderer=renderer,
+                              simGpus="1")
+                with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                    solve = adapter.solve(request)["spec"]
+                    self.assertEqual(solve["resources"]["gpuIds"], ["GPU-explicit"])
+                    self.assertEqual(solve.get("workdir"), workdir)
+                    self.assertEqual(solve["mounts"][-1]["dataset"], kind)
+                    trial["options"]["gpuId"] = "two,devices"
+                    with self.assertRaisesRegex(ValueError, "a single GPU"):
+                        adapter.solve(request)
+                verify = adapter.verify(request)["spec"]
+                self.assertEqual(verify["resources"]["gpus"], 0)
+                self.assertFalse(any("dataset" in mount for mount in verify["mounts"]))
 
     def test_fixed_native_catalog_keeps_seed_and_state_index_independent(self):
         asset = "sha256:" + "b" * 64
