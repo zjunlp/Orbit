@@ -9,7 +9,7 @@ import {
   type TaskPartition,
 } from "../contracts/index.ts";
 
-function readBounded(file: string, limit: number): Buffer {
+export function readBounded(file: string, limit: number): Buffer {
   const fd = openSync(file, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);

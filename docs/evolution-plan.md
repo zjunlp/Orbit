@@ -1,6 +1,6 @@
 # Orbit 进化主线实施方案
 
-更新 2026-11-12。本文是**实施计划**，用于逐项对照实现：统一轨迹、轨迹导出、复盘与分叉、进化门、参考进化器与跨环境实验。
+更新 2026-11-15。本文是**实施计划**，用于逐项对照实现：统一轨迹、轨迹导出、复盘与分叉、进化门、参考进化器与跨环境实验。
 架构与契约仍以 [design.md](design.md) 为准；每个工作包落地时，把最终设计写进 design.md 对应小节，并在本文勾选。
 调研依据见 [research/trajectory/01-formats-export-fork.md](research/trajectory/01-formats-export-fork.md)。
 
@@ -36,10 +36,10 @@
 | F4 | 分叉结果的独立验收（反事实研究用） | F3 | 中 | [ ] |
 | E1 | 任务集划分与冻结 | — | 小 | [x] |
 | E2 | 判定核心（纯函数与统计） | E1 | 中 | [x] |
-| E3 | 策略文件、`orbit bench gate`、判定记录 | E2、T3 | 中 | [ ] |
+| E3 | 策略文件、`orbit bench gate`、判定记录 | E2、T3 | 中 | [x] |
 | E4 | 分级流程助手与静态检查 | E3 | 小 | [ ] |
 | E5 | Web：版本链上的判定与证据 | E3 | 中 | [ ] |
-| E6 | 进化门校准 | E3 | 中 | [ ] |
+| E6 | 进化门校准 | E3 | 中 | [x] 有界开发校准 |
 | V0 | 试点：选族、测成本与翻转率 | T3、E1 | 中 | [ ] |
 | V1 | 参考进化器 skill | X1、E3 | 中 | [ ] |
 | V2 | 基线进化方法 | V1 | 中 | [ ] |
@@ -380,7 +380,7 @@ orbit trajectory export --run <id> --format chat-jsonl --reasoning none --out /p
 
 ### E3 策略文件、CLI 与判定记录
 
-分支 `feat/bench-gate`。
+已实现于 `feat/run-trajectory`（[使用指南](guides/bench-gate.md)、[任务记录](tasks/20261115-bench-gate.md)）。
 
 策略文件（YAML，仓库已有 `yaml` 依赖）：
 
@@ -402,11 +402,11 @@ final:
 cost: { max_wall_ratio: 1.5, max_token_ratio: 1.5 }
 ```
 
-- [ ] `orbit bench gate --policy gate.yaml --parent <rev> --child <rev> [--json]`；退出码区分三种判定。
-- [ ] `POST /bench/gates`（计算并保存）、`GET /bench/gates?child=<rev>`。判定记录不可变，内含策略全文与摘要、所用报告修订；
+- [x] `orbit bench gate --policy gate.yaml --parent <rev> --child <rev> [--json]`；退出码区分三种判定。
+- [x] `POST /bench/gates`（计算并保存）、`GET /bench/gates?child=<rev>`。判定记录不可变，内含策略全文与摘要、所用报告修订；
       与报告修订同样存为文档，不是状态机。数据变化后重新判定产生新记录，旧记录保留。
-- [ ] 成本检查读取 T3 的 token；缺失时该项为"未检查"，不当作通过。
-- [ ] 真实检查：对两组已有的真实作业跑通一次完整判定。
+- [x] 成本检查读取 T3 的 token；缺失时该项为"未检查"，不当作通过。
+- [x] 真实检查：对两组已有的真实作业跑通一次完整判定。
 
 ### E4 分级流程助手与静态检查
 
@@ -421,13 +421,13 @@ cost: { max_wall_ratio: 1.5, max_token_ratio: 1.5 }
 
 ### E6 校准
 
-- [ ] A/A：同一 bundle 当作父与子，各自独立运行；判定不应为接受。真实跑一次，另用已有逐任务结果做重抽样估计接受率。
-- [ ] 破坏性：故意损坏的 bundle（例如指示 Agent 直接放弃）必须被拒绝。
-- [ ] 过期父结果：更换 CLI 版本后用旧的父结果，必须得到"需要重跑父版本"。
-- [ ] 泄漏：`informedBy` 引用了准入集任务时，该任务被剔除并在证据里列出。
-- [ ] 校准记录只写结论与方法，不写个人实验分数。
+- [x] A/A：同一 bundle 当作父与子，各自独立运行；判定不应为接受。显式 calibration-aa 模式，已在开发任务上真实独立运行并对逐任务结果重抽样；无波动时标记退化，不推断真实 benchmark 噪声。
+- [x] 破坏性：故意损坏的 bundle（例如指示 Agent 直接放弃）必须被拒绝。
+- [x] 过期父结果：受控 API 夹具更换 CLI 版本元数据后用旧父结果，得到"需要重跑父版本"。
+- [x] 泄漏：受控 API 夹具中 `informedBy` 引用准入集任务时，该任务被剔除并在证据里列出。
+- [x] 校准记录只写结论与方法，不写个人实验分数。
 
-### 7.3 对 design 的修改（随 E3 提交）
+### 7.3 对 design 的修改（E3 已落地）
 
 - §9.16 的"不做：独立 Method 系统或方法进化声明"改为"不做独立 Method 系统；对配置版本给出准入判定（进化门）"，并新增一小节写入本章定稿。
 - §1 删去"进化门仍在设计中"的说明；§5 增加 `/bench/gates`。

@@ -13,8 +13,8 @@ Orbit 是让验收有据可依的实验室，位于做决策的 Agent 与负责�
 标题中的 Evolve 需要证据证明进化是真的，Any Environment 是证明的方式：
 跨多类 benchmark 与多种 Agent 是进化门的前提，只在诞生地测过的改进不算验证。
 
-前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期、API/CLI、环境对齐与训练数据导出；进化门已有任务集冻结和纯判定核心（§7），CLI 与判定存储仍待 E3 接入，
-当前产品的配置版本/血缘（§9.16）仍不作方法进化声明。
+前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期、API/CLI、环境对齐与训练数据导出；进化门已有任务集冻结、纯判定核心、CLI/API 与不可变判定记录（§7），并完成有界开发校准；
+对配置版本给出准入判定，跨 benchmark 的进化效果仍需真实实验验证。
 统一轨迹、导出、分叉、进化门与进化实验的分步计划见 [evolution-plan.md](evolution-plan.md)；它是计划而不是设计，
 各工作包落地时把定稿写回本文；§9.8 已采用 ATIF，Run 生成、存储、重建与读取已实现。
 具身设备后端是未来方向。规划、分析与迭代仍由 Agent 主导，Orbit 不提出改动，只提供执行、证据与判定依据。
@@ -390,6 +390,8 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 - **Settings**：容器内 Agent 版本、auth profile（掩码、测试、删除）、通知目标（发测试、删除）、浏览器通知开关。
   Web 不录入密钥：添加 profile / 目标只走 CLI。
 
+> 进化判定接口：`POST /bench/gates`，`GET /bench/gates?child=REV&limit=N`，`GET /bench/gates/:id`；契约和不可变证据规则见 §7。
+
 ## 6. 认证（auth）、Agent 注册表与通知
 
 **Agent 定义**（`contracts.AgentDefinition`）：Orbit 能驱动的每个 Agent 都是一份声明，见 `harness/definitions.ts`
@@ -542,7 +544,7 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   新作业持久化 `BenchJob.taskSet`，沿用原 Hub 的有序去重 ID 规范 JSON SHA-256 前 12 位；文件提交还保存 taskFile 的完整文件哈希和可选清单，不保存内容或客户端路径。
   Hub 优先读已保存摘要；旧作业缺省回退既有计算且不在读取时重写。文件作业禁止归并追加任务；普通作业追加时更新摘要，无任务变动的旧作业保持原样。
   任务文件 8 MiB、清单 1 MiB、至多 100000 个任务；普通文件有界读取。输出必须不存在、父目录存在且位于 Orbit home/data 之外，私有临时目录验证后发布，文件 0600、目录 0700。
-  详细使用见 [任务集指南](guides/task-sets.md)。准入判定核心见下文 E2，CLI 与存储由 E3 接入。
+  详细使用见 [任务集指南](guides/task-sets.md)。准入判定与记录见下文 E2/E3。
 - **进化判定纯核心（E2）**：`contracts/gate.ts` 定义 GatePolicy/GateEvidence/GateVerdict，`bench/gate.ts` 接收父/子配置修订、规范策略和显式证据；不读文件、store、Run 当前值或时钟，不提交任务。
   证据是作业冻结元数据、不可变报告修订、任务文件内容快照及每个集合的显式父/子报告引用；调用方提供完整相关历史，不自动选最优作业或报告。
   校验 E1 文件 SHA/taskSet、配置 basis 摘要、报告 plan/metric/aggregator/样本矩阵、版本与执行条件；仅接受已知且除 bundle 外一致的基础项，dirty/approximate 为证据不足。
@@ -552,7 +554,16 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   α_k = α·6/(π²k²)，按同一准入文件哈希和根血缘下已形成报告的不同子版本首次提交顺序计轮，含兄弟候选；根父版本与重评分/补建报告不重复计轮，不增账本。
   新报告方法内的可选 costs 保存所有 solve Run（含先前失败重试）的任务归属/完整性、执行墙钟与 token，批次 Run 去重，缺失 Run 保留 null；复制 token 值，不改旧报告。
   仅在终态且 cleanup done、起止时间有效时记录执行墙钟，不含排队/清理等待；token 用 input+output，缓存/reasoning 不重加、不估价。成本缺项、未知归属或共享 Run 跨被剔除任务时 not_checked，不当通过。
-  结果包含 accept/reject/insufficient、in-domain/cross-domain/transferable、checks、退步任务、轮次/α、策略摘要、报告引用和剔除清单。CLI/API/保存判定属于 E3；真实校准属于 E6。详见 [核心说明](guides/gate-core.md)。
+  结果包含 accept/reject/insufficient、in-domain/cross-domain/transferable、checks、退步任务、轮次/α、策略摘要、报告引用和剔除清单。CLI/API/保存判定见下文 E3；校准见 E6。详见 [核心说明](guides/gate-core.md)。
+- **进化判定入口与记录（E3）**：`orbit bench gate --policy FILE --parent REV --child REV [--reports FILE] [--json]`，以及 `gate list/show`。
+  CLI 有界读取 YAML（1 MiB）与相对路径任务文件（每个 8 MiB、合计 32 MiB），daemon 验证策略/哈希并从已有作业、报告与旧判定快照解析完整相关血缘及候选历史；不重建报告、不读当前 Run 成本、不提交任务。
+  `POST /bench/gates` 计算并保存；`GET /bench/gates?child=REV&limit=N` 返回最多 500 条摘要；`GET /bench/gates/:id` 返回完整记录。client 与 Web 共用契约；版本链 UI 属于 E5。
+  每侧只有一份匹配报告时可自动选择；重评分或多个作业必须给出显式 `{set,parent:{job,revision,method},child:{…}}`，不取最新或最高分。缺证据为 insufficient，文件损坏或引用歧义为请求错误。
+  既有 SQLite 增加 `bench_gates` 文档表；只追加、不覆盖。记录包含 evaluator 版本、用途、规范策略全文、全部输入证据和 verdict。源作业删除/归并后仍可复算，旧记录保存的已评测候选继续计入预算；从未被记录捕获就被删除的历史无法恢复。
+  命令退出码 0/2/3 分别为 accept/reject/insufficient，输入或 API 错误为 1。策略由用户预先约定，保存摘要本身不证明它早于结果冻结。
+- **进化门开发校准（E6）**：显式 `--calibration-aa` 对相同配置修订、不同 job/trial/solve-attempt 的独立运行执行相同统计；只允许准入集、使用首轮 alpha，记录用途为 calibration-aa，无晋级等级、不产生新的子版本轮次。
+  `examples/gate-calibration` 提供有界算术开发任务，真实 CLI 求解、离线容器独立评分；正常/破坏性 bundle 的证据和用量不伪造。`scripts/gate-calibration.ts` 复算不可变记录，并对任务级配对差做中心化 bootstrap；无波动时明确标记退化分布。
+  过期 CLI 条件、泄漏闭包由受控 API 测试验证；小任务校准不证明实际 benchmark 的功效或自适应重复使用的误差控制。[使用指南](guides/bench-gate.md)。
 - **重新评分**（`POST /bench/jobs/:id/rescore`，`orbit bench rescore <job> [-t task] [-m method] [--trial id]`，
   Web job 页与 trial 页的 Rescore）：不重跑 Agent。只对已结束 job 中已完成、solve 输出仍在本机且需要 verify 的
   trial；当前 `{verifyRunId, outcome, endedAt}` 移入 `Trial.history`，trial 回到 `solving`（solve Run 不变），
@@ -1515,7 +1526,7 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   用户或 Agent 可根据失败证据修复环境后重试，或调整评测配置并比较可比结果；页面不将这些变化称为方法进化。
 
 **不做**：跨 benchmark 总分或总榜；单一 Ready 徽章合并安装、凭据、能力、校准与有效性；按 hub 声称的套件数宣传接入量；
-独立 Method 系统或方法进化声明；Web 内的科研编排。
+独立 Method 系统；Web 内的科研编排。对配置版本给出准入判定与证据（§7），不把更换模型或预算自动称为方法进化。
 
 ### 9.17 Benchmark 六维分类 v1（2026-11-09）
 

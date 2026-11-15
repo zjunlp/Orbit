@@ -4,6 +4,7 @@ import {
   type BenchReport,
   type GateCheck,
   type GateEvidence,
+  type GateMode,
   GatePolicy,
   type GatePolicyInput,
   type GateReportRef,
@@ -30,7 +31,7 @@ const identity = (j: BenchJob) =>
   j.benchmarkSnapshot?.labels?.identity ??
   j.capabilities?.identity ??
   j.taskFile?.frozen?.manifest.benchmark.identity;
-const benchmark = (j: BenchJob) => identity(j)?.id ?? j.spec.benchmark;
+export const gateBenchmark = (j: BenchJob) => identity(j)?.id ?? j.spec.benchmark;
 const setDigest = (ids: Iterable<string>) => contentDigest([...new Set(ids)].sort()).slice(7, 19);
 const key = (job: string, revision: number) => JSON.stringify([job, revision]);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -41,7 +42,9 @@ export function gate(
   child: string,
   input: GatePolicyInput,
   evidence: GateEvidence,
+  mode: GateMode = "promotion",
 ): GateVerdict {
+  const repeat = mode === "calibration-aa";
   if (![parent, child].every((r) => /^[a-f0-9]{12}$/.test(r)))
     throw new Error("configuration revisions must be 12 hex digits");
   const policy = GatePolicy.parse(input);
@@ -108,7 +111,9 @@ export function gate(
     return ancestor ? visit(ancestor, new Set([...stack, revision])) : revision;
   };
   const root = visit(child);
-  if (parent === child || !nodes.get(child)?.parents.has(parent))
+  if (repeat && (parent !== child || policy.guard.length || policy.final.length))
+    notes.add("A/A calibration requires the same revision and only a gate dataset");
+  if (!repeat && (parent === child || !nodes.get(child)?.parents.has(parent)))
     notes.add("child must name the requested parent in its lineage");
   const learned: { benchmark: string; task: string; trial: string; revision: string }[] = [];
   const trialTasks = new Map<string, { benchmark: string; task: string }>();
@@ -120,7 +125,7 @@ export function gate(
     }
     for (const m of r.methods)
       for (const e of m.entries) {
-        const value = { benchmark: benchmark(j), task: e.task };
+        const value = { benchmark: gateBenchmark(j), task: e.task };
         const old = trialTasks.get(e.trial);
         if (old && contentDigest(old) !== contentDigest(value))
           notes.add(`conflicting task reference: ${e.trial}`);
@@ -141,7 +146,10 @@ export function gate(
   };
   const assessed = new Map<string, { time: number; job: string }>();
   for (const j of evidence.jobs) {
-    if (benchmark(j) !== policy.gate.benchmark || j.taskFile?.sha256 !== policy.gate.tasks.sha256)
+    if (
+      gateBenchmark(j) !== policy.gate.benchmark ||
+      j.taskFile?.sha256 !== policy.gate.tasks.sha256
+    )
       continue;
     for (const [method, revision] of Object.entries(j.revisions))
       for (const r of evidence.reports) {
@@ -177,7 +185,7 @@ export function gate(
     )
     .sort((a, b) => a[1].time - b[1].time || compare(a[1].job, b[1].job))
     .map(([revision]) => revision);
-  const round = priorChildren.length + 1;
+  const round = repeat ? 1 : priorChildren.length + 1;
   const alpha = alphaAt(round, policy.alpha);
   add(
     "global",
@@ -232,7 +240,9 @@ export function gate(
       Boolean(
         /^[a-f0-9]{64}$/.test(a.basis.bundleDigest ?? "") &&
           /^[a-f0-9]{64}$/.test(b.basis.bundleDigest ?? "") &&
-          a.basis.bundleDigest !== b.basis.bundleDigest &&
+          (repeat
+            ? a.basis.bundleDigest === b.basis.bundleDigest
+            : a.basis.bundleDigest !== b.basis.bundleDigest) &&
           a.basis.cliVersion &&
           a.basis.cliVersion !== "unknown" &&
           b.basis.cliVersion &&
@@ -408,7 +418,7 @@ export function gate(
     }
     const taskOK = [a.job, b.job].every(
       (j) =>
-        benchmark(j) === dataset.benchmark &&
+        gateBenchmark(j) === dataset.benchmark &&
         j.taskFile?.sha256 === dataset.tasks.sha256 &&
         j.taskSet === setDigest(ids) &&
         setDigest(j.spec.tasks) === setDigest(ids) &&
@@ -423,21 +433,32 @@ export function gate(
         : "benchmark or submitted task-set digest differs from policy",
       required,
     );
-    const reportsOK = [a, b].every(
-      (x) =>
-        x.report.planDigest === planDigest(x.job) &&
-        contentDigest(x.report.official) === contentDigest(x.job.official ?? null) &&
-        x.report.metric === policy.metric &&
-        x.report.aggregator === (x.job.spec.samplePlan ? "orbit-report/2" : REPORT_AGGREGATOR) &&
-        matrix(x.job, x.method),
-    );
+    const independent =
+      !repeat ||
+      (a.job.id !== b.job.id &&
+        !(a.method.costs ?? []).some((x) => (b.method.costs ?? []).some((y) => x.run === y.run)) &&
+        !a.method.entries.some((x) =>
+          b.method.entries.some(
+            (y) => x.trial === y.trial || (x.solveRunId && x.solveRunId === y.solveRunId),
+          ),
+        ));
+    const reportsOK =
+      independent &&
+      [a, b].every(
+        (x) =>
+          x.report.planDigest === planDigest(x.job) &&
+          contentDigest(x.report.official) === contentDigest(x.job.official ?? null) &&
+          x.report.metric === policy.metric &&
+          x.report.aggregator === (x.job.spec.samplePlan ? "orbit-report/2" : REPORT_AGGREGATOR) &&
+          matrix(x.job, x.method),
+      );
     add(
       set,
       "reports",
       reportsOK ? "pass" : "insufficient",
       reportsOK
         ? "selected report revisions cover their planned samples"
-        : "report plan, metric, aggregator or sample matrix is incompatible",
+        : "report plan, metric, aggregator or sample matrix is incompatible, or A/A runs are not independent",
       required,
     );
     const revisionsOK = agent
@@ -469,7 +490,9 @@ export function gate(
       "conditions",
       conditionsOK ? "pass" : "insufficient",
       conditionsOK
-        ? "only the configuration bundle differs"
+        ? repeat
+          ? "identical configuration evaluated in independent jobs"
+          : "only the configuration bundle differs"
         : "parent results are stale or incomplete; rerun the parent with matching Agent, model, CLI and benchmark conditions",
       required,
     );
@@ -564,7 +587,13 @@ export function gate(
       `one-sided paired t bounds; margin ${margin}; McNemar is diagnostic only`,
       required,
       false,
-      { diff, lower, upper, limit: -margin, ...(exact ? { mcnemar: exact } : {}) },
+      {
+        diff,
+        lower,
+        upper,
+        limit: margin === 0 ? 0 : -margin,
+        ...(exact ? { mcnemar: exact } : {}),
+      },
     );
     const threshold =
       policy.pass_value ?? (metric.higherIsBetter ? metric.range?.[1] : metric.range?.[0]);
@@ -641,7 +670,7 @@ export function gate(
   return GateVerdict.parse({
     decision,
     level:
-      decision === "accept"
+      decision === "accept" && !repeat
         ? transferred
           ? "transferable"
           : policy.guard.length

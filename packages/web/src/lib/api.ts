@@ -31,6 +31,9 @@ import type {
   EnvironmentKind,
   FolderMoveResult,
   FolderStat,
+  GateRecord,
+  GateRecordSummary,
+  GateSubmissionInput,
   Ledger,
   LogChunk,
   MethodList,
@@ -223,6 +226,13 @@ export const api = {
   benchJob: (id: string) => req<BenchJobDetail>(`/bench/jobs/${enc(id)}`),
   benchReports: (id: string) =>
     req<{ reports: BenchReport[] }>(`/bench/jobs/${enc(id)}/reports`).then((r) => r.reports),
+  benchGate: (body: GateSubmissionInput) =>
+    req<GateRecord>("/bench/gates", { method: "POST", body: JSON.stringify(body) }),
+  benchGates: (child?: string) =>
+    req<{ records: GateRecordSummary[] }>(
+      `/bench/gates${child ? `?child=${enc(child)}` : ""}`,
+    ).then((r) => r.records),
+  benchGateRecord: (id: string) => req<GateRecord>(`/bench/gates/${enc(id)}`),
   benchCancel: (id: string) => req<BenchJob>(`/bench/jobs/${enc(id)}/cancel`, { method: "POST" }),
   /** Pass the preview digest as `expect` when applying. */
   benchConsolidate: (id: string, body: BenchConsolidateInput) =>

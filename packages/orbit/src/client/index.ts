@@ -48,6 +48,9 @@ import {
   FolderExportResult,
   FolderList,
   FolderMoveResult,
+  GateList,
+  GateRecord,
+  type GateSubmissionInput,
   Health,
   Ledger,
   LogChunk,
@@ -304,6 +307,13 @@ export class OrbitClient {
     this.call(z.object({ reports: z.array(BenchReport) }), `/bench/jobs/${enc(id)}/reports`).then(
       (r) => r.reports,
     );
+  benchGate = (body: GateSubmissionInput) =>
+    this.call(GateRecord, "/bench/gates", { method: "POST", body });
+  benchGates = (child?: string) =>
+    this.call(GateList, `/bench/gates${child ? `?child=${enc(child)}` : ""}`).then(
+      (r) => r.records,
+    );
+  benchGateRecord = (id: string) => this.call(GateRecord, `/bench/gates/${enc(id)}`);
   benchCancel = (id: string) =>
     this.call(BenchJob, `/bench/jobs/${enc(id)}/cancel`, { method: "POST" });
   benchCompare = (ids: string[]) =>

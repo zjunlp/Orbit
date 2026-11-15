@@ -7,6 +7,8 @@ import {
   type BenchReport,
   BenchReport as BenchReportSchema,
   type FolderStat,
+  GateRecord,
+  type GateRecordSummary,
   Lease,
   type MethodSummary,
   Run,
@@ -112,6 +114,13 @@ const MIGRATIONS = [
    WHERE json_extract(doc, '$.spec.calibration') IS NOT NULL
      AND json_extract(doc, '$.capabilities.category')
        IN ('embodied-policy', 'fixed-input', 'user-session', 'game');`,
+  `CREATE TABLE bench_gates (
+     id TEXT PRIMARY KEY,
+     child TEXT NOT NULL,
+     created_at TEXT NOT NULL,
+     doc TEXT NOT NULL
+   );
+   CREATE INDEX bench_gates_child ON bench_gates(child, created_at, id);`,
 ];
 
 /** Mirroring progress of a run placed on another node (primary only). */
@@ -591,6 +600,37 @@ export class Store {
     this.db
       .prepare("INSERT INTO bench_reports (job_id, revision, doc) VALUES (?, ?, ?)")
       .run(r.jobId, r.revision, JSON.stringify(r));
+  }
+
+  /** Immutable verdict documents include evidence, so deleting a source job cannot rewrite history. */
+  addGate(record: GateRecord): void {
+    const value = GateRecord.parse(record);
+    this.db
+      .prepare("INSERT INTO bench_gates (id, child, created_at, doc) VALUES (?, ?, ?, ?)")
+      .run(value.id, value.verdict.inputs.child, value.createdAt, JSON.stringify(value));
+  }
+
+  getGate(id: string): GateRecord | null {
+    const row = this.db.prepare("SELECT doc FROM bench_gates WHERE id = ?").get(id) as
+      | { doc: string }
+      | undefined;
+    return row ? GateRecord.parse(JSON.parse(row.doc)) : null;
+  }
+
+  gateRecords(): GateRecord[] {
+    return (
+      this.db.prepare("SELECT doc FROM bench_gates ORDER BY created_at, id").all() as {
+        doc: string;
+      }[]
+    ).map((row) => GateRecord.parse(JSON.parse(row.doc)));
+  }
+
+  listGates(child?: string, limit = 100): GateRecordSummary[] {
+    const rows = this.db
+      .prepare(`SELECT json_remove(doc, '$.evidence') AS doc FROM bench_gates
+      WHERE (? IS NULL OR child = ?) ORDER BY created_at DESC, id DESC LIMIT ?`)
+      .all(child ?? null, child ?? null, limit) as { doc: string }[];
+    return rows.map((row) => JSON.parse(row.doc) as GateRecordSummary);
   }
 
   /** Atomically replace a finished job's trial records and remove consumed source jobs. */

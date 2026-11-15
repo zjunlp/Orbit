@@ -199,6 +199,7 @@ function legacyDatabase(file: string, job: BenchJob, trial: Trial) {
   initial.close();
   const legacy = new DatabaseSync(file);
   legacy.exec(`PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;
+    DROP TABLE bench_gates;
     DROP TABLE trial_runs;
     CREATE TABLE trial_runs (run_id TEXT PRIMARY KEY, trial_id TEXT NOT NULL);
     CREATE INDEX trial_runs_trial ON trial_runs(trial_id);
@@ -222,6 +223,7 @@ it("backs up committed WAL before migrating and restores legacy jobs, trials and
   const migrated = new Store(file);
   stores.push(migrated);
   legacy.close();
+  expect(migrated.listGates()).toEqual([]);
   expect(migrated.getJob(changed.id)).toEqual(changed);
   expect(migrated.getTrial(trial.id)).toEqual(trial);
   expect(migrated.trialsByRun("old-verify", "verify")).toEqual([trial]);

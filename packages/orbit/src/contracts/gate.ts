@@ -124,3 +124,40 @@ export const GateVerdict = z.strictObject({
   }),
 });
 export type GateVerdict = z.infer<typeof GateVerdict>;
+
+export const GateMode = z.enum(["promotion", "calibration-aa"]);
+export type GateMode = z.infer<typeof GateMode>;
+export const GateSubmission = z
+  .strictObject({
+    parent: Revision,
+    child: Revision,
+    mode: GateMode.default("promotion"),
+    policy: GatePolicy,
+    taskSets: GateEvidence.shape.taskSets.max(32),
+    selections: GateEvidence.shape.selections.max(64).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.mode === "calibration-aa" &&
+      (value.parent !== value.child || value.policy.guard.length || value.policy.final.length)
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "A/A calibration requires the same revision and only a gate dataset",
+      });
+  });
+export type GateSubmission = z.infer<typeof GateSubmission>;
+export type GateSubmissionInput = z.input<typeof GateSubmission>;
+export const GateRecord = z.strictObject({
+  id: z.string().min(1),
+  createdAt: z.string().datetime(),
+  evaluator: z.literal("orbit-gate/1"),
+  mode: GateMode,
+  policy: GatePolicy,
+  evidence: GateEvidence,
+  verdict: GateVerdict,
+});
+export type GateRecord = z.infer<typeof GateRecord>;
+export const GateRecordSummary = GateRecord.omit({ evidence: true });
+export type GateRecordSummary = z.infer<typeof GateRecordSummary>;
+export const GateList = z.strictObject({ records: z.array(GateRecordSummary) });

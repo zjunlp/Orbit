@@ -29,6 +29,7 @@ import type { Print } from "./auth.ts";
 import { calibrate } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
 import { formatTokens, formatTokenUsage, compactTable as table } from "./format.ts";
+import { registerGate } from "./gate.ts";
 import { kv, numericOption } from "./options.ts";
 import { readTaskFile } from "./task-file.ts";
 
@@ -375,6 +376,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .command("bench")
     .description("benchmarks: planned samples or task × method × seed as solve + verify runs");
 
+  registerGate(bench, client, print);
   bench
     .command("add-file <file>")
     .description("register a benchmark from a JSON definition")

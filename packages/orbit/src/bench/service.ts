@@ -81,6 +81,7 @@ export { compareJobs, summarize } from "./summary.ts";
 
 import { assignSolveBatches } from "./batches.ts";
 import { CalibrationLifecycle } from "./calibration.ts";
+import { evaluateGate } from "./gates.ts";
 import { PolicyRegistry } from "./policies.ts";
 import { AdapterClient } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
@@ -954,6 +955,22 @@ export class BenchService {
       this.deps.log?.(`bench job ${jobId}: report: ${(e as Error).message}`);
       return null;
     }
+  }
+
+  gate(input: unknown) {
+    return evaluateGate(this.deps.store, input);
+  }
+
+  gates(child?: string, limit = 100) {
+    if (child !== undefined && !/^[a-f0-9]{12}$/.test(child))
+      throw new UserError("child must be a 12-digit configuration revision");
+    return { records: this.deps.store.listGates(child, Math.min(limit, 500)) };
+  }
+
+  gateRecord(id: string) {
+    const record = this.deps.store.getGate(id);
+    if (!record) throw new NotFoundError(`gate record not found: ${id}`);
+    return record;
   }
 
   /**
