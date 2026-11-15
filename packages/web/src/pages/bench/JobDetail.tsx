@@ -1,4 +1,4 @@
-import { resolveMetrics } from "@zjunlp/orbit/metrics";
+import { formatOfficialCoverage, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CiBars, useMetric } from "../../components/BenchMetrics.tsx";
 import { IconCompare } from "../../components/icons.tsx";
@@ -301,8 +301,8 @@ function Reports({ id, version }: { id: string; version: number }) {
                         (m.missing ? `, ${m.missing} missing` : "") +
                         `, tokens: ${formatTokenUsage(m.tokenUsage)}` +
                         (m.orbit ? `, Orbit ${m.orbit.mean.toFixed(2)}` : "") +
-                        (m.official?.value != null
-                          ? `, official ${m.official.value.toFixed(2)}`
+                        (m.official
+                          ? `, official ${m.official.value?.toFixed(2) ?? "—"} (${formatOfficialCoverage(m.official, m.planned)})`
                           : ""),
                     )
                     .join(" · ")}

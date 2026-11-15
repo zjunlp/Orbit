@@ -1151,7 +1151,9 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
   官方聚合在 **job × method** 层计算，不对 native summary 再求平均（两批 1/1 与 1/9 的批次均值 55.6%，episode 成功率 20%）。
 - **已实现（P2）**：`Outcome.failure`（封闭枚举，classify 与 adapter 填写）与 `Outcome.episode`；adapter 声明的 `OfficialRule`
   （`errors: exclude|fail`、`unit: sample|task`、`failValue`、`metric`）在提交时存入 `BenchJob.official`，`MethodSummary.official`
-  给出官方值、样本数、missing 与 partial；`bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
+  给出按官方规则计算的值，以及本次计划数、计分数、缺失数、排除数；计划中有样本未计入即标 `partial`。
+  计划覆盖率以本次 job 为范围，完整上游套件分数仍须满足上游的样本范围要求。
+  `bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
   在 job 结束、取消、重新评分或归并后、且结果与上一修订不同时写入，旧 job 首次读取时补一份 `backfill`；计划 digest 由
   benchmark、tasks、seeds、methods、options 计算。API `GET /bench/jobs/:id/reports`，CLI `orbit bench report`，Web job 页 Reports。
   原生具身评测已支持固定共享 solve 批次及逐 episode 尝试定位；通用 attempt/retry 的显式计数与自动重试规则仍后置。

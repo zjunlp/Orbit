@@ -880,8 +880,13 @@ export const OfficialValue = z.object({
   value: z.number().nullable(),
   /** Samples in the denominator under the rule. */
   samples: z.number().int(),
-  /** Planned samples not finished (pending, cancelled or lost): the value is then partial. */
+  /** The method's full sample plan. Absent from earlier immutable reports. */
+  planned: z.number().int().nonnegative().optional(),
+  /** Invalid samples excluded by the rule and valid samples without the metric. */
+  excluded: z.number().int().nonnegative().optional(),
+  /** Planned samples that are pending, cancelled or lost. */
   missing: z.number().int(),
+  /** At least one planned sample did not contribute to the score. */
   partial: z.boolean(),
 });
 export type OfficialValue = z.infer<typeof OfficialValue>;
