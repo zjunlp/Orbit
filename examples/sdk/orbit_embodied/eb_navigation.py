@@ -176,20 +176,57 @@ def verify_navigation(reference, sample, initial, controls, result):
     if (abs((position[2] - start["rotation"] + 180) % 360 - 180) > 1e-3
             or abs((position[3] - start["horizon"] + 180) % 360 - 180) > 1e-3):
         raise ValueError("EB-Navigation evidence has an unexpected start orientation")
+    previous = position
+    if initial.get("actionSucceeded") is not True or initial.get("feedback") != "":
+        raise ValueError("invalid EB-Navigation reset feedback")
     for step in controls:
         state = step["state"]
         pose = state["navigation_pose"]
         if len(pose) != 4 or not all(math.isfinite(value) for value in pose):
             raise ValueError("invalid native navigation pose")
+        index = action_id(step["action"])
+        verify_navigation_transition(previous, pose, index, state)
         distance = distance_to_target(pose, row["target_position"])
         success = distance <= 1
         done = success or step["step"] + 1 == HORIZON
-        if (state["instruction"] != row["instruction"] or step["nativeAction"] != [action_id(step["action"])]
+        if (state["instruction"] != row["instruction"] or step["nativeAction"] != [index]
                 or step["reward"] != int(success) or step["nativeSuccess"] is not success
                 or step["nativeDone"] is not done or step["terminated"] is not done
                 or (done and step is not controls[-1])):
             raise ValueError("EB-Navigation action, reward or stopping evidence differs from the native rule")
+        previous = pose
     if (initial["instruction"] != row["instruction"] or not done
             or result["native"]["success"] is not success
             or not math.isclose(result["native"]["distanceToTarget"], distance, abs_tol=1e-9)):
         raise ValueError("EB-Navigation result differs from the verified native trace")
+
+
+def verify_navigation_transition(previous, pose, action, state):
+    dx, dz, yaw, pitch = (after - before for before, after in zip(previous, pose))
+    yaw, pitch = (yaw + 180) % 360 - 180, (pitch + 180) % 360 - 180
+    tolerance = 1e-3
+    succeeded = state.get("actionSucceeded")
+    feedback = state.get("feedback")
+    prefix = "Last action " + ACTION_NAMES[action]
+    if (not isinstance(feedback, str)
+            or not ((succeeded is True and feedback == prefix + " executed successfully.")
+                    or (succeeded is False and feedback.startswith(prefix + " is invalid. ")))):
+        raise ValueError("EB-Navigation action feedback differs from the recorded action")
+
+    if not succeeded:
+        plausible = max(abs(dx), abs(dz), abs(yaw), abs(pitch)) <= tolerance
+    elif action < 4:
+        heading = math.radians(previous[2] + (0, 180, 90, -90)[action])
+        # AI2-THOR snaps each horizontal axis to its 0.1 m grid.
+        plausible = (abs(dx - 0.25 * math.sin(heading)) <= 0.051
+                     and abs(dz - 0.25 * math.cos(heading)) <= 0.051
+                     and max(abs(yaw), abs(pitch)) <= tolerance)
+    elif action < 6:
+        plausible = (max(abs(dx), abs(dz), abs(pitch)) <= tolerance
+                     and abs(yaw - (90 if action == 4 else -90)) <= tolerance)
+    else:
+        signed_pitch = -pitch if action == 6 else pitch
+        plausible = (max(abs(dx), abs(dz), abs(yaw)) <= tolerance
+                     and -tolerance <= signed_pitch <= 30 + tolerance)
+    if not plausible:
+        raise ValueError("EB-Navigation pose transition differs from the recorded action")

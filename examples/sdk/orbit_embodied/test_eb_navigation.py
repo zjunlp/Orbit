@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 import tempfile
@@ -47,7 +48,9 @@ class NavigationEvidenceTest(unittest.TestCase):
                 return {"success": self.x >= 1, "distanceToTarget": 2 - self.x}
 
             def state(self, _):
-                return {"instruction": row["instruction"], "navigation_pose": [self.x, 0.0, 90.0, 0.0]}
+                return {"instruction": row["instruction"], "navigation_pose": [self.x, 0.0, 90.0, 0.0],
+                        "actionSucceeded": True,
+                        "feedback": "Last action MoveAhead executed successfully." if self.x else ""}
 
             def close(self):
                 pass
@@ -71,6 +74,16 @@ class NavigationEvidenceTest(unittest.TestCase):
             self.assertTrue(result["success"])
             controls = [json.loads(line) for line in (directory / "actions.jsonl").read_text().splitlines()]
             initial = json.loads((directory / "initial-state.json").read_text())["state"]
+            impossible = copy.deepcopy(controls)
+            impossible[0].update(action=[4], nativeAction=[4])
+            impossible[0]["state"].update(navigation_pose=[0.25, 0.0, 180.0, 0.0],
+                                          feedback="Last action RotateRight executed successfully.")
+            with self.assertRaisesRegex(ValueError, "pose transition"):
+                verify_navigation(reference, sample, initial, impossible, result)
+            impossible = copy.deepcopy(controls)
+            impossible[0]["state"].update(actionSucceeded=False, feedback="Last action MoveAhead is invalid. Wall")
+            with self.assertRaisesRegex(ValueError, "pose transition"):
+                verify_navigation(reference, sample, initial, impossible, result)
             controls[-1]["state"]["navigation_pose"][0] = 0.99
             with self.assertRaisesRegex(ValueError, "stopping evidence"):
                 verify_navigation(reference, sample, initial, controls, result)
