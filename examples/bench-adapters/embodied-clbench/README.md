@@ -29,7 +29,10 @@ accept image tool results. Text-only fallbacks are not enabled.
 The private environment service owns task graphs, option answers, state and evidence. The Agent sees
 only the MCP proxy. Whole native tool calls are serialized on the service, including sequence
 advancement and image staging. Orbit finalizes through a private Unix socket: it stops accepting new
-actions, drains an in-flight tool call, then exports evidence once. Original graph/manifest/option-bank files and all available observation images
+actions, drains an in-flight tool call, then exports evidence once. Each call follows the native
+transport deadline (120 seconds by default). If it expires, Orbit stops the native call and its
+subprocesses, records an environment failure and closes the sequence without exporting a partial
+transition as a score. Original graph/manifest/option-bank files and all available observation images
 used by the trial are SHA256 frozen and checked again at runtime and verification. A separate CPU
 verify run replays the recorded tool actions in the original environment, checks sequence order and
 saved grades, and invokes the original `grade_trace` (through `export_outputs`) and
