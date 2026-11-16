@@ -1,7 +1,7 @@
 # Prepare benchmark resources
 
 Open **Benchmarks → Prepare resources**, select a benchmark, review its official sources and
-preparation steps, then choose **Download, prepare and register**. All 62 supported benchmark
+preparation steps, then choose **Download, prepare and register**. All 63 supported benchmark
 families appear here, including ones that require authorization or a specialized native environment.
 Orbit downloads from upstream; it does not host or redistribute benchmark datasets.
 
@@ -40,9 +40,10 @@ orbit bench prepare hle --reuse questions=/data/hle/test.parquet --set python=/d
 Resource IDs and environment fields vary by benchmark; use `bench resources <family>`.
 `--reuse RESOURCE=PATH` checks existing resources in place without changing the supplied source.
 `--set KEY=VALUE` supplies recipe inputs such as an existing simulator image or asset directory.
-Git sources must match the declared revision and have no tracked edits. Files with published or
-adapter-pinned SHA-256 values must match. Native configurators validate their own image, asset
-and catalog identities; a directory merely existing is not evidence of native readiness.
+Git sources must match the declared revision, have no tracked edits, and have any required submodules
+initialized. The RoboMME public test recipe uses the main checkout without the RoboMME-Plus policy
+submodules. Files with published or adapter-pinned SHA-256 values must match. Native configurators
+validate their own image, asset and catalog identities.
 
 Completed downloads are reused on subsequent attempts. File downloads retain `.partial` files
 and resume when the upstream server supports byte ranges. Corrupt resources are refused rather

@@ -6,6 +6,7 @@ import { setImmediate } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { assignSolveBatches, batchConditions } from "../src/bench/batches.ts";
 import { planConsolidation } from "../src/bench/consolidate.ts";
+import { connectorIssues } from "../src/bench/policies.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { contentDigest } from "../src/bench/samples.ts";
@@ -363,6 +364,46 @@ it("freezes sequential membership and separates batch conditions from single-epi
   assignSolveBatches(changed, trials);
   expect(trials.map((trial) => trial.batch?.plan.members.length)).toEqual([2, 2, 1]);
   expect(batchConditions(trials[1] as Trial)).not.toEqual(batchConditions(f.trials[1] as Trial));
+});
+
+it("preserves an episode-scoped JAX stream in the policy and saved batch", () => {
+  const f = fixture();
+  const method = f.job.spec.methods[0];
+  const profile = f.job.resolvedBindings?.p?.policyProfile;
+  if (!method || !profile) throw new Error("missing batch fixture");
+  const randomness = { backend: "jax", initialKey: 0, scope: "episode" } as const;
+  const definition = PolicyDefinition.parse({
+    name: "p",
+    version: "1",
+    connector: "policy-ws",
+    replanSteps: 16,
+    randomness,
+    profile,
+    checkpointDigest: `sha256:${"a".repeat(64)}`,
+    normalizationDigest: `sha256:${"b".repeat(64)}`,
+    service: {
+      name: "policy",
+      image: `sha256:${"c".repeat(64)}`,
+      command: ["true"],
+      gpus: 0,
+      healthcheck: { command: ["true"] },
+    },
+  });
+  expect(definition.randomness).toEqual(randomness);
+  expect(connectorIssues(definition)).toEqual([]);
+  expect(connectorIssues({ ...definition, connector: "openpi-ws" })).toContain(
+    "Episode-scoped randomness requires the policy-ws connector",
+  );
+  method.policySnapshot = definition;
+  assignSolveBatches(f.job, f.trials);
+  const trial = Trial.parse(f.trials[1]);
+  f.store.putTrial(trial);
+  const stored = f.store.getTrial(trial.id);
+  if (!stored) throw new Error("missing stored trial");
+  expect(batchConditions(stored)).toMatchObject({
+    index: 1,
+    randomness: "episode",
+  });
 });
 
 it("splits batches by the same effective budget that comparison conditions record", () => {

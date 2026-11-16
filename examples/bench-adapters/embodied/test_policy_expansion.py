@@ -88,6 +88,13 @@ class PolicyExpansionTests(unittest.TestCase):
         self.assert_action_policy_registration("motus/configure_motus.py", self.robotwin_recipe("qpos-chunk-16"),
                                                "head_camera", "camera", "left_camera")
 
+    def test_robomme_pi05_registration_rejects_wrong_state_units_and_action_order(self):
+        config = load("benchmarks/robomme/configure_robomme.py")
+        with patch.object(config, "test_catalog", return_value={}):
+            reference = config.reference(ADAPTER)
+        self.assert_action_policy_registration("robomme-pi05/configure_robomme_pi05.py", reference,
+                                               "joint_state", "unit", "degrees-and-meters")
+
     def test_dm05_registration_checks_its_fixed_quaternion_and_action_semantics(self):
         config = load("policies/dm05/configure_dm05.py")
         reference = json.loads((ADAPTER / "profiles/openvla-libero.json").read_text())

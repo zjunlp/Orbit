@@ -1,0 +1,62 @@
+{
+  "id": "robomme-pi05-baseline/1",
+  "observations": {
+    "front_rgb": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [256, 256, 3],
+      "camera": "front",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "wrist_rgb": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [256, 256, 3],
+      "camera": "wrist",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "joint_state": {
+      "semantic": "panda-joint-and-gripper-state",
+      "dtype": "float32",
+      "shape": [8],
+      "frame": "panda-joints",
+      "unit": "radians-and-meters",
+      "order": [
+        "joint_1",
+        "joint_2",
+        "joint_3",
+        "joint_4",
+        "joint_5",
+        "joint_6",
+        "joint_7",
+        "left_finger_position"
+      ]
+    },
+    "instruction": {
+      "semantic": "language-instruction",
+      "dtype": "string",
+      "shape": []
+    }
+  },
+  "action": {
+    "semantic": "absolute-joint-target-and-gripper-command",
+    "shape": [8],
+    "controller": "robomme-joint-angle",
+    "frame": "panda-joints",
+    "unit": "radians-and-signed-command",
+    "rotation": "joint-angles",
+    "gripper": "signed-open-positive",
+    "order": [
+      "joint_1",
+      "joint_2",
+      "joint_3",
+      "joint_4",
+      "joint_5",
+      "joint_6",
+      "joint_7",
+      "gripper_command"
+    ]
+  }
+}

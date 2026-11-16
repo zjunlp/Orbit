@@ -186,6 +186,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261116](20261116-seenav-fallbacks.md) SeeNav fallback diagnostics in Trial evidence
 - [20261116](20261116-hy-embodied-vla.md) Hy-Embodied-0.5-VLA on native RoboTwin 2.0
 - [20261116](20261116-motus.md) Motus on native RoboTwin 2.0
+- [20261116](20261116-robomme-hy-vla-motus.md) Native RoboMME and the no-history π₀.₅ baseline
 - [20261116](20261116-embodied-catalog-checkpoints.md) Embodied product catalog and CHORES checkpoint scope
 - [20261116](20261116-embodied-agent-adapter-maintenance.md) Cadence and preparation fixes for embodied Agent adapters
 - [20261116](20261116-agent-setup-deadline.md) Agent installation deadline and EmbodiedLab native stop reason

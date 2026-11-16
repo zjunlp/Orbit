@@ -170,6 +170,10 @@ def tasks(req):
         metrics = [{"name": "success_rate", "label": "Native success", "unit": "ratio", "range": [0, 1]}]
     elif kind == "cliport":
         metrics = [{"name": "success_rate", "label": "Reward above 0.99", "unit": "ratio", "range": [0, 1]}]
+    elif kind == "robomme":
+        from orbit_embodied.robomme import SUITES
+        metrics = [{"name": suite + "_success", "label": suite.title() + " success",
+                    "unit": "ratio", "range": [0, 1]} for suite in SUITES]
     elif kind == "colosseum-v2":
         metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
     elif kind == "eb-navigation":
@@ -197,6 +201,8 @@ def tasks(req):
                              }, "methods": ["policy"],
                              **({"identity": {"id": "chores", "name": "CHORES", "variant": variant}}
                                 if variant else {}),
+                             **({"identity": {"id": "robomme", "name": "RoboMME", "variant": "Public test"}}
+                                if kind == "robomme" else {}),
                              "taxonomy": {"domains": ["robotics"],
                                           "taskTypes": (["navigation", "manipulation"] if kind == "chores" else
                                                         ["navigation"] if kind in ("eb-navigation", "hssd-ov") else ["manipulation"]),
@@ -248,7 +254,7 @@ def solve_member(trial, reference, implementation, episode_id):
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
                                   "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
-                                  "eb-navigation", "chores", "hssd-ov", "behavior1k"):
+                                  "eb-navigation", "chores", "hssd-ov", "behavior1k", "robomme"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -281,7 +287,8 @@ def solve_member(trial, reference, implementation, episode_id):
 
 def solve_spec(trial, config, environment, destination):
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16, "behavior1k": 32}.get(environment.get("kind"), 8)
+    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16, "behavior1k": 32,
+                 "robomme": 16}.get(environment.get("kind"), 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
     if environment.get("kind") in ("eb-navigation", "chores", "hssd-ov"):
         gpu = trial.get("options", {}).get("gpuId")
@@ -511,6 +518,9 @@ def score(req):
             distance = result["native"]["distanceToTarget"]
             if distance is not None:
                 metrics["distance_to_target"] = distance
+        elif kind == "robomme":
+            suite = environment["taskTags"][req["trial"]["sample"]["taskId"]]["suite"]
+            metrics = {suite + "_success": success}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

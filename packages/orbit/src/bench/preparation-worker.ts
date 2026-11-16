@@ -84,11 +84,13 @@ export async function validateResource(resource: PreparationResource, path: stri
         );
     }
     await git("diff", "--exit-code", "HEAD", "--");
-    const submodules = await git("submodule", "status", "--recursive");
-    if (submodules.split("\n").some((line) => /^[-+U]/.test(line)))
-      throw new Error(
-        `${resource.label}: initialize its pinned submodules before reusing this checkout`,
-      );
+    if (resource.submodules !== false) {
+      const submodules = await git("submodule", "status", "--recursive");
+      if (submodules.split("\n").some((line) => /^[-+U]/.test(line)))
+        throw new Error(
+          `${resource.label}: initialize its pinned submodules before reusing this checkout`,
+        );
+    }
   }
   if (resource.kind === "file" && !st.isFile())
     throw new Error(`${resource.label}: expected a regular file`);
@@ -141,10 +143,11 @@ export async function acquireResource(
       { env },
     );
     await command(["git", "-C", partial, "checkout", "--detach", "FETCH_HEAD"], { env });
-    await command(
-      ["git", "-C", partial, "submodule", "update", "--init", "--recursive", "--depth", "1"],
-      { env },
-    );
+    if (resource.submodules !== false)
+      await command(
+        ["git", "-C", partial, "submodule", "update", "--init", "--recursive", "--depth", "1"],
+        { env },
+      );
   } else if (resource.kind === "file") {
     await command(
       [

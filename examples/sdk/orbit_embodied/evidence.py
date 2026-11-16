@@ -343,6 +343,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None, *, referenc
         verify_navigation(reference, contract["sample"], initial["state"], controls, result)
     if result["valid"] and kind in ("robomimic", "vima-bench"):
         verify_manipulation_stopping(kind, controls, contract["horizon"])
+    if result["valid"] and kind == "robomme":
+        from .robomme import verify_robomme
+        verify_robomme(reference, contract["sample"], initial["state"], controls, result)
     if result["valid"] and kind == "molmospaces":
         from .molmospaces import verify_molmospaces
         verify_molmospaces(controls, contract["horizon"], reference["parameters"])

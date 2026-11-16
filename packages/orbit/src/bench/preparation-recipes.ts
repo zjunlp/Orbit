@@ -466,6 +466,8 @@ for (const id of ["webvoyager", "online-mind2web"])
   };
 
 const rlinf = "1bf78980d9339cbc67497eddceb9a1e3a74e2acc";
+const robommeRepository = "RoboMME/robomme_benchmark";
+const robommeRevision = "777c595d9c443405fdc145452929bc5890c13e19";
 const nativeDefinitions: Record<string, RecipeDefinition> = {
   "behavior-1k": native(
     "StanfordVL/BEHAVIOR-1K",
@@ -529,6 +531,17 @@ const nativeDefinitions: Record<string, RecipeDefinition> = {
     ["--base-image", "{baseImage}"],
     [field("baseImage", "LIBERO base image", "image", "Pinned base runtime from the guide.")],
   ),
+  robomme: {
+    ...native(robommeRepository, robommeRevision, "robomme", "configure_robomme.py"),
+    resources: [
+      {
+        ...gitResource(robommeRepository, robommeRevision),
+        submodules: false,
+        instructions:
+          "Download or reuse the pinned checkout. The public test split uses the source tree and does not require the RoboMME-Plus policy submodules.",
+      },
+    ],
+  },
   "robocasa-v02": native(
     "robocasa/robocasa",
     "756598a5be52e052339bb2d957426e39015c2afb",

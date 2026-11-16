@@ -475,9 +475,11 @@ function TrialConfiguration({ job, trial }: { job: BenchJob; trial: Trial }) {
               ["Episode position", `${trial.batch.index + 1} / ${trial.batch.plan.members.length}`],
               [
                 "Model random stream",
-                trial.batch.plan.randomness === "service"
-                  ? "Continues in fixed batch order; retries require the same full prefix"
-                  : "Stateless",
+                {
+                  service: "Continues in fixed batch order; retries require the same full prefix",
+                  episode: "Restarts at the initial key for each episode",
+                  stateless: "Stateless",
+                }[trial.batch.plan.randomness],
               ],
               [
                 "Shared resources and cancellation",

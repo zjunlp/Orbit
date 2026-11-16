@@ -10,7 +10,7 @@ from pathlib import Path
 GENERATED_ENVIRONMENTS = ("registered-gym", "robocasa365", "robotwin", "maniskill3", "maniskill3-tabletop",
                           "metaworld", "calvin", "robolab", "robodojo", "vlabench", "robocasa-v02", "rlbench", "robomimic",
                           "vima-bench", "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
-                          "eb-navigation", "chores", "hssd-ov", "behavior1k")
+                          "eb-navigation", "chores", "hssd-ov", "behavior1k", "robomme")
 
 
 def digest(value):
@@ -168,6 +168,8 @@ def reset_seed(sample, reference=None):
             return seed + index
         if environment.get("kind") == "cliport":
             return cliport_episode(environment, sample)["seed"]
+        if environment.get("kind") == "robomme":
+            return environment["testEpisodes"][sample["taskId"]][index]["seed"]
         if environment.get("kind") == "vla-arena" and environment.get("protocol") == "dm05":
             seed += environment["catalog"][sample["taskId"]]["index"] * 10000 + sample["repetition"]
             if not 0 <= seed < 2 ** 32:

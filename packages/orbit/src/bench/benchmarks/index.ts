@@ -50,6 +50,7 @@ import { robocasa365 } from "./robocasa365.ts";
 import { robodojo } from "./robodojo.ts";
 import { robolab } from "./robolab.ts";
 import { robomimic } from "./robomimic.ts";
+import { robomme } from "./robomme.ts";
 import { robotagentbench } from "./robotagentbench.ts";
 import { robotwin } from "./robotwin.ts";
 import { simplerEnv } from "./simpler-env.ts";
@@ -115,6 +116,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   metaworld,
   calvin,
   robomimic,
+  robomme,
   vimaBench,
   molmospaces,
   colosseumV2,
@@ -144,6 +146,7 @@ const nativeProfiles: Record<string, string> = {
   "eb-navigation-projected/1": "eb-navigation",
   "chores-stretch-rgb/1": "chores",
   "hssd-ov-stretch-discrete/1": "hssd-ov",
+  "robomme-panda-joint-angle/1": "robomme",
   "libero-plus-panda-raw/1": "libero-plus",
   "molmospaces-franka-droid/1": "molmospaces",
   "colosseum-v2-single-arm/1": "colosseum-v2",

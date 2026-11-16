@@ -234,6 +234,9 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "robomimic":
         from orbit_embodied.robomimic import RoboMimicBenchmark
         benchmark = RoboMimicBenchmark(reference, sample["taskId"])
+    elif kind == "robomme":
+        from orbit_embodied.robomme import RoboMMEBenchmark
+        benchmark = RoboMMEBenchmark(reference, sample["taskId"])
     elif kind == "bigym2":
         from orbit_embodied.bigym2 import BiGym2Benchmark
         benchmark = BiGym2Benchmark(reference, sample["taskId"])

@@ -26,8 +26,8 @@ The full vocabulary and matching rules live in [design §9.17](design.md#917-ben
 A task or profile can have multiple values. Counts are discovery metadata, not evidence of calibration
 or model capability; product families, local registrations and evaluated tasks remain separate counts.
 
-The catalog includes 62 families, combining the [source-backed taxonomy audit](tasks/20261116-benchmark-taxonomy-evidence.md)
-with native navigation, BEHAVIOR-1K and RobotAgentBench integrations.
+The catalog includes 63 families, including the [source-backed taxonomy audit](tasks/20261116-benchmark-taxonomy-evidence.md),
+native navigation, BEHAVIOR-1K, RobotAgentBench, RoboMME, and the [native adapter expansion](tasks/20261117-remaining-benchmarks-main-merge.md).
 BiGym 2.0, CLIPort and LIBERO-Mem already had native adapters and sample checks; this audit adds their
 missing product entries. Classification describes only the implemented route. Unknown values stay
 unknown; separate input layouts and evaluation tracks keep separate profiles so joint filters cannot
