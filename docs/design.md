@@ -1735,6 +1735,9 @@ out of the repository test process. Tasks lacking installed images remain listed
 AppWorld public train/dev uses a private native code-execution service with original safety
 guards; independent replay runs the original task-success evaluator, not a subject-reported score
 or the grouped scenario metric. Both adapters preserve native reference/empty controls.
+miniF2F keeps the original Lean 3 statements and libraries, exports the elaborated theorem with
+its dependencies, rejects nonstandard axioms and runs the native independent leanchecker.
+A successful Lean parse with admitted goals is insufficient for a valid proof.
 
 ## 10. 路线
 

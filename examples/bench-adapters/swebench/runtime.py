@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -18,7 +19,7 @@ def verify(src, solve, out):
     spec = MAP_REPO_VERSION_TO_SPECS[row["repo"]][row["version"]]
     criteria = {key: json.loads(row[key]) if isinstance(row[key], str) else row[key]
                 for key in ("FAIL_TO_PASS", "PASS_TO_PASS")}
-    # Images already contain the installed repository; no environment build or download is needed.
+    # Images already contain the repository; the upstream eval script handles any reinstall.
     test_spec = TestSpec(instance_id=row["instance_id"], repo=row["repo"], version=row["version"],
         repo_script_list=[], env_script_list=[],
         eval_script_list=make_eval_script_list(row, spec, "testbed", "/testbed", row["base_commit"], row["test_patch"]),
@@ -49,7 +50,7 @@ def verify(src, solve, out):
         process = subprocess.run(["bash", str(script)], cwd="/testbed", env=test_env, stdout=log, stderr=subprocess.STDOUT)
     log_text = (out / "test_output.txt").read_text()
     setup_text = log_text.split(START_TEST_OUTPUT)[0]
-    if "ERROR:" in setup_text or "error: subprocess-exited-with-error" in setup_text:
+    if re.search(r"(?m)^error: subprocess-exited-with-error$|^ERROR: (Could not find a version|No matching distribution|Could not install packages|Failed building wheel)", setup_text):
         raise RuntimeError("Original evaluation setup failed; inspect test_output.txt")
     report = get_eval_report(test_spec, {"instance_id": row["instance_id"], "model_patch": patch,
         "model_name_or_path": "orbit"}, str(out / "test_output.txt"), include_tests_status=True)

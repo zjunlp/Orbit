@@ -43,6 +43,7 @@ it.each([
   "longmemeval",
   "financebench",
   "swebench",
+  "minif2f",
 ])("plans the %s external method using the real Method and Run contracts", (name) => {
   const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
   const method = Method.parse({

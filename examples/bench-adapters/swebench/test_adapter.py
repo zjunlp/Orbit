@@ -1,5 +1,4 @@
 """Synthetic privacy, integrity and failure checks; not a substitute for native calibration."""
-import copy
 import json
 from pathlib import Path
 import tempfile

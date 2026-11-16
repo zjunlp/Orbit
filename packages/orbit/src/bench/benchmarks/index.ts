@@ -26,6 +26,7 @@ import { longds } from "./longds.ts";
 import { longmemeval } from "./longmemeval.ts";
 import { maniskill3 } from "./maniskill3.ts";
 import { metaworld } from "./metaworld.ts";
+import { minif2f } from "./minif2f.ts";
 import { miniwob } from "./miniwob.ts";
 import { mmau } from "./mmau.ts";
 import { mobileworld } from "./mobileworld.ts";
@@ -55,6 +56,7 @@ import { wandr } from "./wandr.ts";
 import { webvoyager } from "./webvoyager.ts";
 
 const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
+  minif2f,
   swebench,
   appworld,
   agentdojo,
