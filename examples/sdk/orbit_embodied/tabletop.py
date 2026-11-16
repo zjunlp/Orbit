@@ -1,5 +1,6 @@
 """Native Gymnasium episodes for the pinned ManiSkill3 and Meta-World recipes."""
 
+from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,9 @@ import numpy as np
 from .binding import reference_horizon, reset_seed, seed_asset
 from .assets import tree_digest
 from .driver import StepResult
+
+
+MANISKILL_VERSION = "3.0.1"
 
 
 class TabletopBenchmark:
@@ -72,6 +76,8 @@ def check_maniskill_assets(target, expected):
 
 class ManiSkillBenchmark(TabletopBenchmark):
     def make_env(self, _seed):
+        if "version" in self.config and version("mani_skill") != self.config["version"]:
+            raise ValueError("ManiSkill package differs from the frozen Plate-25 recipe")
         import gymnasium as gym
         import orbit_maniskill_task  # noqa: F401
         assets = self.config["assets"]
@@ -109,7 +115,6 @@ class ManiSkillTabletopBenchmark(TabletopBenchmark):
     def make_env(self, _seed):
         import gymnasium as gym
         import mani_skill.envs  # noqa: F401
-        from importlib.metadata import version
         from mani_skill.utils.assets import DATA_GROUPS, is_data_source_downloaded
         from mani_skill.utils.registration import REGISTERED_ENVS
         from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper

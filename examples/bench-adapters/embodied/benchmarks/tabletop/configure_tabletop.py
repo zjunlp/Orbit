@@ -12,6 +12,7 @@ sys.path[:0] = [str(EMBODIED), str(EMBODIED / "policies/openpi")]
 from adapter import HERE, digest, file_digest, implementation_digest
 from native_runtime import RLINF_REVISION, image_id
 from orbit_embodied.assets import tree_digest
+from orbit_embodied.tabletop import MANISKILL_VERSION
 from serve_metaworld import NORMALIZATION_DIR
 
 
@@ -25,7 +26,8 @@ def reference_for(model, source, assets):
         files = [MANISKILL_SOURCE, "examples/embodiment/config/maniskill_grpo_openvlaoft.yaml",
                  "examples/embodiment/config/env/maniskill_put_on_plate_in_scene_25_main.yaml",
                  "rlinf/envs/sim/maniskill/maniskill_env.py"]
-        environment = {"kind": model, "tasks": [MANISKILL_TASK], "horizon": 80, "controlHz": 5,
+        environment = {"kind": model, "version": MANISKILL_VERSION, "tasks": [MANISKILL_TASK],
+                       "horizon": 80, "controlHz": 5,
                        "assets": {"dataset": "maniskill3-plate-assets", "target": "/maniskill-data",
                                   "digest": tree_digest(assets)}}
         height, width, replan, settle, camera = 480, 640, 8, 0, "3rd_view_camera"
@@ -55,7 +57,7 @@ def reference_for(model, source, assets):
                            "order": ["x", "y", "z", "gripper"]}
     native = {"id": model + "-native/1", "observations": fields, "action": action}
     return {
-        "id": "maniskill3-rlinf-reference/1" if model == "maniskill3" else "metaworld-rlinf-reference/2",
+        "id": "maniskill3-rlinf-reference/2" if model == "maniskill3" else "metaworld-rlinf-reference/2",
         "environment": environment,
         "parameters": {"replanSteps": replan, "settleSteps": settle, "successRule": "last"},
         "benchmarkProfile": native,

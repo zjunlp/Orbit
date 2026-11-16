@@ -8,7 +8,7 @@ The Solve runs one GPU PhysX environment per episode with an independently froze
 
 ## Prepare and register
 
-Use the pinned Colosseum V2 source and the ManiSkill 3.0.0b22 simulator base from [native tabletop setup](../tabletop/README.md). Set `COLOSSEUM_SOURCE`, `COLOSSEUM_ASSETS` and `COLOSSEUM_CONFIG` to user-owned directories outside the checkout. The build uses the exact fork from the selected checkout and pins the base image in its manifest.
+Use the pinned Colosseum V2 source and its ManiSkill 3.0.0b22 simulator base. To build the base, use the ManiSkill command from [native tabletop setup](../tabletop/README.md) with `--build-arg MANISKILL_VERSION=3.0.0b22` and `-t orbit/embodied-maniskill3:3.0.0b22`. Set `COLOSSEUM_SOURCE`, `COLOSSEUM_ASSETS` and `COLOSSEUM_CONFIG` to user-owned directories outside the checkout. The build uses the exact fork from the selected checkout and pins the base image in its manifest.
 
 ```bash
 colosseum_config=examples/bench-adapters/embodied/benchmarks/colosseum-v2/configure_colosseum.py
