@@ -35,7 +35,7 @@ orbit bench run "$BENCHMARK" --method "model=policy,policyRef=$POLICY" \
 
 - 作业页查看分数、有效样本数和报告版本。Trial 页查看单次判定、Solve 和 Verify。
 - 有录像时，在 Trial 的产物中打开视频。录像取决于该登记的观测与记录配置。
-- 有轨迹索引时，**Episode timeline** 同步显示已保存的相机、动作和状态。RoboTwin、LIBERO、RoboDojo 与 RoboLab
+- 有轨迹索引时，**Episode timeline** 同步显示已保存的相机、动作和状态。RoboTwin、LIBERO、EB-Navigation、RoboDojo 与 RoboLab
   的时间轴字段及历史证据重查方式见 [Web 轨迹复盘](gui-bench-web.md#embodied-episodes)。
 
 要对保存的 episode 重评，可运行 `orbit bench rescore "$JOB" --trial "$TRIAL"`。

@@ -4,6 +4,7 @@
 import {
   AdapterOp,
   AdapterRequest,
+  type AdapterRunSpec,
   type AdapterTasksResponseInput,
   type BenchTask,
   type MetricSpecInput,
@@ -16,7 +17,8 @@ import {
 export type RunDescription = Omit<
   RunSpecInput,
   (typeof ORBIT_OWNED_SPEC_FIELDS)[number] | "command"
-> & { command?: string[]; agentTask?: { instruction: string } };
+> &
+  Pick<AdapterRunSpec, "command" | "agentTask">;
 export interface SpecReply {
   spec: RunDescription;
   issues?: string[];

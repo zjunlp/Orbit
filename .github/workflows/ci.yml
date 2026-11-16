@@ -31,4 +31,14 @@ jobs:
       - run: python3 -m pip install -r examples/sdk/requirements-ci.txt
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+      - name: Check native embodied evidence and scoring
+        env:
+          PYTHONPATH: examples/sdk
+        run: >-
+          python3 -B -m unittest -v
+          orbit_embodied.test_core
+          orbit_embodied.test_eb_navigation
+          orbit_embodied.test_episode_trajectory
+          orbit_embodied.test_vln_native
+          orbit_embodied.test_wire
       - run: pnpm smoke:package

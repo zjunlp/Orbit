@@ -193,7 +193,15 @@ export function toRunSpec(
   const spec = {
     ...rest,
     command: agentTask
-      ? agentCommand(agentDef(), method, agentTask.instruction, Boolean(agentTask.tools?.length))
+      ? [
+          ...(agentTask.wrapper ?? []),
+          ...agentCommand(
+            agentDef(),
+            method,
+            agentTask.instruction,
+            Boolean(agentTask.tools?.length),
+          ),
+        ]
       : command,
     env: { ...b.env, ...((rest.env as Record<string, string> | undefined) ?? {}) },
     snapshot: false,

@@ -171,7 +171,7 @@ class CoreTests(unittest.TestCase):
         benchmark.replan_early = True
         reference["environment"]["horizon"] = benchmark.horizon
         self.run_sample(benchmark, policy, {"reference": reference})
-        with self.assertRaisesRegex(ValueError, "fixed chunk schedule"):
+        with self.assertRaisesRegex(ValueError, "invalid action chunk replan evidence"):
             self.verify()
 
     def test_xiaomi_rejects_early_replanning(self):
@@ -296,9 +296,15 @@ class CoreTests(unittest.TestCase):
                                      "catalog": {"sequences": [[0, tasks]]}},
                      "parameters": {"settleSteps": 0, "replanSteps": 5, "subtaskSteps": 2}}
         result = self.run_sample(Sequence(), SyntheticPolicy(), {"reference": reference})
-        rows = [json.loads(line) for line in (self.output / "actions.jsonl").read_text().splitlines()]
+        log = self.output / "actions.jsonl"
+        rows = [json.loads(line) for line in log.read_text().splitlines()]
         self.assertEqual([row["chunkIndex"] for row in rows], [0, 0, 0, 1])
         self.assertEqual(self.verify()["native"]["completedSubtasks"], 2)
+        for row in rows:
+            row.pop("replan", None)
+        log.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        seal(self.output, result)
+        self.assertEqual(self.verify(), result)
         result["native"]["completedSubtasks"] = 3
         seal(self.output, result)
         with self.assertRaisesRegex(ValueError, "recorded subtask completions"):
@@ -464,13 +470,48 @@ class CoreTests(unittest.TestCase):
 
     def test_stops_mid_chunk_and_keeps_full_requested_chunk(self):
         benchmark, policy = SyntheticBenchmark(success_at=2), SyntheticPolicy()
+        policy.last_fallback = "empty-plan"
         result = self.run_sample(benchmark, policy)
         self.assertTrue(result["success"])
         self.assertEqual(result["steps"], 2)
         self.assertEqual(policy.calls, 1)
         self.assertEqual(np.load(self.output / "chunks/0.npy").shape, (6, 7))
+        self.assertEqual(json.loads((self.output / "chunks/0.json").read_text())["fallback"], "empty-plan")
         self.assertTrue(self.verify()["valid"])
         self.assertTrue(benchmark.closed and policy.closed)
+
+    def test_verify_requires_the_full_requested_chunk_even_at_early_success(self):
+        result = self.run_sample(SyntheticBenchmark(success_at=1), SyntheticPolicy())
+        path = self.output / "chunks/0.npy"
+        chunk = np.load(path)
+        for invalid in (chunk[:1], chunk[:, :-1], chunk.astype(complex)):
+            with self.subTest(shape=invalid.shape, dtype=invalid.dtype):
+                np.save(path, invalid, allow_pickle=False)
+                seal(self.output, result)
+                with self.assertRaisesRegex(ValueError, "action chunk has invalid shape"):
+                    self.verify()
+
+    def test_verify_rejects_switching_chunks_without_a_replan(self):
+        reference = {"parameters": {"replanSteps": 5}}
+        result = self.run_sample(SyntheticBenchmark(success_at=2), SyntheticPolicy(), {"reference": reference})
+        log = self.output / "actions.jsonl"
+        first, second = map(json.loads, log.read_text().splitlines())
+        log.write_text(json.dumps({**first, "terminated": True}) + "\n" + json.dumps(second) + "\n")
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "control steps follow a terminal step"):
+            self.verify()
+        second.update(chunk=1, chunkIndex=0, sourceObservation=1)
+        log.write_text(json.dumps(first) + "\n" + json.dumps(second) + "\n")
+        chunk = np.load(self.output / "chunks/0.npy")
+        np.save(self.output / "chunks/1.npy", chunk, allow_pickle=False)
+        write_json(self.output / "chunks/1.json", {"sourceObservation": 1})
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "invalid chunk sequence"):
+            self.verify()
+        log.write_text(json.dumps({**first, "replan": True}) + "\n" + json.dumps(second) + "\n")
+        seal(self.output, result)
+        with self.assertRaisesRegex(ValueError, "invalid action chunk replan evidence"):
+            self.verify()
 
     def test_horizon_failure_is_valid_and_replans_after_consumed_prefix(self):
         policy = SyntheticPolicy()

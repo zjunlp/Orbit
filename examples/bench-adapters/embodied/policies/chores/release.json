@@ -1,0 +1,48 @@
+{
+  "spoc-chores-small": {
+    "checkpoint": "checkpoint_final.ckpt",
+    "bytes": 1094044321,
+    "checkpointDigest": "sha256:a446ab89a6345825c9c70fdf80db9f5b14d040e63da7ba01242b87e70b8ba881",
+    "url": "https://pub-bebbada739114fa1aa96aaf25c873a66.r2.dev/checkpoints/SigLIP-ViTb-3-CHORES-S/checkpoint_final.ckpt",
+    "files": {
+      "config.yaml": "sha256:127791161f8eaea3a58273e7da6cef9c4d2d86fd6a00030fdc409c7e51f9a5ce"
+    }
+  },
+  "spoc-chores-large": {
+    "checkpoint": "checkpoint_final.ckpt",
+    "bytes": 1093997605,
+    "checkpointDigest": "sha256:6a284e14a8c620e83a5848f0f54ea2fc7802df748f65000faa4254aca28a7f37",
+    "url": "https://pub-bebbada739114fa1aa96aaf25c873a66.r2.dev/checkpoints/SigLIP-ViTb-3-CHORES-L/checkpoint_final.ckpt",
+    "files": {
+      "config.yaml": "sha256:683263ae20c81d9afa0f1425e8c4e097d735a11ca1d8b1d5b9ca24209297cb4f"
+    }
+  },
+  "flare-chores-objectnav": {
+    "checkpoint": "FLaRe_objectnav_sparse_reward_000021026752.pt",
+    "bytes": 1351398408,
+    "checkpointDigest": "sha256:6f4abbdab325d4ced7e710d30eba13ec050cea06b7fe03115cb23686fce54ddb",
+    "url": "https://pub-4194bc6e8ed3420491581242f2531a56.r2.dev/FLaRe_ckpts/FLaRe_objectnav_sparse_reward_000021026752.pt",
+    "files": {}
+  },
+  "flare-chores-pickup": {
+    "checkpoint": "FLaRe_pickup_sparse_reward_000044088446.pt",
+    "bytes": 1351496916,
+    "checkpointDigest": "sha256:a5d8727c39d14e1aa47d8dc28094cada719a28ce6c769bd4d4a4fdbc37740438",
+    "url": "https://pub-4194bc6e8ed3420491581242f2531a56.r2.dev/FLaRe_ckpts/FLaRe_pickup_sparse_reward_000044088446.pt",
+    "files": {}
+  },
+  "flare-chores-fetch": {
+    "checkpoint": "FLaRe_fetch_sparse_reward_000047079268.pt",
+    "bytes": 1351510588,
+    "checkpointDigest": "sha256:8d916298d690eff2dedcfb4cbc31a965bbdc72bdbca57b8827a5058262973bb1",
+    "url": "https://pub-4194bc6e8ed3420491581242f2531a56.r2.dev/FLaRe_ckpts/FLaRe_fetch_sparse_reward_000047079268.pt",
+    "files": {}
+  },
+  "flare-chores-roomvisit": {
+    "checkpoint": "FLaRe_roomvisit_sparse_reward_000017028825.pt",
+    "bytes": 1351483692,
+    "checkpointDigest": "sha256:0b52ebfca26d664438821777bdbc0a13886017bd3d64754343c41d4cbbccae27",
+    "url": "https://pub-4194bc6e8ed3420491581242f2531a56.r2.dev/FLaRe_ckpts/FLaRe_roomvisit_sparse_reward_000017028825.pt",
+    "files": {}
+  }
+}

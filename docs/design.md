@@ -512,7 +512,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   `oracle`（跑参考解）、`empty`（不作答，用于检验适配器），或 `policy`（独立具身策略，见 §9.4a）。这些保留名不能注册为 Agent。
   `policy` 通过 `policyRef` 选择已登记定义，提交时保存 `policySnapshot`；不接收 CLI 的 auth、model 或 bundle。
   提交 job 前检查 Agent 已注册、auth profile 的 harness 与之一致且 kind 受该 Agent 支持；`agentCommand` 由定义的模板渲染。
-  `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`），安装失败记为环境失败、不 verify；
+  `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`）。独立的安装时限由 daemon 的
+  `ORBIT_AGENT_SETUP_TIMEOUT_SEC` 控制，默认 900 秒，从容器启动计时。安装失败或到期归为 `agent_install`，跳过 verify。
   process Run 拒绝 `install` 型 Agent。ASI 与 LongDS 的原生 runner 只启动 codex / claude-code，由 adapter 在 `capabilities.methods` 中声明，
   提交与兼容矩阵按同一声明拒绝其他 Agent（`<benchmark> does not support <agent> methods`）。
   `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；Agent 版本由 Run 的
@@ -652,8 +653,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   verify 与 score 用 Run 记录里的公钥核验签名，伪造或缺失签名记 `scorer_error`（无效）。daemon 采集时只写入真实目录（不跟随运行
   预置的符号链接，含 output 根目录），复制失败时目标处不留运行自己写的内容。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
-  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction, tools? }` 二选一。`tools` 最多 8 个 stdio MCP server（`name`、非空 `command` argv、可选 `env`），只交给 Agent 启动，不能覆盖 Orbit 管理的 Run 字段；旧 adapter 无需增加字段。Agent 方法（codex / claude-code）的
-  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染），并设置 auth、bundle 与
+  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction, tools?, wrapper? }` 二选一。`tools` 最多 8 个 stdio MCP server（`name`、非空 `command` argv、可选 `env`），只交给 Agent 启动，不能覆盖 Orbit 管理的 Run 字段；旧 adapter 无需增加字段。Agent 方法（codex / claude-code）的
+  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染）。可选 `wrapper` argv 加在解析好的 Agent 命令前，在 Agent CLI 安装完成后执行。Orbit 设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
   `command`；external 也给 adapter 自己的 `command`，Orbit 只加方法的 solve `passEnv`，不注入 CLI 或强改网络。
   verify 不能请求 Agent。显式 `passEnv` 在对应阶段优先于 adapter 的同名环境默认值，避免 Harbor 模板空值遮住凭据；变量值仍不入记录。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
@@ -937,6 +938,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **Policy 登记**：`PolicyDefinition` 是共享形状（固定镜像、readiness、checkpoint/归一化摘要、命名权重 dataset、随机流声明）；
   各 connector 的必需字段（OFT 的 8 步 LIBERO recipe、GR00T 的执行长度/动作顺序/backbone 摘要）在 `bench/policies.ts` 登记时检查。
   提交时保存权威快照。`gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
+  可选的 `recommendedScope` 声明权重的建议评测 profile 与任务族。超出范围的计划在提交时记录提示，并随校准报告返回。
+  Binding、执行快照和校准判定独立于提示。
 - **样本身份**：`spec.samplePlan` 是带摘要的有序计划；sampleId 由任务、profile、初态资产摘要与索引、环境 seed、模型 seed 和重复
   编号生成。新分支用 sampleRef、禁止 seed，联合契约拒绝混用；旧 seed 作业、报告与 n→n−1 规则不变，新报告为 `orbit-report/2`，
   报告与 Trial 导航按计划顺序列出样本。WidowX 的重置种子为 `environmentSeed + initialStateId`，计划和批次拒绝别名到同一重置的样本。
@@ -945,9 +948,14 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   有效样本；Web 对比把后端未配对的任务列为 “No paired result”。新旧作业不直接归并，归并逐样本核对冻结预算。
 - **SDK 与证据**：Benchmark adapter、PolicyClient、connector、driver、证据写入分离；SDK 核心只依赖标准库与 NumPy。原生判定与
   Orbit 有效性分开，可选媒体失败不改变分数。证据原子封存，含 contract、binding、初态、逐步动作、请求的动作块、源码包摘要；
+  CPU 验证使用 Solve 的动作块形状、最小长度和数值规则，逐步核对消费顺序及重规划边界。
+  固定步长评测按冻结间隔重规划。CALVIN 可在原生子任务完成时提前重规划，验证器复核完成信号和子任务进度。
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
+- **冻结目录归档**：固定批量的 Solve 请求只保存一份冻结 reference 与一份批次计划，模拟器和 SDK 共用同一次准备。
+  每个 Solve Run 在输出根目录归档一份 `reference.json`。episode contract 和 CPU Verify 请求只保存该 reference 的摘要，
+  CPU 重评从只读 Solve 输出加载目录，并核对登记、Run 和 contract 的摘要。旧 Run 继续从 episode 内嵌 reference 重评。
 - **随机性**：模型可声明服务级随机流。OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务
   可以登记发布配方的初始种子，例如 GigaWorld 的 42。批次按冻结顺序推进服务的随机流，样本中的 `policySeed` 保持为 0。
 - **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
@@ -957,6 +965,20 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   Google Robot 固定矩形相机、xyzw 状态、单步重规划及原生 sticky gripper，复用 Gym driver。
   SimplerEnv 固定网格可独立登记 RT-1/Octo 的策略终止协议，直接执行 7 维原生动作并另收终止信号，最终一步的原生 done 决定成功。
   原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
+- **EB-Navigation** 使用 AI2-THOR 5.0.0 的无头 Vulkan 渲染，按原生 8 个离散动作控制，目标水平距离不超过 1 米或第 20 步时结束。
+  SeeNav 和原版 Qwen2.5-VL 在相同的标注双视角、动作反馈及提示词下运行。CPU 验证根据冻结目标和逐步位置复核距离与停止判定，
+  Web 复用现有时间轴，同步播放原始第一视角、俯视和送入模型的标注双视角视频。
+  SeeNav 的空计划和非法计划沿用上游兜底动作。策略报告的原因随动作块进入证据，Trial 时间轴与原生执行动作分开显示。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/eb-navigation/README.md)
+- **CHORES-S / CHORES-L** 共用原生 Stretch 仿真和 20 个离散动作，按任务冻结初态、目标和步数上限。SPOC 和 FLaRe
+  读取相同的双 RGB、指令和抓持状态。CPU 校验核对原生终止条件和 SEL，并按 `sub_done` 动作重建 RoomVisit 已确认房间。
+  Web 同步播放双相机视频并显示动作和位姿。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/chores/README.md)
+- **HSSD-OV** 按 StopWatch 协议冻结目标类别、初始位姿、可接受的实例视点和 navmesh 摘要。CPU 校验按轨迹复算
+  Habitat 动作对应的位姿、测地距离、STOP 判定和 SPL。LightNav-0 Policy 将上游速度输出投影到同一套 Habitat 离散动作。
+  场景准备和登记均核对固定的发布资产清单摘要，覆盖原始文件与派生场景。
+  策略登记冻结投影版本并校验单步 HSSD-OV 动作契约，每个动作块封存归一化速度和解码状态，CPU 重评根据原始动作块复算离散动作。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/hssd-ov/README.md)
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
   Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。
@@ -1147,7 +1169,9 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
   官方聚合在 **job × method** 层计算，不对 native summary 再求平均（两批 1/1 与 1/9 的批次均值 55.6%，episode 成功率 20%）。
 - **已实现（P2）**：`Outcome.failure`（封闭枚举，classify 与 adapter 填写）与 `Outcome.episode`；adapter 声明的 `OfficialRule`
   （`errors: exclude|fail`、`unit: sample|task`、`failValue`、`metric`）在提交时存入 `BenchJob.official`，`MethodSummary.official`
-  给出官方值、样本数、missing 与 partial；`bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
+  给出按官方规则计算的值，以及本次计划数、计分数、缺失数、排除数；计划中有样本未计入即标 `partial`。
+  计划覆盖率以本次 job 为范围，完整上游套件分数仍须满足上游的样本范围要求。
+  `bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
   在 job 结束、取消、重新评分或归并后、且结果与上一修订不同时写入，旧 job 首次读取时补一份 `backfill`；计划 digest 由
   benchmark、tasks、seeds、methods、options 计算。API `GET /bench/jobs/:id/reports`，CLI `orbit bench report`，Web job 页 Reports。
   原生具身评测已支持固定共享 solve 批次及逐 episode 尝试定位；通用 attempt/retry 的显式计数与自动重试规则仍后置。

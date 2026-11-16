@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 import numpy as np
 
+from .conversions import CONVERSIONS as CONVERSIONS, libero_gripper as libero_gripper
+
 
 def quaternion_to_axis_angle(quaternion):
     # OpenPI's LIBERO runner uses robosuite's xyzw convention and this zero-angle rule.
@@ -19,17 +21,6 @@ def quaternion_to_axis_angle(quaternion):
 def libero_rgb(raw):
     """LIBERO renders upside down; both reference runners rotate cameras by 180 degrees."""
     return np.ascontiguousarray(np.asarray(raw)[::-1, ::-1])
-
-
-def libero_gripper(chunk):
-    """Model gripper in [0, 1] (1 closes) to LIBERO's -1 close / +1 open, as both reference runners do."""
-    converted = np.array(chunk, dtype=np.result_type(np.asarray(chunk).dtype, np.float32), copy=True)
-    converted[:, -1] = -np.sign(2 * converted[:, -1] - 1)
-    return converted
-
-
-# Named, deterministic raw-to-native action conversions; evidence records the name and the raw chunk.
-CONVERSIONS = {"libero-gripper": libero_gripper}
 
 
 def prepare_libero_observation(observation, resize_size=224):

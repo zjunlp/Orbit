@@ -41,9 +41,22 @@ class Lab:
         self.execution_lock = threading.RLock()
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.allowed = {t['name'] for t in native['tools']}
-        self.deadline = time.monotonic() + plan['wall_s']
+        self.deadline = None
+        self.timer = None
+        self.close_reason = None
         self.finished = False
         self.finalized = False
+
+    def start(self):
+        with self.lock:
+            if self.finished:
+                raise RuntimeError('The trial is closed')
+            if self.deadline is None:
+                self.deadline = time.monotonic() + self.plan['wall_s']
+                self.timer = threading.Timer(self.plan['wall_s'], self.finalize)
+                self.timer.daemon = True
+                self.timer.start()
+            return {'remaining_s': max(0, self.deadline - time.monotonic())}
 
     def call(self, name, arguments):
         if name not in self.allowed:
@@ -51,8 +64,10 @@ class Lab:
         if not isinstance(arguments, dict):
             raise ValueError('Tool arguments must be an object')
         with self.lock:
-            if self.finished or time.monotonic() >= self.deadline:
+            if self.finished or (self.deadline is not None and time.monotonic() >= self.deadline):
                 raise RuntimeError('The trial is closed')
+            if self.deadline is None:
+                raise RuntimeError('The trial has not started')
             if any(op['status'] == 'running' for op in self.operations.values()):
                 raise ValueError('Wait for the current operation before the next public tool call')
             operation = {'id': uuid.uuid4().hex, 'status': 'running'}
@@ -65,7 +80,7 @@ class Lab:
     def invoke(self, operation_id, name, arguments):
         with self.execution_lock:
             with self.lock:
-                if self.finished:
+                if self.finished or time.monotonic() >= self.deadline:
                     self.operations[operation_id].update(status='failed', error={'message': 'The trial is closed'})
                     return
             operation = {'id': operation_id, 'status': 'completed'}
@@ -92,15 +107,23 @@ class Lab:
     def finalize(self):
         from evidence_helpers import sign_result
         with self.lock:
-            self.finished = True
+            if not self.finished:
+                if self.deadline is None:
+                    self.close_reason = 'not_started'
+                elif time.monotonic() >= self.deadline:
+                    self.close_reason = 'wall_limit'
+                else:
+                    self.close_reason = 'agent_stop'
+                self.finished = True
+                if self.timer is not None:
+                    self.timer.cancel()
         with self.execution_lock, self.lock:
             if self.finalized:
                 return {'finalized': True}
-            closed = 'wall_limit' if time.monotonic() >= self.deadline else 'agent_stop'
             capture = self.worker.finalize()
             self.worker.close()
             excluded = {'result.json', 'evidence-signature.json'}
-            result = {'schema': 1, 'plan': self.plan, 'capture': capture, 'close_reason': closed,
+            result = {'schema': 1, 'plan': self.plan, 'capture': capture, 'close_reason': self.close_reason,
                       'sha256': {p.relative_to(ROOT).as_posix(): digest(p)
                                  for p in sorted(ROOT.rglob('*')) if p.is_file()
                                  and p.relative_to(ROOT).as_posix() not in excluded}}
@@ -188,6 +211,13 @@ def make_app(lab):
     def ready():
         return {'ready': True}
 
+    @app.post('/v1/trial/start')
+    def start():
+        try:
+            return lab.start()
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @app.get('/v1/tools')
     def tools(environment_id: str):
         if environment_id != ENVIRONMENT:
@@ -236,13 +266,9 @@ def main():
         raise ValueError('Unknown command')
     import uvicorn
     lab = prepare()
-    timer = threading.Timer(lab.plan['wall_s'], lab.finalize)
-    timer.daemon = True
-    timer.start()
     try:
         uvicorn.run(make_app(lab), host='0.0.0.0', port=8765, log_level='warning')
     finally:
-        timer.cancel()
         lab.finalize()
 
 

@@ -1,0 +1,23 @@
+{
+  "repository": "LightOriginsHQ/LightNav-0",
+  "revision": "826dc5fbfa37afa8293d2e336d329b6ffc0bfb64",
+  "files": {
+    "action_tokenizer/alpha_per_source.json": "git:4519cb0f68b6149bbea895eb2adbe2e6857d33fc",
+    "action_tokenizer/codebook_l0.npy": "sha256:daaea83b3ae4637a042d1f61b34a687870d735ef709689e02c1e43d39aab6e16",
+    "action_tokenizer/codebook_l1.npy": "sha256:dfde603f96b333cda4c676613ac2f772cec3906a8dbbb7a7415bfeb4aa04e4bf",
+    "action_tokenizer/codebook_l2.npy": "sha256:2a7b186159bc9375997535008028930efe09c9b239a522639aff6febfac6c51c",
+    "action_tokenizer/distance_l0.npy": "sha256:c52ba050dee23d720a805630eb9ff2530437cf6f0acc9de2ffd5b5658f6fb232",
+    "action_tokenizer/distance_l1.npy": "sha256:4468921632e795389edf00bdb879bbf1670f4ed1e0a001649d7350a4e7669f5d",
+    "action_tokenizer/distance_l2.npy": "sha256:27c0ed18606d53cfb5c47f8f822345c2c509c30979ad106607bd610125d0b509",
+    "action_tokenizer/jacobian_weights.npy": "sha256:43872af8deba9986c40da98b8511f5b94b3353a053132b22f7a190b2d7cf9feb",
+    "action_tokenizer/manifest.json": "git:354dd4d6f9825fb8b24052750c48a283dce55b98",
+    "chat_template.jinja": "git:124386803f142761528f710e77ae483f5f8c4fc4",
+    "config.json": "git:34257a5a687ad53a9c7cd9a547ead8bbc60ce980",
+    "eval_config.json": "git:191c0f8b386ee7f026e14d20411fe39a8f690a09",
+    "model-00001-of-00001.safetensors": "sha256:ffc4a925378a881afa761865048eb8d07c55cacf5eaf66548b6641c39f67af18",
+    "model.safetensors.index.json": "git:7699b2402f0a5d2ac925da6c83277ae888f377a1",
+    "processor_config.json": "git:c5a5f23c8133e1b1350740a40bcf55604d69840f",
+    "tokenizer.json": "sha256:5ef513b0453e878d3ef6c1c3a51a11403a404358b763f4d83e23b2c3815f2ab6",
+    "tokenizer_config.json": "git:c104e4eefaec9aac63b3b0f5c6c81cb2276755f0"
+  }
+}

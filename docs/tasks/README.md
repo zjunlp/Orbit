@@ -156,6 +156,15 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261113](20261113-molmobot-v2.md) Native MolmoBot v2 evaluation
 - [20261113](20261113-lingbot-vla-v2.md) LingBot-VLA 2.0 on native RoboTwin
 - [20261114](20261114-libero-mem.md) Native LIBERO-Mem with ordered subgoals
+- [20261114](20261114-eb-navigation.md) Native EB-Navigation and matched SeeNav/Qwen policies
+- [20261114](20261114-eb-navigation-review.md) EB-Navigation policy input video and planner regression
+- [20261114](20261114-vln-chores-hssd.md) Native CHORES and HSSD-OV with SPOC, FLaRe and LightNav-0
+- [20261115](20261115-embodied-evidence-coverage.md) Native embodied verification and official score coverage
+- [20261115](20261115-embodied-shared-reference.md) Shared frozen reference in native embodied Solve evidence
+- [20261116](20261116-seenav-fallbacks.md) SeeNav fallback diagnostics in Trial evidence
+- [20261116](20261116-embodied-catalog-checkpoints.md) Embodied product catalog and CHORES checkpoint scope
+- [20261116](20261116-embodied-agent-adapter-maintenance.md) Cadence and preparation fixes for embodied Agent adapters
+- [20261116](20261116-agent-setup-deadline.md) Agent installation deadline and EmbodiedLab native stop reason
 - [20261114](20261114-xiaomi-robocasa365.md) Xiaomi-Robotics-1 on native RoboCasa365
 - [20261114](20261114-gigaworld-robocasa365.md) GigaWorld-Policy-0.1 on native RoboCasa365
 

@@ -430,6 +430,7 @@ export function calibrationReport(
           mode: "policy" as const,
           policyRef: job.spec.methods[0]?.policyRef,
           samples: job.spec.samplePlan?.items.length,
+          ...(job.policyWarnings?.length ? { policyWarnings: job.policyWarnings } : {}),
           budget: {
             minutes: c.budgetMin as number,
             deadlineAt: deadlineAt as string,

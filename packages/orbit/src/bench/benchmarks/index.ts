@@ -4,16 +4,22 @@ import { type CatalogEntry, SupportedBenchmark } from "../../contracts/index.ts"
 import { asiBench } from "./asi-bench.ts";
 import { automationbench } from "./automationbench.ts";
 import { bfcl } from "./bfcl.ts";
+import { bigym2 } from "./bigym2.ts";
 import { calvin } from "./calvin.ts";
 import { chartography } from "./chartography.ts";
+import { chores } from "./chores.ts";
+import { cliport } from "./cliport.ts";
 import { colosseumV2 } from "./colosseum-v2.ts";
 import { cuaBench } from "./cua-bench.ts";
+import { ebNavigation } from "./eb-navigation.ts";
 import { embodiedClbench } from "./embodied-clbench.ts";
 import { embodiedFirstExam } from "./embodied-first-exam.ts";
 import { embodiedlab } from "./embodiedlab.ts";
 import { frontiersweV2 } from "./frontierswe-v2.ts";
+import { hssdOv } from "./hssd-ov.ts";
 import { humaneval } from "./humaneval.ts";
 import { libero } from "./libero.ts";
+import { liberoMem } from "./libero-mem.ts";
 import { liberoPlus } from "./libero-plus.ts";
 import { liberoPro } from "./libero-pro.ts";
 import { longds } from "./longds.ts";
@@ -71,6 +77,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   mobileworld,
   osworld,
   libero,
+  liberoMem,
   liberoPlus,
   vlabench,
   simplerEnv,
@@ -89,6 +96,11 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   liberoPro,
   robodojo,
   robolab,
+  bigym2,
+  cliport,
+  ebNavigation,
+  chores,
+  hssdOv,
 ];
 
 const SUPPORTED = definitions.map((entry) =>
@@ -97,6 +109,14 @@ const SUPPORTED = definitions.map((entry) =>
 const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
   "libero-panda-raw/1": "libero",
+  "libero-mem-panda-raw/1": "libero-mem",
+  "bigym2-g1-pitch/1": "bigym2",
+  "bigym2-g1-no-pitch/1": "bigym2",
+  "cliport-native-pick-place-rgbd/1": "cliport",
+  "cliport-native-push-rgbd/1": "cliport",
+  "eb-navigation-projected/1": "eb-navigation",
+  "chores-stretch-rgb/1": "chores",
+  "hssd-ov-stretch-discrete/1": "hssd-ov",
   "libero-plus-panda-raw/1": "libero-plus",
   "molmospaces-franka-droid/1": "molmospaces",
   "colosseum-v2-single-arm/1": "colosseum-v2",

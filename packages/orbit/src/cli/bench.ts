@@ -24,7 +24,13 @@ import {
   sampleLabel,
   trialRunIds,
 } from "../contracts/index.ts";
-import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "../contracts/metrics.ts";
+import {
+  fmtCi,
+  fmtMetric,
+  formatOfficialCoverage,
+  primaryMetric,
+  resolveMetrics,
+} from "../contracts/metrics.ts";
 import type { Print } from "./auth.ts";
 import { calibrate } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
@@ -161,7 +167,9 @@ function formatReport(r: BenchReport): string {
         String(m.invalid),
         String(m.unknown),
         v(m.orbit?.mean),
-        m.official ? `${v(m.official.value)}${m.official.partial ? " (partial)" : ""}` : "-",
+        m.official
+          ? `${v(m.official.value)} (${formatOfficialCoverage(m.official, m.planned)})`
+          : "-",
         formatTokenUsage(m.tokenUsage),
         Object.entries(m.failures)
           .map(([k, n]) => `${k}:${n}`)
@@ -192,6 +200,7 @@ function formatJob(d: BenchJobDetail): string {
   const metrics = resolveMetrics(job.metrics);
   const lines = [
     `${job.id}  ${job.state}  ${job.spec.benchmark}${job.spec.name ? `  (${job.spec.name})` : ""}`,
+    ...(job.policyWarnings ?? []).map((warning) => `Warning: ${warning}`),
     ...(job.source
       ? [
           `benchmark at ${job.source.describe ?? job.source.commit.slice(0, 12)}${job.source.dirty && !job.source.describe?.endsWith("-dirty") ? " (dirty)" : ""}`,
@@ -221,7 +230,7 @@ function formatJob(d: BenchJobDetail): string {
                 const o = s.official;
                 if (!o) return `${s.method} -`;
                 const m = metrics.find((x) => x.name === o.metric);
-                return `${s.method} ${o.value === null ? "-" : m ? fmtMetric(o.value, m) : String(o.value)}${o.partial ? ` (partial, ${o.missing} missing)` : ""}`;
+                return `${s.method} ${o.value === null ? "-" : m ? fmtMetric(o.value, m) : String(o.value)} (${formatOfficialCoverage(o, s.trials)})`;
               })
               .join(" · "),
         ]
@@ -724,11 +733,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           },
           o.folder,
         );
-        print(
-          o.json,
-          job,
-          () =>
+        print(o.json, job, () =>
+          [
             `started ${job.id}: ${job.spec.methods.length} methods × ${job.spec.samplePlan ? `${job.spec.samplePlan.items.length} planned samples` : `${job.spec.tasks.length} tasks × ${job.spec.seeds} seeds`}`,
+            ...(job.policyWarnings ?? []).map((warning) => `Warning: ${warning}`),
+          ].join("\n"),
         );
       },
     );

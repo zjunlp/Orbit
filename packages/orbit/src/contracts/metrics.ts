@@ -20,6 +20,21 @@ export interface MetricDef {
   reference?: number;
 }
 
+/** Earlier reports only recorded the scored and missing counts. */
+export function formatOfficialCoverage(
+  value: { samples: number; missing: number; planned?: number; excluded?: number },
+  planned: number,
+): string {
+  const total = value.planned ?? planned;
+  const excluded = value.excluded ?? total - value.samples - value.missing;
+  return [
+    `${value.samples}/${total} scored`,
+    ...(value.missing ? [`${value.missing} missing`] : []),
+    ...(excluded > 0 ? [`${excluded} excluded`] : []),
+    ...(value.samples < total ? ["partial"] : []),
+  ].join(", ");
+}
+
 /** What a trial contributes: an outcome's score and its adapter metrics. */
 export interface MetricSource {
   score: number | null;

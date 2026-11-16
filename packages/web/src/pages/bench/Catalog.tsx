@@ -48,6 +48,16 @@ import "./taxonomy.css";
 import "../hub.css";
 
 type CalState = "passed" | "failed" | "running" | "none";
+function policyOnly(e: CatalogEntry) {
+  const methods = (e.listing?.capabilities ?? e.capabilities)?.methods;
+  return Boolean(
+    methods?.includes("policy") && !methods.includes("empty") && !methods.includes("oracle"),
+  );
+}
+function lacksPolicyBatch(e: CatalogEntry) {
+  return policyOnly(e) && !(e.listing?.capabilities ?? e.capabilities)?.embodied?.batch;
+}
+
 export function calState(e: CatalogEntry): CalState {
   const r = e.calibrations[0];
   if (!r) return "none";
@@ -615,7 +625,12 @@ function BenchmarkCard({
             <button
               type="button"
               className="btn sm"
-              disabled={!e.listing || state === "running"}
+              disabled={!e.listing || state === "running" || lacksPolicyBatch(e)}
+              title={
+                lacksPolicyBatch(e)
+                  ? "Fixed batches are unavailable. See the Calibration tab."
+                  : undefined
+              }
               onClick={() => setCalibrating(true)}
             >
               Calibrate
@@ -640,7 +655,7 @@ function BenchmarkCard({
           }}
         />
       )}
-      {calibrating && (
+      {calibrating && !lacksPolicyBatch(e) && (
         <CalibrateDialog
           e={e}
           onClose={() => setCalibrating(false)}
@@ -820,6 +835,26 @@ export function CalibrationDetail({ e }: { e: CatalogEntry }) {
     <div className="col" style={{ gap: 16 }}>
       {r ? (
         <CalibrationResult r={r} />
+      ) : lacksPolicyBatch(e) ? (
+        <div className="catalog-empty">
+          <p>
+            Policy calibration requires fixed batches, which this registration does not support.
+          </p>
+          <p>
+            Run an ordinary evaluation with <code>orbit bench run --sample-plan</code>, then use{" "}
+            <code>orbit bench rescore</code> on a completed trial.
+          </p>
+        </div>
+      ) : policyOnly(e) ? (
+        <div className="catalog-empty">
+          <p>
+            Use <b>Calibrate</b> on this row to check a real policy with 2–5 frozen episodes, or run{" "}
+            <code>
+              orbit bench calibrate {e.benchmark.name} --policy POLICY --sample-plan samples.json
+            </code>
+            .
+          </p>
+        </div>
       ) : (
         <div className="catalog-empty">
           <p>
@@ -893,6 +928,13 @@ function CalibrationResult({ r }: { r: CalibrationReport }) {
         )}
         <span>{dateTime(r.endedAt ?? r.createdAt)}</span>
       </div>
+      {!!r.policyWarnings?.length && (
+        <ul className="warnbox" aria-label="Checkpoint scope">
+          {r.policyWarnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
       <table className="table cal-checks">
         <thead>
           <tr>
@@ -1120,11 +1162,7 @@ function CalibrateDialog({
   onStarted: () => void;
 }) {
   const caps = e.listing?.capabilities;
-  const policyMode = Boolean(
-    caps?.methods.includes("policy") &&
-      !caps.methods.includes("empty") &&
-      !caps.methods.includes("oracle"),
-  );
+  const policyMode = policyOnly(e);
   const canOracle =
     caps?.calibration?.oracle !== "none" && (!caps || caps.methods.includes("oracle"));
   const canRescore = caps?.rescore !== "none";
@@ -1161,7 +1199,7 @@ function CalibrateDialog({
               ...(suite ? { suite } : {}),
             },
       );
-      toast(`Calibration started: ${job.id}`);
+      toast([`Calibration started: ${job.id}`, ...(job.policyWarnings ?? [])].join(" · "));
       onStarted();
     } catch (err) {
       setError((err as Error).message);

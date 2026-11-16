@@ -1,4 +1,4 @@
-import { fmtMetric, type MetricDef } from "@zjunlp/orbit/metrics";
+import { fmtMetric, formatOfficialCoverage, type MetricDef } from "@zjunlp/orbit/metrics";
 import { ciTitle, StatValue } from "../../components/BenchMetrics.tsx";
 import type { BenchJob, MethodSummary } from "../../lib/api.ts";
 
@@ -69,7 +69,7 @@ export function MethodCard({
                 ? fmtMetric(off.value, offMetric)
                 : off.value.toFixed(2)}
           </b>{" "}
-          over {off.samples} samples{off.partial ? ` · partial, ${off.missing} missing` : ""}
+          · {formatOfficialCoverage(off, s.trials)}
         </span>
       )}
       {others.length > 0 && (

@@ -419,6 +419,8 @@ export const CalibrationReport = z.object({
   mode: z.literal("policy").optional(),
   policyRef: ProfileName.optional(),
   samples: z.number().int().positive().optional(),
+  /** Advisory checkpoint scope messages saved at submission. */
+  policyWarnings: z.array(z.string()).optional(),
   budget: z
     .object({
       minutes: z.number().positive(),
@@ -828,6 +830,8 @@ export const BenchJob = z.object({
   /** Non-secret registration fixed at submission; absent only for legacy jobs. */
   benchmarkSnapshot: Benchmark.optional(),
   resolvedBindings: z.record(z.string(), ResolvedBinding).optional(),
+  /** Checkpoint scope advisories recorded when this job was submitted. */
+  policyWarnings: z.array(z.string()).optional(),
   capabilities: BenchCapabilities.optional(),
   /** The benchmark's own aggregation rule at submission, when its adapter declares one. */
   official: OfficialRule.optional(),
@@ -880,8 +884,13 @@ export const OfficialValue = z.object({
   value: z.number().nullable(),
   /** Samples in the denominator under the rule. */
   samples: z.number().int(),
-  /** Planned samples not finished (pending, cancelled or lost): the value is then partial. */
+  /** The method's full sample plan. Absent from earlier immutable reports. */
+  planned: z.number().int().nonnegative().optional(),
+  /** Invalid samples excluded by the rule and valid samples without the metric. */
+  excluded: z.number().int().nonnegative().optional(),
+  /** Planned samples that are pending, cancelled or lost. */
   missing: z.number().int(),
+  /** At least one planned sample did not contribute to the score. */
   partial: z.boolean(),
 });
 export type OfficialValue = z.infer<typeof OfficialValue>;

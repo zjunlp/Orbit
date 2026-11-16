@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 from orbit_bench import main, invalid, valid
+from runtime import FINALIZE_TIMEOUT_S
 
 HERE = Path(__file__).resolve().parent
 REVISION = "f33105f017f5408f8d2c6debe8bd4086881d3ea4"
@@ -223,7 +224,7 @@ def solve(req):
                 "init": True, "networks": ["embodied"], "collect": ["/evidence"],
                 "healthcheck": {"command": ["python", "-c", "import socket; socket.create_connection(('127.0.0.1',8765),2).close()"],
                     "intervalSec": 2, "timeoutSec": 3, "startPeriodSec": 30, "retries": 30}}],
-            "hooks": [{"service": "environment", "command": "python /adapter/runtime.py finalize /adapter/plan.json", "timeoutSec": 90}]})
+            "hooks": [{"service": "environment", "command": "python /adapter/runtime.py finalize /adapter/plan.json", "timeoutSec": FINALIZE_TIMEOUT_S + 5}]})
     return {"spec": spec, "issues": []}
 
 

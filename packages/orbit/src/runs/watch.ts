@@ -12,7 +12,7 @@ import * as docker from "../executor/docker.ts";
 import { safeJoin } from "../records/index.ts";
 import type { RunContext } from "./context.ts";
 import { DOCKER_RETRY_MS, LOG_DRAIN_TIMEOUT_MS, outcome, sleep } from "./execution.ts";
-import { AGENT_INSTALL_FAILED, AGENT_SETUP_FAILED } from "./launch.ts";
+import { AGENT_INSTALL_FAILED, AGENT_SETUP_FAILED, AGENT_SETUP_TIMEOUT } from "./launch.ts";
 import {
   checkWatching,
   collectAfter,
@@ -90,7 +90,12 @@ export async function watch(
   }
   ctx.disarmTimeout(id);
   const preCollected = join(phaseStateDir(ctx, id), "solve-collected");
-  const checkpointFailure = Boolean(spec.checkpoint && exitCode !== 0 && ctl.cancel !== "cancel");
+  const setupTimeout = join(dirs.root, AGENT_SETUP_TIMEOUT);
+  const setupTimedOut = existsSync(setupTimeout);
+  if (setupTimedOut) ctl.fail ??= readFileSync(setupTimeout, "utf8");
+  const checkpointFailure = Boolean(
+    spec.checkpoint && (exitCode !== 0 || setupTimedOut) && ctl.cancel !== "cancel",
+  );
   await runPhased(ctx, id, [
     {
       name: "quiesce",

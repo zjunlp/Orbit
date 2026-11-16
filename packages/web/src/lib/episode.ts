@@ -123,6 +123,11 @@ export function parseEpisode(text: string): EpisodeTrajectory {
       !time(chunk.end) ||
       chunk.end < chunk.start ||
       (chunk.inferSeconds !== undefined && !time(chunk.inferSeconds)) ||
+      (chunk.fallback !== undefined &&
+        chunk.fallback !== "none" &&
+        chunk.fallback !== "empty-plan" &&
+        chunk.fallback !== "invalid-plan" &&
+        chunk.fallback !== "unrecorded") ||
       (chunk.label !== undefined && (typeof chunk.label !== "string" || chunk.label.length > 100))
     )
       throw new Error("Invalid action chunk.");

@@ -22,6 +22,7 @@ export async function calibrate(
   { waitMin, progress, ...request }: CalibrateOptions,
 ): Promise<CalibrationReport> {
   const job = await c.benchCalibrate(CalibrationRequest.parse({ benchmark, ...request }));
+  for (const warning of job.policyWarnings ?? []) progress?.(`Warning: ${warning}`);
   const deadline = Date.now() + waitMin * 60_000;
   let phase = "";
   for (;;) {

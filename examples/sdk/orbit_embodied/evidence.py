@@ -7,9 +7,15 @@ import math
 import os
 from pathlib import Path
 
-import numpy as np
-
 from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed, robodojo_layout
+
+
+def validate_action_chunk(chunk, width, required):
+    import numpy as np
+
+    if (chunk.dtype.kind not in "buif" or chunk.ndim != 2 or chunk.shape[1] != width
+            or len(chunk) < required or not np.isfinite(chunk).all()):
+        raise ValueError("policy action chunk has invalid shape, length or non-finite values")
 
 
 def write_json(path, value, *, compact=False):
@@ -102,6 +108,8 @@ def verify_simpler_termination(controls, initial, horizon):
 
 
 def verify_manipulation_stopping(kind, controls, horizon):
+    import numpy as np
+
     for step, row in enumerate(controls, start=1):
         done, success = row.get("nativeDone"), row["nativeSuccess"]
         stopped = done is True or step == horizon or (kind == "robomimic" and success is True)
@@ -145,7 +153,18 @@ def verify_diffusion_stopping(controls, horizon, replan_steps):
         previous_success = row["nativeSuccess"]
 
 
-def verify_episode(directory, sample_ref, episode_id, expected=None):
+def read_episode_reference(directory, *, batched):
+    directory = Path(directory).resolve()
+    root = directory.parents[1] if batched else directory.parent
+    path = root / "reference.json"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("missing regular frozen reference archive")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def verify_episode(directory, sample_ref, episode_id, expected=None, *, reference=None):
+    import numpy as np
+
     directory = Path(directory).resolve()
     manifest = json.loads((directory / "evidence-manifest.json").read_text())
     if manifest.get("version") != 1 or manifest.get("sampleRef") != sample_ref or manifest.get("episodeId") != episode_id:
@@ -163,10 +182,14 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     binding = json.loads((directory / "resolved-binding.json").read_text())
     result = json.loads((directory / "native-result.json").read_text())
     check_sample(contract["sample"], sample_ref)
+    identity = contract["identity"]
+    shared_reference = "referenceDigest" in identity
     if expected is not None:
-        identity = contract["identity"]
+        if shared_reference != ("referenceDigest" in expected):
+            raise ValueError("evidence reference format differs from the frozen solve Run")
+        reference_key = "referenceDigest" if shared_reference else "reference"
         for name, actual in (("sample", contract["sample"]), ("binding", binding),
-                             ("reference", identity.get("reference")), ("policy", identity.get("policy"))):
+                             (reference_key, identity.get(reference_key)), ("policy", identity.get("policy"))):
             if actual != expected[name]:
                 raise ValueError("evidence differs from the frozen " + name)
         if identity.get("implementationDigest") != expected["solveImplementationDigest"]:
@@ -193,7 +216,15 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
             raise ValueError("contract/result identity mismatch")
     if contract["bindingDigest"] != binding["digest"] or digest(contract["sample"]) != contract["sampleDigest"]:
         raise ValueError("contract fingerprint mismatch")
-    reference = contract["identity"].get("reference", {})
+    if shared_reference:
+        if "reference" in identity:
+            raise ValueError("episode has conflicting frozen reference representations")
+        if reference is None:
+            reference = read_episode_reference(directory, batched=bool(identity.get("batch")))
+        if digest(reference) != identity["referenceDigest"]:
+            raise ValueError("shared reference digest differs from the frozen episode")
+    else:
+        reference = identity.get("reference", {})
     if "parameters" in reference:
         sample = contract["sample"]
         horizon = reference_horizon(reference, sample["taskId"], sample=sample)
@@ -204,7 +235,7 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     actions = [json.loads(line) for line in (directory / "actions.jsonl").read_text().splitlines()]
     controls = [row for row in actions if row["phase"] == "control"]
     if result["valid"]:
-        settling = contract["identity"].get("reference", {}).get("parameters", {}).get("settleSteps")
+        settling = reference.get("parameters", {}).get("settleSteps")
         if settling is not None:
             reset_actions = [row for row in actions if row["phase"] == "settle"]
             if len(reset_actions) != settling or [row["step"] for row in reset_actions] != list(range(settling)):
@@ -214,29 +245,43 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     first_replan = reference.get("parameters", {}).get("firstReplanSteps", contract["replanSteps"])
     if type(first_replan) is not int or not 0 < first_replan <= contract["replanSteps"]:
         raise ValueError("invalid initial replan interval in episode evidence")
+    frozen_conversion = contract["identity"].get("policy", {}).get("actionConversion")
+    calvin = reference.get("environment", {}).get("kind") == "calvin"
+    width, = binding["benchmarkProfile"]["action"]["shape"]
+    chunk_id, index, limit = 0, 0, first_replan
     for row in controls:
-        chunk_path = "chunks/" + str(row["chunk"]) + ".npy"
-        timing_path = "chunks/" + str(row["chunk"]) + ".json"
-        if chunk_path not in manifest["files"] or timing_path not in manifest["files"]:
-            raise ValueError("requested action chunk is missing")
-        chunk = np.load(directory / chunk_path, allow_pickle=False)
-        timing = json.loads((directory / timing_path).read_text())
-        if "conversion" in timing:
-            from .openpi import CONVERSIONS
-            raw_path = "chunks/" + str(row["chunk"]) + ".raw.npy"
-            if timing["conversion"] not in CONVERSIONS or raw_path not in manifest["files"]:
-                raise ValueError("converted action chunk lacks its raw model output")
-            raw = np.load(directory / raw_path, allow_pickle=False)
-            if not np.array_equal(CONVERSIONS[timing["conversion"]](raw), chunk):
-                raise ValueError("native actions differ from the recorded conversion of the model output")
-        index = row["chunkIndex"]
-        limit = first_replan if row["chunk"] == 0 else contract["replanSteps"]
-        if not isinstance(index, int) or not 0 <= index < min(len(chunk), limit):
-            raise ValueError("executed action has an invalid chunk index")
-        if not np.array_equal(np.asarray(row["action"]), chunk[index]) or not np.isfinite(chunk).all():
+        if (type(row["chunk"]) is not int or type(row["chunkIndex"]) is not int
+                or row["chunk"] != chunk_id or row["chunkIndex"] != index):
+            raise ValueError("executed action has an invalid chunk sequence")
+        if index == 0:
+            prefix = "chunks/" + str(chunk_id)
+            chunk_path, timing_path = prefix + ".npy", prefix + ".json"
+            if chunk_path not in manifest["files"] or timing_path not in manifest["files"]:
+                raise ValueError("requested action chunk is missing")
+            chunk = np.load(directory / chunk_path, allow_pickle=False)
+            validate_action_chunk(chunk, width, limit)
+            timing = json.loads((directory / timing_path).read_text())
+            if frozen_conversion is not None and timing.get("conversion") != frozen_conversion:
+                raise ValueError("action conversion differs from the frozen policy")
+            if "conversion" in timing:
+                from .conversions import CONVERSIONS
+                raw_path = prefix + ".raw.npy"
+                if timing["conversion"] not in CONVERSIONS or raw_path not in manifest["files"]:
+                    raise ValueError("converted action chunk lacks its raw model output")
+                raw = np.load(directory / raw_path, allow_pickle=False)
+                if not np.array_equal(CONVERSIONS[timing["conversion"]](raw), chunk):
+                    raise ValueError("native actions differ from the recorded conversion of the model output")
+        if not np.array_equal(np.asarray(row["action"]), chunk[index]):
             raise ValueError("executed action differs from the requested action")
         if row["sourceObservation"] != timing["sourceObservation"] or row["sourceObservation"] + index != row["step"]:
             raise ValueError("action is linked to the wrong observation")
+        # Only CALVIN can replan early. Its sequence verifier checks the completion signal.
+        replan = calvin and row["reward"] == 1
+        if row.get("replan", replan) is not replan:
+            raise ValueError("invalid action chunk replan evidence")
+        index += 1
+        if replan or index == limit:
+            chunk_id, index, limit = chunk_id + 1, 0, contract["replanSteps"]
     if not isinstance(result["success"], bool) or not isinstance(result["valid"], bool):
         raise ValueError("invalid native verdict")
     if result["valid"] and (result.get("failure") or not controls or result["steps"] > contract["horizon"]):
@@ -250,7 +295,7 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
         initial = json.loads((directory / "initial-state.json").read_text())
         if initial["sampleRef"] != sample_ref or initial["initialStateId"] != contract["sample"].get("initialStateId") or initial["initialStateDigest"] != contract["sample"].get("initialStateDigest"):
             raise ValueError("initial-state evidence differs from the sample plan")
-    rule = contract["identity"].get("reference", {}).get("parameters", {}).get("successRule", "last")
+    rule = reference.get("parameters", {}).get("successRule", "last")
     if rule not in ("last", "any", "chunk-last-any"):
         raise ValueError("unsupported native success aggregation")
     if rule == "chunk-last-any":
@@ -279,6 +324,17 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if result["valid"] and kind == "cliport":
         from .cliport import verify_cliport
         verify_cliport(reference, contract["sample"], controls, result)
+    if result["valid"] and kind == "chores":
+        from .chores import verify_chores
+        verify_chores(reference, contract["sample"], initial["state"], controls, result)
+    if result["valid"] and kind == "hssd-ov":
+        if not {"navigation.navmesh", "goal-viewpoints.json"} <= manifest["files"].keys():
+            raise ValueError("HSSD-OV scoring evidence is missing")
+        from .hssd_ov import verify_hssd
+        verify_hssd(reference, contract["sample"], initial["state"], controls, result, directory)
+    if result["valid"] and kind == "eb-navigation":
+        from .eb_navigation import verify_navigation
+        verify_navigation(reference, contract["sample"], initial["state"], controls, result)
     if result["valid"] and kind in ("robomimic", "vima-bench"):
         verify_manipulation_stopping(kind, controls, contract["horizon"])
     if result["valid"] and kind == "molmospaces":
@@ -322,6 +378,8 @@ def verify_episode(directory, sample_ref, episode_id, expected=None):
     if (result["valid"] and contract.get("version") == 3
             and reference.get("environment", {}).get("protocol") == "diffusion-policy"):
         verify_diffusion_stopping(controls, contract["horizon"], contract["replanSteps"])
+    if any(row["terminated"] for row in controls[:-1]):
+        raise ValueError("control steps follow a terminal step")
     # A valid failure ends at the horizon or at a native termination (e.g. Gym truncation).
     if (result["valid"] and not result["success"] and result["steps"] != contract["horizon"]
             and not controls[-1]["terminated"]):

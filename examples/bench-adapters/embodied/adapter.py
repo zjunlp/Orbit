@@ -70,7 +70,8 @@ def settings(req):
         raise ValueError("the benchmark image must be an immutable image ID or repository digest")
     kind = reference.get("environment", {}).get("kind")
     renderers = {"rlbench": ("xvfb-glx",), "vima-bench": ("pybullet-direct",),
-                 "cliport": ("pybullet-direct",), "bigym2": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
+                 "cliport": ("pybullet-direct",), "bigym2": ("egl",),
+                 "eb-navigation": ("vulkan",), "chores": ("vulkan",), "hssd-ov": ("egl",)}.get(kind, ("osmesa", "egl", "vulkan"))
     if config.get("renderer", "osmesa") not in renderers:
         raise ValueError("unsupported native renderer")
     return root, config, reference
@@ -169,6 +170,21 @@ def tasks(req):
         metrics = [{"name": "success_rate", "label": "Reward above 0.99", "unit": "ratio", "range": [0, 1]}]
     elif kind == "colosseum-v2":
         metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
+    elif kind == "eb-navigation":
+        from orbit_embodied.eb_navigation import SPLITS
+        metrics = [{"name": "distance_to_target", "label": "Final distance to target", "unit": "m",
+                    "higherIsBetter": False}, {"name": "steps", "label": "Control steps", "higherIsBetter": False}]
+        metrics.extend({"name": split + "_success", "label": split.replace("_", " ") + " success",
+                        "unit": "ratio", "range": [0, 1]} for split in SPLITS)
+    elif kind in ("chores", "hssd-ov"):
+        metrics = [{"name": "steps", "label": "Control steps", "higherIsBetter": False}]
+        if kind == "chores":
+            metrics.append({"name": "sel", "label": "Success weighted by episode length", "unit": "ratio", "range": [0, 1]})
+        else:
+            metrics.extend([{"name": "distance_to_target", "label": "Final geodesic distance", "unit": "m",
+                             "higherIsBetter": False},
+                            {"name": "spl", "label": "Success weighted by path length", "unit": "ratio", "range": [0, 1]}])
+    variant = {"chores-small/1": "CHORES-S", "chores-large/1": "CHORES-L"}.get(reference["id"]) if kind == "chores" else None
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
             "capabilities": {"embodied": {
@@ -177,7 +193,11 @@ def tasks(req):
                                  "replanSteps": reference["parameters"]["replanSteps"],
                                  **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
                              }, "methods": ["policy"],
-                             "taxonomy": {"domains": ["robotics"], "taskTypes": ["manipulation"],
+                             **({"identity": {"id": "chores", "name": "CHORES", "variant": variant}}
+                                if variant else {}),
+                             "taxonomy": {"domains": ["robotics"],
+                                          "taskTypes": (["navigation", "manipulation"] if kind == "chores" else
+                                                        ["navigation"] if kind in ("eb-navigation", "hssd-ov") else ["manipulation"]),
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
@@ -197,16 +217,20 @@ def tasks(req):
 def stage(req):
     destination = Path(req["trial"]["staging"])
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(SDK / "orbit_embodied", destination / "python/orbit_embodied", dirs_exist_ok=True,
+    source = SDK / "orbit_embodied"
+    staged_sdk = destination / "python/orbit_embodied"
+    shutil.copytree(source, staged_sdk, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "test_*.py"))
+    # Retries reuse the trial directory; a deleted module must not enter the new archive.
+    for module in staged_sdk.glob("*.py"):
+        if not (source / module.name).is_file():
+            module.unlink(missing_ok=True)
     shutil.copy2(HERE / "run.py", destination / "run.py")
     shutil.copy2(HERE / "adapter.py", destination / "adapter.py")
     return destination
 
 
-def solve_one(req):
-    _, config, reference = settings(req)
-    trial = req["trial"]
+def solve_member(trial, reference, implementation, episode_id):
     if "seed" in trial or not trial.get("sample") or trial["sampleRef"] != trial["sample"]["sampleId"]:
         raise ValueError("native embodied execution requires a planned sample, not legacy seeds")
     check_sample(trial["sample"], trial["sampleRef"])
@@ -221,7 +245,8 @@ def solve_one(req):
             raise ValueError("sample differs from the frozen native reset recipe")
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
-                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport"):
+                                  "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
+                                  "eb-navigation", "chores", "hssd-ov"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -240,16 +265,21 @@ def solve_one(req):
     expected = resolve_binding(reference["benchmarkProfile"], definition["profile"], reference["observationMap"])
     if binding != expected:
         raise ValueError("resolved binding differs from the submitted snapshot")
-    destination = stage(req)
-    payload = {"trialId": trial["id"], "sample": trial["sample"],
-               "episodeId": trial["id"] + "." + uuid.uuid4().hex,
-               "binding": binding, "reference": reference, "policy": definition,
-               "timeoutMin": trial.get("timeoutMin", 20),
-               "implementationDigest": config["implementationDigest"]}
-    (destination / "request.json").write_text(json.dumps(payload, allow_nan=False))
+    return {"trialId": trial["id"], "sample": sample, "episodeId": episode_id,
+            "binding": binding, "policy": definition, "timeoutMin": trial.get("timeoutMin", 20),
+            "implementationDigest": implementation}
+
+
+def solve_spec(trial, config, environment, destination):
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    memory_gb = 20 if environment.get("kind") == "robocasa-v02" else 8
+    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16}.get(environment.get("kind"), 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
+    if environment.get("kind") in ("eb-navigation", "chores", "hssd-ov"):
+        gpu = trial.get("options", {}).get("gpuId")
+        if gpu is not None:
+            if not gpu or "," in gpu or resources["gpus"] != 1:
+                raise ValueError("gpuId must name a single GPU for the native navigation runtime")
+            resources["gpuIds"] = [gpu]
     if "simGpuMemGB" in config:
         memory = float(config["simGpuMemGB"])
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
@@ -260,51 +290,61 @@ def solve_one(req):
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
     libero_kind = environment.get("kind")
     libero_path = "/opt/" + libero_kind + ":" if libero_kind in ("libero-pro", "libero-mem") else ""
+    native_path = "/opt/seenav:" if libero_kind == "eb-navigation" else ""
     assets = environment.get("assets")
     if assets:
         mounts.append({"dataset": assets["dataset"], "target": assets["target"], "mode": "ro"})
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
-                     "env": {"PYTHONPATH": "/orbit-embodied/python:" + libero_path + "/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
+                     "env": {"PYTHONPATH": "/orbit-embodied/python:" + native_path + libero_path + "/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
                              **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
-                                if gl_platform not in ("xvfb-glx", "pybullet-direct") else {})},
+                                if gl_platform not in ("xvfb-glx", "pybullet-direct")
+                                and environment.get("kind") != "eb-navigation" else {})},
                      "resources": resources,
-                     **({"workdir": str(Path(assets["target"]).parent)} if environment.get("kind") in ("robotwin", "robodojo") else {}),
+                     **({"workdir": str(Path(assets["target"]).parent)} if libero_kind in ("robotwin", "robodojo") else {}),
+                     **({"workdir": "image"} if libero_kind == "chores" else {}),
                      "timeoutMin": trial.get("timeoutMin", 20), "root": True,
-                     "tags": {"embodied_evidence": "4" if environment.get("protocol") == "diffusion-policy" else "2"},
+                     "tags": {"embodied_evidence": "4" if environment.get("protocol") == "diffusion-policy" else "2",
+                              "embodied_reference": config["profileDigest"]},
                      "mounts": mounts}}
 
 
 def solve(req):
+    _, config, reference = settings(req)
+    environment = reference.get("environment", {})
+    leader = req["trial"]
+    implementation = config["implementationDigest"]
+    snapshot = {"reference": reference, "referenceDigest": config["profileDigest"]}
     if not req.get("batch"):
-        return solve_one(req)
+        episode_id = leader["id"] + "." + uuid.uuid4().hex
+        payload = solve_member(leader, reference, implementation, episode_id)
+        destination = stage(req)
+        reply = solve_spec(leader, config, environment, destination)
+        (destination / "request.json").write_text(json.dumps({**payload, **snapshot}, allow_nan=False))
+        return reply
     batch = req["batch"]
     plan, trials = batch["plan"], batch["trials"]
     if digest({key: value for key, value in plan.items() if key != "digest"}) != plan["digest"]:
         raise ValueError("batch plan digest mismatch")
     if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
         raise ValueError("batch membership or leader mismatch")
-    reference = reference_profile(req["benchmark"]["config"])
-    if reference.get("environment", {}).get("kind") == "rlbench":
+    if environment.get("kind") == "rlbench":
         raise ValueError("RLBench requires a fresh simulator process per episode")
-    if reference.get("environment", {}).get("kind") in GENERATED_ENVIRONMENTS:
+    if environment.get("kind") in GENERATED_ENVIRONMENTS:
         check_distinct_resets([trial["sample"] for trial in trials], reference)
-    payloads, reply = [], None
+    payloads = []
     for index, (trial, member) in enumerate(zip(trials, plan["members"])):
         if (trial["id"] != member["trialId"] or trial["sampleRef"] != member["sampleRef"]
                 or trial.get("batch") != {"plan": plan, "index": index}
-                or trial["method"] != trials[0]["method"]
-                or trial["binding"] != trials[0]["binding"]):
+                or trial["method"] != leader["method"]
+                or trial["binding"] != leader["binding"]
+                or trial.get("options") != leader.get("options")):
             raise ValueError("batch trial differs from the frozen membership or method")
-        item = solve_one({**req, "trial": trial})
-        path = Path(trial["staging"]) / "request.json"
-        payload = json.loads(path.read_text())
-        payload.update(episodeId=member["episodeId"], batch={"plan": plan, "index": index})
-        payloads.append(payload)
-        if reply is None:
-            reply = item
-    destination = Path(trials[0]["staging"])
-    (destination / "batch-request.json").write_text(json.dumps({"plan": plan, "episodes": payloads}, allow_nan=False))
+        payloads.append(solve_member(trial, reference, implementation, member["episodeId"]))
+    destination = stage(req)
+    reply = solve_spec(leader, config, environment, destination)
+    payload = {**snapshot, "plan": plan, "episodes": payloads}
+    (destination / "batch-request.json").write_text(json.dumps(payload, allow_nan=False))
     reply["spec"]["command"] = ["/orbit-embodied/run.py", "batch", "/orbit-embodied/batch-request.json", "/orbit/output"]
     reply["spec"]["timeoutMin"] = sum(payload["timeoutMin"] for payload in payloads)
     tags = reply["spec"]["tags"]
@@ -318,7 +358,7 @@ def episode_path(req):
     return "episodes/" + batch["plan"]["members"][batch["index"]]["episodeId"] if batch else "episode"
 
 
-def verification_expectation(req):
+def verification_expectation(req, *, reference=None):
     trial, run = req["trial"], req["solve"]["run"]
     params, tags = run["spec"]["params"], run["spec"]["tags"]
     batch = trial.get("batch")
@@ -340,7 +380,8 @@ def verification_expectation(req):
             raise ValueError("solve Run differs from the frozen trial: " + key)
     check_sample(trial["sample"], trial["sampleRef"])
     config = req["benchmark"]["config"]
-    reference = reference_profile(config)
+    if reference is None:
+        reference = reference_profile(config)
     if not execution_trial or not trial.get("binding") or not trial["method"].get("policySnapshot"):
         raise ValueError("missing frozen verification context")
     version = int(tags.get("embodied_evidence", "1"))
@@ -348,9 +389,13 @@ def verification_expectation(req):
     native_done = version == 4 and reference.get("environment", {}).get("protocol") == "diffusion-policy"
     if not (legacy or native_done):
         raise ValueError("unsupported embodied evidence version")
-    return {"version": 1, "trialId": trial["id"], "sample": trial["sample"],
+    reference_digest = tags.get("embodied_reference")
+    if reference_digest is not None and (version < 2 or reference_digest != config["profileDigest"]):
+        raise ValueError("solve Run reference differs from the frozen registration")
+    snapshot = {"reference": reference} if reference_digest is None else {"referenceDigest": reference_digest}
+    return {"version": 1 if reference_digest is None else 2, "trialId": trial["id"], "sample": trial["sample"],
             "binding": trial["binding"], "policy": trial["method"]["policySnapshot"],
-            "reference": reference, "solveImplementationDigest": config["implementationDigest"],
+            **snapshot, "solveImplementationDigest": config["implementationDigest"],
             "solveRunId": run["id"], "executionTrialId": execution_trial,
             "evidenceVersion": version, "verifierDigest": implementation_digest(),
             **({"batch": batch} if batch else {})}
@@ -383,7 +428,8 @@ def score(req):
             raise ValueError("verifier and native evidence disagree")
         if verification["sampleRef"] != result["sampleRef"] or verification["episodeId"] != result["episodeId"]:
             raise ValueError("verification identity differs from the episode")
-        expected = verification_expectation(req)
+        reference = reference_profile(req["benchmark"]["config"])
+        expected = verification_expectation(req, reference=reference)
         if (verification.get("solveRunId") != expected["solveRunId"]
                 or verification.get("trialId") != expected["trialId"]
                 or verification.get("implementationDigest") != expected["verifierDigest"]
@@ -404,7 +450,7 @@ def score(req):
             files.append({"label": "Episode timeline", "phase": "verify", "path": "orbit-trajectory.json", "kind": "episode"})
         if req["trial"].get("batch"):
             files.append({"label": "Fixed solve batch", "phase": "solve", "path": "batch-plan.json", "kind": "json"})
-        environment = expected["reference"].get("environment", {})
+        environment = reference.get("environment", {})
         kind = environment.get("kind")
         if kind == "calvin":
             completed = result["native"]["completedSubtasks"]
@@ -412,7 +458,7 @@ def score(req):
                        **{f"success_at_{n}": int(completed >= n) for n in range(1, 6)}}
             return valid(completed, 5, metrics=metrics,
                          issues=result["issues"], review={"files": files})
-        if expected["reference"].get("environment", {}).get("kind") == "robodojo":
+        if kind == "robodojo":
             metrics = {"success_rate": int(result["success"])}
             if result["native"]["processScore"] is not None:
                 metrics["process_score"] = result["native"]["processScore"]
@@ -440,6 +486,18 @@ def score(req):
                 metrics.update({"safety_cost": cost, f"safety_cost_l{level}": cost})
         elif kind == "colosseum-v2":
             metrics = {"success_at_end": int(result["native"]["successAtEnd"])}
+        elif kind == "eb-navigation":
+            task = req["trial"]["sample"]["taskId"]
+            split = environment["taskTags"][task]["split"]
+            metrics = {split + "_success": success, "steps": result["steps"],
+                       "distance_to_target": result["native"]["distanceToTarget"]}
+        elif kind == "chores":
+            metrics = {"steps": result["steps"], "sel": result["native"]["successWeightedLength"]}
+        elif kind == "hssd-ov":
+            metrics = {"steps": result["steps"], "spl": result["native"]["spl"]}
+            distance = result["native"]["distanceToTarget"]
+            if distance is not None:
+                metrics["distance_to_target"] = distance
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))
