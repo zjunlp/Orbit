@@ -11,6 +11,8 @@ export const embodiedFirstExam: Omit<SupportedBenchmark, "registrationNames"> = 
       ...workspace,
       domains: ["robotics"],
       taskTypes: ["implementation"],
+      world: ["controlled"],
+      participants: [],
     }),
   ],
   integrations: [

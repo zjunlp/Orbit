@@ -27,6 +27,7 @@ export const browser: BenchTaxonomy = {
 export const native: BenchTaxonomy = {
   domains: ["robotics"],
   taskTypes: ["manipulation"],
+  targets: ["control"],
   modalities: ["text", "image", "structured-data"],
   interfaces: ["physical-control"],
   platforms: ["simulation"],

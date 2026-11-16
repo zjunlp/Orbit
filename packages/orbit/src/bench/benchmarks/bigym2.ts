@@ -4,17 +4,18 @@ import { checked, group, native, nativeRoute } from "./shared.ts";
 export const bigym2: Omit<SupportedBenchmark, "registrationNames"> = {
   id: "bigym2",
   name: "BiGym 2.0",
-  description: "Evaluate G1 humanoid manipulation with native joint controls.",
-  taxonomyGroups: [group("Humanoid manipulation", native)],
+  description:
+    "Evaluate the twenty native learned-policy tasks with G1 control and success that excludes falls.",
+  taxonomyGroups: [group("Native learned-policy tasks", { ...native, targets: ["control"] })],
   integrations: [
     nativeRoute(
-      "20 learned-policy tasks and 2,000 frozen seeds across the 20D and 21D action registrations.",
+      "Twenty learned-policy tasks with separate pitch and no-pitch action profiles. The coding-agent track is not included.",
       "examples/bench-adapters/embodied/benchmarks/bigym2/README.md",
     ),
   ],
   verification: checked(
-    "All tasks passed reset, camera and one-step control checks. Fixed-action samples passed CPU verification. Learned checkpoints are pending.",
+    "All twenty tasks passed native reset and one-step control checks. Both layouts passed fixed-action comparison, CPU evidence verification and rescore. Trained-policy and full-suite evaluation remain pending.",
     "docs/tasks/20261112-bigym2.md",
   ),
-  suites: ["G1 20D", "G1 21D"],
+  suites: ["No pitch (6 tasks)", "Pitch (14 tasks)"],
 };

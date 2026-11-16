@@ -15,6 +15,7 @@ export const bfcl: Omit<SupportedBenchmark, "registrationNames"> = {
       world: ["controlled"],
       feedback: ["step"],
       scoringEvidence: ["trajectory"],
+      participants: [],
       scoringMethods: ["rule-check"],
     }),
   ],

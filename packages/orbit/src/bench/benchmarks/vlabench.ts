@@ -6,7 +6,17 @@ export const vlabench: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "VLABench",
   description:
     "Evaluate language-conditioned Franka manipulation with fixed scenes and open cross-task evaluation.",
-  taxonomyGroups: [group("Language-conditioned manipulation", native)],
+  taxonomyGroups: [
+    group("In-distribution, common-sense and seeded cross-task tracks", native),
+    group("Cross-category and unseen-texture tracks", {
+      ...native,
+      targets: ["control", "generalization"],
+    }),
+    group("Semantic-instruction track", {
+      ...native,
+      targets: ["control", "instruction-following"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "All five published fixed tracks and the released native task registry for seeded cross-task evaluation.",

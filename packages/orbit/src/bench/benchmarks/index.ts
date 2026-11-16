@@ -16,6 +16,7 @@ import { embodiedClbench } from "./embodied-clbench.ts";
 import { embodiedFirstExam } from "./embodied-first-exam.ts";
 import { embodiedlab } from "./embodiedlab.ts";
 import { frontiersweV2 } from "./frontierswe-v2.ts";
+import { hle } from "./hle.ts";
 import { hssdOv } from "./hssd-ov.ts";
 import { humaneval } from "./humaneval.ts";
 import { libero } from "./libero.ts";
@@ -56,6 +57,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   frontiersweV2,
   wandr,
   chartography,
+  hle,
   humaneval,
   asiBench,
   longds,

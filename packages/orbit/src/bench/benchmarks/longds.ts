@@ -6,9 +6,32 @@ export const longds: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "LongDS-Bench",
   description: "Complete long, multi-turn data science tasks using the original runner and judge.",
   taxonomyGroups: [
-    group("Data science", {
+    group("Business data analysis", {
       ...workspace,
       taskTypes: ["analysis"],
+      targets: ["memory"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["response"],
+      scoringMethods: ["model-judge"],
+      domains: ["business-services"],
+    }),
+    group("Geoscience data analysis", {
+      ...workspace,
+      taskTypes: ["analysis"],
+      targets: ["memory"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["response"],
+      scoringMethods: ["model-judge"],
+      domains: ["science"],
+    }),
+    group("Community, education, social-good and sports data analysis", {
+      ...workspace,
+      taskTypes: ["analysis"],
+      targets: ["memory"],
+      world: ["controlled"],
+      participants: [],
       scoringEvidence: ["response"],
       scoringMethods: ["model-judge"],
     }),

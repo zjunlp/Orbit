@@ -4,17 +4,20 @@ import { checked, group, native, nativeRoute } from "./shared.ts";
 export const liberoMem: Omit<SupportedBenchmark, "registrationNames"> = {
   id: "libero-mem",
   name: "LIBERO-Mem",
-  description: "Evaluate ordered manipulation subgoals that require remembering previous actions.",
-  taxonomyGroups: [group("Ordered manipulation", native)],
+  description:
+    "Evaluate memory-dependent ordered manipulation with native subgoal progression and alternative valid branches.",
+  taxonomyGroups: [
+    group("Ordered manipulation tasks", { ...native, targets: ["control", "memory"] }),
+  ],
   integrations: [
     nativeRoute(
-      "All ten tasks and 200 published initial states, with native subgoal-progress scoring.",
+      "Ten native ordered tasks and twenty frozen initial states per task. Verification checks ordered progress and whole-sequence completion.",
       "examples/bench-adapters/embodied/benchmarks/libero-mem/README.md",
     ),
   ],
   verification: checked(
-    "All ten tasks passed reset, observation and action checks. A sampled π₀.₅ rollout passed CPU verification and rescore.",
+    "All ten tasks passed reset, observation and control checks. A frozen pi0.5 sample passed independent CPU verification and rescore. Full-suite model evaluation remains pending.",
     "docs/tasks/20261114-libero-mem.md",
   ),
-  suites: [],
+  suites: ["Ordered manipulation (10 tasks)"],
 };

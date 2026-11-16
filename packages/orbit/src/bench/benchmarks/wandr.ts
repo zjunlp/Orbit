@@ -13,6 +13,7 @@ export const wandr: Omit<SupportedBenchmark, "registrationNames"> = {
       taskTypes: ["retrieval", "information-processing"],
       world: ["live"],
       scoringEvidence: ["artifact"],
+      participants: [],
       scoringMethods: ["model-judge"],
     }),
   ],

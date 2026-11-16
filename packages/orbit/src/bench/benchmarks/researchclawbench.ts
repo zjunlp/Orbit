@@ -7,10 +7,30 @@ export const researchclawbench: Omit<SupportedBenchmark, "registrationNames"> = 
   description:
     "Carry out scientific research and submit code, outputs and a report for rubric-based judging.",
   taxonomyGroups: [
-    group("Scientific research", {
+    group("Natural-science research", {
       ...workspace,
       domains: ["science"],
       taskTypes: ["experimentation"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+      scoringMethods: ["model-judge"],
+    }),
+    group("Mathematical research", {
+      ...workspace,
+      domains: ["mathematics"],
+      taskTypes: ["experimentation"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+      scoringMethods: ["model-judge"],
+    }),
+    group("Machine-learning research", {
+      ...workspace,
+      domains: ["machine-learning"],
+      taskTypes: ["experimentation"],
+      world: ["controlled"],
+      participants: [],
       scoringEvidence: ["artifact"],
       scoringMethods: ["model-judge"],
     }),
