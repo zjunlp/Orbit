@@ -153,6 +153,13 @@ export function BenchJobDetail({ id }: { id: string }) {
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
           <h1 className="page-title">{jobLabel(job)}</h1>
+          {!!job.policyWarnings?.length && (
+            <ul className="warnbox" aria-label="Checkpoint scope">
+              {job.policyWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
           <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: -8 }}>
             <JobState state={job.state} />
             <span className="chip mono">{job.spec.benchmark}</span>

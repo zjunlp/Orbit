@@ -674,6 +674,20 @@ class AdapterPlanningTests(unittest.TestCase):
                 self.assertEqual(verify["resources"]["gpus"], 0)
                 self.assertFalse(any("dataset" in mount for mount in verify["mounts"]))
 
+    def test_chores_catalog_reports_distinct_suite_variants(self):
+        from orbit_embodied.chores import semantic_profile
+
+        for suite, variant in (("chores-small", "CHORES-S"), ("chores-large", "CHORES-L")):
+            reference = {"id": suite + "/1", "benchmarkProfile": semantic_profile(),
+                         "observationMap": {}, "parameters": {"replanSteps": 1},
+                         "environment": {"kind": "chores", "tasks": []},
+                         "reference": {"evaluation": {"commit": "synthetic"}}}
+            with self.subTest(suite=suite), patch.object(adapter, "settings", return_value=(
+                    Path("."), {"suite": suite, "image": "synthetic"}, reference)):
+                listing = adapter.tasks({})
+            self.assertEqual(listing["capabilities"]["identity"],
+                             {"id": "chores", "name": "CHORES", "variant": variant})
+
     def test_fixed_native_catalog_keeps_seed_and_state_index_independent(self):
         asset = "sha256:" + "b" * 64
         reference = {"environment": {"kind": "vla-arena", "environmentSeed": 7,

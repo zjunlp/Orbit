@@ -928,6 +928,13 @@ function CalibrationResult({ r }: { r: CalibrationReport }) {
         )}
         <span>{dateTime(r.endedAt ?? r.createdAt)}</span>
       </div>
+      {!!r.policyWarnings?.length && (
+        <ul className="warnbox" aria-label="Checkpoint scope">
+          {r.policyWarnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
       <table className="table cal-checks">
         <thead>
           <tr>
@@ -1192,7 +1199,7 @@ function CalibrateDialog({
               ...(suite ? { suite } : {}),
             },
       );
-      toast(`Calibration started: ${job.id}`);
+      toast([`Calibration started: ${job.id}`, ...(job.policyWarnings ?? [])].join(" · "));
       onStarted();
     } catch (err) {
       setError((err as Error).message);

@@ -107,6 +107,13 @@ export const PolicyDefinition = z.strictObject({
     ])
     .default({ backend: "jax", initialKey: 0, scope: "service" }),
   profile: SemanticProfile,
+  /** Advisory scope for the checkpoint. It does not participate in semantic binding. */
+  recommendedScope: z
+    .strictObject({
+      profiles: z.array(z.string().min(1)).min(1),
+      taskTypes: z.array(z.string().min(1)).min(1).optional(),
+    })
+    .optional(),
   port: z.number().int().min(1).max(65535).default(8000),
   callTimeoutSec: z.number().positive().default(300),
   checkpointDigest: ContentDigest,

@@ -184,6 +184,7 @@ def tasks(req):
             metrics.extend([{"name": "distance_to_target", "label": "Final geodesic distance", "unit": "m",
                              "higherIsBetter": False},
                             {"name": "spl", "label": "Success weighted by path length", "unit": "ratio", "range": [0, 1]}])
+    variant = {"chores-small/1": "CHORES-S", "chores-large/1": "CHORES-L"}.get(reference["id"]) if kind == "chores" else None
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
             "capabilities": {"embodied": {
@@ -192,6 +193,8 @@ def tasks(req):
                                  "replanSteps": reference["parameters"]["replanSteps"],
                                  **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
                              }, "methods": ["policy"],
+                             **({"identity": {"id": "chores", "name": "CHORES", "variant": variant}}
+                                if variant else {}),
                              "taxonomy": {"domains": ["robotics"],
                                           "taskTypes": (["navigation", "manipulation"] if kind == "chores" else
                                                         ["navigation"] if kind in ("eb-navigation", "hssd-ov") else ["manipulation"]),

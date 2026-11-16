@@ -419,6 +419,8 @@ export const CalibrationReport = z.object({
   mode: z.literal("policy").optional(),
   policyRef: ProfileName.optional(),
   samples: z.number().int().positive().optional(),
+  /** Advisory checkpoint scope messages saved at submission. */
+  policyWarnings: z.array(z.string()).optional(),
   budget: z
     .object({
       minutes: z.number().positive(),
@@ -828,6 +830,8 @@ export const BenchJob = z.object({
   /** Non-secret registration fixed at submission; absent only for legacy jobs. */
   benchmarkSnapshot: Benchmark.optional(),
   resolvedBindings: z.record(z.string(), ResolvedBinding).optional(),
+  /** Checkpoint scope advisories recorded when this job was submitted. */
+  policyWarnings: z.array(z.string()).optional(),
   capabilities: BenchCapabilities.optional(),
   /** The benchmark's own aggregation rule at submission, when its adapter declares one. */
   official: OfficialRule.optional(),

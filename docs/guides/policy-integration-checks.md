@@ -52,8 +52,8 @@ acceptance budget or turn that incomplete check into a pass.
 Web Catalog → Calibrate offers a registered-policy name, a sample-plan JSON file and the total
 budget for policy-only benchmarks that support fixed batches. The Calibration tab points
 single-episode registrations to the ordinary evaluation and rescore workflow. The expanded row lists policy checks separately from benchmark
-calibration. The CLI's `--json` response includes the policy, episode count, budget/deadline and
-individual checks.
+calibration. The CLI's `--json` response includes the policy, episode count, budget/deadline,
+individual checks and any checkpoint scope warnings recorded at submission.
 
 These checks are intended to keep normal onboarding near a 10–30 minute validation budget once
 assets are ready. Benchmark native-semantic calibration and complete-suite statistical equivalence

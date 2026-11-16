@@ -199,6 +199,7 @@ function formatJob(d: BenchJobDetail): string {
   const metrics = resolveMetrics(job.metrics);
   const lines = [
     `${job.id}  ${job.state}  ${job.spec.benchmark}${job.spec.name ? `  (${job.spec.name})` : ""}`,
+    ...(job.policyWarnings ?? []).map((warning) => `Warning: ${warning}`),
     ...(job.source
       ? [
           `benchmark at ${job.source.describe ?? job.source.commit.slice(0, 12)}${job.source.dirty && !job.source.describe?.endsWith("-dirty") ? " (dirty)" : ""}`,
@@ -730,11 +731,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           },
           o.folder,
         );
-        print(
-          o.json,
-          job,
-          () =>
+        print(o.json, job, () =>
+          [
             `started ${job.id}: ${job.spec.methods.length} methods × ${job.spec.samplePlan ? `${job.spec.samplePlan.items.length} planned samples` : `${job.spec.tasks.length} tasks × ${job.spec.seeds} seeds`}`,
+            ...(job.policyWarnings ?? []).map((warning) => `Warning: ${warning}`),
+          ].join("\n"),
         );
       },
     );

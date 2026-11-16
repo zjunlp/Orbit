@@ -258,6 +258,8 @@ export class BenchService {
     if (file) spec.tasks = file.tasks;
     const names = new Set<string>();
     const resolvedBindings: Record<string, ResolvedBinding> = {};
+    const policyWarnings: string[] = [];
+    const plannedTasks = new Set(spec.samplePlan?.items.map((sample) => sample.taskId));
     for (const m of spec.methods) {
       if (names.has(m.name)) throw new UserError(`duplicate method name: ${m.name}`);
       names.add(m.name);
@@ -271,7 +273,8 @@ export class BenchService {
           throw new UserError(
             "policy integration checks require a real model registration, not a calibration fixture",
           );
-        m.policySnapshot = structuredClone(policy);
+        const { recommendedScope, ...snapshot } = policy;
+        m.policySnapshot = structuredClone(snapshot);
         const endpoint = info.capabilities?.embodied;
         if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
         // Legacy OpenPI registrations use the native runner's five-step default.
@@ -288,6 +291,27 @@ export class BenchService {
           );
         } catch (e) {
           throw new UserError(`${m.name}: ${(e as Error).message}`);
+        }
+        if (recommendedScope) {
+          if (!recommendedScope.profiles.includes(endpoint.profile))
+            policyWarnings.push(
+              `${m.name}: ${policy.name} recommends ${recommendedScope.profiles.join(", ")}. This plan uses ${endpoint.profile}.`,
+            );
+          const supportedTypes = recommendedScope.taskTypes;
+          if (supportedTypes) {
+            const outside = new Set(
+              all.flatMap((task) => {
+                const type = task.tags.taskType;
+                return plannedTasks.has(task.id) && type && !supportedTypes.includes(type)
+                  ? [type]
+                  : [];
+              }),
+            );
+            if (outside.size)
+              policyWarnings.push(
+                `${m.name}: ${policy.name} recommends ${supportedTypes.join(", ")}. The plan also includes ${[...outside].sort().join(", ")}.`,
+              );
+          }
         }
       }
     }
@@ -326,6 +350,7 @@ export class BenchService {
       ...(file ? { taskFile: file.record } : {}),
       benchmarkSnapshot: structuredClone(b),
       ...(spec.samplePlan ? { resolvedBindings } : {}),
+      ...(policyWarnings.length ? { policyWarnings } : {}),
       ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
       ...(info.official ? { official: structuredClone(info.official) } : {}),
       revisions,

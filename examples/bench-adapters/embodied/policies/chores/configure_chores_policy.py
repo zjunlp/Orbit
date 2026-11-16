@@ -13,7 +13,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 from adapter import digest
 from native_runtime import build_policy_image, check_policy_source, export_source, image_id, policy_manifest, require_image
 from orbit_embodied.assets import tree_digest
-from orbit_embodied.chores import semantic_profile
+from orbit_embodied.chores import TASKS, semantic_profile
 from serve_chores import RANDOMNESS, RELEASE, asset_identity
 
 SOURCES = {
@@ -30,6 +30,14 @@ DOCKERFILE = HERE / "policy.Dockerfile"
 SERVER = HERE / "serve_chores.py"
 SOURCE_PATHS = ("LICENSE", "architecture", "environment", "online_evaluation", "tasks", "training",
                 "utils", "spoc_constants.py")
+CHORES_PROFILES = ("chores-small/1", "chores-large/1")
+SPOC_PROFILES = dict(zip(("spoc-chores-small", "spoc-chores-large"), CHORES_PROFILES))
+FLARE_TASK_TYPES = {
+    "flare-chores-objectnav": [task for task in TASKS if task.startswith("ObjectNav")],
+    "flare-chores-pickup": ["PickupType"],
+    "flare-chores-fetch": ["FetchType"],
+    "flare-chores-roomvisit": ["SimpleExploreHouse"],
+}
 
 
 def check_backbones(root, family):
@@ -60,9 +68,11 @@ def definition(name, image, identity, backbone):
     profile = semantic_profile()
     del profile["observations"]["navigation_pose"]
     profile["id"] = name + "/1"
+    scope = ({"profiles": [SPOC_PROFILES[name]]} if name in SPOC_PROFILES else
+             {"profiles": list(CHORES_PROFILES), "taskTypes": FLARE_TASK_TYPES[name]})
     return {
         "name": name, "version": "1", "connector": "policy-ws", "replanSteps": 1,
-        "callTimeoutSec": 60, "randomness": RANDOMNESS, "profile": profile,
+        "callTimeoutSec": 60, "randomness": RANDOMNESS, "profile": profile, "recommendedScope": scope,
         "backboneDigest": backbone, **identity,
         "weights": {"dataset": name, "target": "/weights"},
         "service": {"name": "policy", "image": image, "gpusOf": "main", "memGB": 12, "cpus": 2,

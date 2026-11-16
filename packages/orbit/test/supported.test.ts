@@ -36,7 +36,7 @@ function registration(
 
 it("ships one supported family per benchmark even with no local registrations", () => {
   const supported = supportedBenchmarks([]);
-  expect(supported).toHaveLength(43);
+  expect(supported).toHaveLength(49);
   expect(new Set(supported.map((row) => row.id)).size).toBe(supported.length);
   expect(supported.every((row) => row.registrationNames.length === 0)).toBe(true);
   expect(
@@ -90,6 +90,31 @@ it("links known built-in adapters and exact native semantic profiles only", () =
   expect(supportedBenchmarks([native]).every((row) => row.registrationNames.length === 0)).toBe(
     true,
   );
+});
+
+it("discovers the added embodied families and retains both CHORES registrations", () => {
+  const local = [
+    ["eb-navigation", "eb-navigation-projected/1"],
+    ["hssd-ov", "hssd-ov-stretch-discrete/1"],
+    ["libero-mem", "libero-mem-panda-raw/1"],
+    ["bigym2", "bigym2-g1-no-pitch/1"],
+    ["cliport", "cliport-native-push-rgbd/1"],
+  ].map(([family, profile]) => {
+    const entry = registration(`local-${family}`, "derived", "derived");
+    entry.capabilities = { embodied: { semanticProfile: { id: profile } } } as never;
+    return entry;
+  });
+  for (const variant of ["CHORES-S", "CHORES-L"]) {
+    const entry = registration(variant.toLowerCase(), "chores");
+    entry.identity.variant = variant;
+    local.push(entry);
+  }
+  const rows = supportedBenchmarks(local);
+  for (const id of ["eb-navigation", "hssd-ov", "libero-mem", "bigym2", "cliport"])
+    expect(rows.find((row) => row.id === id)?.registrationNames).toEqual([`local-${id}`]);
+  const chores = rows.find((row) => row.id === "chores");
+  expect(chores?.registrationNames).toEqual(["chores-l", "chores-s"]);
+  expect(chores?.suites).toEqual(["CHORES-S", "CHORES-L"]);
 });
 
 it("retains profile boundaries and keeps limited integrations visibly limited", () => {

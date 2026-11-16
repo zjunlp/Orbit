@@ -75,6 +75,7 @@ it("shows model integration checks separately from benchmark calibration", () =>
     mode: "policy",
     policyRef: "groot",
     samples: 2,
+    policyWarnings: ["The checkpoint recommends a different suite."],
     budget: { minutes: 20, deadlineAt: "2026-11-05T00:20:00.000Z" },
   });
   const e = { ...entry([]), policyChecks: [policy] };
@@ -86,6 +87,7 @@ it("shows model integration checks separately from benchmark calibration", () =>
   expect(detail).toContain("Policy integration checks");
   expect(detail).toContain("2 frozen episodes");
   expect(detail).toContain("20 minute total budget");
+  expect(detail).toContain("The checkpoint recommends a different suite.");
   expect(detail).toContain("statistical equivalence remain separate");
 });
 
