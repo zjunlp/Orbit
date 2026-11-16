@@ -43,6 +43,7 @@
 | [LIBERO-PRO](../../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md) | 初版四个原版套件、五类排行榜扰动，共 200 个目录条目 | 20 个条件全部登记，固定 BDDL 和构造种子生成 10,000 个计划样本 | 200 个条目都通过原生 reset 和一步控制。两组短原生对照、一个 220 步固定动作 episode 和 CPU 重评通过。OpenVLA-OFT 在 Spatial Language 和 Spatial Task 各完成一条有效短测，CPU 重评一致。[原生接入](../tasks/20261110-libero-pro.md) · [模型短测](../tasks/20261111-embodied-policy-expansion.md) |
 | [BiGym 2.0](../../examples/bench-adapters/embodied/benchmarks/bigym2/README.md) | 正式 learned-policy 协议 20 个任务，每任务 100 个种子 | 20 个任务全部接入，按 20D / 21D 动作分成两组登记，共 2,000 个计划样本 | 全部任务做过原生 reset、相机和一步控制。两种动作规格各有一条完整固定动作对照，并通过 CPU 验证和重评。训练权重待补。[记录](../tasks/20261112-bigym2.md) |
 | [CLIPort](../../examples/bench-adapters/embodied/benchmarks/cliport/README.md) | 语言条件测试集 18 个条目，每条目 100 个 oracle 合格种子 | 18 个条目全部接入，分为 16 个吸盘抓放任务和 2 个铲形末端推扫任务。完整计划共 1,800 个样本 | 全部条目各生成 2 个 oracle 合格样本，冻结 reset 后的步数上限。真实权重短测通过独立 CPU 验证与重评。[记录](../tasks/20261112-cliport.md) |
+| [BEHAVIOR-1K](../../examples/bench-adapters/embodied/benchmarks/behavior-1k/README.md) | 完整发布活动目录；具备 2026 R1Pro public-test 元数据的子集可准备 | 23D 原生命令、固定公开实例及官方评测循环 | 目录、契约和 CPU 证据回归通过；原生物理与模型校准待兼容 RTX 运行时。[记录](../tasks/20261113-behavior-robotagent.md) |
 
 ## 真实模型实测
 

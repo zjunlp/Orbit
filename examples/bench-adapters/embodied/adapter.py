@@ -166,6 +166,8 @@ def tasks(req):
         metrics = [{"name": MEM_SUBGOAL_RATE, "label": "Subgoal completion rate", "unit": "ratio",
                     "range": [0, 1], "primary": True},
                    {"name": "success_rate", "label": "Full sequence success", "unit": "ratio", "range": [0, 1]}]
+    elif kind == "behavior1k":
+        metrics = [{"name": "success_rate", "label": "Native success", "unit": "ratio", "range": [0, 1]}]
     elif kind == "cliport":
         metrics = [{"name": "success_rate", "label": "Reward above 0.99", "unit": "ratio", "range": [0, 1]}]
     elif kind == "colosseum-v2":
@@ -191,7 +193,7 @@ def tasks(req):
                                  "profile": reference["id"], "semanticProfile": reference["benchmarkProfile"],
                                  "observationMap": reference["observationMap"],
                                  "replanSteps": reference["parameters"]["replanSteps"],
-                                 **({"batch": {"maxEpisodes": 128}} if kind != "rlbench" else {}),
+                                 **({"batch": {"maxEpisodes": 128}} if kind not in ("rlbench", "behavior1k") else {}),
                              }, "methods": ["policy"],
                              **({"identity": {"id": "chores", "name": "CHORES", "variant": variant}}
                                 if variant else {}),
@@ -201,7 +203,7 @@ def tasks(req):
                                           "interfaces": ["physical-control"], "platforms": ["simulation"],
                                           "world": ["controlled"], "feedback": ["step"], "participants": [],
                                           "scoringEvidence": ["trajectory"], "scoringMethods": ["rule-check"]},
-                             "scoreKind": "scalar" if calvin or robodojo or kind in ("libero-mem", "cliport") else "binary", "rescore": "evidence",
+                             "scoreKind": "scalar" if calvin or robodojo or kind in ("libero-mem", "cliport", "behavior1k") else "binary", "rescore": "evidence",
                              # A still policy can satisfy a goal that holds at the start.
                              "calibration": {"empty": "any", "oracle": "none", "seedsVary": True},
                              "conditions": {"Protocol": reference["id"], "Profile digest": digest(reference),
@@ -246,7 +248,7 @@ def solve_member(trial, reference, implementation, episode_id):
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
                                   "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
-                                  "eb-navigation", "chores", "hssd-ov"):
+                                  "eb-navigation", "chores", "hssd-ov", "behavior1k"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -265,6 +267,13 @@ def solve_member(trial, reference, implementation, episode_id):
     expected = resolve_binding(reference["benchmarkProfile"], definition["profile"], reference["observationMap"])
     if binding != expected:
         raise ValueError("resolved binding differs from the submitted snapshot")
+    if environment.get("kind") == "behavior1k":
+        from orbit_embodied.behavior1k import native_instance
+        native_instance(reference, sample)
+        if definition.get("replanSteps", 5) != 1:
+            raise ValueError("BEHAVIOR requires one native action per query")
+    if environment.get("kind") == "behavior1k" and definition["connector"] != "policy-ws":
+        raise ValueError("BEHAVIOR requires its bound native policy-ws profile")
     return {"trialId": trial["id"], "sample": sample, "episodeId": episode_id,
             "binding": binding, "policy": definition, "timeoutMin": trial.get("timeoutMin", 20),
             "implementationDigest": implementation}
@@ -272,7 +281,7 @@ def solve_member(trial, reference, implementation, episode_id):
 
 def solve_spec(trial, config, environment, destination):
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16}.get(environment.get("kind"), 8)
+    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16, "behavior1k": 32}.get(environment.get("kind"), 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
     if environment.get("kind") in ("eb-navigation", "chores", "hssd-ov"):
         gpu = trial.get("options", {}).get("gpuId")
@@ -285,7 +294,7 @@ def solve_spec(trial, config, environment, destination):
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
             raise ValueError("simGpuMemGB needs a GPU simulator and a finite positive budget")
         resources["gpuMemGB"] = memory
-    if environment.get("kind") in ("robolab", "robodojo"):
+    if environment.get("kind") in ("robolab", "robodojo", "behavior1k"):
         resources["gpuModels"] = ["RTX", "L4", "L40", "L40S", "A10", "A40"]
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
     libero_kind = environment.get("kind")
@@ -297,6 +306,7 @@ def solve_spec(trial, config, environment, destination):
     return {"spec": {"image": config["image"], "entrypoint": config.get("python", "/.venv/bin/python"),
                      "command": ["/orbit-embodied/run.py", "solve", "/orbit-embodied/request.json", "/orbit/output/episode"],
                      "env": {"PYTHONPATH": "/orbit-embodied/python:" + native_path + libero_path + "/opt/libero-plus:/opt/vlabench:/app/packages/openpi-client/src:/app/third_party/libero:/opt/gr00t:/opt/libero:/opt/simpler:/opt/simpler/ManiSkill2_real2sim:/opt/orbit/rlinf",
+                             **({"OMNIGIBSON_HEADLESS": "True", "OMNIGIBSON_DATA_PATH": "/behavior-data", "OMNIGIBSON_APPDATA_PATH": "/tmp/behavior-appdata"} if environment.get("kind") == "behavior1k" else {}),
                              **({"MUJOCO_GL": gl_platform, "PYOPENGL_PLATFORM": gl_platform}
                                 if gl_platform not in ("xvfb-glx", "pybullet-direct")
                                 and environment.get("kind") != "eb-navigation" else {})},
@@ -328,8 +338,8 @@ def solve(req):
         raise ValueError("batch plan digest mismatch")
     if not 1 <= len(trials) == len(plan["members"]) <= 128 or trials[0] != req["trial"]:
         raise ValueError("batch membership or leader mismatch")
-    if environment.get("kind") == "rlbench":
-        raise ValueError("RLBench requires a fresh simulator process per episode")
+    if environment.get("kind") in ("rlbench", "behavior1k"):
+        raise ValueError("This native recipe requires a fresh simulator process per episode")
     if environment.get("kind") in GENERATED_ENVIRONMENTS:
         check_distinct_resets([trial["sample"] for trial in trials], reference)
     payloads = []
@@ -469,6 +479,9 @@ def score(req):
             completed, total = native["completedSubgoals"], native["totalSubgoals"]
             return valid(completed, total, metrics={MEM_SUBGOAL_RATE: completed / total,
                          "success_rate": int(result["success"])}, issues=result["issues"], review={"files": files})
+        if kind == "behavior1k":
+            return valid(result["native"]["score"], metrics={"success_rate": int(result["success"])},
+                         issues=result["issues"], review={"files": files})
         if kind == "cliport":
             return valid(result["native"]["totalReward"], metrics={"success_rate": int(result["success"])},
                          issues=result["issues"], review={"files": files})

@@ -34,6 +34,7 @@ from the current recipe.
 | RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) · [LingBot-VLA](policies/lingbot-vla/README.md) · [LingBot-VLA 2.0](policies/lingbot-vla-v2/README.md) · [Fast-VLA](policies/fast-vla/README.md) · [LingBot-VA](policies/lingbot-va/README.md) |
 | ManiSkill3 and Meta-World | [Tabletop, Plate-25 and MT50](benchmarks/tabletop/README.md) |
 | RLBench | [MT100 and RVT-18](benchmarks/rlbench/README.md) |
+| BEHAVIOR-1K | [2026 R1Pro public test and licensed assets](benchmarks/behavior-1k/README.md) |
 | CALVIN | [ABC→D](benchmarks/calvin/README.md) |
 | RoboDojo and RoboLab | [RoboDojo](benchmarks/robodojo/README.md) · [RoboLab](benchmarks/robolab/README.md) |
 | RoboMimic | [PH low-dimensional and RGB profiles](benchmarks/robomimic/README.md) |

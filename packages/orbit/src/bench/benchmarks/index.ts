@@ -3,6 +3,7 @@
 import { type CatalogEntry, SupportedBenchmark } from "../../contracts/index.ts";
 import { asiBench } from "./asi-bench.ts";
 import { automationbench } from "./automationbench.ts";
+import { behavior1k } from "./behavior-1k.ts";
 import { bfcl } from "./bfcl.ts";
 import { bigym2 } from "./bigym2.ts";
 import { calvin } from "./calvin.ts";
@@ -40,6 +41,7 @@ import { robocasa365 } from "./robocasa365.ts";
 import { robodojo } from "./robodojo.ts";
 import { robolab } from "./robolab.ts";
 import { robomimic } from "./robomimic.ts";
+import { robotagentbench } from "./robotagentbench.ts";
 import { robotwin } from "./robotwin.ts";
 import { simplerEnv } from "./simpler-env.ts";
 import { tau2Bench } from "./tau2-bench.ts";
@@ -54,6 +56,8 @@ import { webvoyager } from "./webvoyager.ts";
 
 const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   automationbench,
+  behavior1k,
+  robotagentbench,
   frontiersweV2,
   wandr,
   chartography,
@@ -110,6 +114,7 @@ const SUPPORTED = definitions.map((entry) =>
 );
 const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
+  "behavior1k-r1pro-native/1": "behavior-1k",
   "libero-panda-raw/1": "libero",
   "libero-mem-panda-raw/1": "libero-mem",
   "bigym2-g1-pitch/1": "bigym2",

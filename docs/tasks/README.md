@@ -56,6 +56,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261116](20261116-local-branch-integration.md) Integrate local feature branches and reconcile catalog/adapter changes
+
 - [20261116](20261116-benchmark-taxonomy-evidence.md) Audit benchmark classification against implemented protocols and restore missing catalog families
 
 - [20260930](20260930-r3-bench.md) R3: benchmarks on the Run / lease model
@@ -109,6 +111,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261104](20261104-p6-mainline.md) P6 主线：CLI Agent 桥的通用化、MCP 接线与 EFE coding agent
 
 ## Embodied: policies and native benchmarks
+
+- [20261113](20261113-behavior-robotagent.md) BEHAVIOR-1K and RobotAgentBench: adapters implemented; native calibration deferred
 
 - [20261103](20261103-embodied-infra-research.md) 具身评测与调度基础设施源码调研
 - [20261104](20261104-p4-policy.md) P4：Policy 路线与按角色分配 GPU

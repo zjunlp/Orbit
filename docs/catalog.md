@@ -26,7 +26,8 @@ The full vocabulary and matching rules live in [design §9.17](design.md#917-ben
 A task or profile can have multiple values. Counts are discovery metadata, not evidence of calibration
 or model capability; product families, local registrations and evaluated tasks remain separate counts.
 
-The catalog includes 47 families after the [source-backed taxonomy audit](tasks/20261116-benchmark-taxonomy-evidence.md).
+The catalog includes 52 families, combining the [source-backed taxonomy audit](tasks/20261116-benchmark-taxonomy-evidence.md)
+with native navigation, BEHAVIOR-1K and RobotAgentBench integrations.
 BiGym 2.0, CLIPort and LIBERO-Mem already had native adapters and sample checks; this audit adds their
 missing product entries. Classification describes only the implemented route. Unknown values stay
 unknown; separate input layouts and evaluation tracks keep separate profiles so joint filters cannot
@@ -41,7 +42,7 @@ users, and sampled calibration does not establish full-suite equivalence.
 | Browser, desktop and mobile tasks | MiniWoB++; WebVoyager; Online-Mind2Web; Cua Bench; MobileWorld; OSWorld-V2 | [GUI guide](guides/gui-bench-web.md) · [CUA-Lite](../examples/bench-adapters/cua-lite/) · [Cua Bench](../examples/bench-adapters/cua-bench/) · [MobileWorld](../examples/bench-adapters/mobileworld/) · [OSWorld-V2](../examples/bench-adapters/osworld-v2/) |
 | Scientific reasoning | Humanity's Last Exam | [Restricted with-tools adapter](../examples/bench-adapters/hle/) · original public split; HLE-Diamond and official-harness parity excluded |
 | Visual reasoning | Chartography | [Native no-tools adapter](../examples/bench-adapters/chartography/) · released data calibration pending |
-| Embodied coding-agent tasks | Embodied First Exam; RLE-Bench; EmbodiedCLBench; EmbodiedLab | [Harness adapters](tasks/20261110-embodied-harness-benchmarks.md) · [EFE integration](tasks/20261104-p3-browsergym-efe.md) · [Execution boundaries](design.md#94-被评测对象agent-与-policy) |
+| Embodied coding-agent tasks | Embodied First Exam; RLE-Bench; EmbodiedCLBench; EmbodiedLab; RobotAgentBench | [RobotAgentBench](../examples/bench-adapters/robotagentbench/) · [Harness adapters](tasks/20261110-embodied-harness-benchmarks.md) · [EFE integration](tasks/20261104-p3-browsergym-efe.md) · [Execution boundaries](design.md#94-被评测对象agent-与-policy) |
 | Native embodied policies | [Families and task coverage](guides/embodied-compatibility.md#benchmark-接入范围) | [Quickstart](guides/embodied-quickstart.md) · [Verified policies](guides/embodied-compatibility.md#真实模型实测) · [Onboarding](guides/embodied-onboarding.md) |
 
 The area column is a reading aid. The six-dimensional filters use the source catalog's explicit

@@ -318,6 +318,12 @@ def verify_episode(directory, sample_ref, episode_id, expected=None, *, referenc
     if result["valid"] and reference.get("environment", {}).get("kind") == "robocasa-v02":
         verify_robocasa_v02(controls, contract["horizon"])
     kind = reference.get("environment", {}).get("kind")
+    if result["valid"] and kind == "behavior1k":
+        required_native = {"behavior-report.json"} | {"chunks/" + str(row["chunk"]) + ".raw.npy" for row in controls}
+        if not required_native.issubset(manifest["files"]):
+            raise ValueError("Native BEHAVIOR report or raw actions are not sealed")
+        from .behavior1k import verify_behavior
+        verify_behavior(reference, contract["sample"], controls, result, directory)
     if result["valid"] and kind == "bigym2":
         from .bigym2 import verify_bigym2
         verify_bigym2(reference, contract["sample"], controls, result)

@@ -1046,6 +1046,10 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   两者的源码/资产检查与实际 GPU 任务校准分别记录，接入配置不代表已校准。
   Isaac 启动器只在 Linux 查询到一致的实际 R535.256+ 驱动时，采用 NVIDIA 公布的 Vulkan 版本误报兼容参数，并记录版本与处理原因；
   其他版本或查询失败保留原生驱动检查。该处理不修改主机驱动、原生场景或成功判定。
+- **BEHAVIOR-1K**：固定 2026 R1Pro public-test 配方，公开初态序号 0–19 对应原生 ID 301–320，环境种子固定 0。
+  沿用原生 BatchedEvaluator.run 的初始化、首次查询豁免、真实时间预算、终止及 Q-score；不另造 rollout 循环。
+  23D 原生命令和 RGBA 相机由独立 Policy 提供，CPU verifier 复核动作原始输出、原生 float32 转换、实例及终止记录。
+  全部发布活动保留目录，缺少挑战元数据的活动明确不可用。许可数据与密钥只读挂入，密钥不进入摘要、证据或源码。
 - **证据封存**：benchmark 可在 `finalize_evidence` 中关闭原生写入器，再计算必需证据摘要；例如 HDF5 的 close 会改变文件，flush 不能替代。
   收尾失败使 episode 无效，保留已有失败原因；视频等可选媒体仍可在封存后结束。取消中的未完成样本不新增封存。
 - **固定批次**：`spec.batchSize` 按方法、计划顺序和相同生效预算拆分，成员、attemptId、episodeId 与清单摘要提交时冻结；模型服务
@@ -1064,7 +1068,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 
 ### 9.4b 具身 harness benchmark（Agent 评测）
 
-RLE-Bench, EmbodiedCLBench and EmbodiedLab evaluate an Agent together with its harness,
+RLE-Bench, EmbodiedCLBench, EmbodiedLab and RobotAgentBench evaluate an Agent together with its harness,
 tools and task conditions. They use the existing external adapter protocol and `agentTask`
 CLI launch path; they do not register an independent VLA Policy or introduce an Agent loop.
 Model selection and credentials remain Method/auth configuration, including Ark Agent Plan.
@@ -1085,12 +1089,17 @@ Model selection and credentials remain Method/auth configuration, including Ark 
   independent verifier consumes sealed service evidence and the submitted experiment result,
   using the native experiment evaluator. T1's additional services and unreleased T2 are
   explicitly unsupported.
+- **RobotAgentBench** reuses the pinned native raw-22 worker and RawRobotBridge as public MCP tools.
+  Saved configuration ordinals retain their actual seeds. Private per-trial Runtime copies preserve original namespace aliases;
+  Orbit owns the simulator GPU and cleanup. Original delayed ACK, worker exit and source-owner shutdown receipts are all required.
+  Finished native total / maximum and native success remain separate; abandonment is invalid. Dedicated owners and
+  OpenEnd/discovery score profiles stay unsupported. [Setup and limits](../examples/bench-adapters/robotagentbench/README.md).
 
 Native images, datasets, instance state and run evidence stay outside the source checkout.
 Readiness, execution outcome, cleanup and evaluation validity remain separate. Unusable
 model backends and missing or untrustworthy environment evidence are invalid evaluations. Discovery metadata uses §9.17 and
 retains per-profile support limits; sampled checks do not establish full-suite parity.
-Implementation and validation: [task record](tasks/20261110-embodied-harness-benchmarks.md).
+Implementation and validation: [harness adapters](tasks/20261110-embodied-harness-benchmarks.md) · [BEHAVIOR / RobotAgentBench](tasks/20261113-behavior-robotagent.md).
 
 ### 9.5 Agent 与环境的桥
 
