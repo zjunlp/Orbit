@@ -2,6 +2,7 @@
 // One file per benchmark family under this directory; add a family by adding a file and a line here.
 import { type CatalogEntry, SupportedBenchmark } from "../../contracts/index.ts";
 import { agentdojo } from "./agentdojo.ts";
+import { appworld } from "./appworld.ts";
 import { asiBench } from "./asi-bench.ts";
 import { automationbench } from "./automationbench.ts";
 import { bfcl } from "./bfcl.ts";
@@ -42,6 +43,7 @@ import { robolab } from "./robolab.ts";
 import { robomimic } from "./robomimic.ts";
 import { robotwin } from "./robotwin.ts";
 import { simplerEnv } from "./simpler-env.ts";
+import { swebench } from "./swebench.ts";
 import { tau2Bench } from "./tau2-bench.ts";
 import { terminalBench4 } from "./terminal-bench-4.ts";
 import { terminalBenchScience } from "./terminal-bench-science.ts";
@@ -53,6 +55,8 @@ import { wandr } from "./wandr.ts";
 import { webvoyager } from "./webvoyager.ts";
 
 const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
+  swebench,
+  appworld,
   agentdojo,
   automationbench,
   frontiersweV2,

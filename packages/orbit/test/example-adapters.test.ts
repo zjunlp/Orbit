@@ -35,23 +35,27 @@ it.each(pythonAdapters)("checks the %s Python adapter", (name) => {
   });
 });
 
-it.each(["legalbench", "lawbench", "mmau", "healthbench", "longmemeval", "financebench"])(
-  "plans the %s external method using the real Method and Run contracts",
-  (name) => {
-    const dir = fileURLToPath(
-      new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url),
-    );
-    const method = Method.parse({
-      name: "scripted",
-      agent: "external",
-      entrypoint: `python -c 'print("external path")'`,
-    });
-    const result = execFileSync(
-      "python3",
-      [
-        "-B",
-        "-c",
-        `
+it.each([
+  "legalbench",
+  "lawbench",
+  "mmau",
+  "healthbench",
+  "longmemeval",
+  "financebench",
+  "swebench",
+])("plans the %s external method using the real Method and Run contracts", (name) => {
+  const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
+  const method = Method.parse({
+    name: "scripted",
+    agent: "external",
+    entrypoint: `python -c 'print("external path")'`,
+  });
+  const result = execFileSync(
+    "python3",
+    [
+      "-B",
+      "-c",
+      `
 import json, sys
 sys.path.insert(0, sys.argv[1])
 from test_adapter import AdapterTest
@@ -64,23 +68,20 @@ try:
 finally:
     fixture.doCleanups()
 `,
-        dir,
-        JSON.stringify(method),
-      ],
-      { encoding: "utf8" },
-    );
-    const { spec } = AdapterSpecResponse.parse(JSON.parse(result));
-    const run = RunSpec.parse(spec);
-    expect(run.command).toEqual(["python", "-c", 'print("external path")']);
-    expect(run.network).toBe(true);
-    expect(run.env?.ORBIT_TASK_FILE).toBe("/input/task.json");
-  },
-);
-
-it("plans AgentDojo tools with the real Run contract", () => {
-  const dir = fileURLToPath(
-    new URL("../../../examples/bench-adapters/agentdojo/", import.meta.url),
+      dir,
+      JSON.stringify(method),
+    ],
+    { encoding: "utf8" },
   );
+  const { spec } = AdapterSpecResponse.parse(JSON.parse(result));
+  const run = RunSpec.parse(spec);
+  expect(run.command).toEqual(["python", "-c", 'print("external path")']);
+  expect(run.network).toBe(true);
+  expect(run.env?.ORBIT_TASK_FILE).toBe("/input/task.json");
+});
+
+it.each(["agentdojo", "appworld"])("plans %s tools with the real Run contract", (name) => {
+  const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
   const result = execFileSync(
     "python3",
     [

@@ -1729,6 +1729,13 @@ native tool service collects actions, and a fresh native environment replays the
 Reference/empty checks can execute native traces offline, which does not validate live services
 or prompt-injection defenses. See the [task record](tasks/20261116-remaining-benchmarks.md).
 
+SWE-bench Lite uses immutable official instance images, original eval scripts and native
+F2P/P2P resolved reports in fresh verifier containers. The Python harness environment is kept
+out of the repository test process. Tasks lacking installed images remain listed unsupported.
+AppWorld public train/dev uses a private native code-execution service with original safety
+guards; independent replay runs the original task-success evaluator, not a subject-reported score
+or the grouped scenario metric. Both adapters preserve native reference/empty controls.
+
 ## 10. 路线
 
 | 阶段 | 目标 | 验收 |

@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "default": { "cpus": 1, "memGB": 4, "gpus": 0, "timeoutMin": 60 }
+}
