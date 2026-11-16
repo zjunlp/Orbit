@@ -89,6 +89,14 @@ it("shows model integration checks separately from benchmark calibration", () =>
   expect(detail).toContain("statistical equivalence remain separate");
 });
 
+it("offers ordinary evaluation and rescore for a policy registration without fixed batches", () => {
+  const e = { ...entry([]), capabilities: { methods: ["policy"] } } as CatalogEntry;
+  const detail = renderToStaticMarkup(<CalibrationDetail e={e} />);
+  expect(detail).toContain("Policy calibration requires fixed batches");
+  expect(detail).toContain("orbit bench run --sample-plan");
+  expect(detail).toContain("orbit bench rescore");
+});
+
 it("shows completed execution waiting for cleanup without claiming acceptance", () => {
   const policy = report({
     mode: "policy",

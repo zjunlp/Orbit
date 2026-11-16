@@ -51,7 +51,7 @@ function plan(count = 2) {
   return { version: 1 as const, items, digest: contentDigest(items) };
 }
 
-function fixture() {
+function fixture(fixedBatch = true) {
   const home = mkdtempSync(join(tmpdir(), "orbit-policy-calibrate-"));
   const paths = orbitPaths({ ORBIT_HOME: home });
   ensureHome(paths);
@@ -108,7 +108,7 @@ function fixture() {
           profile: "synthetic",
           semanticProfile: profile,
           observationMap: {},
-          batch: { maxEpisodes: 128 },
+          ...(fixedBatch ? { batch: { maxEpisodes: 128 } } : {}),
         },
       },
     }),
@@ -216,6 +216,15 @@ it("bounds policy requests and rejects mixing legacy calibration fields or overs
       methods: [{ name: "p", agent: "policy", policyRef: "p" }],
     }).success,
   ).toBe(false);
+});
+
+it("explains how to validate a policy when the benchmark has no fixed batches", async () => {
+  const f = fixture(false);
+  await expect(f.bench.calibrate(f.request)).rejects.toThrow(
+    /orbit bench run --sample-plan.*orbit bench rescore/,
+  );
+  expect(f.submit).not.toHaveBeenCalled();
+  expect(f.store.listJobs()).toHaveLength(0);
 });
 
 it("accepts valid zero native scores, shares a solve, rescores one episode and keeps policy checks apart", async () => {
