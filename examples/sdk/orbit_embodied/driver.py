@@ -12,6 +12,7 @@ import numpy as np
 
 from .binding import check_sample, digest, validate_observation
 from .evidence import seal, validate_action_chunk, write_json
+from .wire import POLICY_FALLBACKS
 
 
 class EpisodeFailure(RuntimeError):
@@ -143,6 +144,9 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                         write_json(chunks / (str(call) + ".rejected.json"), {"dtype": str(requested.dtype), "shape": list(requested.shape), "preview": repr(requested)[:500]})
                         raise ValueError("policy returned non-numeric actions")
                     timing = {"sourceObservation": step, "inferSeconds": elapsed}
+                    fallback = getattr(policy, "last_fallback", None)
+                    if isinstance(fallback, str) and fallback in POLICY_FALLBACKS:
+                        timing["fallback"] = fallback
                     conversion = getattr(policy, "conversion", None)
                     if conversion is not None:
                         from .conversions import CONVERSIONS

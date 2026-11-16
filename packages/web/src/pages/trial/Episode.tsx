@@ -20,6 +20,8 @@ import "./episode.css";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const seconds = (value: number) => Number(value.toFixed(4)).toString();
+const fallbackLabel = (value: EpisodeTrajectory["chunks"][number]["fallback"]) =>
+  value === "empty-plan" ? "Empty plan" : value === "invalid-plan" ? "Invalid plan" : null;
 /** A recorded number at reading precision: four significant digits, no float noise. */
 const shown = (value: number | null | undefined) =>
   value == null ? "—" : Number(value.toPrecision(4)).toString();
@@ -210,6 +212,13 @@ export function EpisodeViewer({
   const channels = useMemo(() => channelNames(trace), [trace]);
   const [channel, setChannel] = useState(channels.paired[0] ?? "");
   const timing = useMemo(() => chunkTiming(trace.chunks), [trace]);
+  const fallbacks = trace.chunks.filter((chunk) => fallbackLabel(chunk.fallback));
+  const fallbackRecorded = trace.chunks.some(
+    (chunk) => chunk.fallback && chunk.fallback !== "unrecorded",
+  );
+  const fallbackExpected =
+    trace.chunks.some((chunk) => chunk.fallback !== undefined) ||
+    trace.cameras.some((camera) => camera.name === "navigation_views");
   const linked = useMemo(
     () =>
       trace.samples.some((row) => row.sessionStepIds?.length || row.sessionMessageIndexes?.length),
@@ -315,6 +324,7 @@ export function EpisodeViewer({
         {chunks.map((chunk) => (
           <span key={`${chunk.start}-${chunk.end}-${chunk.label}`} className="chip">
             Chunk {chunk.label ?? `${seconds(chunk.start)}–${seconds(chunk.end)}s`}
+            {fallbackLabel(chunk.fallback) && ` · ${fallbackLabel(chunk.fallback)}`}
           </span>
         ))}
       </div>
@@ -378,6 +388,28 @@ export function EpisodeViewer({
           <span className="faint">No chunk boundaries recorded</span>
         )}
       </section>
+      {fallbackExpected && (
+        <section aria-label="Policy-reported fallbacks" className="episode-chunks">
+          <b>Policy-reported fallbacks</b>
+          <span>{fallbackRecorded ? `${fallbacks.length} recorded` : "Not recorded"}</span>
+          {fallbacks.map((chunk) => {
+            const step = sampleAt(trace, chunk.start);
+            return (
+              <button
+                type="button"
+                key={chunk.start}
+                className="btn sm"
+                onClick={() => {
+                  setPlaying(false);
+                  setIndex(step);
+                }}
+              >
+                Step {step + 1} · {fallbackLabel(chunk.fallback)}
+              </button>
+            );
+          })}
+        </section>
+      )}
       <section aria-label="Action and joint curves">
         <h3>Actions and body state</h3>
         {channels.all.length > 1 && (

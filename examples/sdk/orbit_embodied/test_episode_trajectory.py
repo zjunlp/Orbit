@@ -92,12 +92,18 @@ class EpisodeTrajectoryTests(unittest.TestCase):
         result = {"success": True, "issues": []}
 
         write_trajectory(self.directory, output, result, expected, kind="eb-navigation")
-        self.assertEqual([camera["name"] for camera in json.loads(output.read_text())["cameras"]],
+        unrecorded = json.loads(output.read_text())
+        self.assertEqual([chunk["fallback"] for chunk in unrecorded["chunks"]], ["unrecorded", "unrecorded"])
+        self.assertEqual([camera["name"] for camera in unrecorded["cameras"]],
                          ["front_rgb", "overhead_rgb"])
 
+        for index, fallback in enumerate(("empty-plan", "invalid-plan")):
+            (self.directory / "chunks" / f"{index}.json").write_text(json.dumps(
+                {"inferSeconds": 0.1, "fallback": fallback}))
         (self.directory / POLICY_VIDEO).write_bytes(b"synthetic")
         write_trajectory(self.directory, output, result, expected, kind="eb-navigation")
         trace = json.loads(output.read_text())
+        self.assertEqual([chunk["fallback"] for chunk in trace["chunks"]], ["empty-plan", "invalid-plan"])
         self.assertTrue(trace["frameBeforeAction"])
         self.assertEqual([camera["name"] for camera in trace["cameras"]],
                          ["front_rgb", "overhead_rgb", "navigation_views"])

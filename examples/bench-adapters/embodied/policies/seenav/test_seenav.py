@@ -65,12 +65,12 @@ class SeeNavPlannerTests(unittest.TestCase):
 
     def act(self, *, previous=-1, feedback=""):
         with redirect_stdout(io.StringIO()):
-            action = self.predict({"navigation_views": self.views, "instruction": "Find the bread.",
-                                   "previous_action": np.array([previous], dtype=np.int32),
-                                   "previous_feedback": feedback})
+            action, fallback = self.predict({"navigation_views": self.views, "instruction": "Find the bread.",
+                                             "previous_action": np.array([previous], dtype=np.int32),
+                                             "previous_feedback": feedback})
         self.assertEqual(action.shape, (1, 1))
         self.assertEqual(action.dtype, np.dtype("int32"))
-        return action.item()
+        return action.item(), fallback
 
     def message(self):
         messages, = self.model.respond.call_args.args
@@ -79,7 +79,7 @@ class SeeNavPlannerTests(unittest.TestCase):
 
     def test_policy_uses_the_recorded_view_order_and_first_action(self):
         self.model.respond.return_value = '{"executable_plan":[{"action_id":2},{"action_id":6}]}'
-        self.assertEqual(self.act(), 2)
+        self.assertEqual(self.act(), (2, "none"))
         prompt, image = self.message()
         self.assertIn("Find the bread", prompt["text"])
         encoded_image = image["image_url"]["url"].split(",", 1)[1]
@@ -103,9 +103,11 @@ class SeeNavPlannerTests(unittest.TestCase):
         for _ in range(2):
             self.reset()
             self.model.respond.return_value = '{"executable_plan":[]}'
-            self.assertEqual(self.act(), 0)
+            self.assertEqual(self.act(), (0, "empty-plan"))
             expected = np.random.default_rng(0)
             for response in malformed:
                 with self.subTest(response=response):
                     self.model.respond.return_value = response
-                    self.assertEqual(self.act(), int(expected.integers(8)))
+                    self.assertEqual(self.act(), (int(expected.integers(8)), "invalid-plan"))
+            self.model.respond.return_value = '{"executable_plan":[{"action_id":2}]}'
+            self.assertEqual(self.act(), (2, "none"))

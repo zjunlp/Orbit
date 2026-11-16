@@ -10,6 +10,7 @@ from .evidence import write_json
 from .libero import VIDEO_FPS as LIBERO_FPS
 from .robodojo import VIDEO_FPS as ROBODOJO_FPS
 from .robotwin import CAMERA_VIDEOS as ROBOTWIN_CAMERAS, VIDEO_FPS as ROBOTWIN_FPS
+from .wire import POLICY_FALLBACKS
 
 
 LIBERO_STATE = {
@@ -131,8 +132,14 @@ def write_trajectory(directory, destination, result, expected, *, kind):
     for index, group in groupby(controls, key=lambda row: row["chunk"]):
         rows = list(group)
         timing = json.loads((directory / "chunks" / (str(index) + ".json")).read_text())
-        chunks.append({"label": str(index + 1), "start": at(rows[0]["step"]), "end": at(rows[-1]["step"]),
-                       "inferSeconds": rounded(timing["inferSeconds"])})
+        chunk = {"label": str(index + 1), "start": at(rows[0]["step"]), "end": at(rows[-1]["step"]),
+                 "inferSeconds": rounded(timing["inferSeconds"])}
+        fallback = timing.get("fallback")
+        if fallback in POLICY_FALLBACKS:
+            chunk["fallback"] = fallback
+        elif kind == "eb-navigation":
+            chunk["fallback"] = "unrecorded"
+        chunks.append(chunk)
 
     cameras = []
     # With no recording errors, frame i was captured just before control step i.

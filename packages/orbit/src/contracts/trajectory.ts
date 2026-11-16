@@ -90,6 +90,7 @@ export const EpisodeTrajectory = z
             end: Time,
             label: z.string().max(100).optional(),
             inferSeconds: Time.optional(),
+            fallback: z.enum(["none", "empty-plan", "invalid-plan", "unrecorded"]).optional(),
           })
           .refine((chunk) => chunk.end >= chunk.start, "chunk end precedes start"),
       )

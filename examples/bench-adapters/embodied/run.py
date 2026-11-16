@@ -76,6 +76,10 @@ class LazyPolicy:
     def conversion(self):
         return getattr(self.client, "conversion", None)
 
+    @property
+    def last_fallback(self):
+        return getattr(self.client, "last_fallback", None)
+
     def act(self, observation):
         return self.client.act(observation)
 

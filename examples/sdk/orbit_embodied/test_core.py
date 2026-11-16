@@ -470,11 +470,13 @@ class CoreTests(unittest.TestCase):
 
     def test_stops_mid_chunk_and_keeps_full_requested_chunk(self):
         benchmark, policy = SyntheticBenchmark(success_at=2), SyntheticPolicy()
+        policy.last_fallback = "empty-plan"
         result = self.run_sample(benchmark, policy)
         self.assertTrue(result["success"])
         self.assertEqual(result["steps"], 2)
         self.assertEqual(policy.calls, 1)
         self.assertEqual(np.load(self.output / "chunks/0.npy").shape, (6, 7))
+        self.assertEqual(json.loads((self.output / "chunks/0.json").read_text())["fallback"], "empty-plan")
         self.assertTrue(self.verify()["valid"])
         self.assertTrue(benchmark.closed and policy.closed)
 

@@ -1,7 +1,7 @@
 """A policy service that accepts bound observations and emits native action chunks."""
 
 from .openpi import WebSocketPolicy
-from .wire import pack, unpack
+from .wire import POLICY_FALLBACKS, pack, unpack
 
 
 class PolicyClient(WebSocketPolicy):
@@ -11,6 +11,7 @@ class PolicyClient(WebSocketPolicy):
         self.replan_steps = replan_steps
         self.action_size = action_size
         self.conversion = conversion
+        self.last_fallback = None
         self.connect(url, timeout, pack, unpack)
 
     def check_metadata(self, metadata):
@@ -25,4 +26,7 @@ class PolicyClient(WebSocketPolicy):
             raise ValueError("the policy service uses a seed-0 stream")
 
     def act(self, observation):
-        return self.infer(observation)["actions"]
+        reply = self.infer(observation)
+        fallback = reply.get("fallback")
+        self.last_fallback = fallback if isinstance(fallback, str) and fallback in POLICY_FALLBACKS else None
+        return reply["actions"]

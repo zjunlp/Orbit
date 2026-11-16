@@ -954,6 +954,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **EB-Navigation** 使用 AI2-THOR 5.0.0 的无头 Vulkan 渲染，按原生 8 个离散动作控制，目标水平距离不超过 1 米或第 20 步时结束。
   SeeNav 和原版 Qwen2.5-VL 在相同的标注双视角、动作反馈及提示词下运行。CPU 验证根据冻结目标和逐步位置复核距离与停止判定，
   Web 复用现有时间轴，同步播放原始第一视角、俯视和送入模型的标注双视角视频。
+  SeeNav 的空计划和非法计划沿用上游兜底动作。策略报告的原因随动作块进入证据，Trial 时间轴与原生执行动作分开显示。
   [评测协议](../examples/bench-adapters/embodied/benchmarks/eb-navigation/README.md)
 - **CHORES-S / CHORES-L** 共用原生 Stretch 仿真和 20 个离散动作，按任务冻结初态、目标和步数上限。SPOC 和 FLaRe
   读取相同的双 RGB、指令和抓持状态。CPU 校验核对原生终止条件和 SEL，并按 `sub_done` 动作重建 RoomVisit 已确认房间。

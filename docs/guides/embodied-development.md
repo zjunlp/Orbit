@@ -42,7 +42,8 @@ Python 3.11 的真实 HDF5 生命周期检查还使用 `h5py`。缺少可选依�
 
 `pnpm verify` 还会用当前环境的 `python3` 发现各适配器根目录的测试。CI 和发布流程使用 Python 3.11，并从
 [CI 依赖清单](../../examples/sdk/requirements-ci.txt)安装这组测试所需的 Python 包。
-CI 另行运行 `test_core`、`test_eb_navigation` 和 `test_vln_native`，覆盖共享证据和导航计分。
+CI 另行运行 `test_core`、`test_eb_navigation`、`test_episode_trajectory`、`test_vln_native` 和
+`test_wire`，覆盖共享证据、时间轴索引、导航计分和策略传输。
 模型专属的 CPU 回归与模型服务一起放在 `embodied/policies/<family>/test_*.py`，由
 `embodied/test_policy_expansion.py` 自动收集。可以加 `-k FastWAM` 等参数筛选单个模型的测试。
 需要模拟器镜像的回归由各 benchmark 指南给出运行命令。

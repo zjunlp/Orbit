@@ -90,9 +90,11 @@ def make_policy(weights):
                 selected = plan[0]["action_id"] if plan else 0
                 if type(selected) is not int or not 0 <= selected < len(ACTION_NAMES):
                     raise ValueError("action outside the discrete action space")
+                self.fallback = "none" if plan else "empty-plan"
                 return [selected], True
             except (ValueError, KeyError, TypeError):
                 self.output_json_error += 1
+                self.fallback = "invalid-plan"
                 return [int(self.random.integers(len(ACTION_NAMES)))], False
 
         def reset(self):
@@ -115,8 +117,9 @@ def make_policy(weights):
         center = image.width // 2
         projector.overhead = image.crop((0, 0, center, image.height))
         projector.front = image.crop((center, 0, image.width, image.height))
+        planner.fallback = None
         actions, _ = planner.act({}, observation["instruction"], projector=projector)
-        return np.asarray([actions], dtype=np.int32)
+        return np.asarray([actions], dtype=np.int32), planner.fallback
 
     return predict, planner.reset
 
@@ -136,7 +139,7 @@ def main():
         raise ValueError("policy assets differ from the frozen registration")
     policy, reset = make_policy(args.weights)
     metadata = {"replanSteps": 1, "actionSize": 1, "orbit": {**identity, "randomness": RANDOMNESS}}
-    asyncio.run(serve_actions(policy, metadata, "0.0.0.0", args.port, reset=reset))
+    asyncio.run(serve_actions(policy, metadata, "0.0.0.0", args.port, reset=reset, report_fallback=True))
 
 
 if __name__ == "__main__":
