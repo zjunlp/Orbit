@@ -1712,6 +1712,23 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 原生具身家族与模型组合的详细范围见 [具身兼容矩阵](guides/embodied-compatibility.md)。其中 RoboCasa365 的
 GR00T recipe 是 N1.5，LIBERO 与 SimplerEnv 使用 N1.7；矩阵中的真实抽样验证不表示完整套件统计等价。
 
+### 9.19 Additional native question and utility adapters (2026-11-16)
+
+HealthBench and LongMemEval use the existing solve/verify/score protocol with original
+per-question conversations or timestamped histories. Grader inputs and API credentials stay
+in verify; source and installed dataset hashes bind saved-input rescores. Native judge prompts
+and decisions are retained. Alternative judge models/transports are explicit configuration
+conditions, not official-model parity. HealthBench exposes raw per-example scores, which may
+be negative; its official aggregate clips after averaging and is not the raw Orbit mean.
+
+FinanceBench retains public questions and original full PDFs, with the evidence-only condition
+identified separately. Published human judgments bind exact completion bytes and context; new
+answers require explicit answer/source-bound human reviews. Missing reviews are invalid
+`judge_unavailable`, not inferred labels. AgentDojo supports v1.2.2 clean utility: a private
+native tool service collects actions, and a fresh native environment replays them for utility.
+Reference/empty checks can execute native traces offline, which does not validate live services
+or prompt-injection defenses. See the [task record](tasks/20261116-remaining-benchmarks.md).
+
 ## 10. 路线
 
 | 阶段 | 目标 | 验收 |

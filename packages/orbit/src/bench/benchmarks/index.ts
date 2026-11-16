@@ -1,6 +1,7 @@
 // Product support facts, not a second registry or a record of this machine's experiments.
 // One file per benchmark family under this directory; add a family by adding a file and a line here.
 import { type CatalogEntry, SupportedBenchmark } from "../../contracts/index.ts";
+import { agentdojo } from "./agentdojo.ts";
 import { asiBench } from "./asi-bench.ts";
 import { automationbench } from "./automationbench.ts";
 import { bfcl } from "./bfcl.ts";
@@ -11,7 +12,9 @@ import { cuaBench } from "./cua-bench.ts";
 import { embodiedClbench } from "./embodied-clbench.ts";
 import { embodiedFirstExam } from "./embodied-first-exam.ts";
 import { embodiedlab } from "./embodiedlab.ts";
+import { financebench } from "./financebench.ts";
 import { frontiersweV2 } from "./frontierswe-v2.ts";
+import { healthbench } from "./healthbench.ts";
 import { humaneval } from "./humaneval.ts";
 import { lawbench } from "./lawbench.ts";
 import { legalbench } from "./legalbench.ts";
@@ -19,6 +22,7 @@ import { libero } from "./libero.ts";
 import { liberoPlus } from "./libero-plus.ts";
 import { liberoPro } from "./libero-pro.ts";
 import { longds } from "./longds.ts";
+import { longmemeval } from "./longmemeval.ts";
 import { maniskill3 } from "./maniskill3.ts";
 import { metaworld } from "./metaworld.ts";
 import { miniwob } from "./miniwob.ts";
@@ -49,11 +53,15 @@ import { wandr } from "./wandr.ts";
 import { webvoyager } from "./webvoyager.ts";
 
 const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
+  agentdojo,
   automationbench,
   frontiersweV2,
   wandr,
   chartography,
   humaneval,
+  financebench,
+  healthbench,
+  longmemeval,
   legalbench,
   lawbench,
   mmau,

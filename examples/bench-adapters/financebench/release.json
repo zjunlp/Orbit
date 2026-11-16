@@ -1,0 +1,23 @@
+{
+  "revision": "cc39aeb4afdf33909ee1412188bf89035950c2eb",
+  "files": {
+    "data/financebench_open_source.jsonl": "a5a2aa673e573e55675fc3c0f9aa38c1cf59d2abc91edb077534f71f10a71877",
+    "data/financebench_document_information.jsonl": "1c69127783879de8cdadb159d2181f39bc3123b8e0ebf74031c3969d69189575",
+    "results/gpt-4-1106-preview_oracle_reverse.jsonl": "53fff466396bb0d41bde247c2ca54c2367a5f5b87f9dbedbc7823a0c2512fe6d",
+    "results/gpt-4-1106-preview_inContext.jsonl": "28a35b93b9f92e0b095c38f63e778f7b5a510def8f37e2d49e4504711059e222",
+    "results/gpt-4_singleStore.jsonl": "3863ee6497d7100767bd4522e5cac260c6b716eb106135154f877941f200d86d",
+    "results/gpt-4-1106-preview_closedBook.jsonl": "166e4ca04ea4c96dd360ca0618af20873dda361ccad0a8d74af4736dd49e523c",
+    "results/gpt-4_oracle_reverse.jsonl": "622f0286a9d92c08e65678d3225dc4f8f9baff8f1a99a9bff700379036cdd564",
+    "results/gpt-4-1106-preview_inContext_reverse.jsonl": "6cec692b591a1c18d58590ccdcbbb9d54eef61fcb04597c49b3c884b2f3a4e5e",
+    "results/gpt-4_sharedStore.jsonl": "7d2d610fbe0221358d2347592b7443a1741a975f6c74116ec2ccf6517001e13e",
+    "results/gpt-4-1106-preview_sharedStore.jsonl": "c9eff87569a517fe5df8b23ea2ae0ad031dff21b1e944f3180abe0be11498f43",
+    "results/gpt-4_oracle.jsonl": "95e90e5098f121856676888847ef308e07c0b2f6c3cb27d2ffb90fc65726c497",
+    "results/llama2_sharedStore.jsonl": "4023cad21a2b2bdb61685ec393026c222b8246b2f903f13203c441d5b208033e",
+    "results/gpt-4-1106-preview_singleStore.jsonl": "551308ab7990343d334df678fa82c4743495732f8329c573853bb0627ed7fb5f",
+    "results/llama2_singleStore.jsonl": "04a891aaf048ff50a474aeef887447044f5e7f9ca303a754a16b2b4d6dd07b71",
+    "results/claude-2_inContext_reverse.jsonl": "2f481b9cd8a298d14310fa973ea9e7ab15a16c1f6d01a03d756d9433efff7aa7",
+    "results/gpt-4_closedBook.jsonl": "beb885621520e4a781a187ddcd9f96c5dc2439d5e04be672f718aa44ac579c5c",
+    "results/claude-2_inContext.jsonl": "e38452ddbc848aec2fc3ff116ef169ad2167bfaf0dc49ec0a1c19320dd6efc3a",
+    "results/gpt-4-1106-preview_oracle.jsonl": "b07efa7daa2adfe706515ea6c05e207ff59d790e0161fd3f9f9208489ec9b3b2"
+  }
+}

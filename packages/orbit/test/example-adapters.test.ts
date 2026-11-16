@@ -35,7 +35,7 @@ it.each(pythonAdapters)("checks the %s Python adapter", (name) => {
   });
 });
 
-it.each(["legalbench", "lawbench", "mmau"])(
+it.each(["legalbench", "lawbench", "mmau", "healthbench", "longmemeval", "financebench"])(
   "plans the %s external method using the real Method and Run contracts",
   (name) => {
     const dir = fileURLToPath(
@@ -76,6 +76,39 @@ finally:
     expect(run.env?.ORBIT_TASK_FILE).toBe("/input/task.json");
   },
 );
+
+it("plans AgentDojo tools with the real Run contract", () => {
+  const dir = fileURLToPath(
+    new URL("../../../examples/bench-adapters/agentdojo/", import.meta.url),
+  );
+  const result = execFileSync(
+    "python3",
+    [
+      "-B",
+      "-c",
+      `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from test_adapter import AdapterTest
+import adapter
+fixture = AdapterTest()
+fixture.setUp()
+try:
+    fixture.req["trial"]["method"] = {"agent": "external", "entrypoint": "python /adapter/tool.py info"}
+    print(json.dumps(adapter.solve(fixture.req)))
+finally:
+    fixture.doCleanups()
+`,
+      dir,
+    ],
+    { encoding: "utf8" },
+  );
+  const { spec } = AdapterSpecResponse.parse(JSON.parse(result));
+  const run = RunSpec.parse(spec);
+  expect(run.services[0]?.networks).toEqual(["tools"]);
+  expect(run.services[0]?.collect).toEqual(["/evidence/trace.json"]);
+  expect(run.mounts.map((m) => m.target)).toEqual(["/adapter/tool.py"]);
+});
 
 it("plans a Cua desktop service with the real Run contract", () => {
   const dir = fileURLToPath(
