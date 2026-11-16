@@ -54,6 +54,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | Policy / 权重 | 已实测的 benchmark 协议 | 真实模型样本与参考证据 |
 | --- | --- | --- |
 | [Hy-Embodied-0.5-VLA](../../examples/bench-adapters/embodied/policies/hy-embodied-vla/README.md) | RoboTwin 2.0 原版 Clean，双臂绝对末端位姿，每步更新上游相机历史 | 冻结 `adjust_bottle` 完成 8 步短测，覆盖第 7 步后的重新推理。CPU 核对所录动作。[记录](../tasks/20261116-hy-embodied-vla.md) |
+| [Motus](../../examples/bench-adapters/embodied/policies/motus/README.md) | RoboTwin 2.0 原版 Randomized，每 16 步重规划关节目标 | 冻结 `adjust_bottle` 完成 17 步短测，覆盖两个动作块。CPU 核对所录动作。[记录](../tasks/20261116-motus.md) |
 | SeeNav-Agent 与 Qwen2.5-VL-3B-Instruct | EB-Navigation，SeeNav 双视角标注配方 | 同一模型运行镜像，每款模型各两条配对冻结样本。均完成原生控制、CPU 验证与重评。[记录](../tasks/20261114-eb-navigation.md) |
 | π₀.₅ 官方 LIBERO，`pi05-libero` 或共享 GPU 登记 | LIBERO Spatial、Object、Goal、Long 的 OpenPI recipe | 四套件均有抽样；Spatial 的固定输入、动作及共享编译模型控制通过，独立 GPU 进程逐位对照失败。[Spatial](../tasks/20261105-embodied-eval.md) · [扩展](../tasks/20261107-libero-suites.md) |
 | π₀.₅ 官方 LIBERO，八步重规划登记 | LIBERO-Mem | 首个任务用 GPU 完成一个冻结样本并通过 CPU 证据校验；同一初态另经 Orbit 的完整 CPU 流水线和重评。[记录](../tasks/20261114-libero-mem.md) |

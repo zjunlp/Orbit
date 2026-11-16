@@ -19,7 +19,7 @@ SEPTEMBER = {"repository": "https://github.com/RoboTwin-Platform/RoboTwin",
              "commit": "ea8b21121ebb3cd201ff5b3fe361944ac94eda3f"}
 SEPTEMBER_DOCKERFILE = Path(__file__).with_name("robotwin-september.Dockerfile")
 SEPTEMBER_CONFIG = "env_cfg/task_config"
-POLICY_RECIPES = ("fast-vla", "absolute-ee")
+POLICY_RECIPES = ("fast-vla", "absolute-ee", "qpos-chunk-16")
 POSE_ORDER = [f"{arm}_{part}" for arm in ("left", "right")
               for part in ("x", "y", "z", "qw", "qx", "qy", "qz", "gripper")]
 
@@ -111,25 +111,26 @@ def configure_benchmark(args, reference):
                                               "format": f"RGB-native-t-minus-{steps}"}
             reference["observationMap"][name] = name
         suffix = "-full-fast-vla-native"
-    elif recipe == "absolute-ee":
+    elif recipe in ("absolute-ee", "qpos-chunk-16"):
         reference["id"] = reference["id"].rsplit("/", 1)[0] + f"-{recipe}/1"
-        reference["parameters"]["replanSteps"] = 1
+        reference["parameters"]["replanSteps"] = 1 if recipe == "absolute-ee" else 16
         environment["controller"] = recipe
         suffix = f"-full-{recipe}-native"
-        profile = reference["benchmarkProfile"]
-        profile["id"] = "robotwin-aloha-agilex-absolute-ee/1"
-        coordinates = {"shape": [16], "frame": "robotwin-world", "unit": "meters-and-normalized-gripper",
-                       "order": POSE_ORDER}
-        profile["observations"].pop("joint_state")
-        profile["observations"]["ee_pose"] = {
-            **coordinates, "semantic": "aloha-agilex-live-end-effector-pose", "dtype": "float64",
-        }
-        profile["action"] = {
-            **coordinates, "semantic": "absolute-end-effector-and-gripper-target", "controller": "robotwin-ee",
-            "rotation": "quaternion-wxyz", "gripper": "normalized-open-fraction",
-        }
-        reference["observationMap"].pop("joint_state")
-        reference["observationMap"]["ee_pose"] = "ee_pose"
+        if recipe == "absolute-ee":
+            profile = reference["benchmarkProfile"]
+            profile["id"] = "robotwin-aloha-agilex-absolute-ee/1"
+            coordinates = {"shape": [16], "frame": "robotwin-world", "unit": "meters-and-normalized-gripper",
+                           "order": POSE_ORDER}
+            profile["observations"].pop("joint_state")
+            profile["observations"]["ee_pose"] = {
+                **coordinates, "semantic": "aloha-agilex-live-end-effector-pose", "dtype": "float64",
+            }
+            profile["action"] = {
+                **coordinates, "semantic": "absolute-end-effector-and-gripper-target", "controller": "robotwin-ee",
+                "rotation": "quaternion-wxyz", "gripper": "normalized-open-fraction",
+            }
+            reference["observationMap"].pop("joint_state")
+            reference["observationMap"]["ee_pose"] = "ee_pose"
     return {
         "name": "robotwin-" + environment["suite"].replace("_", "-") + suffix,
         "adapter": str(HERE / "adapter.py"),

@@ -237,6 +237,24 @@ class RoboTwinBenchmark:
             self.env = None
 
 
+class RoboTwinJointChunkBenchmark(RoboTwinBenchmark):
+    """Capture chunk-interior video without advancing the policy's lighting stream."""
+
+    def step(self, action):
+        success, terminated = self.apply_action(action)
+        replan = not terminated and self.env.take_action_cnt % self.reference["parameters"]["replanSteps"] == 0
+        if replan:
+            raw = self.env.get_obs()
+        else:
+            # take_action already updated render poses. get_obs would randomize lighting again.
+            self.env._update_render = lambda: None
+            try:
+                raw = self.env.get_obs()
+            finally:
+                del self.env._update_render
+        return StepResult(self.observation(raw), float(success), terminated, success, native_action=action.tolist())
+
+
 class RoboTwinAbsolutePoseBenchmark(RoboTwinBenchmark):
     """Live end-effector poses and absolute native RoboTwin pose targets."""
 

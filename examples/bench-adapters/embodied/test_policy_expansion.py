@@ -84,6 +84,10 @@ class PolicyExpansionTests(unittest.TestCase):
                                                 (f"{arm}_x", f"{arm}_y", f"{arm}_z", f"{arm}_qx",
                                                  f"{arm}_qy", f"{arm}_qz", f"{arm}_qw", f"{arm}_gripper")])
 
+    def test_motus_registration_rejects_wrong_camera_and_action_order(self):
+        self.assert_action_policy_registration("motus/configure_motus.py", self.robotwin_recipe("qpos-chunk-16"),
+                                               "head_camera", "camera", "left_camera")
+
     def test_dm05_registration_checks_its_fixed_quaternion_and_action_semantics(self):
         config = load("policies/dm05/configure_dm05.py")
         reference = json.loads((ADAPTER / "profiles/openvla-libero.json").read_text())

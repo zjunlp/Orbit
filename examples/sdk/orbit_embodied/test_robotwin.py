@@ -14,7 +14,7 @@ import numpy as np
 
 from orbit_embodied.binding import digest, seed_asset
 from orbit_embodied.robotwin import (
-    RoboTwinAbsolutePoseBenchmark, RoboTwinBenchmark, setup_native_scene,
+    RoboTwinAbsolutePoseBenchmark, RoboTwinBenchmark, RoboTwinJointChunkBenchmark, setup_native_scene,
 )
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
@@ -66,6 +66,17 @@ class RobotwinTests(unittest.TestCase):
             np.testing.assert_array_equal(outcome.observation["ee_pose"],
                                           [step, 0, 0, 1, 0, 0, 0, 0.1, step + 1, 0, 0, 1, 0, 0, 0, 0.2])
         self.assertEqual(pose.env.controllers, ["ee", "ee"])
+
+    def test_native_joint_chunk_refreshes_lighting_only_on_replan(self):
+        recipe = reference()
+        recipe["parameters"]["replanSteps"] = 16
+        joint = RoboTwinJointChunkBenchmark(recipe, "adjust_bottle")
+        joint.env = NativeControlEnvironment()
+        for step in range(1, 17):
+            outcome = joint.step(np.zeros(14))
+            self.assertEqual(outcome.observation["head_camera"][0, 0, 0], step + (step == 16))
+            self.assertEqual(outcome.observation["joint_state"][0], step)
+        self.assertEqual(joint.env.controllers, ["qpos"] * 16)
 
     def test_september_instruction_uses_native_split_and_is_independent_of_global_rng(self):
         profile = reference()

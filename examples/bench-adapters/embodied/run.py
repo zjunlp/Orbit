@@ -274,11 +274,12 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
     elif kind == "robotwin":
         from orbit_embodied.robotwin import (
             RoboTwinAbsolutePoseBenchmark, RoboTwinBenchmark, RoboTwinCartesianBenchmark,
-            RoboTwinLingBotBenchmark,
+            RoboTwinJointChunkBenchmark, RoboTwinLingBotBenchmark,
         )
         controller = reference["environment"].get("controller")
         native = {"ee": RoboTwinCartesianBenchmark, "lingbot-va-ee": RoboTwinLingBotBenchmark,
-                  "absolute-ee": RoboTwinAbsolutePoseBenchmark}.get(controller, RoboTwinBenchmark)
+                  "absolute-ee": RoboTwinAbsolutePoseBenchmark,
+                  "qpos-chunk-16": RoboTwinJointChunkBenchmark}.get(controller, RoboTwinBenchmark)
         benchmark = native(reference, sample["taskId"])
     elif kind in ("maniskill3", "metaworld"):
         from orbit_embodied.tabletop import ManiSkillBenchmark, MetaWorldBenchmark
