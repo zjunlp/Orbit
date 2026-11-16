@@ -7,7 +7,7 @@ export const automationbench: Omit<SupportedBenchmark, "registrationNames"> = {
   description:
     "Execute business workflows through the original simulated service APIs and strict task rubric.",
   taxonomyGroups: [
-    group("Public and simple workflows", {
+    group("Public and simple business workflows", {
       domains: ["business-services"],
       taskTypes: ["business-operation"],
       targets: ["tool-use"],
@@ -16,7 +16,21 @@ export const automationbench: Omit<SupportedBenchmark, "registrationNames"> = {
       platforms: ["software-system"],
       world: ["controlled"],
       feedback: ["step"],
-      scoringEvidence: ["final-state", "trajectory"],
+      participants: [],
+      scoringEvidence: ["final-state"],
+      scoringMethods: ["rule-check"],
+    }),
+    group("Public finance workflows", {
+      domains: ["finance", "business-services"],
+      taskTypes: ["business-operation"],
+      targets: ["tool-use"],
+      modalities: ["text", "structured-data"],
+      interfaces: ["tool-api"],
+      platforms: ["software-system"],
+      world: ["controlled"],
+      feedback: ["step"],
+      participants: [],
+      scoringEvidence: ["final-state"],
       scoringMethods: ["rule-check"],
     }),
   ],

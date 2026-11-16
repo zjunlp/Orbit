@@ -6,7 +6,16 @@ export const vlaArena: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "VLA-Arena",
   description:
     "Evaluate safety, distraction resistance, extrapolation and long-horizon manipulation.",
-  taxonomyGroups: [group("Manipulation and safety costs", native)],
+  taxonomyGroups: [
+    group("Safety suites", { ...native, targets: ["control", "safety"] }),
+    group("Distractor suites", { ...native, targets: ["control", "robustness"] }),
+    group("Extrapolation suites", { ...native, targets: ["control", "generalization"] }),
+    group("Long-horizon suites", { ...native, targets: ["control", "planning"] }),
+    group("Visual and language perturbation probes", {
+      ...native,
+      targets: ["control", "robustness"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "Native suites with L0–L2 difficulty, frozen initial states and official safety scoring.",

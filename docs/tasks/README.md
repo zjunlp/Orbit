@@ -52,6 +52,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261116](20261116-benchmark-taxonomy-evidence.md) Audit benchmark classification against implemented protocols and restore missing catalog families
+
 - [20260930](20260930-r3-bench.md) R3: benchmarks on the Run / lease model
 - [20261003](20261003-bench-adapter-protocol.md) Bench adapter protocol and ResearchClawBench
 - [20261003](20261003-bench-resources-usage.md) Per-task bench resources and measured run usage

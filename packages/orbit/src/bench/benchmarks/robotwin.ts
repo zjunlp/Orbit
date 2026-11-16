@@ -6,7 +6,13 @@ export const robotwin: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "RoboTwin 2.0",
   description:
     "Evaluate dual-arm manipulation with clean and randomized scenes under native control protocols.",
-  taxonomyGroups: [group("Dual-arm manipulation", native)],
+  taxonomyGroups: [
+    group("Clean dual-arm manipulation", native),
+    group("Randomized dual-arm manipulation", {
+      ...native,
+      targets: ["control", "robustness"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "Clean and Randomized catalogs; joint-control and Cartesian policies are separate protocols.",

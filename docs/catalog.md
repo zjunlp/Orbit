@@ -26,6 +26,13 @@ The full vocabulary and matching rules live in [design §9.17](design.md#917-ben
 A task or profile can have multiple values. Counts are discovery metadata, not evidence of calibration
 or model capability; product families, local registrations and evaluated tasks remain separate counts.
 
+The catalog includes 46 families after the [source-backed taxonomy audit](tasks/20261116-benchmark-taxonomy-evidence.md).
+BiGym 2.0, CLIPort and LIBERO-Mem already had native adapters and sample checks; this audit adds their
+missing product entries. Classification describes only the implemented route. Unknown values stay
+unknown; separate input layouts and evaluation tracks keep separate profiles so joint filters cannot
+combine unrelated conditions. Review videos are not policy video inputs, fixed histories are not live
+users, and sampled calibration does not establish full-suite equivalence.
+
 | Area | Benchmark families | Setup and scope |
 | --- | --- | --- |
 | Code generation and terminal work | HumanEval; Terminal-Bench 4.0; FrontierSWE v2 | [HumanEval adapter](../examples/bench-adapters/humaneval/) · [Harbor support](tasks/20261010-harbor-verifier-modes.md) |

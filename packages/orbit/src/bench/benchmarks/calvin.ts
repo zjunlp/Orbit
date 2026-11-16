@@ -5,7 +5,12 @@ export const calvin: Omit<SupportedBenchmark, "registrationNames"> = {
   id: "calvin",
   name: "CALVIN",
   description: "Evaluate chains of five language instructions in the held-out scene D environment.",
-  taxonomyGroups: [group("ABC→D instruction sequences", native)],
+  taxonomyGroups: [
+    group("ABC→D instruction sequences", {
+      ...native,
+      targets: ["control", "instruction-following", "generalization"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "Frozen catalog of 1,000 native instruction sequences; benchmark registration is independent of policy weights.",

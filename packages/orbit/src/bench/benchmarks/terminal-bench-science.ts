@@ -7,10 +7,44 @@ export const terminalBenchScience: Omit<SupportedBenchmark, "registrationNames">
   description:
     "Perform scientific tasks in terminal workspaces with task-owned environments and verifiers.",
   taxonomyGroups: [
-    group("Scientific terminal tasks", {
+    group("Natural-science numerical tasks", {
       ...workspace,
+      participants: [],
+      scoringEvidence: ["artifact"],
       domains: ["science"],
-      taskTypes: ["analysis", "experimentation"],
+    }),
+    group("Finite Free Stam: Lean proof", {
+      ...workspace,
+      participants: [],
+      scoringEvidence: ["artifact"],
+      domains: ["mathematics"],
+      taskTypes: ["implementation"],
+      world: ["controlled"],
+      scoringMethods: ["execution-test"],
+    }),
+    group("Ankle MRI findings", {
+      ...workspace,
+      participants: [],
+      scoringEvidence: ["artifact"],
+      domains: ["healthcare"],
+      taskTypes: ["analysis"],
+      modalities: ["text", "image"],
+      world: ["controlled"],
+    }),
+    group("TAMP skill planning", {
+      ...workspace,
+      participants: [],
+      scoringEvidence: ["artifact"],
+      domains: ["robotics"],
+      taskTypes: ["implementation"],
+      targets: ["planning"],
+      modalities: ["text", "structured-data"],
+      platforms: ["software-system", "simulation"],
+      world: ["controlled"],
+    }),
+    group("Other scientific terminal tasks: classification pending", {
+      ...workspace,
+      participants: [],
       scoringEvidence: ["artifact"],
     }),
   ],

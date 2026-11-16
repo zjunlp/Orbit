@@ -6,10 +6,28 @@ export const asiBench: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "ASI-Bench",
   description: "Solve scientific research tasks through the benchmark's native agent runner.",
   taxonomyGroups: [
-    group("Scientific tasks", {
+    group("Natural-science tasks", {
       ...workspace,
       domains: ["science"],
-      taskTypes: ["analysis", "experimentation"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+    }),
+    group("Mathematical and numerical tasks", {
+      ...workspace,
+      domains: ["mathematics"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+    }),
+    group("Robotics estimation and calibration tasks", {
+      ...workspace,
+      domains: ["robotics"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+    }),
+    group("Computer-science and electrical-engineering tasks", {
+      ...workspace,
+      participants: [],
+      scoringEvidence: ["artifact"],
     }),
   ],
   integrations: [

@@ -6,7 +6,13 @@ export const colosseumV2: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "Colosseum V2",
   description:
     "Evaluate manipulation under visual, language and physical perturbations in ManiSkill.",
-  taxonomyGroups: [group("Single-arm and bimanual robustness", native)],
+  taxonomyGroups: [
+    group("Unperturbed single-arm and bimanual tasks", native),
+    group("Perturbed single-arm and bimanual tasks", {
+      ...native,
+      targets: ["control", "robustness"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "Native tasks, applicable perturbation presets and separate single-arm and bimanual control profiles.",

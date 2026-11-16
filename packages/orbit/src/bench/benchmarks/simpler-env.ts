@@ -6,7 +6,13 @@ export const simplerEnv: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "SimplerEnv",
   description:
     "Evaluate robot manipulation with Google Robot and WidowX in fixed simulation recipes and scene grids.",
-  taxonomyGroups: [group("Native robot tasks", native)],
+  taxonomyGroups: [
+    group("Native robot tasks with proprioception", native),
+    group("WidowX RGB224 visual-matching recipe", {
+      ...native,
+      modalities: ["text", "image"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "GR00T recipes, prepackaged tasks, visual matching and variant aggregation; policy termination is available on fixed grids.",

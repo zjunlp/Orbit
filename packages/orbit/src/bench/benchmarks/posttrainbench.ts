@@ -11,7 +11,9 @@ export const posttrainbench: Omit<SupportedBenchmark, "registrationNames"> = {
       ...workspace,
       domains: ["machine-learning"],
       taskTypes: ["training", "optimization"],
+      world: ["controlled"],
       scoringEvidence: ["artifact"],
+      participants: [],
     }),
   ],
   integrations: [

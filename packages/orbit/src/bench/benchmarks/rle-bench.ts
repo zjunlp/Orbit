@@ -14,6 +14,7 @@ export const rleBench: Omit<SupportedBenchmark, "registrationNames"> = {
       platforms: ["simulation"],
       world: ["controlled"],
       scoringEvidence: ["artifact"],
+      participants: [],
       scoringMethods: ["execution-test"],
     }),
   ],
