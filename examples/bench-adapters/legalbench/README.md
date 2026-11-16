@@ -24,7 +24,8 @@ orbit bench calibrate legalbench -t hearsay -t sara_numeric \
 Solve sees only the original `base_prompt.txt` with its fields filled for every test row, stable
 row IDs and source digests. Write `$ORBIT_OUTPUT/answers.json` as `{"0":"answer", "1":"answer"}`.
 The CLI batch submission scaffold is an Orbit evaluation condition, not the original model harness.
-`external` executes the method's argv entrypoint with `ORBIT_TASK_FILE` and `ORBIT_METHOD_CONFIG`;
+`external` splits the method's command-string entrypoint with POSIX quoting into argv, without
+shell expansion, and supplies `ORBIT_TASK_FILE` and `ORBIT_METHOD_CONFIG`;
 credentials use the method's `passEnv`. Reference labels appear only in `oracle` or independent verify.
 
 Verify mounts only the saved solve outputs, private task labels and the pinned original evaluator.

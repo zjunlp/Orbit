@@ -66,3 +66,6 @@ isolation; MedAgentBench additionally needs the separately distributed reference
 needs per-instance images and a disk budget; miniF2F needs a pinned formal-system/mathlib toolchain.
 No placeholder catalog support is added for these prerequisites. Broader task coverage and real
 subject evaluation remain separate follow-up work.
+The external-method command contract and its regression coverage were corrected in the
+[follow-up fix](20261116-batch-external-entrypoint.md); empty/reference calibration alone did not
+exercise that path.

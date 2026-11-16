@@ -31,8 +31,9 @@ orbit bench add mmau /data/mmau --adapter /path/to/mmau/adapter.py \
 orbit bench calibrate mmau -t <uuid> -t <uuid> -t <uuid> -t <uuid>
 ```
 
-Only **audio-capable external methods**, `oracle` and `empty` are accepted. The external argv
-entrypoint receives `ORBIT_TASK_FILE=/input/task.json` and `ORBIT_METHOD_CONFIG`. The task JSON has
+Only **audio-capable external methods**, `oracle` and `empty` are accepted. The external entrypoint
+is a command string split with POSIX quoting into argv, without shell expansion. It receives
+`ORBIT_TASK_FILE=/input/task.json` and `ORBIT_METHOD_CONFIG`. The task JSON has
 `prompts[0].question`, `choices` and `audio=/media/audio.wav`; labels are absent. Write
 `$ORBIT_OUTPUT/answers.json` as `{"0":"the chosen answer text"}`. The original scorer expects the
 answer text, not only an option letter. Set a suitable runtime image with `-c image=<image>` and use

@@ -6,6 +6,7 @@ import {
   AdapterSpecResponse,
   AdapterTasksResponse,
   GuiTrajectory,
+  Method,
   RunSpec,
   ScoreResult,
 } from "../src/contracts/index.ts";
@@ -33,6 +34,48 @@ it.each(pythonAdapters)("checks the %s Python adapter", (name) => {
     stdio: "pipe",
   });
 });
+
+it.each(["legalbench", "lawbench", "mmau"])(
+  "plans the %s external method using the real Method and Run contracts",
+  (name) => {
+    const dir = fileURLToPath(
+      new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url),
+    );
+    const method = Method.parse({
+      name: "scripted",
+      agent: "external",
+      entrypoint: `python -c 'print("external path")'`,
+    });
+    const result = execFileSync(
+      "python3",
+      [
+        "-B",
+        "-c",
+        `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from test_adapter import AdapterTest
+import adapter
+fixture = AdapterTest()
+fixture.setUp()
+try:
+    fixture.req["trial"]["method"] = json.loads(sys.argv[2])
+    print(json.dumps(adapter.solve(fixture.req)))
+finally:
+    fixture.doCleanups()
+`,
+        dir,
+        JSON.stringify(method),
+      ],
+      { encoding: "utf8" },
+    );
+    const { spec } = AdapterSpecResponse.parse(JSON.parse(result));
+    const run = RunSpec.parse(spec);
+    expect(run.command).toEqual(["python", "-c", 'print("external path")']);
+    expect(run.network).toBe(true);
+    expect(run.env?.ORBIT_TASK_FILE).toBe("/input/task.json");
+  },
+);
 
 it("plans a Cua desktop service with the real Run contract", () => {
   const dir = fileURLToPath(

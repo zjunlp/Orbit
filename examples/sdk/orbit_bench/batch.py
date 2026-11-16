@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import shlex
 
 
 def mount(source, target):
@@ -32,7 +33,9 @@ def solve_batch(req, item, adapter_dir):
     if method["agent"] in ("empty", "oracle"):
         run["command"] = ["python", "/adapter/runtime.py", method["agent"]]
     elif method["agent"] == "external":
-        run["command"] = method["entrypoint"]
+        run["command"] = shlex.split(method["entrypoint"])
+        if not run["command"] or not run["command"][0]:
+            raise ValueError("External entrypoint must contain an executable")
         run["env"].update({"ORBIT_TASK_FILE": "/input/task.json",
                             "ORBIT_METHOD_CONFIG": json.dumps(method.get("config") or {})})
         run["network"] = True

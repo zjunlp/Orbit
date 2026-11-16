@@ -35,7 +35,7 @@ class AdapterTest(unittest.TestCase):
         self.audio.write_bytes(b"synthetic audio fixture")
         self.req = {"benchmark": {"path": str(self.root)},
                     "trial": {"task": "question", "staging": str(self.root / "stage"),
-                              "method": {"agent": "external", "entrypoint": ["audio-agent"]}},
+                              "method": {"agent": "external", "entrypoint": "audio-agent --label 'two words'"}},
                     "solve": {"output": str(self.root / "solve")},
                     "verify": {"output": str(self.root / "verify")}}
 
@@ -62,7 +62,7 @@ class AdapterTest(unittest.TestCase):
         run = self.save_input()
         visible = json.loads((self.root / "stage/solve/task.json").read_text())
         self.assertNotIn("answers", visible)
-        self.assertEqual(run["command"], ["audio-agent"])
+        self.assertEqual(run["command"], ["audio-agent", "--label", "two words"])
         self.assertIn({"source": str(self.audio), "target": "/media/audio.wav", "mode": "ro"}, run["mounts"])
         self.assertFalse(adapter.verify(self.req)["spec"]["network"])
         (self.root / "solve/collected/media/audio.wav").write_bytes(b"changed")
@@ -90,6 +90,12 @@ class AdapterTest(unittest.TestCase):
             self.assertEqual(runtime.prediction(path), "")
         with self.assertRaisesRegex(ValueError, "escapes"):
             adapter.audio_path(self.req, {"audio_id": "../private.wav"})
+
+    def test_empty_external_entrypoint_is_rejected(self):
+        for entrypoint in (" ", "''"):
+            self.req["trial"]["method"]["entrypoint"] = entrypoint
+            with self.assertRaisesRegex(ValueError, "executable"):
+                adapter.solve(self.req)
 
 
 if __name__ == "__main__":

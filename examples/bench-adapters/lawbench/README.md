@@ -22,8 +22,9 @@ are unnecessary. The runtime Dockerfile pins Python and lightweight CPU grading 
 
 The subject sees original instructions and questions only, with stable IDs. Return
 `$ORBIT_OUTPUT/answers.json` as `{"0":"answer", "1":"answer"}`. The shared SDK supplies CLI batch
-instructions, not a new Agent loop. External methods run their own entrypoint with
-`ORBIT_TASK_FILE` and `ORBIT_METHOD_CONFIG`; use method `passEnv` for credentials.
+instructions, not a new Agent loop. External methods provide a command-string entrypoint, split
+with POSIX quoting into argv without shell expansion, and receive `ORBIT_TASK_FILE` and
+`ORBIT_METHOD_CONFIG`; use method `passEnv` for credentials.
 
 Verify reconstructs the original `origin_prompt`/`prediction`/`refr` rows and calls the unmodified
 native function. It rejects changed inputs since solve. Missing or malformed answers become empty

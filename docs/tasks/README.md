@@ -77,6 +77,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Harbor and code / research benchmarks
 
+- [20261116](20261116-batch-external-entrypoint.md) Fix batch adapter external entrypoint contract and regression coverage
 - [20261116](20261116-benchmark-expansion.md) Sequential plan and validation for twelve additional benchmarks
 - [20261009](20261009-asi-runner-timeouts.md) ASI runner compatibility and execution status
 - [20261009](20261009-asi-verify-budgets.md) ASI native verification budgets
