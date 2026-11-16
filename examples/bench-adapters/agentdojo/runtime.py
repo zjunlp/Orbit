@@ -1,6 +1,6 @@
 """Private AgentDojo tool service; fresh native replay checks its collected trace."""
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 import json
 import os
 from pathlib import Path
@@ -19,6 +19,7 @@ def environment(item):
 
 def serve(item):
     from agentdojo.functions_runtime import FunctionCall
+    from tool_socket import serve as serve_socket
     suite, task, env, runtime = environment(item)
     trace = {"task": item["task"], "revision": item["revision"], "calls": [], "answer": "", "finished": False}
     dest = Path("/evidence/trace.json")
@@ -88,7 +89,7 @@ def serve(item):
             except (ValueError, TypeError, KeyError) as exc:
                 self.reply({"error": str(exc)})
 
-    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+    serve_socket(Handler)
 
 
 def verify(item, solve_dir="/solve", output=None):

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_bench.batch import mount
 from orbit_bench.questions import checked_source
+from orbit_bench.tool_socket import ipc_mount
 
 HERE = Path(__file__).resolve().parent
 RELEASE = json.loads((HERE / "release.json").read_text())
@@ -81,21 +82,22 @@ def solve(req):
     if method["agent"] in ("oracle", "empty"):
         native["command"] = ["python", "/adapter/runtime.py", "baseline"]
         return {"spec": native}
+    ipc = ipc_mount(req["trial"]["staging"])
+    transport = mount(Path(__file__).resolve().parents[2] / "sdk/orbit_bench/tool_socket.py", "/adapter/tool_socket.py")
     service = {"name": "tools", "image": native["image"], "command": ["python", "/adapter/runtime.py", "serve"],
-        "env": native["env"], "binds": native["mounts"], "networks": ["tools"], "cpus": 1, "memGB": 4,
+        "env": native["env"], "binds": [*native["mounts"], transport, ipc], "networks": [], "noNetwork": True, "cpus": 1, "memGB": 4,
         "collect": ["/evidence/trace.json"],
-        "healthcheck": {"command": ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/info')"],
+        "healthcheck": {"command": ["python", "/adapter/tool_socket.py"],
                         "intervalSec": 2, "timeoutSec": 2, "retries": 60}}
     run = {"image": cfg.get("subjectImage", "python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce"),
-        "mounts": [mount(HERE / "tool.py", "/adapter/tool.py")], "resources": {"cpus": 1, "memGB": 2, "gpus": 0},
-        "network": True, "workdir": "/tmp", "networks": [{"name": "tools", "internal": True}],
-        "runNetworks": ["default", "tools"], "services": [service], "dependsOn": ["tools"],
+        "mounts": [mount(HERE / "tool.py", "/adapter/tool.py"), transport, ipc], "resources": {"cpus": 1, "memGB": 2, "gpus": 0},
+        "network": True, "workdir": "/tmp", "services": [service], "dependsOn": ["tools"],
         "timeoutMin": req["trial"].get("timeoutMin") or 60}
     if method["agent"] == "external":
         run["command"] = shlex.split(method["entrypoint"])
         if not run["command"] or not run["command"][0]:
             raise ValueError("External entrypoint must contain an executable")
-        run["env"] = {"ORBIT_TOOL_URL": "http://tools:8080", "ORBIT_METHOD_CONFIG": json.dumps(method.get("config") or {})}
+        run["env"] = {"ORBIT_TOOL_SOCKET": "/ipc/tools.sock", "ORBIT_METHOD_CONFIG": json.dumps(method.get("config") or {})}
     else:
         run["agentTask"] = {"instruction": "Solve the AppWorld task from `python /adapter/tool.py info`. "
             "Execute Python against the original AppWorld environment using `python /adapter/tool.py execute FILE` "

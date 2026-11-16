@@ -11,9 +11,11 @@ orbit bench run agentdojo -t banking/user_task_0 -m empty -m oracle
 ```
 
 A trial gets a private native tool service, original prompt and original tool schemas. The
-subject image contains only a small HTTP client; it cannot read ground truth or utility code.
+service has no network interface; HTTP requests use a per-trial Unix socket shared through
+`/ipc/tools.sock`. This avoids allocating a second Docker bridge for tool communication.
+The subject image contains only a small HTTP client; it cannot read ground truth or utility code.
 Use `python /adapter/tool.py info`, `call FUNCTION 'JSON_ARGS'` and `finish 'ANSWER'`.
-External commands use the same interface and receive JSON `ORBIT_METHOD_CONFIG`.
+External commands use the same client and receive `ORBIT_TOOL_SOCKET` and JSON `ORBIT_METHOD_CONFIG`.
 The service permits at most 64 calls. Ordinary subjects cannot invoke the oracle endpoint.
 Reference and empty methods execute native ground-truth traces offline, then verify by fresh
 replay; they do not start or validate the live tool service.
@@ -28,4 +30,5 @@ Config: `image` overrides the native service/verifier image, `subjectImage` over
 image. Images must contain the dependencies in the Dockerfile. Version/attack overrides are
 rejected; broader security evaluation needs its own explicit protocol.
 
-Fixture tests are explicit; see `docs/tasks/20261116-remaining-benchmarks.md` for real checks.
+Fixture tests are explicit. Bounded live subject, trusted-trace replay and cleanup checks passed;
+see `docs/tasks/20261117-tool-service-sockets.md`. Full-suite equivalence remains unverified.

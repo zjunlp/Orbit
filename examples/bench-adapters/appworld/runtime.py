@@ -1,6 +1,6 @@
 """AppWorld native execution with service-owned evidence and independent replay."""
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 import json
 import os
 from pathlib import Path
@@ -39,6 +39,7 @@ def baseline(item, out):
 
 
 def serve(item):
+    from tool_socket import serve as serve_socket
     codes = []
     path = Path("/evidence/trace.json")
     world = environment(item)
@@ -80,7 +81,7 @@ def serve(item):
             except (ValueError, TypeError, KeyError) as exc:
                 self.reply({"error": str(exc)})
 
-    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+    serve_socket(Handler)
 
 
 def verify(item, solve, out):

@@ -35,8 +35,8 @@ Validate three or four original tasks per runnable family. Keep data and runtime
 ## Next / open issues
 
 - Judge-backed checks use an explicit alternative model/transport; official judge models and full-suite parity remain unverified.
-- HealthBench nonempty model answers remain unverified; its raw mean differs from the official clipped aggregate.
-- AgentDojo and AppWorld live service execution and real model quality remain unverified; retry after Docker network allocation is available.
+- HealthBench's raw mean differs from the official clipped aggregate; configurable alternative judges do not establish official-judge parity.
+- AgentDojo and AppWorld live service startup and native replay are now validated in the [tool-service follow-up](20261117-tool-service-sockets.md); broader model quality remains unverified.
 - New FinanceBench answers require human review. Reference replay does not assess new model quality.
 - ToolSandbox is not integrated: native user simulation requires a working OpenAI simulator configuration; some scenarios also require RapidAPI. No substitute user was introduced.
 - MedAgentBench is not integrated: the separately distributed original refsol grader is unavailable. Native FHIR service validation is also required. No substitute grader was introduced.

@@ -107,9 +107,14 @@ finally:
   );
   const { spec } = AdapterSpecResponse.parse(JSON.parse(result));
   const run = RunSpec.parse(spec);
-  expect(run.services[0]?.networks).toEqual(["tools"]);
+  expect(run.services[0]?.networks).toEqual([]);
+  expect(run.services[0]?.noNetwork).toBe(true);
   expect(run.services[0]?.collect).toEqual(["/evidence/trace.json"]);
-  expect(run.mounts.map((m) => m.target)).toEqual(["/adapter/tool.py"]);
+  expect(run.mounts.map((m) => m.target)).toEqual([
+    "/adapter/tool.py",
+    "/adapter/tool_socket.py",
+    "/ipc",
+  ]);
 });
 
 it("plans a Cua desktop service with the real Run contract", () => {

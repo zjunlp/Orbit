@@ -23,13 +23,16 @@ class AdapterTest(unittest.TestCase):
     def test_subject_cannot_mount_private_native_code_or_scores(self):
         spec = adapter.solve(self.req)["spec"]
         self.assertIn("agentTask", spec)
-        self.assertEqual(len(spec["mounts"]), 1)
-        self.assertEqual(spec["mounts"][0]["target"], "/adapter/tool.py")
+        self.assertEqual([m["target"] for m in spec["mounts"]],
+                         ["/adapter/tool.py", "/adapter/tool_socket.py", "/ipc"])
+        self.assertEqual(spec["mounts"][-1]["mode"], "rw")
         service = spec["services"][0]
-        self.assertEqual(service["networks"], ["tools"])
+        self.assertEqual(service["networks"], [])
+        self.assertTrue(service["noNetwork"])
         self.assertEqual(service["collect"], ["/evidence/trace.json"])
         self.assertIn("/native", [m["target"] for m in service["binds"]])
-        self.assertEqual(spec["networks"], [{"name": "tools", "internal": True}])
+        self.assertNotIn("networks", spec)
+        self.assertEqual(service["binds"][-1], spec["mounts"][-1])
         self.assertFalse(adapter.verify(self.req)["spec"]["network"])
 
     def test_empty_and_external_commands(self):

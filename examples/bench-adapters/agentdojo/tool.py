@@ -2,16 +2,11 @@
 
 import json
 import sys
-import urllib.request
+from tool_socket import request as socket_request
 
 
 def request(route, payload=None):
-    req = urllib.request.Request("http://tools:8080/" + route,
-                                 data=json.dumps(payload).encode() if payload is not None else None,
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as response:
-        result = json.load(response)
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(socket_request(route, payload, timeout=30), ensure_ascii=False))
 
 
 if __name__ == "__main__":

@@ -1726,6 +1726,9 @@ identified separately. Published human judgments bind exact completion bytes and
 answers require explicit answer/source-bound human reviews. Missing reviews are invalid
 `judge_unavailable`, not inferred labels. AgentDojo supports v1.2.2 clean utility: a private
 native tool service collects actions, and a fresh native environment replays them for utility.
+AgentDojo and AppWorld tool services use per-trial Unix HTTP sockets with service networking
+disabled. Only the socket directory is shared with the subject; grading inputs and collected
+evidence stay private to the service. This removes the additional internal Docker bridge.
 Reference/empty checks can execute native traces offline, which does not validate live services
 or prompt-injection defenses. See the [task record](tasks/20261116-remaining-benchmarks.md).
 

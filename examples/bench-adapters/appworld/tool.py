@@ -3,15 +3,11 @@
 import json
 from pathlib import Path
 import sys
-import urllib.request
+from tool_socket import request as socket_request
 
 
 def request(route, data=None):
-    req = urllib.request.Request("http://tools:8080/" + route,
-        data=json.dumps(data).encode() if data is not None else None,
-        headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as response:
-        print(json.dumps(json.load(response), ensure_ascii=False))
+    print(json.dumps(socket_request(route, data), ensure_ascii=False))
 
 
 if __name__ == "__main__":
