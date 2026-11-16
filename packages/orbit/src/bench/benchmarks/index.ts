@@ -13,6 +13,8 @@ import { embodiedFirstExam } from "./embodied-first-exam.ts";
 import { embodiedlab } from "./embodiedlab.ts";
 import { frontiersweV2 } from "./frontierswe-v2.ts";
 import { humaneval } from "./humaneval.ts";
+import { lawbench } from "./lawbench.ts";
+import { legalbench } from "./legalbench.ts";
 import { libero } from "./libero.ts";
 import { liberoPlus } from "./libero-plus.ts";
 import { liberoPro } from "./libero-pro.ts";
@@ -20,6 +22,7 @@ import { longds } from "./longds.ts";
 import { maniskill3 } from "./maniskill3.ts";
 import { metaworld } from "./metaworld.ts";
 import { miniwob } from "./miniwob.ts";
+import { mmau } from "./mmau.ts";
 import { mobileworld } from "./mobileworld.ts";
 import { molmospaces } from "./molmospaces.ts";
 import { onlineMind2web } from "./online-mind2web.ts";
@@ -51,6 +54,9 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   wandr,
   chartography,
   humaneval,
+  legalbench,
+  lawbench,
+  mmau,
   asiBench,
   longds,
   researchclawbench,

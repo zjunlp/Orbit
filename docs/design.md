@@ -99,6 +99,10 @@ plugin/        canonical skills/orbit and skills/orbit-bench; portable / Claude 
 examples/      bench-adapters/<benchmark>/: external bench adapters (not part of the package)
 ```
 
+`examples/sdk/orbit_bench/batch.py` shares file-submission Run planning and immutable-input checks
+for independent question batches (LegalBench, LawBench and MMAU). It does not implement an Agent
+loop or grader; each adapter retains its native scoring, task unit and private reference handling.
+
 规则（由 `pnpm check:boundaries` 强制，定义在 `scripts/boundaries.ts`）：
 
 | 模块 | 可以依赖 |
