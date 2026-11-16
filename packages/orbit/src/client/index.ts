@@ -48,7 +48,10 @@ import {
   FolderExportResult,
   FolderList,
   FolderMoveResult,
+  GateBundleCheck,
+  type GateBundleInput,
   GateList,
+  GatePlan,
   GateRecord,
   type GateSubmissionInput,
   Health,
@@ -307,6 +310,10 @@ export class OrbitClient {
     this.call(z.object({ reports: z.array(BenchReport) }), `/bench/jobs/${enc(id)}/reports`).then(
       (r) => r.reports,
     );
+  benchGatePlan = (body: GateSubmissionInput) =>
+    this.call(GatePlan, "/bench/gates/plan", { method: "POST", body });
+  benchGateBundleCheck = (body: GateBundleInput) =>
+    this.call(GateBundleCheck, "/bench/gates/check-bundle", { method: "POST", body });
   benchGate = (body: GateSubmissionInput) =>
     this.call(GateRecord, "/bench/gates", { method: "POST", body });
   benchGates = (child?: string) =>

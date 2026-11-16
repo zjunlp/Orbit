@@ -76,3 +76,28 @@ export function maskSecret(secret: string): string {
   const prefix = /^[A-Za-z]{2,8}[-_]/.exec(s)?.[0] ?? "";
   return `${prefix}…${s.slice(-4)}`;
 }
+
+const PATTERNS = [
+  /\bsk-(?:proj-|ant-api\d+-)?[A-Za-z0-9_-]{20,}/,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+  /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,})\b/,
+  /\bAIza[A-Za-z0-9_-]{30,}/,
+  /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}/i,
+  /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:]+:[^\s/@]{8,}@/i,
+  /\b(?:[A-Za-z0-9]{1,32}[_-]){0,8}(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret|private[_-]?key)["']?\s*[=:]\s*["']?[A-Za-z0-9_+./=-]{8,}/i,
+];
+
+export const hasSecretPattern = (text: string): boolean =>
+  PATTERNS.some((pattern) => pattern.test(text));
+
+const SENSITIVE_KEY =
+  /^(?:[A-Za-z0-9]{1,32}[_-]){0,8}(?:(?:api|access|auth|refresh)[_-]?(?:key|token)|password|passwd|client[_-]?secret|private[_-]?key|token|secret)$/i;
+const PLACEHOLDER = /^(?:\[redacted\]|\$\{[^}]+\}|<[^>]+>)$/i;
+
+export const isSecretField = (key: string, value: unknown): boolean =>
+  SENSITIVE_KEY.test(key) &&
+  typeof value === "string" &&
+  value.length >= 8 &&
+  !PLACEHOLDER.test(value);

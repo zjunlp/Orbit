@@ -2,7 +2,13 @@ import { dirname, resolve } from "node:path";
 import type { Command } from "commander";
 import { parse } from "yaml";
 import type { OrbitClient } from "../client/index.ts";
-import { GatePolicy, type GateRecord, GateSubmission } from "../contracts/index.ts";
+import {
+  type GateBundleCheck,
+  type GatePlan,
+  GatePolicy,
+  type GateRecord,
+  GateSubmission,
+} from "../contracts/index.ts";
 import type { Print } from "./auth.ts";
 import { readBounded } from "./task-file.ts";
 
@@ -15,23 +21,69 @@ export function readGateInput(
   reports?: string,
   aa = false,
 ) {
-  const source = resolve(file);
-  const policy = GatePolicy.parse(parse(textFile(source, 1024 * 1024), { maxAliasCount: 50 }));
-  const files = [
-    ...new Set([policy.gate, ...policy.guard, ...policy.final].map((d) => d.tasks.file)),
-  ];
   return GateSubmission.parse({
     parent,
     child,
-    policy,
+    ...readGateFiles(file),
     mode: aa ? "calibration-aa" : "promotion",
-    taskSets: files.map((file) => ({
-      file,
-      content: textFile(resolve(dirname(source), file), 8 * 1024 * 1024),
-    })),
     selections: reports ? JSON.parse(textFile(resolve(reports), 1024 * 1024)) : [],
   });
 }
+export function readGateFiles(file: string) {
+  const source = resolve(file);
+  const policy = GatePolicy.parse(parse(textFile(source, 1024 * 1024), { maxAliasCount: 50 }));
+  const declarations = [policy.gate, ...policy.guard, ...policy.final];
+  if (declarations.length > 32) throw new Error("at most 32 gate datasets are supported");
+  const files = [...new Set(declarations.map((d) => d.tasks.file))];
+  let bytes = 0;
+  return {
+    policy,
+    taskSets: files.map((file) => {
+      const content = textFile(resolve(dirname(source), file), 8 * 1024 * 1024);
+      bytes += Buffer.byteLength(content);
+      if (bytes > 32 * 1024 * 1024)
+        throw new Error("gate task snapshots exceed the 32 MiB total limit");
+      return { file, content };
+    }),
+  };
+}
+
+export function shellCommand(args: string[]): string {
+  return args
+    .map((word) =>
+      /^[A-Za-z0-9_./:@%+=,-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\"'\"'")}'`,
+    )
+    .join(" ");
+}
+export function formatGatePlan(plan: GatePlan): string {
+  return [
+    `${plan.parent} → ${plan.child} · policy ${plan.policyDigest}`,
+    "Read-only plan. Suggested commands require explicit execution.",
+    ...plan.rows.flatMap((row) => [
+      `${row.set} ${row.side}: ${row.status} — ${row.reason}`,
+      ...row.candidates.map((ref) => `  report ${ref.job}@${ref.revision}:${ref.method}`),
+      ...(row.status === "pending" ? row.jobs.map((job) => `  wait: orbit bench show ${job}`) : []),
+      ...(row.command ? [`  ${shellCommand(row.command)}`] : []),
+    ]),
+    ...plan.checks
+      .filter((c) => c.prerequisite && c.status !== "pass")
+      .map(
+        (c) =>
+          `${c.required ? "required" : "optional"} prerequisite ${c.set}/${c.kind}: ${c.reason}`,
+      ),
+  ].join("\n");
+}
+export function formatBundleCheck(check: GateBundleCheck): string {
+  return [
+    `${check.passed ? "passed" : "failed"} · ${check.files} files · ${check.bytes} bytes · digest ${check.digest ?? "unavailable"}`,
+    ...check.checks.map((c) => `${c.kind}: ${c.result} — ${c.detail}`),
+    ...check.findings.map((f) => `${f.kind} ${JSON.stringify(f.file)}: ${f.detail}`),
+    ...(check.truncated
+      ? ["Additional findings omitted; resolve the reported issues and check again."]
+      : []),
+  ].join("\n");
+}
+
 export function formatGate(record: GateRecord): string {
   const v = record.verdict;
   return [
@@ -79,11 +131,71 @@ export function registerGate(bench: Command, client: () => Promise<OrbitClient>,
       },
     );
   command
+    .command("plan")
+    .description("list missing frozen evidence and suggest bounded evaluation commands")
+    .option("--policy <file>")
+    .option("--parent <revision>")
+    .option("--child <revision>")
+    .option("--reports <file>")
+    .option("--calibration-aa")
+    .option("--json")
+    .action(
+      async (options: {
+        policy?: string;
+        parent?: string;
+        child?: string;
+        reports?: string;
+        calibrationAa?: boolean;
+        json?: boolean;
+      }) => {
+        options = { ...command.opts(), ...options };
+        if (!options.policy || !options.parent || !options.child)
+          throw new Error("--policy, --parent and --child are required");
+        const result = await (await client()).benchGatePlan(
+          readGateInput(
+            options.policy,
+            options.parent,
+            options.child,
+            options.reports,
+            options.calibrationAa,
+          ),
+        );
+        for (const row of result.rows)
+          if (row.command) {
+            const index = row.command.indexOf("--tasks-file");
+            if (index >= 0)
+              row.command[index + 1] = resolve(dirname(resolve(options.policy)), row.tasksFile);
+          }
+        print(options.json, result, () => formatGatePlan(result));
+        process.exitCode =
+          result.rows.some((row) => !row.set.startsWith("final:") && row.status !== "available") ||
+          result.checks.some((c) => c.required && c.prerequisite && c.status !== "pass")
+            ? 2
+            : 0;
+      },
+    );
+  command
+    .command("check-bundle <directory>")
+    .description("inspect a local method bundle before exposing held-out evaluations")
+    .option("--policy <file>")
+    .option("--json")
+    .action(async (directory: string, options: { policy?: string; json?: boolean }) => {
+      options = { ...command.opts(), ...options };
+      if (!options.policy) throw new Error("--policy is required");
+      const result = await (await client()).benchGateBundleCheck({
+        directory: resolve(directory),
+        ...readGateFiles(options.policy),
+      });
+      print(options.json, result, () => formatBundleCheck(result));
+      process.exitCode = result.passed ? 0 : 2;
+    });
+  command
     .command("list")
     .description("list saved verdicts")
     .option("--child <revision>", "filter by child revision")
     .option("--json", "print JSON")
     .action(async (options: { child?: string; json?: boolean }) => {
+      options = { ...command.opts(), ...options };
       const records = await (await client()).benchGates(options.child);
       print(options.json, records, () =>
         records
@@ -96,6 +208,7 @@ export function registerGate(bench: Command, client: () => Promise<OrbitClient>,
     .description("read a saved verdict and its evidence")
     .option("--json", "print JSON")
     .action(async (id: string, options: { json?: boolean }) => {
+      options = { ...command.opts(), ...options };
       const record = await (await client()).benchGateRecord(id);
       print(options.json, record, () => formatGate(record));
     });

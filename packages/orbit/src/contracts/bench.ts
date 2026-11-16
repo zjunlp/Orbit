@@ -483,7 +483,12 @@ export const BenchJobSpec = z
 export type BenchJobSpec = z.infer<typeof BenchJobSpec>;
 export type BenchJobSpecInput = z.input<typeof BenchJobSpec>;
 export const BenchJobSubmission = BenchJobSpec.and(
-  z.object({ tasksFile: TaskFileInput.optional(), taskSet: TaskSetDigest.optional() }),
+  z.object({
+    tasksFile: TaskFileInput.optional(),
+    taskSet: TaskSetDigest.optional(),
+    /** Submission guard only; never persisted in BenchJob.spec. */
+    expectedRevisions: z.record(ProfileName, z.string().regex(/^[a-f0-9]{12}$/)).optional(),
+  }),
 );
 export type BenchJobSubmissionInput = z.input<typeof BenchJobSubmission>;
 

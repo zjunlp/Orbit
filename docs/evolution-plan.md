@@ -37,7 +37,7 @@
 | E1 | 任务集划分与冻结 | — | 小 | [x] |
 | E2 | 判定核心（纯函数与统计） | E1 | 中 | [x] |
 | E3 | 策略文件、`orbit bench gate`、判定记录 | E2、T3 | 中 | [x] |
-| E4 | 分级流程助手与静态检查 | E3 | 小 | [ ] |
+| E4 | 分级流程助手与静态检查 | E3 | 小 | [x] |
 | E5 | Web：版本链上的判定与证据 | E3 | 中 | [x] |
 | E6 | 进化门校准 | E3 | 中 | [x] 有界开发校准 |
 | V0 | 试点：选族、测成本与翻转率 | T3、E1 | 中 | [ ] |
@@ -410,9 +410,11 @@ cost: { max_wall_ratio: 1.5, max_token_ratio: 1.5 }
 
 ### E4 分级流程助手与静态检查
 
-- [ ] `orbit bench gate plan --policy … --parent … --child …`：列出还缺哪些"任务集 × 版本"的结果，并打印对应的 `orbit bench run` 命令。门本身不提交任务。
-- [ ] `orbit bench gate check-bundle <dir> --policy …`：bundle 大小上限、密钥扫描、是否出现准入集 / 守护集的任务 id 或参考答案文件摘要。
-- [ ] 建议的省钱顺序写进 skill：静态检查 → 进化集冒烟 → 准入集 → 守护集（按六维分类分层抽样）→ 多轮接受后才跑终测集与第二种 Agent。
+- [x] `orbit bench gate plan --policy … --parent … --child …`：列出还缺哪些"任务集 × 版本"的结果，并打印对应的 `orbit bench run` 命令。门本身不提交任务。
+- [x] `orbit bench gate check-bundle <dir> --policy …`：bundle 大小上限、密钥扫描、是否出现准入集 / 守护集的任务 id 或参考答案文件摘要。
+- [x] 建议的省钱顺序写进 skill：静态检查 → 进化集冒烟 → 准入集 → 守护集（按六维分类分层抽样）→ 多轮接受后才跑终测集与第二种 Agent。
+
+实现与检查范围见 [E4 任务记录](tasks/20261116-gate-workflow.md)；无歧义的 CLI/种子配置可生成命令，冻结样本计划等缺项明确提示，助手不自动执行。
 
 ### E5 Web
 

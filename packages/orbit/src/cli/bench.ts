@@ -647,6 +647,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     )
     .option("-n, --name <name>", "job name")
     .option("-f, --folder <path>", "file the job and its runs in a folder, e.g. rcb/noskills")
+    .option(
+      "--expect-revision <revision>",
+      "require one method to resolve to this exact content revision",
+    )
+    .option("--expect-tasks-sha256 <hash>", "require --tasks-file to match this SHA-256")
     .option("--parent <revision>", "the method revision these methods were derived from")
     .option("--note <text>", "what changed in these methods")
     .option(
@@ -661,6 +666,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
         name: string,
         o: {
           parent?: string;
+          expectRevision?: string;
+          expectTasksSha256?: string;
           note?: string;
           informedBy: string[];
           method: string[];
@@ -681,6 +688,12 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
         if (o.tasksFile && o.task.length)
           throw new Error("--tasks-file and --task are mutually exclusive");
         const taskFile = o.tasksFile ? readTaskFile(resolve(o.tasksFile)) : undefined;
+        if (
+          o.expectTasksSha256 &&
+          (!/^[a-f0-9]{64}$/.test(o.expectTasksSha256) ||
+            taskFile?.tasksFile.sha256 !== o.expectTasksSha256)
+        )
+          throw new Error("--tasks-file does not match --expect-tasks-sha256");
         if (o.samplePlan && o.seeds !== undefined)
           throw new Error("--sample-plan and --seeds are mutually exclusive");
         if (o.batchSize !== undefined && !o.samplePlan)
@@ -693,6 +706,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           methods.push(...(JSON.parse(readFileSync(o.methodsFile, "utf8")) as unknown[]));
         if (methods.length === 0)
           throw new Error("give at least one --method (e.g. --method oracle)");
+        if (o.expectRevision && (methods.length !== 1 || !/^[a-f0-9]{12}$/.test(o.expectRevision)))
+          throw new Error("--expect-revision requires exactly one method and a 12-digit revision");
         // Lineage applies to the methods under test, not to the calibration baselines.
         const lineage =
           o.parent || o.note || o.informedBy.length
@@ -723,6 +738,9 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
                 }
               : {}),
             methods: methods as never,
+            ...(o.expectRevision
+              ? { expectedRevisions: { [(methods[0] as { name: string }).name]: o.expectRevision } }
+              : {}),
             ...(samplePlan
               ? { samplePlan, ...(o.batchSize === undefined ? {} : { batchSize: o.batchSize }) }
               : { seeds: o.seeds }),

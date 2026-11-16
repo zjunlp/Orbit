@@ -567,6 +567,12 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   每侧只有一份匹配报告时可自动选择；重评分或多个作业必须给出显式 `{set,parent:{job,revision,method},child:{…}}`，不取最新或最高分。缺证据为 insufficient，文件损坏或引用歧义为请求错误。
   既有 SQLite 增加 `bench_gates` 文档表；只追加、不覆盖。记录包含 evaluator 版本、用途、规范策略全文、全部输入证据和 verdict。源作业删除/归并后仍可复算，旧记录保存的已评测候选继续计入预算；从未被记录捕获就被删除的历史无法恢复。
   命令退出码 0/2/3 分别为 accept/reject/insufficient，输入或 API 错误为 1。策略由用户预先约定，保存摘要本身不证明它早于结果冻结。
+- **进化流程助手（E4）**：`orbit bench gate plan` / `POST /bench/gates/plan` 复用 E3 的输入和证据解析、E2 的前提检查；按任务集与父/子版本列出 available/missing/pending/ambiguous/blocked，不回填报告、不保存判定、不提交任务。
+  仅从无歧义的已保存 CLI 方法与 benchmark 执行模板建议命令；保留种子、options、checkpoint 与血缘。需显式提供的样本计划或已变动登记保留阻塞原因；多份报告继续要求显式选择。
+  命令携带任务文件 SHA-256 与预期配置修订；`bench run --expect-revision` 对单方法提交传 transient `expectedRevisions`，daemon 在计算实际修订后、创建 job/Run 前核对，避免改动后运行另一版本。
+  `gate check-bundle DIR` / `POST /bench/gates/check-bundle` 在 daemon 本机只读检查，复用配置修订的有界文件读取和导出密钥规则；检查 held-out ID、已声明参考文件摘要和可选 `policy.bundle` 上限。
+  静态检查拒绝外链、环与特殊文件，最多返回 100 条定位；不回显疑似凭据。无参考摘要明确 not_run，短 ID 子串可误报，不证明不存在编码答案或未知泄漏；不替代 V3 隔离。
+  `orbit` skill 采用静态检查→进化集冒烟→准入→冻结守护集→多轮后终测的次序。配置 bundle 摘要仍兼容原算法；共享读取增加 64 层/20000 项限制。
 - **进化判定 Web 复盘（E5）**：Configurations 的版本来源链展示最近判定；`/configurations/gates` 列出最近最多 100 条记录，可按子版本精确筛选；`/configurations/gates/:id` 展示不可变记录详情。
   接受、拒绝、证据不足与 A/A 校准有明确区分，不合成当前最优版本。详情显示性能/守护/成本、前提缺项、单侧区间、轮次和 alpha、冻结策略及报告修订、泄漏剔除清单。
   退步任务按所选报告内的 sample 配对，读取报告保存的 solve Run ID 并排展示 ATIF，父子步骤独立导航；不替换为 Trial 的最新重试。源 Run 删除时保留冻结分数并说明轨迹不可用。

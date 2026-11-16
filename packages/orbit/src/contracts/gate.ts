@@ -29,6 +29,21 @@ export const GatePolicy = z.strictObject({
       }),
     )
     .default([]),
+  bundle: z
+    .strictObject({
+      max_files: z.number().int().positive().max(2000).default(2000),
+      max_bytes: z
+        .number()
+        .int()
+        .positive()
+        .max(64 * 1024 * 1024)
+        .default(64 * 1024 * 1024),
+      reference_sha256: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(10000)
+        .default([]),
+    })
+    .optional(),
   cost: z
     .strictObject({
       max_wall_ratio: z.number().positive().default(1.5),
@@ -161,3 +176,55 @@ export type GateRecord = z.infer<typeof GateRecord>;
 export const GateRecordSummary = GateRecord.omit({ evidence: true });
 export type GateRecordSummary = z.infer<typeof GateRecordSummary>;
 export const GateList = z.strictObject({ records: z.array(GateRecordSummary) });
+
+export const GatePlan = z.strictObject({
+  parent: Revision,
+  child: Revision,
+  policyDigest: z.string(),
+  checks: z.array(GateCheck),
+  rows: z.array(
+    z.strictObject({
+      set: z.string(),
+      side: z.enum(["parent", "child"]),
+      benchmark: z.string(),
+      tasksFile: z.string(),
+      revision: Revision.nullable(),
+      status: z.enum(["available", "missing", "pending", "ambiguous", "blocked"]),
+      reason: z.string(),
+      candidates: z.array(GateReportRef),
+      selected: GateReportRef.nullable(),
+      jobs: z.array(z.string()),
+      command: z.array(z.string()).nullable(),
+    }),
+  ),
+});
+export type GatePlan = z.infer<typeof GatePlan>;
+export const GateBundleInput = z.strictObject({
+  policy: GatePolicy,
+  taskSets: GateEvidence.shape.taskSets.max(32),
+  directory: z.string().min(1).max(4096),
+});
+export type GateBundleInput = z.input<typeof GateBundleInput>;
+export const GateBundleCheck = z.strictObject({
+  passed: z.boolean(),
+  complete: z.boolean(),
+  digest: z.string().nullable(),
+  files: z.number().int().nonnegative(),
+  bytes: z.number().int().nonnegative(),
+  checks: z.array(
+    z.strictObject({
+      kind: z.enum(["limits", "secrets", "task-ids", "reference-hashes"]),
+      result: z.enum(["passed", "failed", "not_run"]),
+      detail: z.string(),
+    }),
+  ),
+  findings: z.array(
+    z.strictObject({
+      kind: z.enum(["limits", "secrets", "task-ids", "reference-hashes"]),
+      file: z.string().nullable(),
+      detail: z.string(),
+    }),
+  ),
+  truncated: z.boolean(),
+});
+export type GateBundleCheck = z.infer<typeof GateBundleCheck>;

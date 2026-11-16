@@ -81,6 +81,8 @@ export { compareJobs, summarize } from "./summary.ts";
 
 import { assignSolveBatches } from "./batches.ts";
 import { CalibrationLifecycle } from "./calibration.ts";
+import { checkGateBundle } from "./gate-bundle.ts";
+import { planGate } from "./gate-plan.ts";
 import { evaluateGate } from "./gates.ts";
 import { PolicyRegistry } from "./policies.ts";
 import { AdapterClient } from "./protocol.ts";
@@ -235,7 +237,7 @@ export class BenchService {
     if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
     const folder = Folder.safeParse(opts.folder ?? "");
     if (!folder.success) throw new UserError(folder.error.issues[0]?.message ?? "invalid folder");
-    const { tasksFile, taskSet: expectedTaskSet, ...spec } = parsed.data;
+    const { tasksFile, taskSet: expectedTaskSet, expectedRevisions, ...spec } = parsed.data;
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
     const batch = info.capabilities?.embodied?.batch;
@@ -327,6 +329,11 @@ export class BenchService {
     checkPlanAgainstBenchmark(spec, all, info.capabilities);
     this.checkLineage(spec);
     const revisions = await this.revisions(spec.methods);
+    for (const [name, expected] of Object.entries(expectedRevisions ?? {}))
+      if (revisions[name]?.revision !== expected)
+        throw new UserError(
+          `${name}: expected configuration revision ${expected}, got ${revisions[name]?.revision ?? "none"}; reconcile the method, bundle or CLI before submitting`,
+        );
     for (const [name, lineage] of Object.entries(spec.lineage))
       if (lineage.parent && lineage.parent === revisions[name]?.revision)
         throw new UserError(
@@ -987,6 +994,14 @@ export class BenchService {
       this.deps.log?.(`bench job ${jobId}: report: ${(e as Error).message}`);
       return null;
     }
+  }
+
+  gatePlan(input: unknown) {
+    return planGate(this.deps.store, input, this.deps.registry.list());
+  }
+
+  gateBundleCheck(input: unknown) {
+    return checkGateBundle(input);
   }
 
   gate(input: unknown) {

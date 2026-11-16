@@ -31,6 +31,9 @@ import type {
   EnvironmentKind,
   FolderMoveResult,
   FolderStat,
+  GateBundleCheck,
+  GateBundleInput,
+  GatePlan,
   GateRecord,
   GateRecordSummary,
   GateSubmissionInput,
@@ -226,6 +229,13 @@ export const api = {
   benchJob: (id: string) => req<BenchJobDetail>(`/bench/jobs/${enc(id)}`),
   benchReports: (id: string) =>
     req<{ reports: BenchReport[] }>(`/bench/jobs/${enc(id)}/reports`).then((r) => r.reports),
+  benchGatePlan: (body: GateSubmissionInput) =>
+    req<GatePlan>("/bench/gates/plan", { method: "POST", body: JSON.stringify(body) }),
+  benchGateBundleCheck: (body: GateBundleInput) =>
+    req<GateBundleCheck>("/bench/gates/check-bundle", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   benchGate: (body: GateSubmissionInput) =>
     req<GateRecord>("/bench/gates", { method: "POST", body: JSON.stringify(body) }),
   benchGates: (child?: string) =>

@@ -56,6 +56,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261116](20261116-gate-workflow.md) E4: read-only evaluation plans and bundle preflight
+
 - [20261116](20261116-local-branch-integration.md) Integrate local feature branches and reconcile catalog/adapter changes
 
 - [20261116](20261116-benchmark-taxonomy-evidence.md) Audit benchmark classification against implemented protocols and restore missing catalog families

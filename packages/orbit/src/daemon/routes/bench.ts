@@ -76,6 +76,10 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.post("/bench/calibrations", async (c) =>
     c.json(await bench.calibrate(await c.req.json()), 201),
   );
+  api.post("/bench/gates/plan", async (c) => c.json(bench.gatePlan(await c.req.json())));
+  api.post("/bench/gates/check-bundle", async (c) =>
+    c.json(bench.gateBundleCheck(await c.req.json())),
+  );
   api.post("/bench/gates", async (c) => c.json(bench.gate(await c.req.json()), 201));
   api.get("/bench/gates", (c) =>
     c.json(bench.gates(c.req.query("child"), num(c.req.query("limit"), 100))),

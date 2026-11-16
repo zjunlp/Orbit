@@ -31,6 +31,63 @@ unknown policy fields and changed files are rejected. Policy files are limited t
 to 8 MiB each, 32 MiB in total and 32 datasets. Full policy defaults are frozen into the saved record.
 Rules are user-declared: saving a policy with a verdict does not prove it was chosen before seeing results.
 
+## Plan evaluations and check bundles
+
+E4 adds two read-only helpers:
+
+```bash
+orbit bench gate check-bundle /path/to/candidate --policy /path/to/gate.yaml --json
+orbit bench gate plan --policy /path/to/gate.yaml --parent PARENT_REV --child CHILD_REV --json
+```
+
+Both revisions must already be recorded, usually by an evolve-set smoke. `plan` uses the same frozen
+input validation, evidence history and prerequisite checks as evaluation. It lists each set and side
+as available, missing, pending, ambiguous or blocked. Pending work is not duplicated; multiple report
+revisions require `--reports` just as for evaluation. A finished legacy job without reports receives
+an explicit `bench report` suggestion; planning never backfills reports or saves a gate record.
+
+A missing result can receive a `bench run` command built from an unambiguous saved CLI method and
+benchmark execution template. Commands preserve seeds, options, checkpoint settings and declared
+lineage; task paths resolve against the policy file. They include `--expect-tasks-sha256` and
+`--expect-revision`: changed task bytes or method/bundle/CLI content are rejected before a job is
+created. These flags can also be used directly with `bench run`; `--expect-revision` requires one
+method. API submissions use the transient `expectedRevisions: {methodName: revision}` field, which
+is not stored in job specifications.
+
+Commands remain suggestions. Reconcile changed benchmark registrations, conflicting templates,
+unknown revisions or methods that cannot be represented by `--method` first. Frozen sample-plan
+jobs require an explicitly selected plan file; the helper does not invent a replacement. Review
+prerequisites even when both reports are available: stale conditions remain insufficient.
+
+`check-bundle` reads the directory on the daemon's machine. It shares the existing revision digest
+reader, but confines links to the bundle directory. It checks regular files (including hidden files),
+executable bits, size/file limits, known credential patterns and structured JSON secret fields,
+literal IDs from all held-out task files, and explicitly declared reference SHA-256 values.
+Optional frozen policy settings tighten the existing hard limits:
+
+```yaml
+bundle:
+  max_files: 200
+  max_bytes: 1048576
+  reference_sha256: []
+```
+
+The hard limits remain 2,000 files / 64 MiB, with 20,000 directory entries and 64 levels. Inspection
+errors, cycles, external links and exhausted matcher limits fail the check. Findings identify files
+without printing suspected secret values; at most 100 findings are returned. A reference match means
+an identical file or a literal digest in the bundle. With no reference hashes, that check is explicitly
+`not_run`. Compressed, encoded or paraphrased answers and unknown secrets are not certified absent;
+literal short task IDs can produce conservative substring matches. A passed preflight is not proof
+of isolation or absence of leakage, and the returned digest identifies the inspected bytes only.
+
+Suggested cost order: static check → evolve smoke → gate → frozen guard sets → final sets and a second
+Agent after several accepted rounds. The shipped `orbit` skill documents this order. These helpers
+never submit work or advance an evolution loop automatically.
+
+Exit codes: `plan` uses **0** when required reports and prerequisites are available, **2** for missing,
+pending, ambiguous or blocked required evidence. `check-bundle` uses **0 passed**, **2 failed**.
+Input/API errors use **1**. Optional final evidence is listed without blocking the required plan.
+
 ## Evaluate and select reports
 
 ```bash
@@ -65,6 +122,8 @@ Exit codes for evaluation: **0 accept**, **2 reject**, **3 insufficient**; input
 
 ## API and records
 
+- `POST /bench/gates/plan`: the same input as evaluation; read-only plan and prerequisite checks.
+- `POST /bench/gates/check-bundle`: `{directory, policy, taskSets}`; daemon-local read-only preflight.
 - `POST /bench/gates`: `{parent, child, policy, taskSets: [{file, content}], selections?, mode?}`.
 - `GET /bench/gates?child=REV&limit=100`: newest-first summaries (maximum 500 per request).
 - `GET /bench/gates/ID`: full record with policy, evidence and verdict.
