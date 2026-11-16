@@ -647,6 +647,13 @@ timeout_sec = 120
     expect(verify).toMatchObject({ passEnv: ["GRADER_KEY"], priority: 1 });
 
     const task = { agentTask: { instruction: "go" }, image: "x" };
+    const wrapped = AdapterRunSpec.parse({
+      ...task,
+      agentTask: { ...task.agentTask, wrapper: ["python", "/start.py"] },
+    });
+    const wrappedRun = toRunSpec(wrapped, codex, b, "solve", () => requireAgent("codex"));
+    expect(wrappedRun.command?.slice(0, 4)).toEqual(["python", "/start.py", "codex", "exec"]);
+    expect(wrappedRun.command?.at(-1)).toBe("go");
     expect(() => toRunSpec(task, oracle, b, "solve", () => requireAgent("codex"))).toThrow(
       /asked for an Agent/,
     );

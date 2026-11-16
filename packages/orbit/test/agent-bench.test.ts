@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -21,7 +21,12 @@ import {
 } from "../src/contracts/index.ts";
 import { runArgs } from "../src/executor/docker.ts";
 import { AgentRegistry } from "../src/harness/registry.ts";
-import { AGENT_SETUP_FAILED, AGENT_SETUP_FILE, withAgentSetup } from "../src/runs/launch.ts";
+import {
+  AGENT_SETUP_DONE,
+  AGENT_SETUP_FAILED,
+  AGENT_SETUP_FILE,
+  withAgentSetup,
+} from "../src/runs/launch.ts";
 import { localBlocker } from "../src/runs/preflight.ts";
 import { requireAgent } from "../test-support/agents.ts";
 
@@ -112,7 +117,13 @@ describe("Agents installed inside the run", () => {
   it("runs the install script, then the command with the install prefix on PATH", () => {
     const agentDir = join(dir, "ok");
     mkdirSync(agentDir);
-    const r = sh(agentDir, "echo installing", ["sh", "-c", "echo ran; echo $PATH"]);
+    const r = sh(agentDir, "echo installing", [
+      "sh",
+      "-c",
+      `test -f "$1/${AGENT_SETUP_DONE}" || exit 7; echo ran; echo $PATH`,
+      "sh",
+      agentDir,
+    ]);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("ran");
     expect(r.stdout).toContain(`${dir}/.local/bin`);
@@ -127,6 +138,7 @@ describe("Agents installed inside the run", () => {
     expect(r.stdout).not.toContain("should-not-run");
     expect(r.stderr).toContain("Agent install failed (exit 7)");
     expect(readFileSync(join(agentDir, AGENT_SETUP_FAILED), "utf8").trim()).toBe("7");
+    expect(existsSync(join(agentDir, AGENT_SETUP_DONE))).toBe(false);
   });
 
   it("counts a failed install as an environment failure, not the method's result", () => {

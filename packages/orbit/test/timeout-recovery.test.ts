@@ -6,6 +6,7 @@ import { expect, it, vi } from "vitest";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
 import { Run } from "../src/contracts/index.ts";
 import * as docker from "../src/executor/docker.ts";
+import { AGENT_SETUP_TIMEOUT } from "../src/runs/launch.ts";
 import { RunService } from "../src/runs/service.ts";
 import { UsageSampler } from "../src/runs/usage.ts";
 import { Store } from "../src/store/index.ts";
@@ -26,13 +27,14 @@ vi.mock("../src/runs/process.ts", async (original) => ({
 }));
 
 it.each([
-  ["docker", 0],
-  ["docker", 7],
-  ["process", 0],
-  ["process", 7],
+  ["docker", 0, false],
+  ["docker", 7, false],
+  ["process", 0, false],
+  ["process", 7, false],
+  ["docker", 0, true],
 ] as const)(
-  "recovers an already exited %s run (%i) after its deadline without timing it out",
-  async (backend, code) => {
+  "recovers an exited %s run (%i) with its persisted setup timeout (present=%s)",
+  async (backend, code, setupTimedOut) => {
     const home = mkdtempSync(join(tmpdir(), "orbit-timeout-recovery-"));
     const paths = orbitPaths({ ORBIT_HOME: home });
     ensureHome(paths);
@@ -65,6 +67,8 @@ it.each([
     mkdirSync(dirs.output, { recursive: true });
     writeFileSync(dirs.log, "");
     writeFileSync(join(dirs.root, "exit-code"), String(code));
+    const setupFailure = "Agent install failed (timed out after 2s); see orbit/agent/setup.log";
+    if (setupTimedOut) writeFileSync(join(dirs.root, AGENT_SETUP_TIMEOUT), setupFailure);
     store.putRun(run);
     vi.mocked(docker.inspectContainer).mockResolvedValue({
       id: "fixture-container",
@@ -90,9 +94,9 @@ it.each([
       await runs.start();
       await expect.poll(() => runs.get(run.id)?.sizeBytes).not.toBeNull();
       expect(runs.get(run.id)).toMatchObject({
-        state: code === 0 ? "succeeded" : "failed",
+        state: code === 0 && !setupTimedOut ? "succeeded" : "failed",
         exitCode: code,
-        reason: code === 0 ? null : "exit code 7",
+        reason: setupTimedOut ? setupFailure : code === 0 ? null : "exit code 7",
         cleanup: "done",
       });
       expect(store.events(run.id).some((e) => e.kind === "timeout")).toBe(false);

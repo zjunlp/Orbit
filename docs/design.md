@@ -510,7 +510,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   `oracle`（跑参考解）、`empty`（不作答，用于检验适配器），或 `policy`（独立具身策略，见 §9.4a）。这些保留名不能注册为 Agent。
   `policy` 通过 `policyRef` 选择已登记定义，提交时保存 `policySnapshot`；不接收 CLI 的 auth、model 或 bundle。
   提交 job 前检查 Agent 已注册、auth profile 的 harness 与之一致且 kind 受该 Agent 支持；`agentCommand` 由定义的模板渲染。
-  `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`），安装失败记为环境失败、不 verify；
+  `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`）。独立的安装时限由 daemon 的
+  `ORBIT_AGENT_SETUP_TIMEOUT_SEC` 控制，默认 900 秒，从容器启动计时。安装失败或到期归为 `agent_install`，跳过 verify。
   process Run 拒绝 `install` 型 Agent。ASI 与 LongDS 的原生 runner 只启动 codex / claude-code，由 adapter 在 `capabilities.methods` 中声明，
   提交与兼容矩阵按同一声明拒绝其他 Agent（`<benchmark> does not support <agent> methods`）。
   `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；Agent 版本由 Run 的
@@ -641,8 +642,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   verify 与 score 用 Run 记录里的公钥核验签名，伪造或缺失签名记 `scorer_error`（无效）。daemon 采集时只写入真实目录（不跟随运行
   预置的符号链接，含 output 根目录），复制失败时目标处不留运行自己写的内容。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
-  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction, tools? }` 二选一。`tools` 最多 8 个 stdio MCP server（`name`、非空 `command` argv、可选 `env`），只交给 Agent 启动，不能覆盖 Orbit 管理的 Run 字段；旧 adapter 无需增加字段。Agent 方法（codex / claude-code）的
-  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染），并设置 auth、bundle 与
+  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction, tools?, wrapper? }` 二选一。`tools` 最多 8 个 stdio MCP server（`name`、非空 `command` argv、可选 `env`），只交给 Agent 启动，不能覆盖 Orbit 管理的 Run 字段；旧 adapter 无需增加字段。Agent 方法（codex / claude-code）的
+  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染）。可选 `wrapper` argv 加在解析好的 Agent 命令前，在 Agent CLI 安装完成后执行。Orbit 设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
   `command`；external 也给 adapter 自己的 `command`，Orbit 只加方法的 solve `passEnv`，不注入 CLI 或强改网络。
   verify 不能请求 Agent。显式 `passEnv` 在对应阶段优先于 adapter 的同名环境默认值，避免 Harbor 模板空值遮住凭据；变量值仍不入记录。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），

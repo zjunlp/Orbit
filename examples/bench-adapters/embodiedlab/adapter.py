@@ -96,7 +96,7 @@ def solve(req):
         wall = min(wall, timeout)
     staging = Path(trial['staging'])
     staging.mkdir(parents=True, exist_ok=True)
-    for name in ('service.py', 'verify.py'):
+    for name in ('service.py', 'verify.py', 'start.py'):
         shutil.copyfile(HERE / name, staging / name)
     helpers = HERE.parents[1] / 'tools/orbit-gui-service/evidence.py'
     shutil.copyfile(helpers, staging / 'evidence_helpers.py')
@@ -110,8 +110,10 @@ def solve(req):
             'sim_s': row['budget']['sim_s']}
     (staging / 'plan.json').write_text(json.dumps(plan))
     image = config.get('image', 'orbit-embodiedlab-agent:5dd50ff')
+    launcher = ['python', '/orbit-lab-start.py']
     spec = {'image': image, 'workdir': '/task', 'resources': resources,
-            'timeoutMin': wall / 60, 'network': True, 'networks': [{'name': 'lab', 'internal': True}],
+            'mounts': [{'source': str(staging / 'start.py'), 'target': '/orbit-lab-start.py', 'mode': 'ro'}],
+            'network': True, 'networks': [{'name': 'lab', 'internal': True}],
             'runNetworks': ['default', 'lab'], 'volumes': ['workspace'],
             'volumeMounts': [{'volume': 'workspace', 'target': '/task'}], 'dependsOn': ['lab'],
             'env': {'PYTHONDONTWRITEBYTECODE': '1'}, 'collect': ['/task'],
@@ -128,9 +130,9 @@ def solve(req):
                                 'intervalSec': 5, 'timeoutSec': 5, 'startPeriodSec': 900, 'retries': 3}}],
             'hooks': [{'service': 'lab', 'command': '/isaac-sim/python.sh /adapter/service.py finalize', 'timeoutSec': 1200}]}
     if trial['method']['agent'] == 'empty':
-        spec['command'] = ['true']
+        spec['command'] = [*launcher, 'true']
     else:
-        spec['agentTask'] = {'instruction': 'Read /task/PROMPT.md and carry out the original EmbodiedLab experiment. '
+        spec['agentTask'] = {'wrapper': launcher, 'instruction': 'Read /task/PROMPT.md and carry out the original EmbodiedLab experiment. '
             'The workspace contains the native task card, Python API, tools and submission schema. '
             'Use ./py for interactions. Inspect observations, write your own experiment code and submit once. '
             'Stay inside /task; simulator internals and evaluation data are private.'}
@@ -175,6 +177,9 @@ def score(req):
         review['details'] = {'Interface': 'T0', 'Wall budget': str(result['plan']['wall_s']) + 's',
                              'Condition': 'Bounded smoke; not a full-budget benchmark result'
                              if result['plan']['wall_s'] < result['plan']['official_wall_s'] else 'Native task budget'}
+        stop = {'wall_limit': 'Wall-clock budget exhausted', 'agent_stop': 'Agent command ended'}
+        if result.get('close_reason') in stop:
+            review['details']['Native stop reason'] = stop[result['close_reason']]
         return {'score': float(result['task_completed']), 'maxScore': 1, 'invalid': False, 'issues': [],
                 'metrics': {'processScore': result['process_score'] * 100, 'reward': result['reward']}, 'review': review}
     except (OSError, KeyError, ValueError, TypeError) as exc:

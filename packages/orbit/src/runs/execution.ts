@@ -8,6 +8,7 @@ export const usesRunNetworks = (s: RunSpec) =>
 
 export interface Control {
   timeout?: NodeJS.Timeout;
+  setupTimeout?: NodeJS.Timeout;
   cancel?: "cancel" | "timeout";
   /** A failure found by Orbit while the container runs (it is stopped, then collected). */
   fail?: string;

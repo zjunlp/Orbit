@@ -11,11 +11,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { OrbitClient } from "../src/client/index.ts";
 import { orbitPaths } from "../src/config/paths.ts";
 import { type StartedDaemon, startDaemon } from "../src/daemon/server.ts";
 import * as docker from "../src/executor/docker.ts";
+import { AGENT_SETUP_DONE, AGENT_SETUP_FAILED } from "../src/runs/launch.ts";
 
 const home = mkdtempSync(join(tmpdir(), "orbit-checkpoint-real-"));
 const paths = orbitPaths({ ORBIT_HOME: home });
@@ -157,6 +158,59 @@ describe.runIf(process.env.ORBIT_E2E === "1")("real Docker checkpoints", () => {
     expect(await docker.imageExists(failed.checkpoint?.imageId as string)).toBe(false);
     delete process.env.ORBIT_CHECKPOINT_FIXTURE_KEY;
   }, 120_000);
+
+  it.each([false, true])(
+    "enforces the install deadline after restoring a checkpoint (previous install failed=%s)",
+    async (setupFailed) => {
+      const name = setupFailed ? "setup-failed" : "setup-completed";
+      await client.agentPut({
+        name,
+        install: {
+          kind: "install",
+          binary: "sh",
+          script: [
+            'if [ -f "$ORBIT_OUTPUT/reinstall" ]; then sleep 20; exit 0; fi',
+            'touch "$ORBIT_OUTPUT/reinstall"',
+            setupFailed ? "exit 7" : "exit 0",
+          ].join("\n"),
+        },
+        auth: { secretEnv: { "api-key": "FIXTURE_AGENT_KEY" } },
+        command: { run: ["sh", "-c", "{instruction}"] },
+      });
+      await client.authPut({ name, harness: name, kind: "api-key", secret: "fixture" });
+      vi.stubEnv("ORBIT_AGENT_SETUP_TIMEOUT_SEC", "2");
+      try {
+        const original = await client.submit({
+          image,
+          root: true,
+          network: false,
+          auth: name,
+          resources: { cpus: 1, memGB: 1 },
+          checkpoint: { maxSizeGB: 1 },
+          command: ["sh", "-c", "exit 7"],
+        });
+        expect(await finish(original.id)).toMatchObject({
+          state: "failed",
+          checkpoint: { state: "ready" },
+        });
+        const saved = join(daemon.runs.dirs(original.id).root, "checkpoint", "orbit", "agent");
+        expect(existsSync(join(saved, setupFailed ? AGENT_SETUP_FAILED : AGENT_SETUP_DONE))).toBe(
+          true,
+        );
+
+        const resumed = await client.resume(original.id, { command: ["true"] });
+        expect(await finish(resumed.id)).toMatchObject({
+          state: "failed",
+          reason: "Agent install failed (timed out after 2s); see orbit/agent/setup.log",
+          lease: { state: "released" },
+          cleanup: "done",
+        });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+    60_000,
+  );
 
   it("keeps normal failure cleanup and artifacts when the checkpoint exceeds its limit", async () => {
     const run = await client.submit({
