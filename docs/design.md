@@ -991,7 +991,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   握手核对冻结的动作维数、重规划步数、权重和归一化摘要以及随机流约定。
   Google Robot 固定矩形相机、xyzw 状态、单步重规划及原生 sticky gripper，复用 Gym driver。
   SimplerEnv 固定网格可独立登记 RT-1/Octo 的策略终止协议，直接执行 7 维原生动作并另收终止信号，最终一步的原生 done 决定成功。
-  原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
+  原始动作在任何转换前检查数值类型与有限性，拒绝归为 `policy_act`。`policy-ws` 的共享动作服务在校验拒绝时回传原因
+  和可传输的数值数组，由 driver 禁用 pickle 保存。非数值或超出传输限制的数组保存 dtype、形状和预览。
 - **EB-Navigation** 使用 AI2-THOR 5.0.0 的无头 Vulkan 渲染，按原生 8 个离散动作控制，目标水平距离不超过 1 米或第 20 步时结束。
   SeeNav 和原版 Qwen2.5-VL 在相同的标注双视角、动作反馈及提示词下运行。CPU 验证根据冻结目标和逐步位置复核距离与停止判定，
   Web 复用现有时间轴，同步播放原始第一视角、俯视和送入模型的标注双视角视频。

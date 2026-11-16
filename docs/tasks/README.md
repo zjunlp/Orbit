@@ -184,6 +184,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261115](20261115-embodied-evidence-coverage.md) Native embodied verification and official score coverage
 - [20261115](20261115-embodied-shared-reference.md) Shared frozen reference in native embodied Solve evidence
 - [20261116](20261116-seenav-fallbacks.md) SeeNav fallback diagnostics in Trial evidence
+- [20261116](20261116-hy-embodied-vla.md) Hy-Embodied-0.5-VLA on native RoboTwin 2.0
 - [20261116](20261116-embodied-catalog-checkpoints.md) Embodied product catalog and CHORES checkpoint scope
 - [20261116](20261116-embodied-agent-adapter-maintenance.md) Cadence and preparation fixes for embodied Agent adapters
 - [20261116](20261116-agent-setup-deadline.md) Agent installation deadline and EmbodiedLab native stop reason

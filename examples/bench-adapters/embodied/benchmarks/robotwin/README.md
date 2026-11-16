@@ -40,6 +40,9 @@ Asset preparation verifies the published archive hashes and extracts Aloha-Agile
 object tree. Randomized adds the native unseen backgrounds for evaluation, so Clean installations
 can skip the background archive. The planner templates resolve to a fixed path in the simulator
 image. Registration verifies the assembled asset tree against the suite's pinned digest.
+For policies that use Orbit's action WebSocket, use a simulator image with the transport
+dependencies in `requirements-robotwin.txt`. The simulator build above checks `msgpack_numpy`
+and the synchronous WebSocket client before publishing the image.
 
 ## Register a suite and plan samples
 

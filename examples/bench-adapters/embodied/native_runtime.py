@@ -156,6 +156,77 @@ def build_policy_image(args, context_name, source, dockerfile, manifest, *, sour
                         "-f", str(dockerfile), "-t", args.build_tag, str(HERE.parents[2])], check=True)
 
 
+def configure_action_policy(name, source, paths, server, benchmark_profile, replan_steps, gpu_memory,
+                            *, interpreter="python", normalization_source=None, flash_attention=False):
+    from orbit_embodied.assets import policy_asset_digests
+    from orbit_embodied.binding import resolve_binding
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source", type=Path, required=True)
+    operation = parser.add_mutually_exclusive_group(required=True)
+    operation.add_argument("--build-tag")
+    operation.add_argument("--policy-image")
+    parser.add_argument("--policy-base")
+    parser.add_argument("--reference-file", type=Path)
+    parser.add_argument("--weights", type=Path)
+    parser.add_argument("--output", type=Path)
+    if flash_attention:
+        parser.add_argument("--flash-attention-wheel", type=Path)
+    args = parser.parse_args()
+    if args.build_tag and not args.policy_base:
+        parser.error("--build-tag requires --policy-base")
+    if args.policy_image and not all((args.reference_file, args.weights, args.output)):
+        parser.error("--policy-image requires --reference-file, --weights and --output")
+    path = Path(server.__file__)
+    dockerfile = path.with_name("policy.Dockerfile")
+    manifest = policy_manifest(name, {"policy_src": source}, dockerfile, path, interpreter=interpreter)
+    check_policy_source(args.source, source)
+    if args.build_tag:
+        with tempfile.TemporaryDirectory(prefix="orbit-native-policy-wheels-") as temporary:
+            contexts = ()
+            if flash_attention:
+                import shutil
+
+                wheel = args.flash_attention_wheel
+                expected = "flash_attn-2.7.4.post1+cu12torch2.7cxx11abiTRUE-cp311-cp311-linux_x86_64.whl"
+                if (wheel is None or wheel.name != expected or file_digest(wheel) !=
+                        "sha256:22013b8c74a63fc70e69be1e10ff02e4ad8fec84a43600bdca67b434ed417113"):
+                    parser.error("--build-tag requires the pinned FlashAttention wheel")
+                shutil.copyfile(wheel, Path(temporary) / expected)
+                contexts = (("wheels", Path(temporary)),)
+            build_policy_image(args, "policy_src", source, dockerfile, manifest, source_paths=paths,
+                               extra_contexts=contexts)
+        return
+
+    image = require_image(args.policy_image, manifest)
+    reference = json.loads(args.reference_file.read_text())
+    benchmark = reference["benchmarkProfile"]
+    if benchmark["id"] != benchmark_profile or reference["parameters"]["replanSteps"] != replan_steps:
+        raise ValueError("benchmark profile or control cadence differs from the released policy recipe")
+    profile = json.loads(path.with_name("profile.json").read_text())
+    resolve_binding(benchmark, profile, reference["observationMap"])
+    identities = policy_asset_digests(args.weights, server.ASSETS)
+    if normalization_source:
+        identities["normalizationDigest"] = file_digest(args.source / normalization_source)
+    registration = {
+        "name": name, "version": "1", "connector": "policy-ws", "replanSteps": replan_steps,
+        "profile": profile, **identities, "randomness": server.RANDOMNESS,
+        "weights": {"dataset": name, "target": "/weights"},
+        "service": {
+            "name": "policy", "image": image, "gpusOf": "main", "gpus": 0, "gpuMemGB": gpu_memory,
+            "memGB": 48, "cpus": 4,
+            "command": ["--weights", "/weights", "--asset-digests", json.dumps(identities, separators=(",", ":"))],
+            "healthcheck": {
+                "command": [interpreter, "-c",
+                            "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()"],
+                "intervalSec": 10, "timeoutSec": 6, "startPeriodSec": 300, "retries": 90,
+            },
+        },
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(registration, indent=2) + "\n")
+
+
 def build(args):
     if args.recipe == "robocasa-v02":
         kind = args.recipe

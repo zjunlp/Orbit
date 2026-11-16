@@ -13,7 +13,9 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from orbit_embodied.binding import digest, seed_asset
-from orbit_embodied.robotwin import RoboTwinBenchmark, setup_native_scene
+from orbit_embodied.robotwin import (
+    RoboTwinAbsolutePoseBenchmark, RoboTwinBenchmark, setup_native_scene,
+)
 
 ADAPTER = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
 sys.path.insert(0, str(ADAPTER / "benchmarks/robotwin"))
@@ -25,7 +27,46 @@ def reference():
     return json.loads((ADAPTER / "profiles/robotwin-demo-clean.json").read_text())
 
 
+class NativeControlEnvironment:
+    eval_success = False
+
+    def __init__(self):
+        self.take_action_cnt = 0
+        self.render_updates = 0
+        self.controllers = []
+
+    def get_instruction(self):
+        return "adjust the bottle"
+
+    def _update_render(self):
+        self.render_updates += 1
+
+    def get_obs(self):
+        self._update_render()
+        step = self.take_action_cnt
+        frame = np.full((1, 1, 3), self.render_updates, dtype=np.uint8)
+        return {"observation": {name: {"rgb": frame} for name in
+                                ("head_camera", "left_camera", "right_camera")},
+                "joint_action": {"vector": np.full(14, step)},
+                "endpose": {"left_endpose": [step, 0, 0, 1, 0, 0, 0], "left_gripper": 0.1,
+                            "right_endpose": [step + 1, 0, 0, 1, 0, 0, 0], "right_gripper": 0.2}}
+
+    def take_action(self, _action, *, action_type):
+        self.take_action_cnt += 1
+        self.controllers.append(action_type)
+        self._update_render()
+
+
 class RobotwinTests(unittest.TestCase):
+    def test_native_pose_controller_reads_live_pose_after_each_control(self):
+        pose = RoboTwinAbsolutePoseBenchmark(reference(), "adjust_bottle")
+        pose.env = NativeControlEnvironment()
+        for step in range(1, 3):
+            outcome = pose.step(np.zeros(16))
+            np.testing.assert_array_equal(outcome.observation["ee_pose"],
+                                          [step, 0, 0, 1, 0, 0, 0, 0.1, step + 1, 0, 0, 1, 0, 0, 0, 0.2])
+        self.assertEqual(pose.env.controllers, ["ee", "ee"])
+
     def test_september_instruction_uses_native_split_and_is_independent_of_global_rng(self):
         profile = reference()
         profile["environment"].update(instructionSeedMode="native-episode-seed", instructionSplit="seen")

@@ -1,9 +1,11 @@
 """Check model-side I/O and frozen recipes with synthetic data."""
 
+from argparse import Namespace
 from fnmatch import fnmatch
 import importlib.util
 import json
 from pathlib import Path
+import runpy
 import sys
 import tempfile
 from types import ModuleType
@@ -33,6 +35,55 @@ def load_tests(loader, tests, pattern):
 
 
 class PolicyExpansionTests(unittest.TestCase):
+    def assert_action_policy_registration(self, script, reference, observation, field, incompatible):
+        config = ADAPTER / "policies" / script
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference_path, output = root / "reference.json", root / "policy.json"
+            argv = [str(config), "--source", str(root), "--policy-image", "test:policy",
+                    "--reference-file", str(reference_path), "--weights", str(root), "--output", str(output)]
+            identities = {"checkpointDigest": "sha256:" + "a" * 64, "normalizationDigest": "sha256:" + "b" * 64}
+            with patch.object(sys, "argv", argv), patch.object(sys, "path", [str(config.parent), str(ADAPTER), *sys.path]), \
+                    patch("native_runtime.check_policy_source"), \
+                    patch("native_runtime.require_image", return_value="sha256:" + "c" * 64), \
+                    patch("native_runtime.file_digest", return_value="sha256:" + "d" * 64), \
+                    patch("orbit_embodied.assets.policy_asset_digests", return_value=identities):
+                reference_path.write_text(json.dumps(reference))
+                runpy.run_path(str(config), run_name="__main__")
+                registered = json.loads(output.read_text())
+                self.assertEqual(registered["profile"]["observations"], reference["benchmarkProfile"]["observations"])
+                self.assertEqual(registered["profile"]["action"], reference["benchmarkProfile"]["action"])
+                output.unlink()
+
+                descriptor = reference["benchmarkProfile"]["observations"][observation]
+                original = descriptor[field]
+                descriptor[field] = incompatible
+                reference_path.write_text(json.dumps(reference))
+                with self.assertRaisesRegex(ValueError, "incompatible semantics for " + observation):
+                    runpy.run_path(str(config), run_name="__main__")
+                descriptor[field] = original
+                action = reference["benchmarkProfile"]["action"]
+                action["order"] = list(reversed(action["order"]))
+                reference_path.write_text(json.dumps(reference))
+                with self.assertRaisesRegex(ValueError, "action semantics differ"):
+                    runpy.run_path(str(config), run_name="__main__")
+                self.assertFalse(output.exists())
+
+    def robotwin_recipe(self, recipe):
+        config = load("benchmarks/robotwin/configure_robotwin.py")
+        profile = json.loads((ADAPTER / "profiles/robotwin-demo-clean.json").read_text())
+        args = Namespace(suite=None, recipe=recipe, robotwin_source=ADAPTER, assets=ADAPTER, benchmark_image="test:sim")
+        with patch.object(config, "check_source"), patch.object(config, "tree_digest", return_value="test-assets"), \
+                patch.object(config, "image_id", return_value="test:sim"), patch.object(config, "implementation_digest"):
+            return json.loads(config.configure_benchmark(args, profile)["config"]["reference"])
+
+    def test_hy_vla_registration_rejects_wrong_quaternion_and_action_order(self):
+        self.assert_action_policy_registration("hy-embodied-vla/configure_hy_vla.py",
+                                               self.robotwin_recipe("absolute-ee"), "ee_pose", "order",
+                                               [part for arm in ("left", "right") for part in
+                                                (f"{arm}_x", f"{arm}_y", f"{arm}_z", f"{arm}_qx",
+                                                 f"{arm}_qy", f"{arm}_qz", f"{arm}_qw", f"{arm}_gripper")])
+
     def test_dm05_registration_checks_its_fixed_quaternion_and_action_semantics(self):
         config = load("policies/dm05/configure_dm05.py")
         reference = json.loads((ADAPTER / "profiles/openvla-libero.json").read_text())

@@ -2,10 +2,27 @@
 
 from pathlib import Path
 
-from .binding import digest
+from .binding import digest, file_digest
 
 
 COLOSSEUM_ASSET_ROOT = "/colosseum-assets"
+
+
+def policy_asset_digests(root, groups):
+    """Fingerprint the exact files consumed by a policy, excluding download caches."""
+    identities = {}
+    for field, paths in groups.items():
+        files = {}
+        for relative in paths:
+            path = root / relative
+            if path.is_dir():
+                files[relative] = tree_digest(path)
+            elif path.is_file():
+                files[relative] = file_digest(path)
+            else:
+                raise ValueError("missing policy asset: " + relative)
+        identities[field] = next(iter(files.values())) if field == "normalizationDigest" and len(files) == 1 else digest(files)
+    return identities
 
 
 def tree_digest(directory):

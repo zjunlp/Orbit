@@ -237,6 +237,24 @@ class RoboTwinBenchmark:
             self.env = None
 
 
+class RoboTwinAbsolutePoseBenchmark(RoboTwinBenchmark):
+    """Live end-effector poses and absolute native RoboTwin pose targets."""
+
+    action_size = 16
+    action_type = "ee"
+
+    def observation(self, raw):
+        observation = super().observation(raw)
+        pose = raw["endpose"]
+        observation["ee_pose"] = np.r_[pose["left_endpose"], pose["left_gripper"],
+                                      pose["right_endpose"], pose["right_gripper"]].astype(np.float64)
+        return observation
+
+    @staticmethod
+    def state(observation):
+        return {**RoboTwinBenchmark.state(observation), "ee_pose": observation["ee_pose"].tolist()}
+
+
 class RoboTwinCartesianBenchmark(RoboTwinBenchmark):
     action_size = 16
     action_type = "ee"

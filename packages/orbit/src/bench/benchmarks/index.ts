@@ -159,6 +159,7 @@ const nativeProfiles: Record<string, string> = {
   "robocasa365-panda-omron-native/1": "robocasa365",
   "robotwin-aloha-agilex-native/1": "robotwin",
   "robotwin-aloha-agilex-cartesian/1": "robotwin",
+  "robotwin-aloha-agilex-absolute-ee/1": "robotwin",
   "maniskill3-native/1": "maniskill3",
   "rlbench-panda-joint-velocity/1": "rlbench",
   "rlbench-panda-rvt-pose/1": "rlbench",

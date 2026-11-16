@@ -19,6 +19,9 @@ SEPTEMBER = {"repository": "https://github.com/RoboTwin-Platform/RoboTwin",
              "commit": "ea8b21121ebb3cd201ff5b3fe361944ac94eda3f"}
 SEPTEMBER_DOCKERFILE = Path(__file__).with_name("robotwin-september.Dockerfile")
 SEPTEMBER_CONFIG = "env_cfg/task_config"
+POLICY_RECIPES = ("fast-vla", "absolute-ee")
+POSE_ORDER = [f"{arm}_{part}" for arm in ("left", "right")
+              for part in ("x", "y", "z", "qw", "qx", "qy", "qz", "gripper")]
 
 
 def september_manifest():
@@ -108,6 +111,25 @@ def configure_benchmark(args, reference):
                                               "format": f"RGB-native-t-minus-{steps}"}
             reference["observationMap"][name] = name
         suffix = "-full-fast-vla-native"
+    elif recipe == "absolute-ee":
+        reference["id"] = reference["id"].rsplit("/", 1)[0] + f"-{recipe}/1"
+        reference["parameters"]["replanSteps"] = 1
+        environment["controller"] = recipe
+        suffix = f"-full-{recipe}-native"
+        profile = reference["benchmarkProfile"]
+        profile["id"] = "robotwin-aloha-agilex-absolute-ee/1"
+        coordinates = {"shape": [16], "frame": "robotwin-world", "unit": "meters-and-normalized-gripper",
+                       "order": POSE_ORDER}
+        profile["observations"].pop("joint_state")
+        profile["observations"]["ee_pose"] = {
+            **coordinates, "semantic": "aloha-agilex-live-end-effector-pose", "dtype": "float64",
+        }
+        profile["action"] = {
+            **coordinates, "semantic": "absolute-end-effector-and-gripper-target", "controller": "robotwin-ee",
+            "rotation": "quaternion-wxyz", "gripper": "normalized-open-fraction",
+        }
+        reference["observationMap"].pop("joint_state")
+        reference["observationMap"]["ee_pose"] = "ee_pose"
     return {
         "name": "robotwin-" + environment["suite"].replace("_", "-") + suffix,
         "adapter": str(HERE / "adapter.py"),
@@ -160,7 +182,7 @@ def main():
     benchmark.add_argument("--robotwin-source", type=Path, required=True)
     benchmark.add_argument("--suite", choices=("demo_clean", "demo_randomized"),
                            help="register all tasks for this suite; omit for the legacy adjust_bottle recipe")
-    benchmark.add_argument("--recipe", choices=("joint", "fast-vla"), default="joint")
+    benchmark.add_argument("--recipe", choices=("joint", *POLICY_RECIPES), default="joint")
     benchmark.add_argument("--revision", choices=("original", "september-2026"), default="original")
     benchmark.add_argument("--assets", type=Path, required=True)
     benchmark.add_argument("--benchmark-image", required=True)
@@ -179,8 +201,8 @@ def main():
     if args.endpoint == "build-september":
         build_september(args.robotwin_source, args.base_image, args.tag)
         return
-    if args.endpoint == "benchmark" and args.recipe == "fast-vla" and not args.suite:
-        parser.error("the Fast-VLA recipe requires --suite")
+    if args.endpoint == "benchmark" and args.recipe in POLICY_RECIPES and not args.suite:
+        parser.error("this RoboTwin recipe requires --suite")
 
     reference = json.loads((HERE / "profiles/robotwin-demo-clean.json").read_text())
     if args.endpoint == "benchmark":

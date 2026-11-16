@@ -621,6 +621,78 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(rejection["sourceObservation"], 5)
         self.assertEqual(rejection["encoding"], "raw-policy-actions")
 
+    def test_frozen_policy_websocket_preserves_rejected_actions_before_control(self):
+        import asyncio
+        from contextlib import asynccontextmanager, suppress
+        import sys
+        from unittest.mock import patch
+
+        from websockets.server import serve
+        from .policy_ws import PolicyClient
+        from .wire import serve_actions, serve_frozen_actions
+
+        invalid = "policy action chunk has invalid shape, length or non-finite values"
+        wrong_count = "policy action count differs from the released model"
+        cases = (
+            ("nonfinite", np.full((6, 7), np.nan, dtype=np.float32), invalid, True),
+            ("wrong-width", np.zeros((6, 8)), invalid, True),
+            ("wrong-count", np.zeros((5, 7)), wrong_count, True),
+            ("object", np.full((6, 7), "invalid", dtype=object), invalid, False),
+            ("oversized", np.zeros((1024, 7)), wrong_count, False),
+            ("valid", np.zeros((6, 7)), None, False),
+        )
+        predictions = iter(chunk for _, chunk, _, _ in cases)
+
+        def run_trials(port):
+            for name, chunk, reason, keep_array in cases:
+                with self.subTest(case=name):
+                    self.output = Path(self.temporary.name) / name
+                    policy = PolicyClient(f"ws://127.0.0.1:{port}", timeout=3, replan_steps=5, action_size=7)
+                    benchmark = SyntheticBenchmark(success_at=1)
+                    result = self.run_sample(benchmark, policy)
+                    self.assertEqual(result["valid"], reason is None)
+                    self.assertEqual(benchmark.count, int(reason is None))
+                    self.assertEqual(self.verify()["valid"], result["valid"])
+                    if reason is None:
+                        continue
+                    self.assertEqual(result["failure"], "policy_act")
+                    rejection = json.loads((self.output / "chunks/0.rejected.json").read_text())
+                    self.assertEqual(rejection["reason"], reason)
+                    self.assertEqual(rejection["sourceObservation"], 0)
+                    self.assertEqual(rejection["dtype"], str(chunk.dtype))
+                    self.assertEqual(rejection["shape"], list(chunk.shape))
+                    raw_file = self.output / "chunks/0.rejected.npy"
+                    if keep_array:
+                        np.testing.assert_array_equal(np.load(raw_file, allow_pickle=False), chunk, strict=True)
+                    else:
+                        self.assertFalse(raw_file.exists())
+                        self.assertTrue(rejection["preview"])
+
+        async def exercise(policy, metadata, _host, _port, *, reset):
+            loop = asyncio.get_running_loop()
+            ready = loop.create_future()
+
+            @asynccontextmanager
+            async def listen(handler, host, port, **options):
+                async with serve(handler, host, port, **options) as server:
+                    ready.set_result(server.sockets[0].getsockname()[1])
+                    yield server
+
+            with patch("websockets.server.serve", listen):
+                task = asyncio.create_task(serve_actions(policy, metadata, "127.0.0.1", 0, reset=reset))
+                try:
+                    await loop.run_in_executor(None, run_trials, await ready)
+                finally:
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+
+        argv = ["serve", "--weights", self.temporary.name, "--asset-digests", "{}"]
+        with patch.object(sys, "argv", argv), patch("orbit_embodied.wire.serve_actions", exercise), \
+                patch("orbit_embodied.wire.POLICY_WS_MAX_MESSAGE_SIZE", 4096):
+            serve_frozen_actions(lambda _: (lambda _observation: next(predictions), lambda: None),
+                                 {}, 7, 5, {}, action_count=6)
+
     def test_rescore_rejects_other_samples_attempts_and_changed_files(self):
         self.run_sample(SyntheticBenchmark(), SyntheticPolicy())
         with self.assertRaisesRegex(ValueError, "another sample"):

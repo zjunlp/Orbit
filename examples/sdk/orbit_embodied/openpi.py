@@ -6,6 +6,7 @@ import math
 import numpy as np
 
 from .conversions import CONVERSIONS as CONVERSIONS, libero_gripper as libero_gripper
+from .wire import POLICY_WS_MAX_MESSAGE_SIZE
 
 
 def quaternion_to_axis_angle(quaternion):
@@ -78,7 +79,7 @@ class WebSocketPolicy:
         from websockets.sync.client import connect
 
         self.timeout, self.packb, self.unpackb = timeout, packb, unpackb
-        self.connection = connect(url, compression=None, max_size=64 * 1024 * 1024,
+        self.connection = connect(url, compression=None, max_size=POLICY_WS_MAX_MESSAGE_SIZE,
                                   open_timeout=timeout, close_timeout=5)
         try:
             self.metadata = unpackb(self.connection.recv(timeout=timeout))
