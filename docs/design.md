@@ -220,6 +220,11 @@ init, readOnly, tmpfs, capAdd, capDrop, securityOpt, pidsLimit?, collect }`，�
   bench 记为 invalid），再停止服务，把日志与 `collect` 路径存到 `output/services/<name>/`。
 - 清理：删除 Run 容器、`orbit.parent` 服务容器和网络，全部确认后才释放租约；daemon 重启后同样按标签清理。
 
+原生 CLI 的默认网络保持开启，但 adapter 显式设置 `network: false` 时不得覆盖。
+有服务的 Run 显式 `runNetworks: []` 表示 Docker `--network none`，不是 Docker 默认 bridge。
+HLE 用只读挂载的 Unix socket 与独立联网服务通信，分别约束模型 API 和过滤后的网页工具；
+题目与标准答案分开挂载，评分凭据仅挂载到独立 verifier。
+
 **after 阶段**（`RunSpec.after`，Harbor shared verifier 用）：`{ command, timeoutMin, env, passEnv, copy[{ source, target }],
 network?, collect }`，在 `command` 结束（或到时被停）后于**同一容器**里运行，看到它留下的文件与仍在运行的进程：
 - 容器命令包一层 `/orbit/phases/run.sh`：命令在自己的 session 中后台运行（有 `setsid` 时），退出码写入

@@ -628,7 +628,7 @@ timeout_sec = 120
     );
     expect(agent.command?.slice(0, 2)).toEqual(["codex", "exec"]);
     expect(agent.command?.at(-1)).toBe("x\n");
-    expect(agent).toMatchObject({ auth: "p", agentBundle: "/m", network: true, snapshot: false });
+    expect(agent).toMatchObject({ auth: "p", agentBundle: "/m", network: false, snapshot: false });
     expect(agent.env).toEqual({ B: "1" });
     expect(agent.passEnv ?? []).toEqual([]);
 

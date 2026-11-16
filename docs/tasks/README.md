@@ -89,6 +89,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261105](20261105-sample-tau2.md) Direct τ²-bench user-session sample
 - [20261105](20261105-samples-c1-c7.md) C1 / C7 样板：HumanEval（固定输入）与 TextArena（游戏）
 - [20261110](20261110-benchmark-gaps.md) Native benchmark integrations and availability
+- [20261116](20261116-hle-with-tools.md) Public HLE with restricted web/code tools and native-prompt grading
 - [20261110](20261110-harbor-verifier-gpu-models.md) Preserve Harbor verifier GPU model requirements
 
 ## GUI benchmarks
