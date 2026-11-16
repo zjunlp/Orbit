@@ -68,19 +68,24 @@ def set_benchmark_scope(reference, root, task_set, split, recipe):
         name += "-" + recipe
     if split == "target":
         name += "-target"
-    reference["id"] = name + "/1"
+    reference["id"] = name + ("/2" if recipe == "diffusion-policy" else "/1")
     reference["scoreName"] = "RoboCasa365 " + TASK_SETS[task_set] + " success"
     if split == "target":
         reference["scoreName"] += " (target scenes)"
     return name + "-native"
 
 
+def use_v101_simulator(reference):
+    benchmark = json.loads((HERE / "profiles/robocasa365-v101.json").read_text())
+    source = reference["reference"]
+    source["robocasa"]["commit"] = benchmark["robocasaCommit"]
+    source["files"].update(benchmark["files"])
+
+
 def panda_omron_v101_reference(robocasa, assets, evaluation):
     reference = json.loads((HERE / "profiles/robocasa365-atomic-seen.json").read_text())
-    baseline = json.loads((HERE / "profiles/robocasa365-gr00t-n15.json").read_text())
+    use_v101_simulator(reference)
     source = reference["reference"]
-    source["robocasa"]["commit"] = baseline["benchmark"]["robocasaCommit"]
-    source["files"].update(baseline["benchmark"]["files"])
     source["evaluation"] = evaluation
     check_source(robocasa, source["robocasa"], source["files"])
     reference["scoreErrors"] = "exclude"
@@ -91,10 +96,8 @@ def panda_omron_v101_reference(robocasa, assets, evaluation):
 
 def groot_reference(reference, model):
     reference["scoreErrors"] = "exclude"
-    source = reference["reference"]
-    source["robocasa"]["commit"] = model["benchmark"]["robocasaCommit"]
-    source["files"].update(model["benchmark"]["files"])
-    source["evaluation"] = model["source"]
+    use_v101_simulator(reference)
+    reference["reference"]["evaluation"] = model["source"]
     reference["environment"]["horizonScale"] = 1
     reference["parameters"].pop("resizeSize")
     reference["parameters"].update(replanSteps=16, successRule="chunk-last-any")
@@ -102,8 +105,9 @@ def groot_reference(reference, model):
 
 def diffusion_reference(reference, model):
     reference["scoreErrors"] = "exclude"
+    use_v101_simulator(reference)
     reference["reference"]["evaluation"] = model["source"]
-    reference["environment"]["protocol"] = "diffusion-policy"
+    reference["environment"].update(protocol="diffusion-policy", horizonScale=1)
     parameters = reference["parameters"]
     parameters.pop("resizeSize")
     parameters.update(replanSteps=8, successRule="any", environmentSeed=1111111)

@@ -158,6 +158,7 @@ The upstream scorer averages per-task rates with available results. Orbit
 excludes invalid episodes from that view. [Official submission](https://github.com/robocasa-benchmark/leaderboard/blob/main/submissions_md/gr00t_n1.5_2026_05_19.md)
 
 Use `ROBOCASA101_SOURCE` and `GROOT_N15_SOURCE` at the commits listed in the
+[RoboCasa 1.0.1 profile](../../profiles/robocasa365-v101.json) and
 [GR00T N1.5 profile](../../profiles/robocasa365-gr00t-n15.json). The runtime uses the published
 policy loader and PandaOmron transforms with four denoising steps. It serves over Orbit's
 GR00T ZeroMQ transport, sending numeric arrays through MessagePack. The weights dataset
@@ -205,7 +206,8 @@ orbit bench calibrate robocasa365-atomic-seen-gr00t-native --policy groot-n15-ro
 
 ## Diffusion Policy
 
-Use the RoboCasa 1.0.0 and robosuite sources from the OpenPI simulator recipe, with the Diffusion
+Use the RoboCasa 1.0.1 horizon-update checkout (`f970a0aac4675a7e97ed5771cade4ade7044b2af`)
+also used by the GR00T recipe, the shared robosuite source, and the Diffusion
 Policy and robomimic revisions pinned in the [Diffusion Policy profile](../../profiles/robocasa365-diffusion-policy.json).
 The published epoch-0500 checkpoint supplies the EMA model and its normalization. The policy
 uses the latest two observations, including all three cameras and the end-effector and gripper
@@ -213,16 +215,22 @@ state. It duplicates the reset observation for the first call and encodes the re
 with the pinned CLIP text encoder. Each prediction yields eight native PandaOmron actions.
 [Official submission](https://github.com/robocasa-benchmark/leaderboard/blob/main/submissions_md/dp_2026_04_02.md)
 
-The recipe caps each rollout at `int(1.5 * get_task_horizon(task))` and scores it successful if
+The recipe caps each rollout at the RoboCasa 1.0.1 registry's `get_task_horizon(task)` and scores it successful if
 any executed step earns the native sparse reward. Orbit uses the single-environment stopping
 rule of the reference runner, which checks the earlier of the last two success signals after
 each action chunk. Orbit freezes an independent first reset per sample. The upstream runner
 also supports parallel environments, with a joint stop check and continuing reset streams.
+Regenerate the registration and sample plans for the `/2` recipe.
 
 ```bash
 docker build --label orbit.task=robocasa365-diffusion-policy --target simulator \
+  --build-context robocasa="$ROBOCASA101_SOURCE" --build-context robosuite="$ROBOSUITE_SOURCE" \
+  --build-context openpi="$ROBOCASA_OPENPI" \
+  -f examples/bench-adapters/embodied/benchmarks/robocasa365/robocasa365.Dockerfile \
+  -t orbit/robocasa365-simulator:1.0.1 .
+docker build --label orbit.task=robocasa365-diffusion-policy --target simulator \
   -f examples/bench-adapters/embodied/policies/diffusion-policy/diffusion-policy.Dockerfile \
-  -t orbit/robocasa365-diffusion-simulator:reference .
+  -t orbit/robocasa365-diffusion-simulator:1.0.1 .
 docker build --label orbit.task=robocasa365-diffusion-policy --target policy \
   --build-context diffusion="$DIFFUSION_SOURCE" --build-context robomimic="$ROBOMIMIC_SOURCE" \
   -f examples/bench-adapters/embodied/policies/diffusion-policy/diffusion-policy.Dockerfile \
@@ -239,10 +247,10 @@ for file in config.json merges.txt model.safetensors special_tokens_map.json tok
 done
 
 python3 -B examples/bench-adapters/embodied/benchmarks/robocasa365/configure_robocasa365.py \
-  --robocasa-source "$ROBOCASA_SOURCE" --robosuite-source "$ROBOSUITE_SOURCE" \
+  --robocasa-source "$ROBOCASA101_SOURCE" --robosuite-source "$ROBOSUITE_SOURCE" \
   --diffusion-source "$DIFFUSION_SOURCE" --robomimic-source "$ROBOMIMIC_SOURCE" \
   --assets "$ROBOCASA_ASSETS" --weights "$DIFFUSION_WEIGHTS" \
-  --benchmark-image orbit/robocasa365-diffusion-simulator:reference \
+  --benchmark-image orbit/robocasa365-diffusion-simulator:1.0.1 \
   --policy-image orbit/robocasa365-diffusion-policy:reference \
   --share-gpu --output-dir "$DIFFUSION_CONFIG"
 orbit data add robocasa365-assets "$ROBOCASA_ASSETS"
@@ -250,7 +258,7 @@ orbit data add diffusion-policy-robocasa365 "$DIFFUSION_WEIGHTS"
 orbit bench add-file "$DIFFUSION_CONFIG/benchmark.json"
 orbit policy add "$DIFFUSION_CONFIG/policy.json"
 
-python3 -B examples/bench-adapters/embodied/plan.py --reference-source "$ROBOCASA_SOURCE" \
+python3 -B examples/bench-adapters/embodied/plan.py --reference-source "$ROBOCASA101_SOURCE" \
   --reference-file "$DIFFUSION_CONFIG/reference.json" --task robocasa/OpenDrawer \
   --task robocasa/TurnOnMicrowave --initial-state 0 --environment-seed 1111111 \
   > "$DIFFUSION_CONFIG/samples.json"
@@ -258,8 +266,8 @@ orbit bench calibrate robocasa365-atomic-seen-diffusion-policy-native \
   --policy diffusion-policy-robocasa365-shared --sample-plan "$DIFFUSION_CONFIG/samples.json" --budget 15 --json
 ```
 
-The Dockerfile defaults to the existing 1.0.0 simulator and OpenPI dependency images from
-the setup above. The new policy image runs Torch inference and serves native actions over
+The policy Dockerfile uses the existing OpenPI dependency image from the setup above.
+The policy image runs Torch inference and serves native actions over
 `policy-ws`. The checkpoint, its embedded normalization and the complete local CLIP files
 are checked at service startup. Use `--benchmark-only --recipe diffusion-policy` to generate
 the benchmark registration independently of the weights.

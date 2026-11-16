@@ -1016,7 +1016,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/robocasa365/README.md)
   GR00T N1.5 共用环境 driver，以 RoboCasa 1.0.1 原生 horizon 运行。每 16 步重规划，按动作段末尾的原生成功信号计分。
   OpenPI 和 GR00T 的 recipe 分别登记，GR00T recipe 的统计排除无效样本。
-  Diffusion Policy 使用 RoboCasa 1.0.0，向 Policy 端发送两帧原生观测，每 8 步重规划。
+  Diffusion Policy 使用 RoboCasa 1.0.1，直接读取任务注册表中的原生步数上限。Policy 接收两帧原生观测，每 8 步重规划。
   原生奖励任一步为正即计成功，动作段结束时按上游单环境规则决定是否提前停止。
   新证据单独保存原生 `done`，验证器据此重算停止点。旧证据可重评，验证记录会标明停止点未经复核。
   固定任务目录、Lifelong 的阶段及累计套件独立于模型登记，复用每任务的原生步数和判定。

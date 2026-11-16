@@ -74,7 +74,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 | StarVLA QwenGR00T 20K，`starvla-qwen3vl-groot-widowx` | SimplerEnv WidowX Visual Matching，224×224 RGB 配方 | Carrot on Plate 完成一条真实样本，独立 CPU 验证与重评一致。[记录](../tasks/20261111-embodied-policy-expansion.md) |
 | RoboCasa365 π₀.₅，`pi05-robocasa365-shared` | RoboCasa365 Atomic-Seen，OpenPI recipe | 两个冻结样本通过真实批次及 CPU 验证，另有短原生状态与动作对照。[记录](../tasks/20261107-robocasa365.md) |
 | RoboCasa365 GR00T N1.5，`groot-n15-robocasa365-shared` | RoboCasa365 Atomic-Seen 与 `target50` pretrain 中的两个 Composite 组 | Atomic 两个样本与官方多步 wrapper 对照；两个 Composite 组各一个真实样本，均有独立验证与重评。[Atomic](../tasks/20261107-robocasa365-gr00t-n15.md) · [Composite](../tasks/20261109-embodied-benchmark-coverage.md) |
-| RoboCasa365 Diffusion Policy，`diffusion-policy-robocasa365-shared` | RoboCasa365 Atomic-Seen，双帧八步 recipe | 两个冻结样本覆盖成功停止与步数上限，完成 CPU 验证和选定重评。[记录](../tasks/20261109-robocasa365-diffusion-policy.md) |
+| RoboCasa365 Diffusion Policy，`diffusion-policy-robocasa365-shared` | RoboCasa365 Atomic-Seen，双帧八步 recipe，读取 1.0.1 原生步数上限 | 旧配方两个真实样本覆盖成功停止与步数上限。新配方核对了 317 个上限，冻结动作回放复现成功停止并通过 CPU 验证。[模型实测](../tasks/20261109-robocasa365-diffusion-policy.md) · [协议更新](../tasks/20261116-robocasa365-diffusion-refresh.md) |
 | Xiaomi-Robotics-1，`xiaomi-robotics-1-robocasa365` | RoboCasa365 Target50，四帧历史、两步采样间隔、16 步重规划 | 一个冻结样本完成真实模型推理和 900 步原生仿真，通过 CPU 验证和重评。[记录](../tasks/20261114-xiaomi-robocasa365.md) |
 | GigaWorld-Policy-0.1，`gigaworld-policy-01-robocasa365` | RoboCasa365 Target50，三相机 T 形输入，24 步动作块、20 步重规划 | 一个冻结样本完成真实模型推理和 1,350 步原生仿真，CPU 验证和重评一致。[记录](../tasks/20261114-gigaworld-robocasa365.md) |
 | 社区 RoboTwin π₀.₅，`pi05-robotwin-adjust-bottle-shared` | RoboTwin Clean 单任务 `adjust_bottle` | 两个专家通过场景的真实批次及独立验证，另有原生固定动作对照。[记录](../tasks/20261107-robotwin.md) |

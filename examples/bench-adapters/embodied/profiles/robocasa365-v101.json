@@ -1,0 +1,7 @@
+{
+  "robocasaCommit": "f970a0aac4675a7e97ed5771cade4ade7044b2af",
+  "files": {
+    "robocasa/utils/dataset_registry.py": "sha256:23e8e31bb56bae80de86c34eafadfe32dd1e1eba6608376152ba9fdda5532a4b",
+    "robocasa/scripts/download_kitchen_assets.py": "sha256:60e4524869434d0391f4f8a9801b15408338a43bd18192bb68f5d2eae6531033"
+  }
+}

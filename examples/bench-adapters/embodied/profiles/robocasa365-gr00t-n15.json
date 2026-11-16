@@ -15,13 +15,6 @@
       "gr00t/eval/get_eval_stats.py": "sha256:2d8ccc0d331882ebbc4e6e0447731dd3ba2ebf733ff0d4c142980af60f3e3350"
     }
   },
-  "benchmark": {
-    "robocasaCommit": "f970a0aac4675a7e97ed5771cade4ade7044b2af",
-    "files": {
-      "robocasa/utils/dataset_registry.py": "sha256:23e8e31bb56bae80de86c34eafadfe32dd1e1eba6608376152ba9fdda5532a4b",
-      "robocasa/scripts/download_kitchen_assets.py": "sha256:60e4524869434d0391f4f8a9801b15408338a43bd18192bb68f5d2eae6531033"
-    }
-  },
   "checkpoint": {
     "repository": "robocasa/robocasa365_checkpoints",
     "revision": "c484448aba1a9b60a04c9b0ca117241518ea69f3",
