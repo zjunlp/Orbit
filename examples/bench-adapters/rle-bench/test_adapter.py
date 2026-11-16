@@ -2,12 +2,15 @@
 
 import copy
 import json
+import os
 from pathlib import Path
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
 import adapter
+import prepare
 
 
 class RLEAdapterTests(unittest.TestCase):
@@ -71,11 +74,11 @@ class RLEAdapterTests(unittest.TestCase):
             path.write_text(json.dumps({"revision": adapter.REVISION, "images": {"native:dev": digest}}))
             req = {"benchmark": {"path": directory, "config": {}}}
             spec = {"image": "native:dev", "services": [{"image": "native:dev"}]}
-            adapter.pin_images(req, spec)
+            adapter.pin_images(req, spec, {})
             self.assertEqual(spec["image"], digest)
             self.assertEqual(spec["services"][0]["image"], digest)
             with self.assertRaisesRegex(ValueError, "missing immutable"):
-                adapter.pin_images(req, {"image": "unprepared:dev"})
+                adapter.pin_images(req, {"image": "unprepared:dev"}, {})
 
     def test_catalog_requires_all_native_tasks_and_keeps_nested_ids(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -109,6 +112,60 @@ class RLEAdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "files changed"):
                 adapter.check_prepared(root)
 
+    def test_validated_catalog_reuses_family_digests_and_catches_same_mtime_edits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task = root / "tasks/task08"
+            task.mkdir(parents=True)
+            (task / "task.toml").write_text("# synthetic catalog fixture")
+            instruction = task / "instruction.md"
+            instruction.write_text("original")
+            lock_path = root / "orbit-catalog.json"
+            lock = adapter.preparation_lock(root)
+            lock_path.write_text(json.dumps(lock))
+            with patch.object(adapter, "prepared_hashes", side_effect=AssertionError("reread task bytes")):
+                self.assertEqual(adapter.check_prepared(root), {"task08": lock["digest"]})
+            lock_path.write_text(json.dumps({**lock, "digest": "0" * 64}))
+            with self.assertRaisesRegex(ValueError, "files changed"):
+                adapter.check_prepared(root)
+            lock_path.write_text(json.dumps(lock))
+
+            before = instruction.stat()
+            instruction.write_text("modified")
+            os.utime(instruction, ns=(before.st_atime_ns, before.st_mtime_ns))
+            with self.assertRaisesRegex(ValueError, "files changed"):
+                adapter.check_prepared(root)
+            instruction.write_text("original")
+            self.assertEqual(adapter.check_prepared(root), {"task08": lock["digest"]})
+            extra = task / "extra.md"
+            extra.write_text("new generated file")
+            with self.assertRaisesRegex(ValueError, "files changed"):
+                adapter.check_prepared(root)
+            extra.unlink()
+            instruction.unlink()
+            with self.assertRaisesRegex(ValueError, "files changed"):
+                adapter.check_prepared(root)
+
+    def test_refresh_upgrades_legacy_lock_only_for_unchanged_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task = root / "tasks/task08"
+            task.mkdir(parents=True)
+            source = task / "task.toml"
+            source.write_text("# synthetic catalog fixture")
+            lock = root / "orbit-catalog.json"
+            legacy = {"revision": adapter.REVISION, "digest": adapter.prepared_digest(root)}
+            lock.write_text(json.dumps(legacy))
+            prepare.record_preparation(root, refresh=True)
+            refreshed = json.loads(lock.read_text())
+            self.assertEqual(refreshed["digest"], legacy["digest"])
+            self.assertEqual(refreshed["families"], {"task08": legacy["digest"]})
+
+            source.write_text("# changed fixture")
+            with self.assertRaisesRegex(ValueError, "files changed"):
+                prepare.record_preparation(root, refresh=True)
+            self.assertEqual(json.loads(lock.read_text()), refreshed)
+
     def test_image_inputs_must_match_the_current_prepared_task(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -120,10 +177,35 @@ class RLEAdapterTests(unittest.TestCase):
                     "inputs": {image: adapter.prepared_digest(root, "task08")}}
             (root / "orbit-images.json").write_text(json.dumps(lock))
             req = {"benchmark": {"path": directory, "config": {}}}
-            adapter.pin_images(req, {"image": image})
+            adapter.pin_images(req, {"image": image}, adapter.preparation_lock(root)["families"])
             (task / "instruction.md").write_text("modified fixture")
             with self.assertRaisesRegex(ValueError, "build inputs changed"):
-                adapter.pin_images(req, {"image": image})
+                adapter.pin_images(req, {"image": image}, adapter.preparation_lock(root)["families"])
+
+    def test_solve_and_verify_pin_images_without_rereading_task_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task = root / "tasks/task08"
+            task.mkdir(parents=True)
+            (task / "task.toml").write_text("# synthetic catalog fixture")
+            lock = adapter.preparation_lock(root)
+            (root / "orbit-catalog.json").write_text(json.dumps(lock))
+            image = "rlebench-task08-agent:dev"
+            pinned_image = "sha256:" + "a" * 64
+            (root / "orbit-images.json").write_text(json.dumps({
+                "revision": adapter.REVISION, "images": {image: pinned_image},
+                "inputs": {image: lock["families"]["task08"]},
+            }))
+            harbor = types.SimpleNamespace(returncode=0, stdout=json.dumps({"spec": {"image": image}}))
+            req = {"benchmark": {"path": directory, "config": {"orbit": "/fixture/orbit"}},
+                   "trial": {"task": "task08", "method": {"agent": "empty"}}}
+            with patch.object(adapter, "checked_root", return_value=root), \
+                    patch.object(adapter, "catalog", return_value={"task08": "task08"}), \
+                    patch.object(adapter.subprocess, "run", return_value=harbor), \
+                    patch.object(adapter, "prepared_hashes", side_effect=AssertionError("reread task bytes")):
+                for operation in (adapter.solve, adapter.verify):
+                    result = operation({**req, "op": operation.__name__})
+                    self.assertEqual(result["spec"]["image"], pinned_image)
 
     def test_proven_native_submission_rejection_is_valid_zero(self):
         for kind in ("robot_size", "controller_size", "symlink", "directory"):
@@ -182,8 +264,7 @@ class RLEAdapterTests(unittest.TestCase):
         native = {"spec": {"image": "native:dev", "timeoutMin": 120,
                             "resources": {"gpus": 0, "cpus": 4, "memGB": 4},
                             "agentTask": {"instruction": "native instructions"}}}
-        with patch.object(adapter, "delegate", return_value=copy.deepcopy(native)), \
-                patch.object(adapter, "pin_images"):
+        with patch.object(adapter, "delegate", return_value=copy.deepcopy(native)):
             result = adapter.solve({"trial": {"task": "task08", "method": {"agent": "claude-code"}}})
         self.assertEqual(result["spec"]["agentTask"], native["spec"]["agentTask"])
         self.assertEqual(result["spec"]["timeoutMin"], 120)

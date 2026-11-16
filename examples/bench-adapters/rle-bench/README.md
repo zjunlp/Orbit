@@ -51,10 +51,13 @@ orbit bench tasks rle-bench
 
 Preparation runs upstream generators and the official Docker builds. It records
 immutable local image IDs and build-input digests in `/data/rle-bench/orbit-images.json`.
-The complete prepared task trees are hashed into `/data/rle-bench/orbit-catalog.json`;
-planning rejects changes to generated instructions, task settings, graders or oracle
-files even when the tracked Git revision is unchanged. Rebuild changed inputs rather
-than editing either digest file by hand. Images carry the task label
+The complete prepared task trees are hashed into `/data/rle-bench/orbit-catalog.json`.
+Solve and verify reuse the recorded digests when the file inventory and metadata match.
+A metadata change triggers content verification, which still rejects changes to generated instructions, task settings, graders or oracle
+files even when the tracked Git revision is unchanged. Run `prepare.py CHECKOUT --refresh-digests`
+to enable reuse on an older preparation lock or a copied checkout. This command verifies the
+existing content digest and needs neither generators nor Docker builds. Rebuild changed inputs.
+Images carry the task label
 `orbit.task=embodied-harness-benchmarks`. Run preparation again
 with `--task task07 --build` to prepare the other structurally supported environment.
 Task09 is blocked even though its Harbor settings parse: its native controller sandbox
