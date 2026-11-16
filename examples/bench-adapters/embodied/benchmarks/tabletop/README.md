@@ -90,7 +90,7 @@ docker build --label orbit.task=embodied-eval --target maniskill \
   -t orbit/embodied-maniskill3:3.0.1 .
 docker build --label orbit.task=embodied-eval --target metaworld \
   --build-arg SIMULATOR_BASE=orbit/simpler-native:reference -f "$adapter/benchmarks/tabletop/tabletop.Dockerfile" \
-  -t orbit/embodied-metaworld:3.0.0 .
+  -t orbit/embodied-metaworld:3.1.1 .
 docker build --label orbit.task=embodied-eval --build-arg POLICY_BASE=orbit/robocasa365-policy:reference \
   -f "$adapter/policies/openpi/metaworld-policy.Dockerfile" -t orbit/embodied-metaworld-policy:reference .
 ```
@@ -101,7 +101,8 @@ under `data/tasks/bridge_v2_real2sim_dataset/` and the
 [WidowX robot assets](https://github.com/haosulab/ManiSkill-WidowX250S/tree/v0.2.0)
 under `data/robots/widowx/`. Register the assembled root as `maniskill3-plate-assets`.
 Plate-25 uses the same ManiSkill 3.0.1 simulator image as the tabletop profiles.
-Meta-World loads its scenes from the simulator wheel. Keep the existing model images and checkpoint bundles.
+Meta-World 3.1.1 loads its scenes from the simulator wheel and pins MuJoCo 3.3.0
+for its contact dynamics. Keep the existing model images and checkpoint bundles.
 
 ## Register and calibrate
 
@@ -117,7 +118,7 @@ For example, calibrate π₀.₅ on two Meta-World tasks using the published che
 ```bash
 python3 -B "$adapter/benchmarks/tabletop/configure_tabletop.py" --model metaworld \
   --reference-source "$RLINF_SOURCE" --weights "$METAWORLD_WEIGHTS" \
-  --benchmark-image orbit/embodied-metaworld:3.0.0 --policy-image orbit/embodied-metaworld-policy:reference \
+  --benchmark-image orbit/embodied-metaworld:3.1.1 --policy-image orbit/embodied-metaworld-policy:reference \
   --output-dir "$LOCAL_CONFIG"
 orbit data add pi05-rlinf-metaworld "$METAWORLD_WEIGHTS"
 orbit policy add "$LOCAL_CONFIG/policy.json"
@@ -136,7 +137,7 @@ Plate-25 main task and uses an eight-step chunk. Generate its sample plans with
 `maniskill3-rlinf-reference/2`. Meta-World selects the 50-task catalog and uses 15 zero-action
 settle steps followed by at most 160 control steps, with five actions per inference.
 Meta-World uses the same unsigned 32-bit seed (`environmentSeed + initialStateId`) to construct MT1
-goals and reset the environment. Generate sample plans with the seeded `metaworld-rlinf-reference/2`
+goals and reset the environment. Generate sample plans with the seeded `metaworld-rlinf-reference/3`
 recipe.
 The Meta-World service uses eager Torch to keep the first inference within its deadline.
 

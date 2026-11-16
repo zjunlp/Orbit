@@ -11,6 +11,8 @@ from .driver import StepResult
 
 
 MANISKILL_VERSION = "3.0.1"
+METAWORLD_VERSION = "3.1.1"
+METAWORLD_MUJOCO_VERSION = "3.3.0"
 
 
 class TabletopBenchmark:
@@ -95,6 +97,9 @@ class ManiSkillBenchmark(TabletopBenchmark):
 
 class MetaWorldBenchmark(TabletopBenchmark):
     def make_env(self, seed):
+        for package, key in (("metaworld", "version"), ("mujoco", "mujocoVersion")):
+            if key in self.config and version(package) != self.config[key]:
+                raise ValueError(f"{package} package differs from the frozen Meta-World recipe")
         import gymnasium as gym
         import metaworld  # noqa: F401
 

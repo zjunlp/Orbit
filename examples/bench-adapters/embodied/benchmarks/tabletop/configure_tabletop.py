@@ -12,7 +12,7 @@ sys.path[:0] = [str(EMBODIED), str(EMBODIED / "policies/openpi")]
 from adapter import HERE, digest, file_digest, implementation_digest
 from native_runtime import RLINF_REVISION, image_id
 from orbit_embodied.assets import tree_digest
-from orbit_embodied.tabletop import MANISKILL_VERSION
+from orbit_embodied.tabletop import MANISKILL_VERSION, METAWORLD_MUJOCO_VERSION, METAWORLD_VERSION
 from serve_metaworld import NORMALIZATION_DIR
 
 
@@ -41,7 +41,8 @@ def reference_for(model, source, assets):
         instructions = json.loads((source / METAWORLD_CONFIG).read_text())["TASK_DESCRIPTIONS"]
         if len(instructions) != 50:
             raise ValueError("Meta-World MT50 requires 50 pinned task instructions")
-        environment = {"kind": model, "tasks": list(instructions), "instructions": instructions,
+        environment = {"kind": model, "version": METAWORLD_VERSION, "mujocoVersion": METAWORLD_MUJOCO_VERSION,
+                       "tasks": list(instructions), "instructions": instructions,
                        "horizon": 160, "controlHz": 25}
         height, width, replan, settle, camera = 480, 480, 5, 15, "camera-2"
         action = {"semantic": "sawyer-ee-delta", "shape": [4], "controller": "metaworld-sawyer-xyz",
@@ -57,7 +58,7 @@ def reference_for(model, source, assets):
                            "order": ["x", "y", "z", "gripper"]}
     native = {"id": model + "-native/1", "observations": fields, "action": action}
     return {
-        "id": "maniskill3-rlinf-reference/2" if model == "maniskill3" else "metaworld-rlinf-reference/2",
+        "id": "maniskill3-rlinf-reference/2" if model == "maniskill3" else "metaworld-rlinf-reference/3",
         "environment": environment,
         "parameters": {"replanSteps": replan, "settleSteps": settle, "successRule": "last"},
         "benchmarkProfile": native,

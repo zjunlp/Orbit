@@ -3,7 +3,7 @@ FROM ${SIMULATOR_BASE} AS base
 RUN --mount=type=cache,target=/root/.cache/pip pip install websockets==13.1
 
 FROM base AS metaworld
-RUN --mount=type=cache,target=/root/.cache/pip pip install 'metaworld==3.0.0' 'gymnasium==1.2.1' 'mujoco==3.3.7'
+RUN --mount=type=cache,target=/root/.cache/pip pip install 'metaworld==3.1.1' 'gymnasium==1.2.1' 'mujoco==3.3.0'
 
 FROM base AS maniskill
 ARG MANISKILL_VERSION=3.0.1

@@ -189,6 +189,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261116](20261116-robomme-hy-vla-motus.md) Native RoboMME and the no-history π₀.₅ baseline
 - [20261116](20261116-robocasa365-diffusion-refresh.md) RoboCasa365 Diffusion Policy horizon update
 - [20261116](20261116-maniskill3-refresh.md) ManiSkill 3.0.1 for tabletop tasks and Plate-25
+- [20261116](20261116-metaworld-refresh.md) Meta-World 3.1.1 and MuJoCo 3.3.0
 - [20261116](20261116-embodied-catalog-checkpoints.md) Embodied product catalog and CHORES checkpoint scope
 - [20261116](20261116-embodied-agent-adapter-maintenance.md) Cadence and preparation fixes for embodied Agent adapters
 - [20261116](20261116-agent-setup-deadline.md) Agent installation deadline and EmbodiedLab native stop reason
