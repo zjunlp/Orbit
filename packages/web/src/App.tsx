@@ -11,6 +11,7 @@ import { BenchComparePage, BenchJobDetail, BenchJobs, NewBenchJob } from "./page
 import { BenchmarksPage } from "./pages/Benchmarks.tsx";
 import { Compare } from "./pages/Compare.tsx";
 import { ConfigurationsPage } from "./pages/Configurations.tsx";
+import { GatePage, GatesPage } from "./pages/Gates.tsx";
 import { Overview } from "./pages/Overview.tsx";
 import { Resources } from "./pages/Resources.tsx";
 import { RunDetail } from "./pages/RunDetail.tsx";
@@ -32,6 +33,8 @@ const VIEWS: Record<RouteName, (params: string[]) => React.ReactNode> = {
   benchmarks: () => <BenchmarksPage />,
   agents: () => <AgentsPage />,
   configurations: () => <ConfigurationsPage />,
+  gates: () => <GatesPage />,
+  gate: ([id]) => <GatePage key={id} id={id as string} />,
   bench: () => <BenchJobs />,
   runs: () => <Runs />,
   compare: () => <Compare />,
@@ -272,7 +275,7 @@ const SHORTCUTS: [string, string][] = [
   ["x", "Select run (for compare)"],
   ["c", "Compare selected runs"],
   ["/", "Focus search / log filter"],
-  ["1 – 7", "Run tabs: Overview, Logs, Metrics, Artifacts, Code, Session, Events"],
+  ["1 – 7", "Run tabs: Overview, Logs, Metrics, Artifacts, Code, Trajectory, Events"],
   ["n / N", "Next / previous log match"],
   ["e", "Jump to first error in logs"],
   ["f", "Toggle log follow"],

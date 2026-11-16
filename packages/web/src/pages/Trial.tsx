@@ -50,7 +50,7 @@ import { navigate, setQuery, useLocation } from "../lib/router.ts";
 import { upsertRun, useRun } from "../lib/runs-store.ts";
 import { useAsync } from "../lib/use.ts";
 import { ArtifactsTab } from "./run/Artifacts.tsx";
-import { SessionTab } from "./run/Session.tsx";
+import { TrajectoryTab } from "./run/Trajectory.tsx";
 import { GraderView, ReportView } from "./trial/Legacy.tsx";
 import { Value } from "./trial/parts.tsx";
 import { DetailsView, EvidenceView, FILE_VIEWS } from "./trial/Review.tsx";
@@ -341,7 +341,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
 
 const ALWAYS_TABS: TabDef[] = [
   { key: "config", label: "Configuration" },
-  { key: "session", label: "Agent session" },
+  { key: "session", label: "Agent trajectory" },
   { key: "outputs", label: "Outputs" },
 ];
 const LEGACY_TABS: TabDef[] = [
@@ -391,7 +391,16 @@ function TabBody(props: {
   if (tab === "config") return <TrialConfiguration job={job} trial={trial} />;
   if (tab === "report") return solve ? <ReportView run={solve} /> : notStarted("solve");
   if (tab === "judge") return verify ? <GraderView run={verify} /> : notStarted("verify");
-  if (tab === "session") return solve ? <SessionTab run={solve} /> : notStarted("solve");
+  if (tab === "session")
+    return solve ? (
+      <TrajectoryTab
+        key={`${trial.id}/${solve.id}`}
+        run={solve}
+        trialContext={{ job: job.id, trial: trial.id }}
+      />
+    ) : (
+      notStarted("solve")
+    );
   if (tab === "outputs") return <OutputsView solve={solve} verify={verify} />;
   return <Empty title="Unknown tab" />;
 }

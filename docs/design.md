@@ -361,7 +361,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   Runs 页选中整个 job 行可删除该 job。
 - **Run 详情**：Overview（生命周期时间线、清理核对、笔记、指标迷你图、日志尾）、Logs（虚拟列表、ANSI、
   搜索、跟随）、Metrics（uPlot，平滑、同步十字线）、Artifacts、Code（相对快照 commit 的 diff）、
-  Session（提交者会话标出提交点，与 Run 内 Agent 会话并排）、Events。
+  Trajectory（ATIF 逐步复盘，另保留提交者会话）、Events。
 - **Compare**：`?ids=` / `?group=`，按 seed 聚合 mean ± std、相对基线的变化、曲线叠加、配置差异。
 - **Resources**：GPU 卡片（Orbit 租约 / 外部占用 / 空闲、显存与利用率，以及占用显存的每个进程：用户、
   命令、PID、容器或 Run、已运行多久）、租约与队列、worker 节点表（§8）。
@@ -558,10 +558,13 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   结果包含 accept/reject/insufficient、in-domain/cross-domain/transferable、checks、退步任务、轮次/α、策略摘要、报告引用和剔除清单。CLI/API/保存判定见下文 E3；校准见 E6。详见 [核心说明](guides/gate-core.md)。
 - **进化判定入口与记录（E3）**：`orbit bench gate --policy FILE --parent REV --child REV [--reports FILE] [--json]`，以及 `gate list/show`。
   CLI 有界读取 YAML（1 MiB）与相对路径任务文件（每个 8 MiB、合计 32 MiB），daemon 验证策略/哈希并从已有作业、报告与旧判定快照解析完整相关血缘及候选历史；不重建报告、不读当前 Run 成本、不提交任务。
-  `POST /bench/gates` 计算并保存；`GET /bench/gates?child=REV&limit=N` 返回最多 500 条摘要；`GET /bench/gates/:id` 返回完整记录。client 与 Web 共用契约；版本链 UI 属于 E5。
+  `POST /bench/gates` 计算并保存；`GET /bench/gates?child=REV&limit=N` 返回最多 500 条摘要；`GET /bench/gates/:id` 返回完整记录。client 与 Web 共用契约；Web 判定记录与版本链入口见下文 E5。
   每侧只有一份匹配报告时可自动选择；重评分或多个作业必须给出显式 `{set,parent:{job,revision,method},child:{…}}`，不取最新或最高分。缺证据为 insufficient，文件损坏或引用歧义为请求错误。
   既有 SQLite 增加 `bench_gates` 文档表；只追加、不覆盖。记录包含 evaluator 版本、用途、规范策略全文、全部输入证据和 verdict。源作业删除/归并后仍可复算，旧记录保存的已评测候选继续计入预算；从未被记录捕获就被删除的历史无法恢复。
   命令退出码 0/2/3 分别为 accept/reject/insufficient，输入或 API 错误为 1。策略由用户预先约定，保存摘要本身不证明它早于结果冻结。
+- **进化判定 Web 复盘（E5）**：Configurations 的版本来源链展示最近判定；`/configurations/gates` 列出最近最多 100 条记录，可按子版本精确筛选；`/configurations/gates/:id` 展示不可变记录详情。
+  接受、拒绝、证据不足与 A/A 校准有明确区分，不合成当前最优版本。详情显示性能/守护/成本、前提缺项、单侧区间、轮次和 alpha、冻结策略及报告修订、泄漏剔除清单。
+  退步任务按所选报告内的 sample 配对，读取报告保存的 solve Run ID 并排展示 ATIF，父子步骤独立导航；不替换为 Trial 的最新重试。源 Run 删除时保留冻结分数并说明轨迹不可用。
 - **进化门开发校准（E6）**：显式 `--calibration-aa` 对相同配置修订、不同 job/trial/solve-attempt 的独立运行执行相同统计；只允许准入集、使用首轮 alpha，记录用途为 calibration-aa，无晋级等级、不产生新的子版本轮次。
   `examples/gate-calibration` 提供有界算术开发任务，真实 CLI 求解、离线容器独立评分；正常/破坏性 bundle 的证据和用量不伪造。`scripts/gate-calibration.ts` 复算不可变记录，并对任务级配对差做中心化 bootstrap；无波动时明确标记退化分布。
   过期 CLI 条件、泄漏闭包由受控 API 测试验证；小任务校准不证明实际 benchmark 的功效或自适应重复使用的误差控制。[使用指南](guides/bench-gate.md)。
@@ -1224,6 +1227,11 @@ Orbit 扩展放在 `extra.orbit`，包含来源文件摘要、导入器版本、
 不改变执行结果、分数、有效性或阻止资源释放。worker 生成/持有原始文件，主节点代理 ATIF、媒体和重建请求。
 CLI：`orbit trajectory show <run> [--json]`、`orbit trajectory rebuild <runs...> [--json]`。
 详细使用见 [轨迹指南](guides/trajectories.md)。
+
+**Web 逐步复盘（T6）**：Run 的 Trajectory 与 Trial 的 Agent trajectory 直接读取 ATIF，保留旧 `?tab=session` URL；Submitter session 仍可查看宿主提交会话。
+虚拟步骤列表、搜索、嵌入子 Agent 选择、折叠工具调用/结果与 reasoning、压缩边界、逐步 token 和已记录检查点；不展示 opaque reasoning，不伪造缺失用量或步骤执行耗时，时间戳差仅标为到下一步的间隔。
+右侧复用 GUI/Episode/Conversation viewer，按根会话的显式步骤引用同步；无匹配或外置子轨迹缺失时明确提示。共享 solve 批次使用当前 Trial 身份，历史 solve 不复用后续尝试的环境。转换失败或无会话时仍可看环境证据。
+步骤/子轨迹位置保存在 URL，支持焦点内左右键；媒体只走本地 trajectory media 端点。检查点分叉仍待 F2/F3。
 
 **Token 记账（T3）**：`sessions/tokens.ts` 从 ATIF 生成 `Run.tokens`，在轨迹生成/重建、缓存读取补记及 worker 同步时保存，沿用同一 Run 生命周期。
 根轨迹与嵌入子轨迹各计一次，忽略复制上下文和非模型调用。`input` 含缓存读取/写入，`output` 含 reasoning；细分字段不能再加到总量上。

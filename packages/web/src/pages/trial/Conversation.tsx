@@ -7,6 +7,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { IconAlert, IconBan, IconCheck, IconSearch, IconX } from "../../components/icons.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
 import { api, type ReviewFile, type Run } from "../../lib/api.ts";
+import type { ReplayControl } from "../../lib/atif.ts";
 import {
   brief,
   type Conversation,
@@ -68,18 +69,22 @@ const STATUS_ICON = {
 export function ConversationViewer({
   c,
   messages = [],
+  control,
 }: {
   c: Conversation;
   messages?: SessionMessage[];
+  control?: ReplayControl;
 }) {
   const loc = useLocation();
   const [q, setQ] = useState("");
   const search = useRef<HTMLInputElement>(null);
   const failed = c.verdict.failedTurn ?? null;
   const fromUrl = loc.query.has("turn") ? Number(loc.query.get("turn")) : Number.NaN;
-  const selected = c.turns.some((t) => t.index === fromUrl)
-    ? fromUrl
-    : (failed ?? c.turns[0]?.index ?? 0);
+  const selected = control
+    ? (c.turns[control.index]?.index ?? 0)
+    : c.turns.some((t) => t.index === fromUrl)
+      ? fromUrl
+      : (failed ?? c.turns[0]?.index ?? 0);
   const turn = c.turns.find((t) => t.index === selected);
   const label = useMemo(
     () =>
@@ -92,6 +97,10 @@ export function ConversationViewer({
   /** One unchecked turn: the benchmark judges the whole conversation (τ²), not turns. */
   const whole = c.turns.length <= 1 && !c.turns.some((t) => t.check);
   const select = (index: number, scroll = true) => {
+    if (control) {
+      control.select(c.turns.findIndex((t) => t.index === index));
+      return;
+    }
     setQuery({ turn: String(index) }, { replace: true });
     if (scroll)
       document
@@ -103,19 +112,25 @@ export function ConversationViewer({
     const next = c.turns[Math.min(c.turns.length - 1, Math.max(0, i + d))];
     if (next) select(next.index);
   };
-  useHotkeys({
-    h: () => !overlayOpen() && step(-1),
-    l: () => !overlayOpen() && step(1),
-    e: () => !overlayOpen() && failed !== null && select(failed),
-    "/": () => search.current?.focus(),
-  });
+  useHotkeys(
+    control
+      ? {}
+      : {
+          h: () => !overlayOpen() && step(-1),
+          l: () => !overlayOpen() && step(1),
+          e: () => !overlayOpen() && failed !== null && select(failed),
+          "/": () => search.current?.focus(),
+        },
+  );
   // Land on the failing turn when the page opens on it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per conversation
   useEffect(() => {
-    if (loc.query.get("turn") === null && failed !== null)
+    if (!control && loc.query.get("turn") === null && failed !== null)
       document.getElementById(`turn-${failed}`)?.scrollIntoView({ block: "start" });
   }, [c]);
-  const shown = c.turns.map((t) => ({ t, events: t.events.filter((e) => matches(e, q)) }));
+  const shown = c.turns
+    .filter((t) => !control || t.index === selected)
+    .map((t) => ({ t, events: t.events.filter((e) => matches(e, q)) }));
   const hits = q ? shown.reduce((n, x) => n + x.events.length, 0) : null;
 
   return (

@@ -457,3 +457,16 @@ function Message(props: {
     </div>
   );
 }
+
+export function SubmitterSession({ run }: { run: Run }) {
+  const session = useAsync(() => api.session(run.id), [run.id]);
+  if (session.error) return <Empty title="Submitter session unavailable">{session.error}</Empty>;
+  if (!session.data) return <Loading />;
+  return session.data.submitter ? (
+    <SessionView run={run} t={session.data.submitter} kind="submitter" />
+  ) : (
+    <Empty title="No submitter session">
+      {session.data.submitterError ?? "This Run has no captured submitter conversation."}
+    </Empty>
+  );
+}

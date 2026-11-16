@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, PALETTE } from "../../components/Chart.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
+import type { ReplayControl } from "../../lib/atif.ts";
 import {
   channelNames,
   chunkTiming,
@@ -198,17 +199,25 @@ export function EpisodeViewer({
   mediaRunId = runId,
   files,
   messages = [],
+  control,
 }: {
   trace: EpisodeTrajectory;
   runId: string;
   mediaRunId?: string | null;
   files: Set<string>;
   messages?: SessionMessage[];
+  control?: ReplayControl;
 }) {
   const videoLimit = Math.floor(
     MAX_VIDEO_BYTES / Math.max(1, trace.cameras.filter((camera) => camera.video).length),
   );
-  const [index, setIndex] = useState(0);
+  const [localIndex, setLocalIndex] = useState(0);
+  const index = control?.index ?? localIndex;
+  const setIndex = (next: number | ((current: number) => number)) => {
+    const value = typeof next === "function" ? next(index) : next;
+    if (control) control.select(value);
+    else setLocalIndex(value);
+  };
   const channels = useMemo(() => channelNames(trace), [trace]);
   const [channel, setChannel] = useState(channels.paired[0] ?? "");
   const timing = useMemo(() => chunkTiming(trace.chunks), [trace]);
@@ -228,14 +237,14 @@ export function EpisodeViewer({
   const [playing, setPlaying] = useState(false);
   const last = trace.samples.length - 1;
   useEffect(() => {
-    if (!playing || index >= last) return;
+    if (control || !playing || index >= last) return;
     const delay = Math.max(
       16,
       ((trace.samples[index + 1]?.time ?? 0) - (sample?.time ?? 0)) * 1000,
     );
-    const timer = setTimeout(() => setIndex((current) => Math.min(last, current + 1)), delay);
+    const timer = setTimeout(() => setLocalIndex((current) => Math.min(last, current + 1)), delay);
     return () => clearTimeout(timer);
-  }, [playing, index, last, trace, sample]);
+  }, [playing, index, last, trace, sample, control]);
   useEffect(() => {
     if (index === last) setPlaying(false);
   }, [index, last]);
@@ -291,7 +300,7 @@ export function EpisodeViewer({
         <button
           type="button"
           className="btn sm"
-          disabled={last === 0}
+          disabled={last === 0 || !!control}
           onClick={() => {
             if (index === last) setIndex(0);
             setPlaying(!playing);

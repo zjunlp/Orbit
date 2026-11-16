@@ -1,8 +1,8 @@
 # Agent trajectories
 
 Orbit saves an ATIF trajectory when a Codex or Claude Code Run finishes and cleanup confirms that
-execution has stopped. The Run's Session tab uses that same trajectory; an incomplete session shows
-an explicit notice. No Agent session means no trajectory.
+execution has stopped. Run **Trajectory** and Trial **Agent trajectory** read that same ATIF document;
+partial evidence shows an explicit notice. Without Agent evidence, the environment replay can still be viewed.
 
 ```sh
 orbit trajectory show <run>
@@ -55,7 +55,29 @@ Usage never changes scores or confidence intervals. Old saved reports remain unc
 and rescore revisions include the available usage.
 
 For portable ATIF packages and Chat JSONL training files, see [trajectory export](trajectory-export.md).
-The unified step viewer is a separate work package.
+
+## Web step review
+
+Open a Run's **Trajectory** tab or a Trial's **Agent trajectory** tab. Existing `?tab=session` links
+remain valid. The step list uses virtual scrolling; search filters messages, source and tool names.
+Select a step or use Previous/Next. Left/right arrows work while focus is inside the trajectory;
+steps and sub-Agent branches are stored in the URL and survive reloads.
+
+Each step shows its source, message, recorded reasoning, tool calls and their matching results,
+input/output/cache tokens, context compression and any recorded checkpoint marker. Unknown usage
+stays `not recorded`; zero stays zero. The time gap to the next timestamp is labelled as an interval,
+not model or tool execution time. Opaque reasoning is not shown. Embedded sub-Agents can be selected;
+external child references without embedded evidence are labelled unavailable. Recorded image/audio
+paths use only the daemon's local trajectory media endpoint.
+
+The environment panel reuses GUI, episode and conversation viewers. It follows explicit root
+`sessionStepIds` and lets you choose among multiple linked records. Unmatched steps remain unlinked;
+sub-Agent steps are never treated as root steps. Trial identity is passed explicitly for shared solve
+batches. A historical solve is not paired with a trial's newer solve attempt. A missing or unreadable
+ATIF does not suppress available environment-only evidence. Open full replay to navigate the complete
+environment recording independently. **Submitter session** retains the captured host conversation.
+
+Checkpoint markers only display recorded evidence; step-level restore/fork remains F2/F3.
 
 ## Environment records
 

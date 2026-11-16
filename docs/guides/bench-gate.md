@@ -76,7 +76,23 @@ SQLite store; there is no mutable winner or gate state machine. Old records rema
 source reports change or disappear. Evidence that was deleted before any gate captured it cannot be
 recovered; callers must retain their assessment history. No current Run costs are substituted.
 
-The Web client exposes these typed operations; the version-chain UI is still E5.
+## Web verdict review
+
+**Configurations → Gate records** opens `/configurations/gates`. Each configuration's version lineage
+shows recent verdicts with links to the full history for that child revision. The list shows up to
+100 newest records and supports an exact child-revision filter; it is not a mutable current winner.
+Records from different policies remain separate. A/A calibration is labelled separately and has no
+promotion badge or level.
+
+Open a record to inspect the decision, missing prerequisites, performance/guard/cost checks, one-sided
+bounds, candidate round and alpha, frozen policy and report selections, and excluded tasks. Missing
+checks and rejected checks have distinct labels. **Compare trajectories** on a regressed task selects
+paired samples from the exact saved report revisions. The parent and child panels load the recorded
+solve Run IDs and navigate independently; equal step numbers do not imply equivalent actions.
+
+Later retries and rescoring cannot silently replace these attempts. If a source Run was deleted, its
+trajectory is unavailable while the saved report value and gate evidence remain visible. Trial links
+explicitly open the current trial view. Full JSON is available from the record's provenance section.
 
 ## A/A calibration
 

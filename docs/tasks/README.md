@@ -28,6 +28,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Agents, auth, plugins, notifications
 
+- [20261116](20261116-web-trajectory-gates.md) T6/E5: unified trajectory and evolution verdict review
+
 - [20261115](20261115-bench-gate.md) E3/E6: gate CLI/API, immutable evidence and development calibration
 
 - [20261114](20261114-gate-core.md) E2: immutable-evidence evolution verdict and calibrated statistics
