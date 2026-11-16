@@ -199,10 +199,10 @@ export function toRunSpec(
     snapshot: false,
   } as RunSpecInput;
   if (phase === "solve" && isCliMethod(method)) {
-    // The Agent reaches its model API; native runners get the auth to inject into their containers.
+    // Offline adapters can provide a separate model transport; otherwise CLI agents use the network.
     spec.auth = method.auth;
     spec.agentBundle = agentToolsBundle(agentDef(), method.bundle, agentTask?.tools, staging);
-    spec.network = true;
+    spec.network = (s.network as boolean | undefined) ?? true;
   }
   if (agentTask && spec.root && spec.backend !== "process") {
     const uid = process.getuid?.();

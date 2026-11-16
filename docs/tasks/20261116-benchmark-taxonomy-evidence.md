@@ -15,7 +15,7 @@ integrates, with enough evidence to distinguish missing annotations from missing
 - Keep input layouts and distinct evaluation tracks in separate taxonomy groups. Classification does
   not alter execution, local registrations, frozen evaluation evidence or calibration claims.
 
-The audit covers all 46 entries and produces 79 profiles. Six families still have no verified domain
+The audit covers all 47 entries and produces 81 profiles. Seven families still have no verified domain
 mapping and sixteen have no verified evaluation target. Unknown metadata is not zero capability.
 In particular, model training tasks do not establish that the evaluated Agent learns/adapts, and
 fixed oracle tool replay does not establish a supported interactive Agent route.
@@ -31,6 +31,7 @@ fixed oracle tool replay does not establish a supported interactive Agent route.
 | Native observation variants | [RoboMimic](../../examples/sdk/orbit_embodied/robomimic.py), [native setup](../../examples/bench-adapters/embodied/README.md); low-dimensional inputs, RGB-only recipes and target coordinates stay separate |
 | VLA-Arena targets | [Pinned suite purposes](https://github.com/PKU-Alignment/VLA-Arena/tree/babe582ebffc82b979b77964a7e56417d02f63a4#task-suites-overview), [implemented suites/probes](../../examples/bench-adapters/embodied/benchmarks/vla-arena/README.md); safety, robustness, generalization and planning remain distinct profiles |
 | VLABench generalization | [Fixed tracks and open cross-task scope](../../examples/bench-adapters/embodied/benchmarks/vlabench/README.md); open training/evaluation splits do not automatically establish held-out generalization |
+| HLE text/image questions | [Original public benchmark purpose](https://huggingface.co/datasets/cais/hle) and [per-question image metadata](../../examples/bench-adapters/hle/prepare.py); preserve knowledge as the stated target, leave subjects unmapped, and give both catalog and adapter separate actual input modalities |
 
 Key evidence for the restored entries:
 
@@ -44,10 +45,12 @@ Key evidence for the restored entries:
 
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
-| Source and protocol audit | working tree | passed | Independent review of target, input and interaction claims; 46 entries and 79 profiles parse through the public contract |
+| Source and protocol audit | working tree | passed | Independent review of target, input and interaction claims; 47 entries and 81 profiles parse through the public contract, including the HLE integration merged into main during this audit |
 | Initial verification environment | working tree | failed | System Python lacked existing embodied-test dependencies; resolved in an isolated test environment with repository-pinned websockets/msgpack packages |
 | Embodied Python fixture regressions | working tree | passed | 35 tests with the declared dependencies and local socket access; synthetic environments, not native physics/model checks |
-| `pnpm verify` | working tree | passed | Formatting, lint, types, boundaries, 910 core tests, 136 Web tests, 5 script tests and both builds; 28 opt-in core tests skipped |
+| `pnpm verify` before HLE synchronization | 52abe37 | passed | Formatting, lint, types, boundaries, 910 core tests, 136 Web tests, 5 script tests and both builds; 28 opt-in core tests skipped |
+| HLE metadata fixtures | working tree | passed | 16 synthetic adapter tests; text/image input separation and no invented subject/tool-use target |
+| `pnpm verify` after HLE synchronization | working tree | passed | All checks and both builds; 913 core tests, 136 Web tests and 5 script tests passed; 28 opt-in tests skipped |
 | New Docker/GPU evaluation | working tree | not_run | Metadata-only change; existing validation records retained without upgrading their claims |
 
 ## Next / open issues

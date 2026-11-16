@@ -187,10 +187,11 @@ export function runArgs(s: ContainerSpec): string[] {
   for (const [k, v] of Object.entries(s.env)) args.push("-e", `${k}=${v}`);
   if (s.envFile) args.push("--env-file", s.envFile);
   if (s.shmGB) args.push("--shm-size", `${Math.ceil(s.shmGB * 1024)}m`);
-  if (s.networks)
+  if (s.networks?.length)
     for (const n of s.networks)
       args.push("--network", [`name=${n.name}`, ...n.aliases.map((a) => `alias=${a}`)].join(","));
-  else if (s.network !== "bridge") args.push("--network", s.network);
+  else if (s.networks || s.network !== "bridge")
+    args.push("--network", s.networks ? "none" : s.network);
   const h = s.healthcheck;
   if (h)
     args.push(
