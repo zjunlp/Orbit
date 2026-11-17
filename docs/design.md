@@ -577,6 +577,9 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   输出配对翻转率及单侧 Wilson 上界、无效/未决/成本覆盖，并按首轮 alpha 与功效给出条件样本量估算。零观测翻转不当成零方差，缺失成本不补 0；A/A 不证明未来 bundle 效果或自适应功效。
   准入规模不足保留 insufficient；具体选族、测量、冻结策略与结果留在源码外。原报告成本未收齐时可显式提供已完成 Run 快照，只补缺项并标注来源，不改写报告或判定；共用原报告成本提取。
   策略的 gate/guard/final 任务集可各自声明 metric，缺省沿用顶层 metric；解析、纯判定、流程计划与 Web 按该原生指标读取不可变报告，不做别名或换算，旧策略摘要与行为保持兼容。
+- **参考进化器（V1）**：`plugin/skills/orbit-evolve` 及其最小 bundle 随现有插件分发，宿主 Agent 只从 evolve 失败导出学习，在父包副本上作有界指令修改，复用静态检查、smoke、E4 计划、血缘提交与 E3 判定；daemon 不运行进化循环，不新增记录库。
+  改动行/字节、轮数、评测 token 与下一阶段预留由宿主显式核算；成本未知不补 0，编辑器 token 单列，无法承诺模型调用内的精确 token 截断。仅 accept 采用子版本，reject/insufficient 留父版本，保持冻结门槛。
+  V1 是流程约束，不是物理隔离；原始结果、预算与候选留在源码外，V3 另行加固。
 - **进化判定 Web 复盘（E5）**：Configurations 的版本来源链展示最近判定；`/configurations/gates` 列出最近最多 100 条记录，可按子版本精确筛选；`/configurations/gates/:id` 展示不可变记录详情。
   接受、拒绝、证据不足与 A/A 校准有明确区分，不合成当前最优版本。详情显示性能/守护/成本、前提缺项、单侧区间、轮次和 alpha、冻结策略及报告修订、泄漏剔除清单。
   退步任务按所选报告内的 sample 配对，读取报告保存的 solve Run ID 并排展示 ATIF，父子步骤独立导航；不替换为 Trial 的最新重试。源 Run 删除时保留冻结分数并说明轨迹不可用。
@@ -1297,7 +1300,8 @@ ATIF 每 Run 一个编号目录，保留标准字段、步骤、工具配对与�
 Chat 多媒体使用 ATIF content parts；无来源调用 ID 的观察标 user+observation，不伪造缺失工具结果，不声明兼容任一训练供应商的直接上传。
 manifest 记录导出器版本、筛选、任务/配置修订与 sample、执行/清理、独立评分有效性/分数、源轨迹 token/完整性及每个载荷文件 SHA-256/字节数；manifest 自身不做自引用 hash，附固定再分发许可提示。
 reasoning 默认 summary，仅保留显式摘要；raw 允许标准字段的原文/未标记思考，none 移除。所有模式移除加密/opaque 思考、签名及其他原生思考 metadata，不修改源文件。
-所有文本复用 redactor 后再扫描常见密钥/令牌/私钥/密码模式，命中只报告位置并失败，不静默掩盖命中；媒体字节也扫描，已知凭据命中时拒绝修改二进制。
+所有文本复用 redactor 后再扫描常见密钥/令牌/私钥/密码模式，默认命中只报告位置并失败。显式 `sensitiveText: redact` / `--sensitive-text redact` 可将命中模式的完整轨迹文本值与敏感字段字符串替换为 `[redacted]`，manifest.redactions 记录额外剔除位置、结果返回数量；不改源轨迹或 token。
+最终扫描仍执行；筛选/上下文元数据、敏感 key 和媒体不因此放行，媒体命中也不修改二进制。省略后的动作参数不再是完整行为证据，调用方需审阅。
 不对像素/音频做 OCR 或语义脱敏。安全哈希媒体不符、缺文件、外置子轨迹或 worker 不可读时整体失败，不导出半份数据。
 输出目录必须不存在、父目录存在且位于 Orbit home/data 之外（按真实路径检查）；同级私有临时目录写完检查后发布，失败清理临时目录；文件 0600、目录 0700。
 上限为 1000 Runs / 1 GiB，单媒体 32 MiB；不自动下载远程媒体或延续会话。CLI、typed client 和 Web API helper 共用契约，导出 UI 留待后续。

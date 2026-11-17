@@ -35,7 +35,7 @@ export function registerPlugin(program: Command): void {
     .command("plugin")
     .description("manage Orbit skills for Claude Code, Codex, DeepSeek Harness and pi")
     .command("install")
-    .description("install both skills using the agent's native plugin/package manager")
+    .description("install Orbit skills using the agent's native plugin/package manager")
     .addArgument(
       new Argument("[agent]", "target agent").choices(Object.keys(labels)).default("claude"),
     )
@@ -95,7 +95,7 @@ export function registerPlugin(program: Command): void {
         ]);
       }
       console.log(
-        `Orbit plugin installed. Restart ${labels[agent]}${opts.profile ? ` (profile ${opts.profile})` : ""} to load orbit and orbit-bench.`,
+        `Orbit plugin installed. Restart ${labels[agent]}${opts.profile ? ` (profile ${opts.profile})` : ""} to load orbit, orbit-bench and orbit-evolve.`,
       );
     });
 }

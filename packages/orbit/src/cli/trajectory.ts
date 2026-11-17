@@ -31,6 +31,11 @@ export function registerTrajectory(program: Command, client: () => Promise<Orbit
     .option("--outcome <result>", "pass or fail (valid scores only)")
     .option("--format <format>", "atif or chat-jsonl", "atif")
     .option("--reasoning <policy>", "raw, summary or none", "summary")
+    .option(
+      "--sensitive-text <policy>",
+      "reject or redact whole affected text values; media still rejects",
+      "reject",
+    )
     .requiredOption("--out <directory>", "new output directory on the daemon host")
     .option("--json", "print export result as JSON")
     .action(
@@ -44,6 +49,7 @@ export function registerTrajectory(program: Command, client: () => Promise<Orbit
         outcome?: string;
         format: string;
         reasoning: string;
+        sensitiveText: string;
         out: string;
         json?: boolean;
       }) => {
@@ -64,13 +70,14 @@ export function registerTrajectory(program: Command, client: () => Promise<Orbit
           outcome: opts.outcome,
           format: opts.format,
           reasoning: opts.reasoning,
+          sensitiveText: opts.sensitiveText,
           out: resolve(opts.out),
         });
         const result = await (await client()).exportTrajectories(input);
         console.log(
           opts.json
             ? JSON.stringify(result, null, 2)
-            : `Exported ${result.runs} Runs to ${result.out}\nManifest: ${result.manifest}`,
+            : `Exported ${result.runs} Runs to ${result.out}\nManifest: ${result.manifest}${result.redactions ? `\nOmitted ${result.redactions} sensitive text values; review the manifest.` : ""}`,
         );
       },
     );

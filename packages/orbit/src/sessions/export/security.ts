@@ -1,4 +1,4 @@
-import { hasSecretPattern, isSecretField, type Redactor } from "../../lib/redact.ts";
+import { hasSecretPattern, isSecretField, REDACTED, type Redactor } from "../../lib/redact.ts";
 
 export class TrajectoryExportError extends Error {}
 
@@ -41,6 +41,32 @@ export function redactExport(value: unknown, redactor: Redactor): unknown {
         throw new TrajectoryExportError("redaction would merge object keys");
       Object.defineProperty(result, clean, {
         value: redactExport(item, redactor),
+        enumerable: true,
+      });
+    }
+    return result;
+  }
+  return value;
+}
+
+/** Explicitly omit complete affected text values; final scanning still decides exportability. */
+export function omitSensitiveText(value: unknown, location: string, omitted: string[]): unknown {
+  if (typeof value === "string") {
+    if (!hasSecretPattern(value)) return value;
+    omitted.push(location);
+    return REDACTED;
+  }
+  if (Array.isArray(value))
+    return value.map((v, i) => omitSensitiveText(v, `${location}[${i}]`, omitted));
+  if (value && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [i, [key, item]] of Object.entries(value).entries()) {
+      const field =
+        /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) && !hasSecretPattern(key) ? key : `$value[${i}]`;
+      const path = `${location}.${field}`;
+      if (isSecretField(key, item)) omitted.push(path);
+      Object.defineProperty(result, key, {
+        value: isSecretField(key, item) ? REDACTED : omitSensitiveText(item, path, omitted),
         enumerable: true,
       });
     }

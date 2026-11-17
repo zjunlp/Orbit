@@ -144,7 +144,7 @@ orbit plugin install dsh --profile headless
 orbit plugin install pi
 ```
 
-Restart the agent to load `orbit` for experiment execution and review, and `orbit-bench` for benchmark adapters, resources and validation.
+Restart the agent to load `orbit` for experiment execution/review, `orbit-bench` for benchmark integration, and `orbit-evolve` for bounded configuration improvement with frozen gate evidence.
 
 | Agent | Host skills | In-container execution & session capture |
 | --- | --- | --- |
@@ -472,7 +472,7 @@ space. Folders organize runs and bench jobs without moving files: `orbit run --f
 | **Digital experiments** | Docker execution, resource scheduling, sweeps, trajectory records and local Web review are implemented; single-machine workflows are validated. |
 | **Benchmarks & multiple machines** | Benchmarks have integration-specific validation records. Multi-node validation uses two daemons on one host. |
 | **Embodied environments** | Native simulation, independent policies, evidence verification and Trial review are implemented. Physical device backends are a future direction. |
-| **Evolution gate and unified trajectories** | ATIF trajectories, token accounting/export, configuration lineage, frozen-evidence gate decisions, CLI/Web review and pilot sizing are implemented. Cross-benchmark improvement and cross-agent transfer still need prospective studies. |
+| **Evolution gate and unified trajectories** | ATIF trajectories, token accounting/export, configuration lineage, frozen-evidence gate decisions, CLI/Web review, pilot sizing and a host-driven reference evolver are implemented. Cross-benchmark improvement and cross-agent transfer still need prospective studies. |
 
 Orbit is in early development (0.1.1). See [project status](docs/status.md) for validation limits and near-term work, and [design](docs/design.md) for the architecture.
 

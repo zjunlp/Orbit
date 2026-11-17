@@ -72,7 +72,7 @@ reasoning and native thought signatures are excluded in every mode. Arbitrary na
 metadata is removed rather than interpreted as a public summary. Source evidence is unchanged.
 
 Known credentials pass through Orbit's existing redactor. A second scan checks text, metadata,
-tool arguments, manifest and media bytes for common key/token/private-key/password patterns. Any
+tool arguments, manifest and media bytes for common key/token/private-key/password patterns. By default, any
 remaining hit fails with a location and does not echo the suspected value. Media containing a known
 credential fails rather than being corrupted by text substitution. Image pixels and audio are not
 OCR/transcribed or semantically redacted; inspect content before sharing. Pattern checks cannot
@@ -81,3 +81,18 @@ identify every possible secret or confidential benchmark passage.
 API: `POST /api/v1/trajectory/export`, using the shared `TrajectoryExportRequest` contract. Typed
 CLI and Web clients expose the same operation; this package adds no export screen or training service.
 The existing `orbit export <folder> <destination>` continues to copy whole record directories.
+
+### Explicit text omission
+
+`--sensitive-text redact` opts into omitting entire trajectory text values that still match the
+credential patterns, plus string values under sensitive field names. Omitted values become
+`[redacted]`; their locations appear in `manifest.redactions`, and the CLI/result reports their
+count. Known-secret redaction still runs first. This list describes the additional text omissions,
+not every existing known-secret replacement. The original saved trajectory and token totals stay
+unchanged. Review the omissions before using the remaining evidence; an omitted tool argument is
+not a complete action record.
+
+The final credential/opaque-reasoning scan still runs. Metadata keys and media are not rewritten
+by this option; unsafe hits there still reject the whole export. It does not OCR, transcribe or
+certify the absence of unknown secrets. API requests use `sensitiveText: "redact"`; the default is
+`"reject"`. The same option applies to ATIF and Chat JSONL.
