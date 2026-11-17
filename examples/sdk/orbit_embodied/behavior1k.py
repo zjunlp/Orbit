@@ -140,7 +140,7 @@ def run_native_episode(request, destination, policy, *, prepare=None, cancelled=
     directory = Path(destination)
     directory.mkdir(parents=True, exist_ok=False)
     start = time.monotonic()
-    identity = {"reference": reference, "policy": request["policy"],
+    identity = {"referenceDigest": request["referenceDigest"], "policy": request["policy"],
                 "execution": {"runId": os.environ["ORBIT_RUN_ID"], "trialId": request["trialId"]},
                 "implementationDigest": request["implementationDigest"], "implementationArchive": True}
     horizon = reference_horizon(reference, sample["taskId"], sample=sample)

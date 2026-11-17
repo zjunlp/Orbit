@@ -5,7 +5,7 @@ import asyncio
 import copy
 from pathlib import Path
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 
 
 def independent_policies(policy):
@@ -21,7 +21,8 @@ def main():
     parser.add_argument("--normalization-digest", required=True)
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    if tree_digest(args.checkpoint) != args.checkpoint_digest or tree_digest(args.checkpoint / "assets") != args.normalization_digest:
+    if (checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest
+            or checkpoint_tree_digest(args.checkpoint / "assets") != args.normalization_digest):
         raise ValueError("paired policy assets differ from the frozen comparison")
     import jax
     from openpi.policies.policy_config import create_trained_policy

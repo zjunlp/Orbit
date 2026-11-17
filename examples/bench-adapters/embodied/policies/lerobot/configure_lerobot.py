@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, digest, implementation_digest
 from native_runtime import image_id
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from serve_lerobot import normalization_digest
 
 
@@ -41,7 +41,7 @@ def main():
         "comparison": "Orbit uses its pinned LIBERO runtime with the registered policy recipe.",
     }
 
-    checkpoint = tree_digest(args.weights)
+    checkpoint = checkpoint_tree_digest(args.weights)
     normalization = normalization_digest(args.weights, args.model)
     name = args.model + "-libero"
     policy = {"name": name, "version": "1", "connector": "policy-ws", "replanSteps": replan,

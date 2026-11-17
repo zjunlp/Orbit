@@ -50,6 +50,8 @@ const CONNECTOR_RULES: Record<PolicyDefinition["connector"], (d: PolicyDefinitio
 
 export function connectorIssues(definition: PolicyDefinition): string[] {
   const issues = CONNECTOR_RULES[definition.connector](definition);
+  if (definition.randomness.scope === "episode" && definition.connector !== "policy-ws")
+    issues.push("Episode-scoped randomness requires the policy-ws connector");
   if (definition.normalizationKey && definition.connector !== "openvla-ws")
     issues.push("normalizationKey is supported by the OpenVLA connector");
   if (definition.actionConversion === "lightnav-hssd-velocity/1") {

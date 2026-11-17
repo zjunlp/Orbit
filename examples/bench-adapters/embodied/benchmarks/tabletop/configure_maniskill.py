@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from adapter import HERE, digest, file_digest, implementation_digest
 from native_runtime import image_id
 from orbit_embodied.assets import tree_digest
+from orbit_embodied.tabletop import MANISKILL_VERSION
 
 
-VERSION = "3.0.0b22"
 CATALOG = HERE / "profiles/maniskill3-tabletop.json"
 
 
@@ -22,7 +22,7 @@ def reference_for(scope, profile, assets):
     tasks = profile["tasks"]
     name = "maniskill3-tabletop-" + scope
     environment = {
-        "kind": "maniskill3-tabletop", "version": VERSION, "robot": robot, "controlHz": 20,
+        "kind": "maniskill3-tabletop", "version": MANISKILL_VERSION, "robot": robot, "controlHz": 20,
         "tasks": list(tasks), "horizons": {task: row[0] for task, row in tasks.items()},
         "instructions": {task: row[1] for task, row in tasks.items()},
     }
@@ -54,10 +54,11 @@ def reference_for(scope, profile, assets):
         },
     }
     return {
-        "id": name + "/2", "environment": environment,
+        "id": name + "/3", "environment": environment,
         "benchmarkProfile": native, "observationMap": {field: field for field in observations},
         "parameters": {"replanSteps": 1, "settleSteps": 0, "successRule": "last"},
-        "reference": {"evaluation": {"repository": "https://github.com/mani-skill/ManiSkill", "commit": VERSION},
+        "reference": {"evaluation": {"repository": "https://github.com/mani-skill/ManiSkill",
+                                     "commit": "v" + MANISKILL_VERSION},
                       "files": {CATALOG.relative_to(HERE).as_posix(): file_digest(CATALOG)}},
         "scoreName": "ManiSkill3 tabletop " + scope + " success", "scoreUnit": "task",
     }

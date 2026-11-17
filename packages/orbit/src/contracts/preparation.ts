@@ -13,6 +13,8 @@ export const PreparationResource = z.object({
   kind: z.enum(["git", "file", "huggingface", "manual"]),
   url: z.url(),
   revision: z.string().optional(),
+  /** Git recipes can omit submodules unrelated to their evaluation. */
+  submodules: z.boolean().optional(),
   sha256: z
     .string()
     .regex(/^[a-f0-9]{64}$/)

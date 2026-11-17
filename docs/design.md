@@ -886,6 +886,7 @@ daemon 不参与逐步控制，任务、控制器和成功判定仍由 benchmark
 默认一个 Trial 对应一个逻辑样本、一个 solve Run。原生具身 adapter 声明固定批次能力后，可通过 `--batch-size` 让多个
 Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和重评。`trial_runs` 按 Run、Trial、阶段关联，保存 episode
 及尝试身份；事件通过 `trialsByRun` 推进全部关联项。批次只有不可变计划，执行状态仍由既有 Run 和 Trial 管理。
+若没有该 episode 的证据，且与计划摘要匹配的最终批次摘要标记为 `not_started`，Trial 跳过 Verify 并以缺失样本报告。
 轨迹事件带 sample / attempt / source / step 身份；计划数、完成数、有效数注明计数单位。
 
 ### 9.2 Bench 家族与接入路径
@@ -979,19 +980,23 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   固定步长评测按冻结间隔重规划。CALVIN 可在原生子任务完成时提前重规划，验证器复核完成信号和子任务进度。
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
+  DROID 和 CALVIN 拒绝的动作在夹爪转换前保存。无法表示为数组的返回值保留有界摘要。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
 - **冻结目录归档**：固定批量的 Solve 请求只保存一份冻结 reference 与一份批次计划，模拟器和 SDK 共用同一次准备。
+  RoboLab 和 ManiSkill Plate-25 的运行时与只读资产校验在每个 Solve Run 的准备阶段执行一次，批次内各 episode 复用该结果。
   每个 Solve Run 在输出根目录归档一份 `reference.json`。episode contract 和 CPU Verify 请求只保存该 reference 的摘要，
   CPU 重评从只读 Solve 输出加载目录，并核对登记、Run 和 contract 的摘要。旧 Run 继续从 episode 内嵌 reference 重评。
-- **随机性**：模型可声明服务级随机流。OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务
-  可以登记发布配方的初始种子，例如 GigaWorld 的 42。批次按冻结顺序推进服务的随机流，样本中的 `policySeed` 保持为 0。
+- **随机性**：OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务可登记发布配方的初始种子，
+  例如 GigaWorld 的 42。服务级随机流按冻结的批次顺序推进。`policy-ws` JAX 服务也可声明 episode 级随机流，例如
+  RoboMME π₀.₅ 在每个 episode 从 key 0 重启。批次计划记录随机流范围，样本中的 `policySeed` 保持为 0。
 - **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
   转换，亦接 SimplerEnv WidowX 七个任务与 Google Robot 六个任务）、`openvla-ws`（官方 OFT 推理在模型端，`libero-oft-native` 是独立评测 recipe）。
   `policy-ws` 把 Binding 选出的观测交给 Policy 服务，由服务负责图像、状态、语言与动作转换，返回 benchmark 控制器使用的动作块。
   握手核对冻结的动作维数、重规划步数、权重和归一化摘要以及随机流约定。
   Google Robot 固定矩形相机、xyzw 状态、单步重规划及原生 sticky gripper，复用 Gym driver。
   SimplerEnv 固定网格可独立登记 RT-1/Octo 的策略终止协议，直接执行 7 维原生动作并另收终止信号，最终一步的原生 done 决定成功。
-  原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
+  原始动作在任何转换前检查数值类型与有限性，拒绝归为 `policy_act`。`policy-ws` 的共享动作服务在校验拒绝时回传原因
+  和可传输的数值数组，由 driver 禁用 pickle 保存。非数值或超出传输限制的数组保存 dtype、形状和预览。
 - **EB-Navigation** 使用 AI2-THOR 5.0.0 的无头 Vulkan 渲染，按原生 8 个离散动作控制，目标水平距离不超过 1 米或第 20 步时结束。
   SeeNav 和原版 Qwen2.5-VL 在相同的标注双视角、动作反馈及提示词下运行。CPU 验证根据冻结目标和逐步位置复核距离与停止判定，
   Web 复用现有时间轴，同步播放原始第一视角、俯视和送入模型的标注双视角视频。
@@ -1014,7 +1019,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   以任务聚合并将无效样本计入失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/robocasa365/README.md)
   GR00T N1.5 共用环境 driver，以 RoboCasa 1.0.1 原生 horizon 运行。每 16 步重规划，按动作段末尾的原生成功信号计分。
   OpenPI 和 GR00T 的 recipe 分别登记，GR00T recipe 的统计排除无效样本。
-  Diffusion Policy 使用 RoboCasa 1.0.0，向 Policy 端发送两帧原生观测，每 8 步重规划。
+  Diffusion Policy 使用 RoboCasa 1.0.1，直接读取任务注册表中的原生步数上限。Policy 接收两帧原生观测，每 8 步重规划。
   原生奖励任一步为正即计成功，动作段结束时按上游单环境规则决定是否提前停止。
   新证据单独保存原生 `done`，验证器据此重算停止点。旧证据可重评，验证记录会标明停止点未经复核。
   固定任务目录、Lifelong 的阶段及累计套件独立于模型登记，复用每任务的原生步数和判定。
@@ -1026,6 +1031,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/benchmarks/robotwin/README.md)
+  固定批次按原生套件的 `clear_cache_freq` 在 episode 之间清理 SAPIEN 渲染缓存，周期以批次内的样本序号计算。
   X-VLA 在 Clean 和 Randomized 各使用独立的末端位姿配置，沿用原生场景和专家筛选逻辑。策略输出转换为 16 维原生控制目标，每 30 步重规划。
   LingBot-VA Clean 同样走原生末端位姿控制。首个动作块执行 16 步，后续每块最多 32 步，仿真每四步采集一组相机帧，供模型更新其 episode 内的缓存。
 - **ManiSkill3 与 Meta-World**：两个 RLinf recipe 分别使用原生 SAPIEN WidowX 和 MuJoCo Sawyer 环境。冻结样本种子、观测和控制语义，

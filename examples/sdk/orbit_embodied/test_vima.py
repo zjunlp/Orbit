@@ -92,8 +92,12 @@ class VIMATests(unittest.TestCase):
                 weights = Path(temporary)
                 tokenizer = weights / module.TOKENIZER
                 tokenizer.write_text("synthetic tokenizer")
+                checkpoint_digest = tree_digest(weights)
+                download = weights / ".cache/huggingface/download"
+                download.mkdir(parents=True)
+                (download / "tokenizer.metadata").write_text("synthetic download metadata")
                 argv = ["serve_vima.py", "--weights", str(weights), "--port", "0",
-                        "--checkpoint-digest", tree_digest(weights), "--normalization-digest", file_digest(tokenizer)]
+                        "--checkpoint-digest", checkpoint_digest, "--normalization-digest", file_digest(tokenizer)]
                 with patch.object(sys, "argv", argv), patch.object(module, "VIMAPolicy", SyntheticVIMAPolicy), \
                         patch.object(module, "asyncio", SimpleNamespace(run=run)):
                     module.main()

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from urllib.request import urlopen
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import digest, file_digest
 
 
@@ -86,7 +86,7 @@ def main():
         return
     if not all((args.model, args.checkpoint, args.checkpoint_digest, args.normalization_digest)):
         parser.error("model, checkpoint and both content digests are required")
-    if tree_digest(args.checkpoint) != args.checkpoint_digest:
+    if checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest:
         raise ValueError("policy checkpoint content digest mismatch")
     if normalization_digest(args.checkpoint, args.model) != args.normalization_digest:
         raise ValueError("policy normalization content digest mismatch")

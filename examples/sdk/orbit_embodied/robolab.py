@@ -1,6 +1,7 @@
 """Pinned RoboLab joint-position episodes; Isaac starts only in the solve process."""
 
 import atexit
+from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 import tempfile
@@ -79,9 +80,10 @@ def array(value):
 
 
 class RoboLabBenchmark:
-    def __init__(self, reference, task):
+    def __init__(self, reference, task, *, prepare_runtime=None):
         self.reference, self.task = reference, task
         self.config = reference["environment"]
+        self.prepare_runtime = prepare_runtime if prepare_runtime is not None else partial(check_runtime, reference)
         if task not in self.config["tasks"]:
             raise ValueError("task is outside the frozen RoboLab catalog")
         self.horizon = reference_horizon(reference, task)
@@ -93,7 +95,7 @@ class RoboLabBenchmark:
         self._temporary = None
 
     def make_env(self, seed):
-        check_runtime(self.reference)
+        self.prepare_runtime()
         simulation_app()
         from robolab.constants import set_output_dir
         from robolab.core.environments.runtime import create_env

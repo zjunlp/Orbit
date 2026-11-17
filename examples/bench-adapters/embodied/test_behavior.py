@@ -4,8 +4,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
-from orbit_embodied.behavior1k import asset_digest, native_instance, profile, verify_behavior
+from orbit_embodied.behavior1k import asset_digest, native_instance, profile, run_native_episode, verify_behavior
+from orbit_embodied.binding import digest, resolve_binding
+from orbit_embodied.evidence import verify_episode, write_json
 
 
 class BehaviorTest(unittest.TestCase):
@@ -55,6 +58,29 @@ class BehaviorTest(unittest.TestCase):
         self.assertEqual(asset_digest(self.root), first)
         (self.root / ASSET_DIRS[0] / "fixture").write_text("changed")
         self.assertNotEqual(asset_digest(self.root), first)
+
+    def test_native_runner_emits_evidence_for_the_shared_reference(self):
+        reference = {"environment": {"kind": "behavior1k", "tasks": ["activity"], "horizons": {"activity": 10}},
+                     "parameters": {"replanSteps": 1}}
+        sample = {**self.sample, "sampleId": digest(self.sample)}
+        semantic = profile()
+        binding = resolve_binding(semantic, semantic, {key: key for key in semantic["observations"]})
+        policy = {"connector": "policy-ws", "replanSteps": 1}
+        request = {"reference": reference, "referenceDigest": digest(reference), "sample": sample,
+                   "binding": binding, "policy": policy, "trialId": "fixture", "episodeId": "fixture.attempt",
+                   "implementationDigest": "fixture-sdk"}
+        write_json(self.root / "reference.json", reference)
+        directory = self.root / "episode"
+        # A preflight failure still produces sealed evidence and needs no simulator or model.
+        prepare = Mock(side_effect=ValueError("synthetic preflight failure"))
+        with patch.dict("os.environ", {"ORBIT_RUN_ID": "fixture-run"}):
+            result = run_native_episode(request, directory, Mock(), prepare=prepare)
+        self.assertEqual(result["issues"], ["synthetic preflight failure"])
+        self.assertFalse(result["valid"])
+        expected = {"referenceDigest": request["referenceDigest"], "sample": sample, "binding": binding,
+                    "policy": policy, "solveImplementationDigest": request["implementationDigest"],
+                    "evidenceVersion": 2, "solveRunId": "fixture-run", "executionTrialId": request["trialId"]}
+        self.assertEqual(verify_episode(directory, sample["sampleId"], request["episodeId"], expected), result)
 
     def test_verification_rejects_native_report_or_raw_action_changes(self):
         import numpy as np

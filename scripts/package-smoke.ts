@@ -129,7 +129,7 @@ try {
   );
   assert.equal(typeof report.ok, "boolean");
   const resources = JSON.parse(run(cli, ["bench", "resources", "--json"]));
-  assert.equal(resources.recipes.length, 62);
+  assert.equal(resources.recipes.length, 63);
   assert.ok(
     resources.recipes.every(
       (recipe: { id: string; resources: unknown[] }) => recipe.id && recipe.resources.length,

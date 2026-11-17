@@ -71,12 +71,14 @@ class RoboTwinBenchmark:
     action_type = "qpos"
     settle_steps = 0
 
-    def __init__(self, reference, task):
+    def __init__(self, reference, task, *, batch_index=None):
         self.reference, self.task = reference, task
         if task not in reference["environment"]["tasks"]:
             raise ValueError("task is not in the frozen RoboTwin catalog")
         self.horizon = reference_horizon(reference, task)
         self.env = None
+        self.batch_index = batch_index
+        self.clear_render_cache = False
         self.video_stack = ExitStack()
         self.videos = {}
         self.head_history_steps = reference["environment"].get("headCameraHistorySteps", ())
@@ -141,6 +143,8 @@ class RoboTwinBenchmark:
             raise ValueError("RoboTwin seed must fit in an unsigned 32-bit integer")
         config = self.reference["environment"]
         args = self._native_args()
+        if self.batch_index is not None:
+            self.clear_render_cache = (self.batch_index + 1) % args["clear_cache_freq"] == 0
         self.env, info = self._expert_scene(self.seed, args)
         setup_native_scene(self.env, self.seed, args)
         native_limits = config.get("nativeHorizons", {})
@@ -232,9 +236,51 @@ class RoboTwinBenchmark:
         self.videos.clear()
 
     def close(self):
-        if self.env is not None:
-            self.env.close_env()
-            self.env = None
+        env, clear_cache = self.env, self.clear_render_cache
+        self.env, self.clear_render_cache = None, False
+        try:
+            if clear_cache:
+                from sapien.render import clear_cache as clear_sapien_cache
+                clear_sapien_cache()
+        finally:
+            if env is not None:
+                env.close_env()
+
+
+class RoboTwinJointChunkBenchmark(RoboTwinBenchmark):
+    """Capture chunk-interior video without advancing the policy's lighting stream."""
+
+    def step(self, action):
+        success, terminated = self.apply_action(action)
+        replan = not terminated and self.env.take_action_cnt % self.reference["parameters"]["replanSteps"] == 0
+        if replan:
+            raw = self.env.get_obs()
+        else:
+            # take_action already updated render poses. get_obs would randomize lighting again.
+            self.env._update_render = lambda: None
+            try:
+                raw = self.env.get_obs()
+            finally:
+                del self.env._update_render
+        return StepResult(self.observation(raw), float(success), terminated, success, native_action=action.tolist())
+
+
+class RoboTwinAbsolutePoseBenchmark(RoboTwinBenchmark):
+    """Live end-effector poses and absolute native RoboTwin pose targets."""
+
+    action_size = 16
+    action_type = "ee"
+
+    def observation(self, raw):
+        observation = super().observation(raw)
+        pose = raw["endpose"]
+        observation["ee_pose"] = np.r_[pose["left_endpose"], pose["left_gripper"],
+                                      pose["right_endpose"], pose["right_gripper"]].astype(np.float64)
+        return observation
+
+    @staticmethod
+    def state(observation):
+        return {**RoboTwinBenchmark.state(observation), "ee_pose": observation["ee_pose"].tolist()}
 
 
 class RoboTwinCartesianBenchmark(RoboTwinBenchmark):

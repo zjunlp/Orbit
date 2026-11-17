@@ -12,7 +12,7 @@ sys.path[:0] = [str(EMBODIED), str(EMBODIED / "policies/x-vla")]
 from adapter import HERE, digest, file_digest
 from native_runtime import image_id
 from configure_robotwin import configure_benchmark
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from serve_xvla import CHUNK_SIZE, normalization_digest
 
 
@@ -73,7 +73,7 @@ def main():
     }
     benchmark["name"] = f"robotwin-{suite}-cartesian-native"
     benchmark["config"].update(reference=json.dumps(reference), profileDigest=digest(reference))
-    checkpoint, normalization = tree_digest(args.weights), normalization_digest(args.weights)
+    checkpoint, normalization = checkpoint_tree_digest(args.weights), normalization_digest(args.weights)
     name = "xvla-robotwin2"
     policy = {"name": name, "version": "1", "connector": "policy-ws",
               "replanSteps": CHUNK_SIZE, "profile": reference["policyProfile"], "checkpointDigest": checkpoint,

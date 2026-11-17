@@ -9,6 +9,7 @@ from .eb_navigation import POLICY_VIDEO as EB_NAV_POLICY_VIDEO
 from .evidence import write_json
 from .libero import VIDEO_FPS as LIBERO_FPS
 from .robodojo import VIDEO_FPS as ROBODOJO_FPS
+from .robomme import CAMERA_VIDEOS as ROBOMME_CAMERAS, VIDEO_FPS as ROBOMME_FPS
 from .robotwin import CAMERA_VIDEOS as ROBOTWIN_CAMERAS, VIDEO_FPS as ROBOTWIN_FPS
 from .wire import POLICY_FALLBACKS
 
@@ -23,6 +24,7 @@ LIBERO_ACTIONS = ["delta_x", "delta_y", "delta_z", "rotation_x", "rotation_y", "
 VIDEOS = {
     "libero": ({"front_rgb": "video.mp4"}, LIBERO_FPS),
     "robotwin": (ROBOTWIN_CAMERAS, ROBOTWIN_FPS),
+    "robomme": (ROBOMME_CAMERAS, ROBOMME_FPS),
     "robodojo": ({"cam_head": "video.mp4"}, ROBODOJO_FPS),
     "robolab": ({"front_rgb": "video.mp4"}, None),
     "chores": ({"raw_navigation_camera": "video.mp4", "raw_manipulation_camera": "arm.mp4"}, None),

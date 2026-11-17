@@ -6,6 +6,8 @@ import unittest
 
 import numpy as np
 
+from orbit_embodied import EpisodeFailure
+
 
 class GigaWorldTests(unittest.TestCase):
     def test_model_receives_reference_layout_and_returns_native_orders(self):
@@ -32,5 +34,5 @@ class GigaWorldTests(unittest.TestCase):
         native = service.native_chunk(upstream)
         np.testing.assert_array_equal(native, upstream[:, [5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4]])
         upstream[3, 1] = np.nan
-        with self.assertRaisesRegex(ValueError, "invalid RoboCasa365"):
+        with self.assertRaisesRegex(EpisodeFailure, "non-finite"):
             service.native_chunk(upstream)

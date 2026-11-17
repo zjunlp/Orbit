@@ -14,7 +14,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "examples/sdk"))
@@ -38,6 +38,37 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_libero_planner_expands_the_count_in_each_initial_state_asset(self):
+        import pickle
+        from zipfile import ZipFile
+
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            suite = "libero_spatial"
+            source = root / "third_party/libero/libero/libero"
+            (source / "benchmark").mkdir(parents=True)
+            (source / "benchmark/libero_suite_task_map.py").write_text(
+                "libero_task_map = {'libero_spatial': ['first', 'second']}\n")
+            states = source / "init_files" / suite
+            states.mkdir(parents=True)
+            for name, count in (("first", 2), ("second", 3)):
+                with ZipFile(states / (name + ".pruned_init"), "w") as asset:
+                    asset.writestr("archive/data.pkl", pickle.dumps(np.zeros((count, 79)), protocol=2))
+            tasks = adapter.catalog(root, suite)
+            self.assertEqual([task["tags"]["initialStateCount"] for task in tasks], ["2", "3"])
+            command = [sys.executable, "-S", "-B", str(ADAPTER.with_name("plan.py")),
+                       "--reference-source", str(root), "--all-tasks"]
+            plan = json.loads(subprocess.check_output([*command, "--all-initial-states"], text=True))
+            expected = [(task["id"], str(index), task["tags"]["initialStateDigest"])
+                        for task in tasks for index in range(int(task["tags"]["initialStateCount"]))]
+            self.assertEqual([(row["taskId"], row["initialStateId"], row["initialStateDigest"])
+                              for row in plan["items"]], expected)
+            explicit = subprocess.run([*command, "--initial-state", "2"], capture_output=True, text=True)
+            self.assertNotEqual(explicit.returncode, 0)
+            self.assertIn("initial-state index exceeds the selected reset recipe", explicit.stderr)
+
     def test_hssd_configurator_help_works_without_site_packages(self):
         path = ADAPTER.parent / "benchmarks/hssd-ov/configure_hssd_ov.py"
         output = subprocess.check_output([sys.executable, "-B", "-E", "-S", str(path), "--help"], text=True)
@@ -368,6 +399,74 @@ class AdapterPlanningTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "mounted simulator asset digest mismatch"):
                         run.main(argv)
                     self.assertEqual(measure.call_count, 2)
+
+    def test_robolab_and_plate25_prepare_runtime_once_per_solve(self):
+        from orbit_embodied import robolab, tabletop
+
+        spec = importlib.util.spec_from_file_location("native_embodied_run", ADAPTER.with_name("run.py"))
+        run = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(run)
+
+        for kind, batched in product(("robolab", "maniskill3"), (False, True)):
+            with self.subTest(kind=kind, batched=batched), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                assets = root / "assets"
+                assets.mkdir()
+                asset = assets / "scene"
+                asset.write_text("frozen assets")
+                version_file = root / "VERSION"
+                version_file.write_text("5.0.0")
+                lab = root / "isaaclab"
+                (lab / "source/isaaclab/config").mkdir(parents=True)
+                (lab / "VERSION").write_text("fixture")
+                (lab / "source/isaaclab/config/extension.toml").write_text("fixture")
+                environment = {"kind": kind, "tasks": ["fixture"], "horizon": 2, "version": "3.0.1",
+                               "assets": {"target": str(assets), "digest": tree_digest(assets)},
+                               "sourceRoot": str(root), "isaacLabPackageVersion": "0.44.8",
+                               "isaacLabSource": {"root": str(lab), "digest": robolab.isaaclab_source_digest(lab)},
+                               "isaacSimVersionFile": str(version_file), "isaacSim": "5.0.0"}
+                reference = {"id": "fixture", "environment": environment, "reference": {"files": {}},
+                             "benchmarkProfile": {"action": {"shape": [8]}},
+                             "parameters": {"settleSteps": 0, "replanSteps": 5}}
+                episodes = [{"sample": {"taskId": "fixture", "benchmarkProfile": "fixture", "sampleId": str(index)},
+                             "trialId": str(index), "episodeId": str(index), "implementationDigest": "driver",
+                             "policy": {"connector": "policy-ws"}, "binding": {}}
+                            for index in range(2)]
+                plan = {"members": [{"trialId": episode["trialId"], "episodeId": episode["episodeId"],
+                                     "sampleRef": episode["sample"]["sampleId"]} for episode in episodes]}
+                payload = {"reference": reference, "referenceDigest": digest(reference),
+                           **({"plan": {**plan, "digest": digest(plan)}, "episodes": episodes} if batched else episodes[0])}
+                request = root / "request.json"
+                write_json(request, payload)
+
+                start = Mock(side_effect=RuntimeError("synthetic simulator entry point"))
+                module = robolab if kind == "robolab" else tabletop
+
+                def run_fixture(benchmark, *args, prepare, **kwargs):
+                    prepare()
+                    with self.assertRaisesRegex(RuntimeError, "synthetic simulator entry point"):
+                        benchmark.make_env(0)
+                    return {"valid": True}
+
+                with patch.object(run, "archive_implementation", return_value="driver"), \
+                        patch.object(run, "run_episode", side_effect=run_fixture), \
+                        patch.object(module, "tree_digest", wraps=tree_digest) as measure, \
+                        patch.object(module, "version", return_value="0.44.8" if kind == "robolab" else "3.0.1"), \
+                        patch.object(robolab, "simulation_app", start), \
+                        patch.dict(sys.modules, {"gymnasium": SimpleNamespace(make=start),
+                                                 "orbit_maniskill_task": SimpleNamespace()}), \
+                        patch.dict("os.environ", {"ORBIT_RUN_ID": "fixture"}):
+                    argv = ["batch" if batched else "solve", str(request), str(root / "output")]
+                    run.main(argv)
+                    self.assertEqual(measure.call_count, 1)
+                    self.assertEqual(Path(measure.call_args.args[0]), assets)
+                    self.assertEqual(start.call_count, 2 if batched else 1)
+                    start.reset_mock()
+                    asset.write_text("edited assets")
+                    with self.assertRaisesRegex(ValueError, "asset digest mismatch"):
+                        run.main(argv)
+                    self.assertEqual(measure.call_count, 2)
+                    start.assert_not_called()
 
     def test_versioned_evidence_cannot_skip_the_solve_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -794,6 +893,30 @@ class AdapterPlanningTests(unittest.TestCase):
                 write_json(root / "verify-output/verification.json", {**verification, key: "other"})
                 with self.subTest(key=key):
                     self.assertTrue(adapter.score(request)["invalid"])
+
+    def test_rescore_excludes_archived_robomme_simulator_errors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            config = request["benchmark"]["config"]
+            reference = json.loads(config["reference"])
+            reference["environment"] = {"kind": "robomme", "tasks": [request["trial"]["task"]]}
+            config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+            with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                self.assertEqual(adapter.tasks(request)["official"]["errors"], "fail")
+            request["verify"] = {"output": str(root / "verify-output")}
+            expected = adapter.verification_expectation(request)
+            result = {"sampleRef": request["trial"]["sampleRef"], "episodeId": "synthetic-trial.attempt",
+                      "valid": True, "success": False, "issues": [], "native": {"nativeStatus": "error"}}
+            write_json(root / "solve-output/episode/native-result.json", result)
+            write_json(root / "verify-output/verified.json", result)
+            write_json(root / "verify-output/verification.json",
+                       {"sampleRef": result["sampleRef"], "episodeId": result["episodeId"],
+                        "solveRunId": expected["solveRunId"], "trialId": expected["executionTrialId"],
+                        "implementationDigest": expected["verifierDigest"], "expectationDigest": digest(expected)})
+            outcome = adapter.score(request)
+            self.assertTrue(outcome["invalid"])
+            self.assertEqual(outcome["failure"], "env_step")
 
     def test_calvin_reports_raw_completed_subtasks_as_its_primary_metric(self):
         with tempfile.TemporaryDirectory() as temporary:

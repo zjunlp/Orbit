@@ -27,6 +27,13 @@ class PolicyClient(WebSocketPolicy):
 
     def act(self, observation):
         reply = self.infer(observation)
+        if "rejection" in reply:
+            from .driver import EpisodeFailure
+
+            self.last_fallback = None
+            rejection = reply["rejection"]
+            raise EpisodeFailure("policy_act", rejection["reason"], rejected_actions=rejection.get("actions"),
+                                 rejected_summary=rejection.get("summary"))
         fallback = reply.get("fallback")
         self.last_fallback = fallback if isinstance(fallback, str) and fallback in POLICY_FALLBACKS else None
         return reply["actions"]

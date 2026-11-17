@@ -1,5 +1,5 @@
 ARG POLICY_BASE=orbit/robocasa365-policy:reference
-ARG SIMULATOR_BASE=orbit/robocasa365-simulator:reference
+ARG SIMULATOR_BASE=orbit/robocasa365-simulator:1.0.1
 
 FROM ${SIMULATOR_BASE} AS simulator
 RUN --mount=type=cache,target=/root/.cache/uv \

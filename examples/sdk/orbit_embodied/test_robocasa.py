@@ -201,7 +201,7 @@ class RoboCasaRegistrationTests(unittest.TestCase):
                 ("openpi", "target", "composite_seen", {"robocasa/Seen": 302}),
                 ("gr00t", "pretrain", "composite_unseen", {"robocasa/Unseen": 300}),
                 ("gr00t", "target", "target50", {"robocasa/Atomic": 100, "robocasa/Seen": 201, "robocasa/Unseen": 300}),
-                ("diffusion-policy", "pretrain", "composite_seen", {"robocasa/Seen": 301}),
+                ("diffusion-policy", "pretrain", "composite_seen", {"robocasa/Seen": 201}),
                 ("gr00t", "pretrain", "all_tasks",
                  {"robocasa/Atomic": 100, "robocasa/Seen": 201, "robocasa/Unseen": 300, "robocasa/Later": 400}),
                 ("gr00t", "pretrain", "lifelong_learning_phase3", {"robocasa/Later": 400}),
@@ -226,6 +226,10 @@ class RoboCasaRegistrationTests(unittest.TestCase):
                     self.assertFalse((output / "policy.json").exists())
                     references[recipe, split, task_set] = reference
             self.assertEqual(references["openpi", "pretrain", "atomic_seen"]["id"], "robocasa365-atomic-seen/1")
+            diffusion = references["diffusion-policy", "pretrain", "composite_seen"]
+            self.assertEqual(diffusion["id"], "robocasa365-composite-seen-diffusion-policy/2")
+            self.assertEqual(diffusion["reference"]["robocasa"],
+                             references["gr00t", "pretrain", "composite_unseen"]["reference"]["robocasa"])
             self.assertNotEqual(seed_asset(references["openpi", "pretrain", "composite_seen"], "robocasa/Seen"),
                                 seed_asset(references["openpi", "target", "composite_seen"], "robocasa/Seen"))
 

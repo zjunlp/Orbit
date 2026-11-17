@@ -1,6 +1,7 @@
 """Explicit CPU fixtures; these checks do not simulate robot physics."""
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -56,6 +57,28 @@ class AdapterTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "input changed"):
             self.solve()
         self.assertFalse((self.root / "stage").exists())
+
+    def test_verify_restages_its_scripts_after_trial_cleanup(self):
+        solve = self.solve()
+        output = self.root / "solve"
+        evidence = output / "services/environment/evidence"
+        evidence.mkdir(parents=True)
+        trial_stage = Path(self.req["trial"]["staging"])
+        req = {**self.req, "solve": {"output": str(output), "run": {"spec": solve}}}
+        first = adapter.verify(req)["spec"]
+        shutil.rmtree(trial_stage)
+
+        rescore = adapter.verify(req)["spec"]
+        self.assertEqual(rescore, first)
+        mount = next(mount for mount in rescore["mounts"] if mount["target"] == "/adapter")
+        stage = Path(mount["source"])
+        self.assertTrue((stage / "verify.py").is_file())
+        self.assertTrue((stage / "evidence_helpers.py").is_file())
+        self.assertEqual({path.name for path in stage.iterdir()}, {"verify.py", "evidence_helpers.py"})
+        self.assertEqual(mount["mode"], "ro")
+        self.assertIn({"source": str(evidence), "target": "/solve", "mode": "ro"}, rescore["mounts"])
+        public = solve["services"][0]["env"][adapter.PUBLIC_KEY]
+        self.assertEqual(rescore["env"][adapter.PUBLIC_KEY], public)
 
     def test_no_fabricated_scores(self):
         self.assertEqual(native_score({"status": "finished", "success": False,

@@ -1,13 +1,23 @@
 """Deterministic action conversions shared by Solve and CPU Verify."""
 
+LIBERO_GRIPPER = "libero-gripper"
 LIGHTNAV_HSSD_VELOCITY = "lightnav-hssd-velocity/1"
+
+
+def connector_action_conversion(connector, io_adapter=None):
+    if connector == "openvla-ws" or (connector == "groot-zmq" and io_adapter == "libero-native"):
+        return LIBERO_GRIPPER
+    return None
 
 
 def libero_gripper(chunk):
     """Model gripper in [0, 1] (1 closes) to LIBERO's -1 close / +1 open."""
     import numpy as np
 
-    converted = np.array(chunk, dtype=np.result_type(np.asarray(chunk).dtype, np.float32), copy=True)
+    chunk = np.asarray(chunk)
+    if chunk.ndim != 2 or chunk.shape[1] != 7 or chunk.dtype.kind not in "buif" or not np.isfinite(chunk).all():
+        raise ValueError("LIBERO gripper conversion requires finite numeric 7D raw actions")
+    converted = np.array(chunk, dtype=np.result_type(chunk.dtype, np.float32), copy=True)
     converted[:, -1] = -np.sign(2 * converted[:, -1] - 1)
     return converted
 
@@ -34,4 +44,4 @@ def lightnav_hssd_velocity(chunk):
     return np.array([[action]], dtype=np.int32)
 
 
-CONVERSIONS = {"libero-gripper": libero_gripper, LIGHTNAV_HSSD_VELOCITY: lightnav_hssd_velocity}
+CONVERSIONS = {LIBERO_GRIPPER: libero_gripper, LIGHTNAV_HSSD_VELOCITY: lightnav_hssd_velocity}

@@ -170,6 +170,42 @@ describe("preparation recipes and input boundaries", () => {
       execFileSync("git", ["-C", destination, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     ).toBe(git("rev-parse", "HEAD"));
   });
+
+  it("prepares RoboMME source without fetching its Plus submodules", async () => {
+    const source = join(root, "robomme-source");
+    mkdirSync(source);
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", source, ...args], { encoding: "utf8" }).trim();
+    git("init", "-q");
+    git("config", "user.name", "Fixture");
+    git("config", "user.email", "fixture@example.invalid");
+    writeFileSync(join(source, "task.json"), "{}");
+    git("add", "task.json");
+    git("commit", "-qm", "fixture task");
+    writeFileSync(
+      join(source, ".gitmodules"),
+      '[submodule "plus"]\n\tpath = plus\n\turl = ./unavailable-plus\n',
+    );
+    git("add", ".gitmodules");
+    git("update-index", "--add", "--cacheinfo", `160000,${git("rev-parse", "HEAD")},plus`);
+    git("commit", "-qm", "fixture optional submodule");
+    mkdirSync(join(source, "plus"));
+    const resource = PreparationResource.parse({
+      ...preparationDefinition("robomme").resources[0],
+      url: `file://${source}`,
+      revision: git("rev-parse", "HEAD"),
+    });
+    await expect(validateResource({ ...resource, submodules: true }, source)).rejects.toThrow(
+      "initialize its pinned submodules",
+    );
+    const destination = join(root, "robomme-download");
+    await acquireResource(resource, destination);
+    await validateResource(resource, source);
+    await validateResource(resource, destination);
+    expect(readFileSync(join(destination, "task.json"), "utf8")).toBe("{}");
+    writeFileSync(join(source, "task.json"), '{"modified": true}');
+    await expect(validateResource(resource, source)).rejects.toThrow("unmodified");
+  });
 });
 
 describe("download validation (local HTTP fixture, not official-source validation)", () => {

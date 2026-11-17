@@ -8,6 +8,10 @@ Orbit CLI 和 daemon 使用项目规定的 Node。具身 Python 代码分成主�
 daemon 另行在主机上启动 adapter，原生 adapter 的 `/usr/bin/env` 从 daemon 的 `PATH` 找
 `python3`。Solve 和 Verify 使用 benchmark 镜像中的 Python，Policy 服务使用其自己的镜像。
 
+权重目录的登记和启动检查使用相同的内容指纹。Hugging Face `--local-dir` 写入的
+`.cache/huggingface/download` 和同级 `.gitignore` 不参与指纹。运行时使用的 Hub 权重和索引继续计入。
+没有下载元数据的目录沿用原来的摘要。用新规则登记包含下载元数据的权重时，需使用按当前代码构建的策略镜像。
+
 ## Python 3.8 共享 SDK 回归
 
 用显式模块列表检查 adapter 协议、Binding、episode 驱动、证据、批次与模型传输。该列表不收集各 benchmark
@@ -16,7 +20,7 @@ daemon 另行在主机上启动 adapter，原生 adapter 的 `/usr/bin/env` 从 
 ```bash
 PYTHONPATH=examples/sdk "$PYTHON38" -B -m unittest -v \
   orbit_bench.test_protocol \
-  orbit_embodied.test_core orbit_embodied.test_batch \
+  orbit_embodied.test_core orbit_embodied.test_batch orbit_embodied.test_assets \
   orbit_embodied.test_openpi orbit_embodied.test_groot orbit_embodied.test_openvla \
   orbit_embodied.test_wire
 ```
@@ -41,9 +45,9 @@ Python 3.11 的真实 HDF5 生命周期检查还使用 `h5py`。缺少可选依�
 这些回归包括明确标注的合成策略和本地传输测试。
 
 `pnpm verify` 还会用当前环境的 `python3` 发现各适配器根目录的测试。CI 和发布流程使用 Python 3.11，并从
-[CI 依赖清单](../../examples/sdk/requirements-ci.txt)安装这组测试所需的 Python 包。
-CI 另行运行 `test_core`、`test_eb_navigation`、`test_episode_trajectory`、`test_vln_native` 和
-`test_wire`，覆盖共享证据、时间轴索引、导航计分和策略传输。
+[CI 依赖清单](../../examples/sdk/requirements-ci.txt)安装测试依赖。两套流程在 `pnpm verify` 之外调用
+`pnpm test:embodied-sdk`，自动发现并运行 `orbit_embodied` 下的全部 SDK 测试模块。OpenPI 对照使用清单中固定的
+`openpi-client` 发行版。
 模型专属的 CPU 回归与模型服务一起放在 `embodied/policies/<family>/test_*.py`，由
 `embodied/test_policy_expansion.py` 自动收集。可以加 `-k FastWAM` 等参数筛选单个模型的测试。
 需要模拟器镜像的回归由各 benchmark 指南给出运行命令。

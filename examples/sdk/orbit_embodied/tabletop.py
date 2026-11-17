@@ -1,5 +1,7 @@
 """Native Gymnasium episodes for the pinned ManiSkill3 and Meta-World recipes."""
 
+from functools import partial
+from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +9,11 @@ import numpy as np
 from .binding import reference_horizon, reset_seed, seed_asset
 from .assets import tree_digest
 from .driver import StepResult
+
+
+MANISKILL_VERSION = "3.0.1"
+METAWORLD_VERSION = "3.1.1"
+METAWORLD_MUJOCO_VERSION = "3.3.0"
 
 
 class TabletopBenchmark:
@@ -70,12 +77,22 @@ def check_maniskill_assets(target, expected):
         raise ValueError("ManiSkill task asset digest mismatch")
 
 
+def check_plate25_runtime(config):
+    if "version" in config and version("mani_skill") != config["version"]:
+        raise ValueError("ManiSkill package differs from the frozen Plate-25 recipe")
+    assets = config["assets"]
+    check_maniskill_assets(assets["target"], assets["digest"])
+
+
 class ManiSkillBenchmark(TabletopBenchmark):
+    def __init__(self, reference, task, *, prepare_runtime=None):
+        super().__init__(reference, task)
+        self.prepare_runtime = prepare_runtime if prepare_runtime is not None else partial(check_plate25_runtime, self.config)
+
     def make_env(self, _seed):
+        self.prepare_runtime()
         import gymnasium as gym
         import orbit_maniskill_task  # noqa: F401
-        assets = self.config["assets"]
-        check_maniskill_assets(assets["target"], assets["digest"])
         return gym.make(self.task, num_envs=1, obs_mode="rgb+segmentation",
                         control_mode="arm_pd_ee_target_delta_pose_align2_gripper_pd_joint_pos",
                         sim_backend="gpu", sim_config={"sim_freq": 500, "control_freq": 5},
@@ -89,6 +106,9 @@ class ManiSkillBenchmark(TabletopBenchmark):
 
 class MetaWorldBenchmark(TabletopBenchmark):
     def make_env(self, seed):
+        for package, key in (("metaworld", "version"), ("mujoco", "mujocoVersion")):
+            if key in self.config and version(package) != self.config[key]:
+                raise ValueError(f"{package} package differs from the frozen Meta-World recipe")
         import gymnasium as gym
         import metaworld  # noqa: F401
 
@@ -109,7 +129,6 @@ class ManiSkillTabletopBenchmark(TabletopBenchmark):
     def make_env(self, _seed):
         import gymnasium as gym
         import mani_skill.envs  # noqa: F401
-        from importlib.metadata import version
         from mani_skill.utils.assets import DATA_GROUPS, is_data_source_downloaded
         from mani_skill.utils.registration import REGISTERED_ENVS
         from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper

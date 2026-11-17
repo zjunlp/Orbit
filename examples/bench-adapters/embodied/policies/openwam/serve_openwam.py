@@ -7,7 +7,7 @@ from urllib.request import urlopen
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import file_digest
 from orbit_embodied.wire import serve_actions
 
@@ -49,7 +49,7 @@ def main():
         return
     if not all((args.checkpoint, args.checkpoint_digest, args.normalization_digest)):
         parser.error("checkpoint and both content digests are required")
-    if tree_digest(args.checkpoint) != args.checkpoint_digest:
+    if checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest:
         raise ValueError("OpenWAM checkpoint content digest mismatch")
     if file_digest(args.checkpoint / "normalization_stats.npy") != args.normalization_digest:
         raise ValueError("OpenWAM normalization content digest mismatch")

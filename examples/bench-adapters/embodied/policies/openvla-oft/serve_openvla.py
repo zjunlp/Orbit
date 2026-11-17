@@ -39,10 +39,10 @@ def main():
         return
     if not all((args.checkpoint, args.checkpoint_digest, args.normalization_digest, args.unnorm_key)):
         parser.error("checkpoint, normalization key and both content digests are required")
-    from orbit_embodied.assets import tree_digest
+    from orbit_embodied.assets import checkpoint_tree_digest
     from orbit_embodied.evidence import file_digest
     from orbit_embodied.wire import serve_actions
-    if tree_digest(args.checkpoint) != args.checkpoint_digest:
+    if checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest:
         raise ValueError("OpenVLA checkpoint content digest mismatch")
     maniskill = args.decoding == "rlinf-maniskill"
     stats_file = "config.json" if maniskill else "dataset_statistics.json"

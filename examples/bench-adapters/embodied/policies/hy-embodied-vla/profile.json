@@ -1,0 +1,86 @@
+{
+  "id": "hy-embodied-vla-robotwin/1",
+  "observations": {
+    "head_camera": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "head_camera",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "left_camera": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "left_camera",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "right_camera": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "shape": [240, 320, 3],
+      "camera": "right_camera",
+      "layout": "HWC",
+      "format": "RGB-native"
+    },
+    "instruction": {
+      "semantic": "language-instruction",
+      "dtype": "string",
+      "shape": []
+    },
+    "ee_pose": {
+      "shape": [16],
+      "frame": "robotwin-world",
+      "unit": "meters-and-normalized-gripper",
+      "order": [
+        "left_x",
+        "left_y",
+        "left_z",
+        "left_qw",
+        "left_qx",
+        "left_qy",
+        "left_qz",
+        "left_gripper",
+        "right_x",
+        "right_y",
+        "right_z",
+        "right_qw",
+        "right_qx",
+        "right_qy",
+        "right_qz",
+        "right_gripper"
+      ],
+      "semantic": "aloha-agilex-live-end-effector-pose",
+      "dtype": "float64"
+    }
+  },
+  "action": {
+    "shape": [16],
+    "frame": "robotwin-world",
+    "unit": "meters-and-normalized-gripper",
+    "order": [
+      "left_x",
+      "left_y",
+      "left_z",
+      "left_qw",
+      "left_qx",
+      "left_qy",
+      "left_qz",
+      "left_gripper",
+      "right_x",
+      "right_y",
+      "right_z",
+      "right_qw",
+      "right_qx",
+      "right_qy",
+      "right_qz",
+      "right_gripper"
+    ],
+    "semantic": "absolute-end-effector-and-gripper-target",
+    "controller": "robotwin-ee",
+    "rotation": "quaternion-wxyz",
+    "gripper": "normalized-open-fraction"
+  }
+}

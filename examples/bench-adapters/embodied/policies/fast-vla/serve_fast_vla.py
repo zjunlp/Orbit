@@ -7,8 +7,9 @@ from pathlib import Path
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 from orbit_embodied.binding import digest, file_digest
+from orbit_embodied.wire import checked_policy_actions, serve_actions
 
 
 CAMERAS = ("head_camera", "left_camera", "right_camera")
@@ -41,21 +42,17 @@ def main():
     parser.add_argument("--normalization-digest", required=True)
     parser.add_argument("--backbone-digest", required=True)
     args = parser.parse_args()
-    backbone = digest({"dm05": tree_digest(args.weights / "dm05"), "vision": tree_digest(args.weights / "hub")})
-    if (tree_digest(args.weights / "actor") != args.checkpoint_digest
+    backbone = digest({"dm05": checkpoint_tree_digest(args.weights / "dm05"),
+                       "vision": tree_digest(args.weights / "hub")})
+    if (checkpoint_tree_digest(args.weights / "actor") != args.checkpoint_digest
             or file_digest(args.weights / "actor/norm_stats.json") != args.normalization_digest
             or backbone != args.backbone_digest):
         raise ValueError("Fast-VLA assets differ from the frozen registration")
 
-    from orbit_embodied.wire import serve_actions
-
     model = build_model(args.weights)
 
     def infer(observation):
-        actions = np.asarray(model.act(*model_inputs(observation)))
-        if actions.shape != (CHUNK, 14) or not np.isfinite(actions).all():
-            raise ValueError("Fast-VLA must return fifty finite RoboTwin joint targets")
-        return actions
+        return checked_policy_actions(model.act(*model_inputs(observation)), 14, CHUNK)
 
     identity = {"checkpointDigest": args.checkpoint_digest, "normalizationDigest": args.normalization_digest,
                 "backboneDigest": args.backbone_digest,

@@ -6,6 +6,7 @@ import { setImmediate } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { assignSolveBatches, batchConditions } from "../src/bench/batches.ts";
 import { planConsolidation } from "../src/bench/consolidate.ts";
+import { connectorIssues } from "../src/bench/policies.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { contentDigest } from "../src/bench/samples.ts";
@@ -244,6 +245,72 @@ it.each(["cancelled", "failed"] as const)(
   },
 );
 
+it.each(["final", "progress", "other attempt"] as const)(
+  "uses only a matching final batch result to report an unstarted sample (%s)",
+  async (summary) => {
+    const f = fixture();
+    const output = f.runs.dirs(f.solve.id).output;
+    for (const member of f.plan.members.slice(0, 2)) {
+      const directory = join(output, "episodes", member.episodeId);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, "evidence-manifest.json"), "explicit synthetic verifier input");
+    }
+    writeFileSync(
+      join(output, "batch-result.json"),
+      JSON.stringify({
+        planDigest: summary === "other attempt" ? contentDigest("other batch") : f.plan.digest,
+        states: ["completed", "invalid", "not_started"],
+        ...(summary === "progress" ? {} : { cancelled: false }),
+      }),
+    );
+    f.store.putJob({
+      ...f.job,
+      official: { name: "Synthetic success rate", unit: "sample", errors: "fail", failValue: 0 },
+    });
+    f.store.putRun({
+      ...f.solve,
+      state: "failed",
+      startedAt: f.at,
+      endedAt: f.at,
+      cleanup: "done",
+    });
+    for (const trial of f.trials)
+      f.store.putTrial({ ...trial, solveRunId: f.solve.id, state: "solving" });
+    vi.mocked(AdapterClient.prototype.score).mockImplementation(async (trial) =>
+      trial.batch?.index === 1
+        ? { score: null, maxScore: 1, invalid: true, failure: "env_step", issues: [] }
+        : { score: 1, maxScore: 1, invalid: false, issues: [] },
+    );
+    f.bench.start();
+
+    for (const trial of f.trials.slice(0, 2)) {
+      await expect.poll(() => f.store.getTrial(trial.id)?.state).toBe("verifying");
+      f.finishVerify(f.store.getTrial(trial.id)?.verifyRunId ?? null);
+    }
+    await expect
+      .poll(() => f.store.trials(f.job.id).every((trial) => trial.state === "done"))
+      .toBe(true);
+    const final = summary === "final";
+    expect(f.verify.mock.calls.map(([trial]) => trial.batch?.index).sort()).toEqual(
+      final ? [0, 1] : [0, 1, 2],
+    );
+    const report = f.bench.reports(f.job.id).at(-1)?.methods[0];
+    expect(report?.entries.map((entry) => entry.evaluation)).toEqual([
+      "valid",
+      "invalid",
+      final ? "unknown" : "invalid",
+    ]);
+    expect(report?.entries[1]?.failure).toBe("env_step");
+    expect(report?.entries[2]?.verifyRunId).toBeNull();
+    expect(report?.official).toMatchObject({
+      samples: final ? 2 : 3,
+      missing: final ? 1 : 0,
+      partial: final,
+    });
+    expect(report?.official?.value).toBeCloseTo(final ? 50 : 100 / 3);
+  },
+);
+
 it("adopts a persisted batch Run after a crash before trial links were written", async () => {
   const f = fixture();
   f.store.putRun(f.solve);
@@ -363,6 +430,46 @@ it("freezes sequential membership and separates batch conditions from single-epi
   assignSolveBatches(changed, trials);
   expect(trials.map((trial) => trial.batch?.plan.members.length)).toEqual([2, 2, 1]);
   expect(batchConditions(trials[1] as Trial)).not.toEqual(batchConditions(f.trials[1] as Trial));
+});
+
+it("preserves an episode-scoped JAX stream in the policy and saved batch", () => {
+  const f = fixture();
+  const method = f.job.spec.methods[0];
+  const profile = f.job.resolvedBindings?.p?.policyProfile;
+  if (!method || !profile) throw new Error("missing batch fixture");
+  const randomness = { backend: "jax", initialKey: 0, scope: "episode" } as const;
+  const definition = PolicyDefinition.parse({
+    name: "p",
+    version: "1",
+    connector: "policy-ws",
+    replanSteps: 16,
+    randomness,
+    profile,
+    checkpointDigest: `sha256:${"a".repeat(64)}`,
+    normalizationDigest: `sha256:${"b".repeat(64)}`,
+    service: {
+      name: "policy",
+      image: `sha256:${"c".repeat(64)}`,
+      command: ["true"],
+      gpus: 0,
+      healthcheck: { command: ["true"] },
+    },
+  });
+  expect(definition.randomness).toEqual(randomness);
+  expect(connectorIssues(definition)).toEqual([]);
+  expect(connectorIssues({ ...definition, connector: "openpi-ws" })).toContain(
+    "Episode-scoped randomness requires the policy-ws connector",
+  );
+  method.policySnapshot = definition;
+  assignSolveBatches(f.job, f.trials);
+  const trial = Trial.parse(f.trials[1]);
+  f.store.putTrial(trial);
+  const stored = f.store.getTrial(trial.id);
+  if (!stored) throw new Error("missing stored trial");
+  expect(batchConditions(stored)).toMatchObject({
+    index: 1,
+    randomness: "episode",
+  });
 });
 
 it("splits batches by the same effective budget that comparison conditions record", () => {

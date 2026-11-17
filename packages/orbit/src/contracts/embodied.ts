@@ -45,7 +45,7 @@ export const EmbodiedCapabilities = z.object({
   semanticProfile: SemanticProfile,
   observationMap: z.record(z.string(), z.string()),
   replanSteps: z.number().int().positive().optional(),
-  /** Fixed sequential solve batches; model RNG remains scoped to the leased service. */
+  /** Fixed sequential solve batches with one leased model service. */
   batch: z.object({ maxEpisodes: z.number().int().min(2).max(256) }).optional(),
 });
 
@@ -54,7 +54,7 @@ export const SolveBatch = z.strictObject({
   id: z.string().min(1),
   attemptId: z.string().regex(/^[a-zA-Z0-9-]+$/),
   method: z.string().min(1),
-  randomness: z.enum(["service", "stateless"]),
+  randomness: z.enum(["service", "episode", "stateless"]),
   members: z
     .array(
       z.strictObject({
@@ -96,7 +96,7 @@ export const PolicyDefinition = z.strictObject({
       z.object({
         backend: z.literal("jax"),
         initialKey: z.literal(0),
-        scope: z.literal("service"),
+        scope: z.enum(["service", "episode"]),
       }),
       z.object({ backend: z.literal("stateless"), scope: z.literal("stateless") }),
       z.object({

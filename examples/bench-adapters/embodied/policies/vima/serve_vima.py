@@ -8,7 +8,7 @@ from urllib.request import urlopen
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import file_digest
 from orbit_embodied.vima_bench import POSE_FIELDS, VIEWS, unpack_prompt_context
 from orbit_embodied.wire import serve_actions
@@ -97,7 +97,7 @@ def main():
         return
     if args.weights is None or not args.checkpoint_digest or not args.normalization_digest:
         parser.error("--weights and content digests are required")
-    if (tree_digest(args.weights) != args.checkpoint_digest
+    if (checkpoint_tree_digest(args.weights) != args.checkpoint_digest
             or file_digest(args.weights / TOKENIZER) != args.normalization_digest):
         raise ValueError("VIMA checkpoint or tokenizer differs from the frozen registration")
     policy = VIMAPolicy(args.weights)

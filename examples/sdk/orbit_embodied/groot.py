@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .conversions import connector_action_conversion
 from .wire import pack, unpack
 
 LIBERO_ORDER = ["x", "y", "z", "roll", "pitch", "yaw", "gripper"]
@@ -40,7 +41,7 @@ class GrootClient:
             self.order = profile["action"]["order"]
         else:
             raise ValueError("unsupported GR00T I/O adapter")
-        self.conversion = "libero-gripper" if io_adapter == "libero-native" else None
+        self.conversion = connector_action_conversion("groot-zmq", io_adapter)
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
         self.socket.setsockopt(zmq.LINGER, 0)

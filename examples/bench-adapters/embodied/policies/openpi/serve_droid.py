@@ -6,8 +6,11 @@ from pathlib import Path
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import file_digest
+from orbit_embodied.driver import EpisodeFailure
+from orbit_embodied.evidence import validate_action_chunk
+from orbit_embodied.wire import policy_action_array
 
 
 CHUNK = 8
@@ -25,10 +28,12 @@ def droid_inputs(observation):
     }
 
 
-def droid_actions(actions):
-    actions = np.asarray(actions)
-    if actions.ndim != 2 or actions.shape[1] != 8 or len(actions) < CHUNK or not np.isfinite(actions).all():
-        raise ValueError("expected finite OpenPI DROID joint-position actions")
+def droid_actions(raw):
+    actions = policy_action_array(raw)
+    try:
+        validate_action_chunk(actions, 8, CHUNK)
+    except ValueError as exc:
+        raise EpisodeFailure("policy_act", str(exc), rejected_actions=actions) from exc
     chunk = actions[:CHUNK].copy()
     chunk[:, 7] = np.where(chunk[:, 7] > 0.5, 255, 0)
     return chunk
@@ -40,7 +45,7 @@ def main():
     parser.add_argument("--checkpoint-digest", required=True)
     parser.add_argument("--normalization-digest", required=True)
     args = parser.parse_args()
-    if (tree_digest(args.checkpoint) != args.checkpoint_digest
+    if (checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest
             or file_digest(args.checkpoint / NORMALIZATION) != args.normalization_digest):
         raise ValueError("DROID checkpoint differs from the frozen registration")
 

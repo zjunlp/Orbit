@@ -11,7 +11,7 @@ sys.path[:0] = [str(EMBODIED), str(EMBODIED / "policies/openpi")]
 
 from adapter import HERE, digest, file_digest, implementation_digest
 from native_runtime import RLINF_REVISION, image_id
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from serve_metaworld import CALVIN_NORMALIZATION_DIR
 
 
@@ -94,7 +94,7 @@ def main():
 
 
 def policy_for(args, reference):
-    checkpoint = tree_digest(args.weights)
+    checkpoint = checkpoint_tree_digest(args.weights)
     normalization = file_digest(args.weights / CALVIN_NORMALIZATION_DIR / "norm_stats.json")
     name = "pi05-rlinf-calvin-abc-d"
     return {"name": name, "version": "1", "connector": "policy-ws", "replanSteps": 5,

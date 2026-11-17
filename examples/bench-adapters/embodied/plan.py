@@ -65,7 +65,7 @@ def main():
         task = tasks[task_id]
         if kind == "calvin":
             count = len(environment["catalog"]["sequences"])
-        elif kind == "libero-plus":
+        elif "initialStateCount" in task["tags"]:
             count = int(task["tags"]["initialStateCount"])
         elif kind == "vlabench":
             count = vlabench_state_count(environment, task_id)
@@ -82,7 +82,7 @@ def main():
         if args.all_initial_states and count is None:
             parser.error("--all-initial-states requires a fixed native catalog")
         selected = range(count) if args.all_initial_states else args.initial_state
-        limit = count if count is not None else 2 ** 31 if generated else 50
+        limit = count if count is not None else 2 ** 31
         for initial_state in selected:
             if not 0 <= initial_state < limit:
                 raise ValueError("initial-state index exceeds the selected reset recipe")

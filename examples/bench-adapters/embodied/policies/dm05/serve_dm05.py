@@ -6,8 +6,9 @@ from pathlib import Path
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import file_digest
+from orbit_embodied.wire import checked_policy_actions, serve_actions
 
 
 HORIZON = 20
@@ -25,10 +26,7 @@ def model_state(observation):
 
 
 def native_actions(raw):
-    actions = np.asarray(raw, dtype=np.float32)
-    if actions.shape != (HORIZON, 7) or not np.isfinite(actions).all():
-        raise ValueError("DM0.5 Arena must return twenty finite seven-dimensional actions")
-    actions = actions.copy()
+    actions = checked_policy_actions(raw, 7, REPLAN, action_count=HORIZON, dtype=np.float32)
     dimensions = (0, 1, 2, 6)
     values = actions[:, dimensions]
     actions[:, dimensions] = np.where(values < -0.5, -1, np.where(values > 0.5, 1, 0))
@@ -66,11 +64,9 @@ def main():
     parser.add_argument("--checkpoint-digest", required=True)
     parser.add_argument("--normalization-digest", required=True)
     args = parser.parse_args()
-    if (tree_digest(args.weights) != args.checkpoint_digest
+    if (checkpoint_tree_digest(args.weights) != args.checkpoint_digest
             or file_digest(args.weights / "norm_stats.json") != args.normalization_digest):
         raise ValueError("DM0.5 assets differ from the frozen registration")
-
-    from orbit_embodied.wire import serve_actions
 
     model = build_model(args.weights)
     identity = {"checkpointDigest": args.checkpoint_digest, "normalizationDigest": args.normalization_digest,

@@ -121,6 +121,9 @@ use `profiles/openvla-libero.json`, environment seed 0 and eight-step replanning
 state identities are frozen in the plan. The different recipes are different evaluation conditions;
 matching task names alone does not permit paired comparisons or merging.
 
+Use `--all-initial-states` in place of the explicit indices to expand the initial states recorded
+in each task's official asset. Combine it with `--all-tasks` to plan a full suite.
+
 ## Verification scope
 
 Catalog and native reset/control coverage are separate from model-path validation. Routine

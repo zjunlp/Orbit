@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from native_runtime import build_policy_image, image_id, policy_manifest, require_image
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 from orbit_embodied.libero_suites import SUITES, LABELS, benchmark_name
 
 
@@ -68,7 +68,7 @@ def main():
         raise ValueError("checkpoint download is incomplete")
     if list(checkpoint.rglob("*.partial")) or list((args.weights / "hub").rglob("*.partial")):
         raise ValueError("asset downloads are still in progress")
-    model = tree_digest(checkpoint)
+    model = checkpoint_tree_digest(checkpoint)
     normalization = file_digest(checkpoint / "statistics.json")
     backbone = tree_digest(args.weights / "hub")
     model_image, benchmark_image = require_image(args.policy_image, manifest), image_id(args.benchmark_image)

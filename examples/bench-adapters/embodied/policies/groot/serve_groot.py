@@ -60,9 +60,9 @@ def main():
     if not all((args.checkpoint, args.backbone_cache, args.embodiment,
                 args.checkpoint_digest, args.normalization_digest, args.backbone_digest)):
         parser.error("checkpoint, backbone cache, embodiment and all content digests are required")
-    from orbit_embodied.assets import tree_digest
+    from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
     from orbit_embodied.evidence import file_digest
-    if tree_digest(args.checkpoint) != args.checkpoint_digest:
+    if checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest:
         raise ValueError("GR00T checkpoint content digest mismatch")
     if file_digest(args.checkpoint / "statistics.json") != args.normalization_digest:
         raise ValueError("GR00T normalization content digest mismatch")

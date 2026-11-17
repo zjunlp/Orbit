@@ -38,10 +38,7 @@ export function assignSolveBatches(job: BenchJob, trials: Trial[]): void {
         id: `${job.id}.batch.${++sequence}`,
         attemptId,
         method: method.name,
-        randomness:
-          method.policySnapshot?.randomness.scope === "stateless"
-            ? ("stateless" as const)
-            : ("service" as const),
+        randomness: method.policySnapshot?.randomness.scope ?? ("service" as const),
         members: group.map((trial) => ({
           trialId: trial.id,
           sampleRef: trial.sampleRef as string,
@@ -56,7 +53,7 @@ export function assignSolveBatches(job: BenchJob, trials: Trial[]): void {
   }
 }
 
-/** A retry must reproduce the same complete service-stream prefix, even when only one result is adopted. */
+/** Record membership, episode position and random-stream scope for comparison and retries. */
 export function batchConditions(trial: Trial): unknown {
   return trial.batch
     ? {

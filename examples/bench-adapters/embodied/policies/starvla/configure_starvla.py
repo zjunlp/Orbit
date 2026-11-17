@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, digest, file_digest, implementation_digest
 from native_runtime import build_policy_image, check_policy_source, policy_manifest, require_image
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.simpler import WIDOWX_AREA_SIZE
 
 
@@ -100,7 +100,7 @@ def main():
         raise ValueError("the Qwen3-VL-4B backbone is missing")
     benchmark = json.loads(args.benchmark_config.read_text())
     reference = benchmark_recipe(benchmark, args.source)
-    checkpoint, normalization = tree_digest(args.weights), file_digest(args.weights / STATS)
+    checkpoint, normalization = checkpoint_tree_digest(args.weights), file_digest(args.weights / STATS)
     name = "starvla-qwen3vl-groot-widowx"
     policy = {
         "name": name, "version": "20k", "connector": "policy-ws", "replanSteps": 1, "callTimeoutSec": 300,

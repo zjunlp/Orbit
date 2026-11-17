@@ -11,6 +11,7 @@
     "check:boundaries": "node scripts/boundaries.ts && node scripts/python-syntax.ts",
     "format": "biome check --write .",
     "test": "vitest run --dir scripts && pnpm -r test",
+    "test:embodied-sdk": "PYTHONPATH=examples/sdk python3 -B -m unittest discover -s examples/sdk/orbit_embodied -t examples/sdk -v",
     "build": "pnpm --filter @zjunlp/orbit-web build && pnpm --filter @zjunlp/orbit build",
     "verify": "pnpm check && pnpm test && pnpm build",
     "orbit": "node packages/orbit/src/bin.ts",

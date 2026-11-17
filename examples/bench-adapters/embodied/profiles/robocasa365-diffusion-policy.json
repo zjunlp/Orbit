@@ -1,9 +1,9 @@
 {
   "source": {
     "repository": "https://github.com/robocasa-benchmark/diffusion_policy.git",
-    "commit": "da6996f475572a3e37da16fef27b375732a612b4",
+    "commit": "41212698b6f481ed92a55f0d5f1778ec56bea417",
     "files": {
-      "eval_robocasa.py": "sha256:45e3acf12acb85bfee25ec9ebf755f969a526e40f52669fa8cc10d60c2f807ad",
+      "eval_robocasa.py": "sha256:d1b6bb4f939358465d2492c08fe34cd2d69b974ecfc74e0bbe0b566dc6c02492",
       "diffusion_policy/env_runner/robomimic_image_runner.py": "sha256:d3cb68ba936ae8716c694fcef8869c17de39b87840f126fc690bcaf48367b31a",
       "diffusion_policy/gym_util/multistep_wrapper.py": "sha256:2923e73c13ff9f782451ab61bed43a802670bbf29419471f82878c690f26a342",
       "diffusion_policy/env/robomimic/robomimic_image_wrapper.py": "sha256:792bd8757cfbce8b9c8bee6fa691f9e2a8e3d5357c90d58d2365a571d0de1dc2",

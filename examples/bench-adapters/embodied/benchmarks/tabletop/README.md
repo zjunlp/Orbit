@@ -13,7 +13,7 @@ The four recipes reuse the existing fixed-batch, CPU verification and rescore pa
 
 ## ManiSkill3 native tabletop tasks
 
-The `3.0.0b22` [tabletop catalog](../../profiles/maniskill3-tabletop.json) groups tasks by the
+The ManiSkill `3.0.1` [tabletop catalog](../../profiles/maniskill3-tabletop.json) groups tasks by the
 native robot, joint controller and observation contract. The adapter freezes each native time limit
 and reads `info.success`. Each profile uses 128 × 128 RGB, seeded CPU physics, and the
 native normalized `pd_joint_delta_pos` controller. Dual Panda actions use the simulator's
@@ -22,7 +22,7 @@ flattened Dict order. The language field is a fixed task description from the ca
 The `panda-pick-cube`, `dual-panda-pick-cube`, `so100`, `widowxai` and `ycb` profiles
 include `goal_pos` as a float32 XYZ target in world metres. The single-arm tasks use the
 native RGB observation's goal field. The dual-arm task uses the native goal marker pose.
-Register the updated profiles and regenerate sample plans for the `/2` recipe.
+Register the updated profiles and regenerate sample plans for the `/3` recipe.
 
 Use the ManiSkill3 simulator image below and choose a profile. These registrations accept
 an independent `policy-ws` service that matches the profile's observation and action
@@ -31,7 +31,7 @@ declarations. The RLinf Plate-25 checkpoint uses a separate WidowX end-effector 
 ```bash
 adapter=examples/bench-adapters/embodied
 python3 -B "$adapter/benchmarks/tabletop/configure_maniskill.py" --profile panda-pick-cube \
-  --benchmark-image orbit/embodied-maniskill3:3.0.0b22 --output-dir "$MANISKILL_CONFIG"
+  --benchmark-image orbit/embodied-maniskill3:3.0.1 --output-dir "$MANISKILL_CONFIG"
 orbit bench add-file "$MANISKILL_CONFIG/benchmark.json"
 orbit bench tasks maniskill3-tabletop-panda-pick-cube-native --json
 python3 -B "$adapter/plan.py" --reference-source "$adapter" \
@@ -87,10 +87,10 @@ docker build --label orbit.task=embodied-eval --target maniskill \
   --build-arg SIMULATOR_BASE=orbit/simpler-native:reference \
   --build-context rlinf="$RLINF_SOURCE" --build-context torch_wheels="$ROBOTWIN_TORCH_WHEELS" \
   --build-context physx="$MANISKILL_PHYSX" -f "$adapter/benchmarks/tabletop/tabletop.Dockerfile" \
-  -t orbit/embodied-maniskill3:3.0.0b22 .
+  -t orbit/embodied-maniskill3:3.0.1 .
 docker build --label orbit.task=embodied-eval --target metaworld \
   --build-arg SIMULATOR_BASE=orbit/simpler-native:reference -f "$adapter/benchmarks/tabletop/tabletop.Dockerfile" \
-  -t orbit/embodied-metaworld:3.0.0 .
+  -t orbit/embodied-metaworld:3.1.1 .
 docker build --label orbit.task=embodied-eval --build-arg POLICY_BASE=orbit/robocasa365-policy:reference \
   -f "$adapter/policies/openpi/metaworld-policy.Dockerfile" -t orbit/embodied-metaworld-policy:reference .
 ```
@@ -100,7 +100,9 @@ under `rlinf/`, the [Bridge archive](https://huggingface.co/datasets/haosulab/Ma
 under `data/tasks/bridge_v2_real2sim_dataset/` and the
 [WidowX robot assets](https://github.com/haosulab/ManiSkill-WidowX250S/tree/v0.2.0)
 under `data/robots/widowx/`. Register the assembled root as `maniskill3-plate-assets`.
-Meta-World loads its scenes from the simulator wheel.
+Plate-25 uses the same ManiSkill 3.0.1 simulator image as the tabletop profiles.
+Meta-World 3.1.1 loads its scenes from the simulator wheel and pins MuJoCo 3.3.0
+for its contact dynamics. Keep the existing model images and checkpoint bundles.
 
 ## Register and calibrate
 
@@ -116,7 +118,7 @@ For example, calibrate π₀.₅ on two Meta-World tasks using the published che
 ```bash
 python3 -B "$adapter/benchmarks/tabletop/configure_tabletop.py" --model metaworld \
   --reference-source "$RLINF_SOURCE" --weights "$METAWORLD_WEIGHTS" \
-  --benchmark-image orbit/embodied-metaworld:3.0.0 --policy-image orbit/embodied-metaworld-policy:reference \
+  --benchmark-image orbit/embodied-metaworld:3.1.1 --policy-image orbit/embodied-metaworld-policy:reference \
   --output-dir "$LOCAL_CONFIG"
 orbit data add pi05-rlinf-metaworld "$METAWORLD_WEIGHTS"
 orbit policy add "$LOCAL_CONFIG/policy.json"
@@ -131,10 +133,11 @@ orbit bench calibrate metaworld-mt50-native --policy pi05-rlinf-metaworld \
 Use `orbit bench tasks <registration> --json` to select sample tasks. Pass `--suite libero_goal`
 to the plan generator for MolmoAct2. The SmolVLA recipe uses 10 settle steps and replans every
 50 steps. MolmoAct2 uses 50 settle steps and replans every 10 steps. The ManiSkill3 recipe selects the
-Plate-25 main task and uses an eight-step chunk. Meta-World selects the 50-task catalog and uses
-15 zero-action settle steps followed by at most 160 control steps, with five actions per inference.
+Plate-25 main task and uses an eight-step chunk. Generate its sample plans with
+`maniskill3-rlinf-reference/2`. Meta-World selects the 50-task catalog and uses 15 zero-action
+settle steps followed by at most 160 control steps, with five actions per inference.
 Meta-World uses the same unsigned 32-bit seed (`environmentSeed + initialStateId`) to construct MT1
-goals and reset the environment. Generate sample plans with the seeded `metaworld-rlinf-reference/2`
+goals and reset the environment. Generate sample plans with the seeded `metaworld-rlinf-reference/3`
 recipe.
 The Meta-World service uses eager Torch to keep the first inference within its deadline.
 

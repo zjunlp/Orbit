@@ -2,13 +2,16 @@
 """Orbit protocol 1 adapter: native environments, independent policy, one planned episode."""
 
 import ast
+from itertools import islice, takewhile
 import json
 import math
 from pathlib import Path
+from pickletools import genops
 import shutil
 import subprocess
 import sys
 import uuid
+from zipfile import BadZipFile, ZipFile
 
 HERE = Path(__file__).resolve().parent
 SDK = HERE.parents[1] / "sdk"
@@ -77,6 +80,27 @@ def settings(req):
     return root, config, reference
 
 
+def libero_initial_state_count(asset):
+    """Read the shape header of the upstream Torch archive's NumPy matrix."""
+    try:
+        with ZipFile(asset) as archive:
+            metadata, = (name for name in archive.namelist() if name.endswith("/data.pkl"))
+            with archive.open(metadata) as stream:
+                operations = ((op.name, arg) for op, arg, _ in genops(stream.read(256)))
+                # Parse only the shape header. Loading the pickle would execute its instructions.
+                constructor = [arg for op, arg in takewhile(lambda item: item[0] != "MARK", operations)
+                               if op == "GLOBAL"]
+                version, count, width, shape = islice(operations, 4)
+        if (len(constructor) >= 2 and constructor[0] in
+                ("numpy.core.multiarray _reconstruct", "numpy._core.multiarray _reconstruct")
+                and constructor[1] == "numpy ndarray" and version[1] == 1 and shape[0] == "TUPLE2"
+                and all(type(value) is int and value > 0 for value in (count[1], width[1]))):
+            return count[1]
+    except (BadZipFile, ValueError) as exc:
+        raise ValueError(f"invalid LIBERO initial-state metadata in {asset.name}") from exc
+    raise ValueError(f"unsupported LIBERO initial-state matrix in {asset.name}")
+
+
 def catalog(root, suite):
     source = root / "third_party/libero/libero/libero"
     tree = ast.parse((source / "benchmark/libero_suite_task_map.py").read_text())
@@ -89,7 +113,8 @@ def catalog(root, suite):
         result.append({"id": suite + ":" + name, "title": name.replace("_", " "),
                        "supported": True, "reason": None,
                        "tags": {"suite": suite, "taskIndex": str(index),
-                                "initialStateDigest": file_digest(asset)}})
+                                "initialStateDigest": file_digest(asset),
+                                "initialStateCount": str(libero_initial_state_count(asset))}})
     return result
 
 
@@ -170,6 +195,10 @@ def tasks(req):
         metrics = [{"name": "success_rate", "label": "Native success", "unit": "ratio", "range": [0, 1]}]
     elif kind == "cliport":
         metrics = [{"name": "success_rate", "label": "Reward above 0.99", "unit": "ratio", "range": [0, 1]}]
+    elif kind == "robomme":
+        from orbit_embodied.robomme import SUITES
+        metrics = [{"name": suite + "_success", "label": suite.title() + " success",
+                    "unit": "ratio", "range": [0, 1]} for suite in SUITES]
     elif kind == "colosseum-v2":
         metrics = [{"name": "success_at_end", "label": "Success at horizon", "unit": "ratio", "range": [0, 1]}]
     elif kind == "eb-navigation":
@@ -197,6 +226,8 @@ def tasks(req):
                              }, "methods": ["policy"],
                              **({"identity": {"id": "chores", "name": "CHORES", "variant": variant}}
                                 if variant else {}),
+                             **({"identity": {"id": "robomme", "name": "RoboMME", "variant": "Public test"}}
+                                if kind == "robomme" else {}),
                              "taxonomy": {"domains": ["robotics"],
                                           "taskTypes": (["navigation", "manipulation"] if kind == "chores" else
                                                         ["navigation"] if kind in ("eb-navigation", "hssd-ov") else ["manipulation"]),
@@ -248,7 +279,7 @@ def solve_member(trial, reference, implementation, episode_id):
         reset_seed(sample, reference)
     if environment.get("kind") in ("vlabench", "robocasa-v02", "rlbench", "robomimic", "vima-bench",
                                   "molmospaces", "colosseum-v2", "vla-arena", "libero-pro", "libero-mem", "bigym2", "cliport",
-                                  "eb-navigation", "chores", "hssd-ov", "behavior1k"):
+                                  "eb-navigation", "chores", "hssd-ov", "behavior1k", "robomme"):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
@@ -281,7 +312,8 @@ def solve_member(trial, reference, implementation, episode_id):
 
 def solve_spec(trial, config, environment, destination):
     gl_platform = "egl" if config.get("renderer") == "vulkan" else config.get("renderer", "osmesa")
-    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16, "behavior1k": 32}.get(environment.get("kind"), 8)
+    memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16, "behavior1k": 32,
+                 "robomme": 16}.get(environment.get("kind"), 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
     if environment.get("kind") in ("eb-navigation", "chores", "hssd-ov"):
         gpu = trial.get("options", {}).get("gpuId")
@@ -447,6 +479,10 @@ def score(req):
             raise ValueError("verification belongs to another frozen trial or solve Run")
         if not result["valid"]:
             return invalid(result.get("failure", "scorer_error"), *result["issues"])
+        if (reference.get("environment", {}).get("kind") == "robomme"
+                and result["native"]["nativeStatus"] == "error"):
+            # Archived Solve evidence used to mark this status valid.
+            return invalid("env_step", "RoboMME simulator error recorded by the archived Solve")
         files = [
             {"label": "Native episode", "phase": "solve", "path": prefix + "/native-result.json", "kind": "json"},
             {"label": "Resolved binding", "phase": "solve", "path": prefix + "/resolved-binding.json", "kind": "json"},
@@ -511,6 +547,9 @@ def score(req):
             distance = result["native"]["distanceToTarget"]
             if distance is not None:
                 metrics["distance_to_target"] = distance
+        elif kind == "robomme":
+            suite = environment["taskTags"][req["trial"]["sample"]["taskId"]]["suite"]
+            metrics = {suite + "_success": success}
         return valid(success, metrics=metrics, issues=result["issues"], review={"files": files})
     except Exception as exc:
         return invalid("scorer_error", str(exc))

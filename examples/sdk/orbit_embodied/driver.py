@@ -16,10 +16,11 @@ from .wire import POLICY_FALLBACKS
 
 
 class EpisodeFailure(RuntimeError):
-    def __init__(self, kind, message, *, rejected_actions=None):
+    def __init__(self, kind, message, *, rejected_actions=None, rejected_summary=None):
         super().__init__(message)
         self.kind = kind
         self.rejected_actions = rejected_actions
+        self.rejected_summary = rejected_summary
 
 
 class SampleRejected(RuntimeError):
@@ -129,15 +130,20 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                     try:
                         requested = np.asarray(policy.act(inputs))
                     except EpisodeFailure as exc:
+                        if exc.rejected_actions is None and exc.rejected_summary is None:
+                            raise
+                        rejection = {"sourceObservation": step, "encoding": "raw-policy-actions", "reason": str(exc)}
                         if exc.rejected_actions is not None:
                             raw = np.asarray(exc.rejected_actions)
-                            rejection = {"sourceObservation": step, "encoding": "raw-policy-actions",
-                                         "reason": str(exc), "dtype": str(raw.dtype), "shape": list(raw.shape)}
+                            rejection.update(dtype=str(raw.dtype), shape=list(raw.shape))
                             if raw.dtype.kind in "buif":
                                 np.save(chunks / (str(call) + ".rejected.npy"), raw, allow_pickle=False)
                             else:
                                 rejection["preview"] = repr(raw)[:500]
-                            write_json(chunks / (str(call) + ".rejected.json"), rejection)
+                        else:
+                            summary = exc.rejected_summary
+                            rejection.update(dtype=summary["dtype"], shape=summary["shape"], preview=summary["preview"])
+                        write_json(chunks / (str(call) + ".rejected.json"), rejection)
                         raise
                     elapsed = time.monotonic() - called
                     if requested.dtype.kind not in "buif":

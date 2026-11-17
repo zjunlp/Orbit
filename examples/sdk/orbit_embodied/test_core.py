@@ -580,6 +580,37 @@ class CoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "conversion"):
             self.verify()
 
+    def test_connector_gripper_conversion_is_bound_to_valid_raw_actions(self):
+        class Converting(SyntheticPolicy):
+            conversion = "libero-gripper"
+
+        for definition in ({"connector": "openvla-ws"}, {"connector": "groot-zmq", "ioAdapter": "libero-native"}):
+            with self.subTest(definition=definition), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary) / "episode"
+                result = run_episode(SyntheticBenchmark(success_at=2), Converting(), self.sample, self.binding,
+                                     directory, "synthetic-attempt", {"policy": definition})
+                self.assertTrue(result["valid"])
+
+                def verify():
+                    return verify_episode(directory, self.sample["sampleId"], "synthetic-attempt")
+
+                self.assertEqual(verify(), result)
+                raw_path = directory / "chunks/0.raw.npy"
+                raw = np.load(raw_path, allow_pickle=False)
+                raw[:, -1] = -np.inf  # Would still convert to the same finite native gripper command.
+                np.save(raw_path, raw, allow_pickle=False)
+                seal(directory, result)
+                with self.assertRaisesRegex(ValueError, "finite numeric"):
+                    verify()
+                raw_path.unlink()
+                timing_path = directory / "chunks/0.json"
+                timing = json.loads(timing_path.read_text())
+                del timing["conversion"]
+                write_json(timing_path, timing)
+                seal(directory, result)
+                with self.assertRaisesRegex(ValueError, "conversion differs from the frozen policy"):
+                    verify()
+
     def test_final_step_past_the_episode_deadline_is_invalid(self):
         import time
 
@@ -620,6 +651,88 @@ class CoreTests(unittest.TestCase):
         rejection = json.loads((self.output / "chunks/1.rejected.json").read_text())
         self.assertEqual(rejection["sourceObservation"], 5)
         self.assertEqual(rejection["encoding"], "raw-policy-actions")
+
+    def test_frozen_policy_websocket_preserves_rejected_actions_before_control(self):
+        import asyncio
+        from contextlib import asynccontextmanager, suppress
+        import sys
+        from unittest.mock import patch
+
+        from websockets.server import serve
+        from .policy_ws import PolicyClient
+        from .wire import serve_actions, serve_frozen_actions
+
+        invalid = "policy action chunk has invalid shape, length or non-finite values"
+        wrong_count = "policy action count differs from the released model"
+        cases = (
+            ("nonfinite", np.full((6, 7), np.nan, dtype=np.float32), invalid, True),
+            ("wrong-width", np.zeros((6, 8)), invalid, True),
+            ("wrong-count", np.zeros((5, 7)), wrong_count, True),
+            ("object", np.full((6, 7), "invalid", dtype=object), invalid, False),
+            ("numeric-text", np.full((6, 7), "0.25"), invalid, False),
+            ("complex", np.full((6, 7), 1 + 2j), invalid, False),
+            ("ragged", [[0], [0, 0]], invalid, False),
+            ("incompatible-arrays", [np.zeros((2, 7)), np.zeros((2, 8))],
+             "policy action chunk cannot be represented as an array", False),
+            ("oversized", np.zeros((1024, 7)), wrong_count, False),
+            ("valid", np.zeros((6, 7)), None, False),
+        )
+        predictions = iter(chunk for _, chunk, _, _ in cases)
+
+        def run_trials(port):
+            for name, chunk, reason, keep_array in cases:
+                with self.subTest(case=name):
+                    self.output = Path(self.temporary.name) / name
+                    policy = PolicyClient(f"ws://127.0.0.1:{port}", timeout=3, replan_steps=5, action_size=7)
+                    benchmark = SyntheticBenchmark(success_at=1)
+                    result = self.run_sample(benchmark, policy)
+                    self.assertEqual(result["valid"], reason is None)
+                    self.assertEqual(benchmark.count, int(reason is None))
+                    self.assertEqual(self.verify()["valid"], result["valid"])
+                    if reason is None:
+                        continue
+                    self.assertEqual(result["failure"], "policy_act")
+                    rejection = json.loads((self.output / "chunks/0.rejected.json").read_text())
+                    self.assertEqual(rejection["reason"], reason)
+                    self.assertEqual(rejection["sourceObservation"], 0)
+                    if name == "incompatible-arrays":
+                        self.assertEqual((rejection["dtype"], rejection["shape"]), ("object", []))
+                    else:
+                        if name == "ragged":
+                            chunk = np.asarray(chunk, dtype=object)
+                        self.assertEqual(rejection["dtype"], str(chunk.dtype))
+                        self.assertEqual(rejection["shape"], list(chunk.shape))
+                    raw_file = self.output / "chunks/0.rejected.npy"
+                    if keep_array:
+                        np.testing.assert_array_equal(np.load(raw_file, allow_pickle=False), chunk, strict=True)
+                    else:
+                        self.assertFalse(raw_file.exists())
+                        self.assertTrue(rejection["preview"])
+
+        async def exercise(policy, metadata, _host, _port, *, reset):
+            loop = asyncio.get_running_loop()
+            ready = loop.create_future()
+
+            @asynccontextmanager
+            async def listen(handler, host, port, **options):
+                async with serve(handler, host, port, **options) as server:
+                    ready.set_result(server.sockets[0].getsockname()[1])
+                    yield server
+
+            with patch("websockets.server.serve", listen):
+                task = asyncio.create_task(serve_actions(policy, metadata, "127.0.0.1", 0, reset=reset))
+                try:
+                    await loop.run_in_executor(None, run_trials, await ready)
+                finally:
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+
+        argv = ["serve", "--weights", self.temporary.name, "--asset-digests", "{}"]
+        with patch.object(sys, "argv", argv), patch("orbit_embodied.wire.serve_actions", exercise), \
+                patch("orbit_embodied.wire.POLICY_WS_MAX_MESSAGE_SIZE", 4096):
+            serve_frozen_actions(lambda _: (lambda _observation: next(predictions), lambda: None),
+                                 {}, 7, 5, {}, action_count=6)
 
     def test_rescore_rejects_other_samples_attempts_and_changed_files(self):
         self.run_sample(SyntheticBenchmark(), SyntheticPolicy())

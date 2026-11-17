@@ -9,7 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import file_digest
 from native_runtime import build_policy_image, check_policy_source, policy_manifest, require_image
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
+from orbit_embodied.binding import resolve_binding
 
 
 SOURCE = {"repository": "https://github.com/robbyant/lingbot-vla",
@@ -17,6 +18,16 @@ SOURCE = {"repository": "https://github.com/robbyant/lingbot-vla",
 NORM = "assets/norm_stats/robotwin_50.json"
 POLICY = Path(__file__).resolve().parent
 DOCKERFILE = POLICY / "policy.Dockerfile"
+
+
+def policy_profile(reference):
+    benchmark = reference["benchmarkProfile"]
+    if (reference["environment"]["kind"] != "robotwin" or benchmark["id"] != "robotwin-aloha-agilex-native/1"
+            or reference["parameters"]["replanSteps"] != 50):
+        raise ValueError("expected the native RoboTwin fifty-step joint-control recipe")
+    profile = json.loads((POLICY / "profile.json").read_text())
+    resolve_binding(benchmark, profile, reference["observationMap"])
+    return profile
 
 
 def main():
@@ -41,18 +52,16 @@ def main():
         return
     image = require_image(args.policy_image, manifest)
     reference = json.loads(args.reference_file.read_text())
-    profile = reference["benchmarkProfile"]
-    if profile["id"] != "robotwin-aloha-agilex-native/1" or reference["parameters"]["replanSteps"] != 50:
-        raise ValueError("expected the native RoboTwin fifty-step joint-control recipe")
+    profile = policy_profile(reference)
     required = ("policy/config.json", "policy/lingbotvla_cli.yaml", "policy/model.safetensors",
                 "qwen/config.json", "qwen/tokenizer.json", "qwen/preprocessor_config.json")
     if not all((args.weights / path).is_file() for path in required):
         raise ValueError("LingBot-VLA checkpoint or Qwen processor is incomplete")
-    checkpoint, normalization = tree_digest(args.weights), file_digest(args.source / NORM)
+    checkpoint, normalization = checkpoint_tree_digest(args.weights), file_digest(args.source / NORM)
     name = "lingbot-vla-4b-robotwin"
     registration = {
         "name": name, "version": "1", "connector": "policy-ws", "replanSteps": 50, "callTimeoutSec": 300,
-        "profile": {**profile, "id": "lingbot-vla-robotwin-joint-input/1"},
+        "profile": profile,
         "checkpointDigest": checkpoint, "normalizationDigest": normalization,
         "randomness": {"backend": "torch", "initialSeed": 0, "scope": "service"},
         "weights": {"dataset": name, "target": "/weights"},

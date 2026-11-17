@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from native_runtime import image_id
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 from orbit_embodied.binding import robocasa_horizon
 
 
@@ -68,19 +68,24 @@ def set_benchmark_scope(reference, root, task_set, split, recipe):
         name += "-" + recipe
     if split == "target":
         name += "-target"
-    reference["id"] = name + "/1"
+    reference["id"] = name + ("/2" if recipe == "diffusion-policy" else "/1")
     reference["scoreName"] = "RoboCasa365 " + TASK_SETS[task_set] + " success"
     if split == "target":
         reference["scoreName"] += " (target scenes)"
     return name + "-native"
 
 
+def use_v101_simulator(reference):
+    benchmark = json.loads((HERE / "profiles/robocasa365-v101.json").read_text())
+    source = reference["reference"]
+    source["robocasa"]["commit"] = benchmark["robocasaCommit"]
+    source["files"].update(benchmark["files"])
+
+
 def panda_omron_v101_reference(robocasa, assets, evaluation):
     reference = json.loads((HERE / "profiles/robocasa365-atomic-seen.json").read_text())
-    baseline = json.loads((HERE / "profiles/robocasa365-gr00t-n15.json").read_text())
+    use_v101_simulator(reference)
     source = reference["reference"]
-    source["robocasa"]["commit"] = baseline["benchmark"]["robocasaCommit"]
-    source["files"].update(baseline["benchmark"]["files"])
     source["evaluation"] = evaluation
     check_source(robocasa, source["robocasa"], source["files"])
     reference["scoreErrors"] = "exclude"
@@ -91,10 +96,8 @@ def panda_omron_v101_reference(robocasa, assets, evaluation):
 
 def groot_reference(reference, model):
     reference["scoreErrors"] = "exclude"
-    source = reference["reference"]
-    source["robocasa"]["commit"] = model["benchmark"]["robocasaCommit"]
-    source["files"].update(model["benchmark"]["files"])
-    source["evaluation"] = model["source"]
+    use_v101_simulator(reference)
+    reference["reference"]["evaluation"] = model["source"]
     reference["environment"]["horizonScale"] = 1
     reference["parameters"].pop("resizeSize")
     reference["parameters"].update(replanSteps=16, successRule="chunk-last-any")
@@ -102,8 +105,9 @@ def groot_reference(reference, model):
 
 def diffusion_reference(reference, model):
     reference["scoreErrors"] = "exclude"
+    use_v101_simulator(reference)
     reference["reference"]["evaluation"] = model["source"]
-    reference["environment"]["protocol"] = "diffusion-policy"
+    reference["environment"].update(protocol="diffusion-policy", horizonScale=1)
     parameters = reference["parameters"]
     parameters.pop("resizeSize")
     parameters.update(replanSteps=8, successRule="any", environmentSeed=1111111)
@@ -124,7 +128,7 @@ def diffusion_policy(args, reference, model):
         source = model[key]
         check_source(args.diffusion_source if key == "source" else args.robomimic_source, source, source["files"])
     checkpoint = file_digest(args.weights / model["checkpointFile"])
-    backbone = tree_digest(args.weights / "clip")
+    backbone = checkpoint_tree_digest(args.weights / "clip")
     if checkpoint != model["checkpointDigest"] or backbone != model["backboneDigest"]:
         raise ValueError("inference assets differ from the published Diffusion Policy recipe")
     normalization = model["normalizationDigest"]
@@ -162,9 +166,9 @@ def configure_policy(args, reference, model, groot):
                 else ["_CHECKPOINT_METADATA", "params/manifest.ocdbt", "assets/norm_stats.json"])
     if any(not (weights / filename).is_file() for filename in required):
         raise ValueError("RoboCasa365 inference checkpoint is incomplete")
-    checkpoint = tree_digest(weights)
+    checkpoint = checkpoint_tree_digest(weights)
     normalization = (file_digest(weights / "experiment_cfg/metadata.json") if groot
-                     else tree_digest(weights / "assets"))
+                     else checkpoint_tree_digest(weights / "assets"))
     if checkpoint != model["checkpoint"]["digest"] or normalization != model["checkpoint"]["normalizationDigest"]:
         raise ValueError("checkpoint contents differ from the published RoboCasa365 inference files")
     service = {
@@ -175,7 +179,7 @@ def configure_policy(args, reference, model, groot):
                    "--normalization-digest", normalization]
     extra = {}
     if groot:
-        backbone = tree_digest(policy_root / model["backbone"]["path"])
+        backbone = checkpoint_tree_digest(policy_root / model["backbone"]["path"])
         if backbone != model["backbone"]["digest"]:
             raise ValueError("bundled Eagle assets differ from the published recipe")
         server = "/opt/orbit/serve_groot_n15.py"
