@@ -3,8 +3,8 @@
 // state diff, reference calls and raw record. The checker's first failure is one key away (`e`).
 
 import type { SessionMessage } from "@zjunlp/orbit/contracts";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { IconAlert, IconBan, IconCheck, IconSearch, IconX } from "../../components/icons.tsx";
+import { Fragment, useMemo, useRef, useState } from "react";
+import { IconCheck, IconSearch, IconX } from "../../components/icons.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
 import { api, type ReviewFile, type Run } from "../../lib/api.ts";
 import type { ReplayControl } from "../../lib/atif.ts";
@@ -14,19 +14,18 @@ import {
   callSummary,
   deepParse,
   diffStates,
-  matches,
   parseConversation,
-  parseResult,
   type ToolCall,
   type Turn,
-  turnStats,
 } from "../../lib/conversation.ts";
 import { bytes } from "../../lib/format.ts";
 import { overlayOpen, useHotkeys } from "../../lib/hotkeys.ts";
 import { setQuery, useLocation } from "../../lib/router.ts";
 import { useRunFile } from "../../lib/run-file.ts";
 import { useAsync } from "../../lib/use.ts";
-import { SessionSteps } from "./SessionSteps.tsx";
+import { ConversationMessages, ConversationTurns } from "./ConversationList.tsx";
+import { conversationRows, indexConversation } from "./conversation-model.ts";
+import { Field, Json, STATUS_ICON } from "./conversation-parts.tsx";
 import "./conversation.css";
 
 const MAX_BYTES = 16 * 1024 * 1024;
@@ -41,12 +40,16 @@ export function ConversationFile({
   solve?: Run;
 }) {
   const sessionRun = solve ?? run;
-  const session = useAsync(() => api.session(sessionRun.id), [sessionRun.id, sessionRun.state]);
+  const session = useAsync(
+    (signal) => api.session(sessionRun.id, signal),
+    [sessionRun.id, sessionRun.state],
+    { resetKey: sessionRun.id },
+  );
   const source = useRunFile(run, file.path, {
     what: "the conversation",
     maxBytes: MAX_BYTES,
     parse: parseConversation,
-    load: () => api.environment(run.id, file.path, "conversation", sessionRun.id),
+    load: (signal) => api.environment(run.id, file.path, "conversation", sessionRun.id, signal),
     loadKey: sessionRun.id,
   });
   const problem =
@@ -55,16 +58,37 @@ export function ConversationFile({
       ? `${bytes(source.entry.bytes)} exceeds the preview limit; download ${file.path} from Outputs.`
       : null) ??
     source.error;
-  if (problem) return <Empty title="Conversation unavailable">{problem}</Empty>;
-  if (!source.data) return <Loading what="Loading the conversation" />;
-  return <ConversationViewer c={source.data} messages={session.data?.agent?.messages ?? []} />;
+  return (
+    <div className="conv-file">
+      <div className="toolbar">
+        <span className="faint">Saved conversation</span>
+        <span className="spacer" />
+        <button
+          type="button"
+          className="btn sm"
+          aria-label="Refresh conversation"
+          onClick={() => {
+            source.reload();
+            session.reload();
+          }}
+        >
+          Refresh
+        </button>
+      </div>
+      {problem ? (
+        <Empty title="Conversation unavailable">{problem}</Empty>
+      ) : !source.data ? (
+        <Loading what="Loading the conversation" />
+      ) : (
+        <ConversationViewer
+          key={`${run.id}/${file.path}/${sessionRun.id}`}
+          c={source.data}
+          messages={session.data?.agent?.messages ?? []}
+        />
+      )}
+    </div>
+  );
 }
-
-const STATUS_ICON = {
-  passed: <IconCheck size={12} />,
-  failed: <IconX size={12} />,
-  unchecked: <IconBan size={12} />,
-};
 
 export function ConversationViewer({
   c,
@@ -78,6 +102,9 @@ export function ConversationViewer({
   const loc = useLocation();
   const [q, setQ] = useState("");
   const search = useRef<HTMLInputElement>(null);
+  const indexed = useMemo(() => indexConversation(c), [c]);
+  const followSelection = useRef(true);
+  const [jump, setJump] = useState(0);
   const failed = c.verdict.failedTurn ?? null;
   const fromUrl = loc.query.has("turn") ? Number(loc.query.get("turn")) : Number.NaN;
   const selected = control
@@ -97,15 +124,13 @@ export function ConversationViewer({
   /** One unchecked turn: the benchmark judges the whole conversation (τ²), not turns. */
   const whole = c.turns.length <= 1 && !c.turns.some((t) => t.check);
   const select = (index: number, scroll = true) => {
+    followSelection.current = scroll;
+    if (scroll) setJump((value) => value + 1);
     if (control) {
       control.select(c.turns.findIndex((t) => t.index === index));
       return;
     }
     setQuery({ turn: String(index) }, { replace: true });
-    if (scroll)
-      document
-        .getElementById(`turn-${index}`)
-        ?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
   const step = (d: number) => {
     const i = c.turns.findIndex((t) => t.index === selected);
@@ -122,16 +147,9 @@ export function ConversationViewer({
           "/": () => search.current?.focus(),
         },
   );
-  // Land on the failing turn when the page opens on it.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once per conversation
-  useEffect(() => {
-    if (!control && loc.query.get("turn") === null && failed !== null)
-      document.getElementById(`turn-${failed}`)?.scrollIntoView({ block: "start" });
-  }, [c]);
-  const shown = c.turns
-    .filter((t) => !control || t.index === selected)
-    .map((t) => ({ t, events: t.events.filter((e) => matches(e, q)) }));
-  const hits = q ? shown.reduce((n, x) => n + x.events.length, 0) : null;
+  const onlyTurn = control ? selected : undefined;
+  const layout = useMemo(() => conversationRows(indexed, q, onlyTurn), [indexed, q, onlyTurn]);
+  const hits = q ? layout.hits : null;
 
   return (
     <div className="conv">
@@ -156,100 +174,24 @@ export function ConversationViewer({
             />
           </div>
           {hits !== null && <div className="faint conv-hits">{hits} matching events</div>}
-          <ol>
-            {c.turns.map((t) => {
-              const s = turnStats(t);
-              const status = t.check?.status;
-              return (
-                <li key={t.index}>
-                  <button
-                    type="button"
-                    className={`conv-turn-link${t.index === selected ? " on" : ""} st-${status ?? "none"}`}
-                    onClick={() => select(t.index)}
-                  >
-                    <span className="conv-turn-n">
-                      {status && STATUS_ICON[status]} Turn {t.index + 1}
-                    </span>
-                    <span className="conv-turn-meta">
-                      {s.calls} call{s.calls === 1 ? "" : "s"}
-                      {s.errors > 0 && <span className="bad"> · {s.errors} error</span>}
-                      {s.rejected > 0 && <span className="warn"> · {s.rejected} rejected</span>}
-                    </span>
-                    <span className="conv-turn-preview">{brief(s.preview, 70)}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
+          <ConversationTurns indexed={indexed} selected={selected} onSelect={select} />
           <div className="conv-keys faint">
             <kbd>h</kbd>/<kbd>l</kbd> turns · <kbd>e</kbd> failure · <kbd>/</kbd> search
           </div>
         </aside>
-        <main className="conv-main">
-          <div className="conv-source faint">
-            Messages, tool results and states come from the saved evaluation record. The Agent
-            session tab has the agent's full session.
-          </div>
-          {c.turns.some((turn) => turn.sessionStepIds?.length) && (
-            <section aria-label="Agent at this turn">
-              <h3>Agent at this turn</h3>
-              <SessionSteps stepIds={turn?.sessionStepIds ?? []} messages={messages} />
-            </section>
-          )}
-          {shown.map(({ t, events }) => (
-            <section
-              key={t.index}
-              id={`turn-${t.index}`}
-              className={`conv-turn${t.index === selected ? " on" : ""} st-${t.check?.status ?? "none"}`}
-              onClick={() => t.index !== selected && select(t.index, false)}
-              onKeyDown={undefined}
-            >
-              <header>
-                <b>{whole ? "Conversation" : `Turn ${t.index + 1}`}</b>
-                {t.check && (
-                  <span className={`conv-check st-${t.check.status}`}>
-                    {STATUS_ICON[t.check.status]} {t.check.status}
-                  </span>
-                )}
-                {t.check?.status === "unchecked" && failed !== null && (
-                  <span className="faint">
-                    not checked: the checker stopped at turn {failed + 1}
-                  </span>
-                )}
-                {t.note && <span className="conv-note">{t.note}</span>}
-              </header>
-              {t.check?.status === "failed" && t.check.detail && (
-                <div className="conv-fail">
-                  <IconAlert size={13} /> {t.check.detail}
-                </div>
-              )}
-              {events.length === 0 && (
-                <div className="faint conv-none">
-                  {q
-                    ? "No matching events in this turn."
-                    : t.events.length === 0 && whole
-                      ? "No messages or tool calls: this is the expected behavior of the do-nothing baseline."
-                      : "No events in this turn."}
-                </div>
-              )}
-              {events.map((e, i) =>
-                e.type === "message" ? (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: messages have no id; order is fixed
-                  <Message key={`m${i}`} actor={e.actor} text={e.text} label={label} />
-                ) : (
-                  <CallCard
-                    key={e.id}
-                    call={e}
-                    label={label}
-                    open0={t.check?.status === "failed"}
-                    onOpen={() => t.index !== selected && select(t.index, false)}
-                  />
-                ),
-              )}
-            </section>
-          ))}
-          {c.turns.length === 0 && <Empty title="The conversation has no turns" />}
-        </main>
+        <ConversationMessages
+          indexed={indexed}
+          query={q}
+          selected={selected}
+          layout={layout}
+          jump={jump}
+          whole={whole}
+          failed={failed}
+          label={label}
+          messages={messages}
+          followSelection={followSelection}
+          onSelect={select}
+        />
         <aside className="conv-inspector" aria-label="Selected turn">
           {turn ? (
             <Inspector
@@ -341,99 +283,6 @@ function Verdict({ c, onJump }: { c: Conversation; onJump?: () => void }) {
       </div>
     </div>
   );
-}
-
-type Labels = Record<string, Conversation["participants"][number]>;
-
-function Message({ actor, text, label }: { actor: string; text: string; label: Labels }) {
-  const role = label[actor]?.role ?? actor;
-  return (
-    <div className={`conv-msg role-${role}`}>
-      <div className="conv-who">{label[actor]?.label ?? actor}</div>
-      <div className="conv-text">{text || <span className="faint">(empty)</span>}</div>
-    </div>
-  );
-}
-
-function CallCard({
-  call,
-  label,
-  open0 = false,
-  onOpen,
-}: {
-  call: ToolCall;
-  label: Labels;
-  /** Open from the start (calls of the failing turn). */
-  open0?: boolean;
-  onOpen?: () => void;
-}) {
-  const [open, setOpen] = useState(open0 || call.status !== "ok");
-  const role = label[call.actor]?.role ?? call.actor;
-  const result = parseResult(call.result);
-  return (
-    <div className={`conv-call st-${call.status} role-${role}`}>
-      <button
-        type="button"
-        className="conv-call-h"
-        aria-expanded={open}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!open) onOpen?.();
-          setOpen(!open);
-        }}
-      >
-        <span className={`conv-actor role-${role}`}>{label[call.actor]?.label ?? call.actor}</span>
-        <span className="conv-caret" aria-hidden>
-          {open ? "▾" : "▸"}
-        </span>
-        <span className="mono conv-call-sig">{callSummary(call)}</span>
-        <span className="spacer" />
-        {call.status !== "ok" && (
-          <span className={`chip ${call.status === "error" ? "bad" : "warn"}`}>{call.status}</span>
-        )}
-        {call.status === "ok" && call.result !== undefined && (
-          <span className="faint mono conv-call-res">→ {brief(call.result, 48)}</span>
-        )}
-      </button>
-      {open && (
-        <div className="conv-call-b">
-          {call.source && call.source !== callSummary(call, 1e9) && (
-            <Field label="As written">
-              <pre className="mono">{call.source}</pre>
-            </Field>
-          )}
-          <Field label="Arguments">
-            <Json v={call.arguments} />
-          </Field>
-          {call.error && (
-            <Field label={call.status === "rejected" ? "Rejected" : "Error"}>
-              <pre className="mono conv-err">{call.error}</pre>
-            </Field>
-          )}
-          {call.result !== undefined && call.status !== "error" && (
-            <Field label="Result">
-              <Json v={result} />
-            </Field>
-          )}
-          <div className="faint mono">call {call.id}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="conv-field">
-      <div className="conv-field-l">{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function Json({ v }: { v: unknown }) {
-  const text = typeof v === "string" ? v : JSON.stringify(v, null, 2);
-  return <pre className="mono conv-json">{text}</pre>;
 }
 
 type InspectorTab = "check" | "state" | "reference" | "final" | "raw";

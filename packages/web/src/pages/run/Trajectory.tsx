@@ -23,7 +23,8 @@ export function TrajectoryTab({
   compact?: boolean;
   trialContext?: { job: string; trial: string };
 }) {
-  const source = useAsync(() => api.trajectory(run.id), [run.id, run.state], {
+  const source = useAsync((signal) => api.trajectory(run.id, signal), [run.id, run.state], {
+    resetKey: run.id,
     poll: isActive(run.state),
     pollMs: 5000,
   });

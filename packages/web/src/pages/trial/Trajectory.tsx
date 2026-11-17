@@ -30,10 +30,12 @@ export function TrajectoryFile({
     what: "the trajectory",
     maxBytes: MAX_BYTES,
     parse: parseTrajectory,
-    load: () => api.environment(run.id, file.path, "gui"),
+    load: (signal) => api.environment(run.id, file.path, "gui", run.id, signal),
   });
   const a = source.listing;
-  const session = useAsync(() => api.session(run.id), [run.id, run.state]);
+  const session = useAsync((signal) => api.session(run.id, signal), [run.id, run.state], {
+    resetKey: run.id,
+  });
   const files = useMemo(() => new Set(a.data?.files.map((f) => f.path) ?? []), [a.data]);
   const problem =
     (source.missing

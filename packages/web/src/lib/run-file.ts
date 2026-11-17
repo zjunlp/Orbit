@@ -1,6 +1,6 @@
 // Loading one saved output file of a run for a trial view: find it in the run's listing, refuse
 // files over the view's preview limit before fetching, then read and parse it.
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { type Artifacts, api, fileUrl, type Run } from "./api.ts";
 import { type Async, useAsync } from "./use.ts";
 
@@ -10,8 +10,9 @@ export async function readRunFile(
   path: string,
   what: string,
   maxBytes = Number.POSITIVE_INFINITY,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(fileUrl(runId, path));
+  const response = await fetch(fileUrl(runId, path), { signal });
   if (!response.ok) throw new Error(`Could not read ${what} (${response.status}).`);
   const text = await response.text();
   // The file may have grown since it was listed.
@@ -32,6 +33,7 @@ export interface RunFile<T> {
   data: T | undefined;
   /** Why the listing, the file or its parsing failed. */
   error: string | null;
+  reload: () => void;
 }
 
 export function useRunFile<T>(
@@ -41,12 +43,14 @@ export function useRunFile<T>(
     what: string;
     maxBytes: number;
     parse: (text: string) => T;
-    load?: () => Promise<T>;
+    load?: (signal: AbortSignal) => Promise<T>;
     loadKey?: string;
     skip?: boolean;
   },
 ): RunFile<T> {
-  const listing = useAsync(() => api.artifacts(run.id), [run.id, run.state]);
+  const listing = useAsync((signal) => api.artifacts(run.id, signal), [run.id, run.state], {
+    resetKey: run.id,
+  });
   const entry = useMemo(
     () => listing.data?.files.find((item) => item.path === path),
     [listing.data, path],
@@ -54,16 +58,22 @@ export function useRunFile<T>(
   const tooLarge = !!entry && entry.bytes > opts.maxBytes;
   const read = !!entry && !tooLarge && !opts.skip;
   const source = useAsync(
-    async () =>
+    async (signal) =>
       read
         ? opts.load
-          ? await opts.load()
-          : opts.parse(await readRunFile(run.id, path, opts.what, opts.maxBytes))
+          ? await opts.load(signal)
+          : opts.parse(await readRunFile(run.id, path, opts.what, opts.maxBytes, signal))
         : undefined,
-    [run.id, path, read, entry?.bytes, entry?.mtime, opts.loadKey],
+    [run.id, path, read, entry?.bytes, entry?.mtime, opts.loadKey, opts.skip],
+    { resetKey: JSON.stringify([run.id, path, opts.loadKey, opts.skip]) },
   );
+  const reload = useCallback(() => {
+    listing.reload();
+    source.reload();
+  }, [listing.reload, source.reload]);
   return {
     listing,
+    reload,
     entry,
     missing: !!listing.data && !entry,
     tooLarge,

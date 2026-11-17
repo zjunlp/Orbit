@@ -25,9 +25,9 @@ export function TrajectoryEnvironment({
   const jobId = trialContext?.job ?? run.spec.tags.job;
   const trialId = trialContext?.trial ?? run.spec.tags.trial;
   const source = useAsync(
-    () => (jobId && trialId ? api.benchJob(jobId) : Promise.resolve(null)),
+    (signal) => (jobId && trialId ? api.benchJob(jobId, signal) : Promise.resolve(null)),
     [jobId, trialId, run.state],
-    { poll: !!jobId && !!trialId, pollMs: 15000 },
+    { poll: !!jobId && !!trialId, pollMs: 15000, resetKey: JSON.stringify([jobId, trialId]) },
   );
   const trial = source.data?.trials.find((t) => t.id === trialId);
   const review = trial?.outcome?.review ?? trial?.history.at(-1)?.outcome.review;
@@ -38,8 +38,9 @@ export function TrajectoryEnvironment({
   const chosen = files[selected] ?? files[0];
   const evidenceId = chosen?.file.phase === "verify" ? trial?.verifyRunId : trial?.solveRunId;
   const evidence = useAsync(
-    () => (evidenceId ? api.run(evidenceId) : Promise.resolve(null)),
+    (signal) => (evidenceId ? api.run(evidenceId, signal) : Promise.resolve(null)),
     [evidenceId],
+    { resetKey: evidenceId },
   );
   const sameSolve = trial?.solveRunId === run.id;
   return (
@@ -120,15 +121,16 @@ function AlignedEnvironment({
     what: "environment evidence",
     maxBytes: (kind === "conversation" ? 16 : 2) * 1024 * 1024,
     parse: JSON.parse,
-    load: () => api.environment(run.id, file.path, kind, solve.id),
+    load: (signal) => api.environment(run.id, file.path, kind, solve.id, signal),
     loadKey: solve.id,
   });
   const trace = source.data;
   const separate =
     kind === "episode" && trace && "mediaPhase" in trace && trace.mediaPhase === "solve";
   const media = useAsync(
-    () => (separate ? api.artifacts(solve.id) : Promise.resolve(null)),
+    (signal) => (separate ? api.artifacts(solve.id, signal) : Promise.resolve(null)),
     [separate, solve.id],
+    { resetKey: solve.id },
   );
   const listing = separate ? media.data : source.listing.data;
   const paths = useMemo(() => new Set(listing?.files.map((f) => f.path) ?? []), [listing]);

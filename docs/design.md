@@ -376,7 +376,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 - **页面框架**：一级页面在面包屑下有统一的 `PageHeader`（标题 + 一句说明），内容区最宽 `--content-max`（1600px）居中；
   侧栏底部为连接状态与快捷键 / 主题 / 折叠三个图标；job 状态用彩色徽标，`<details class="card">` 统一带折叠箭头。
 - **地址**：旧地址先由 `legacyHref` 重定向；`routes.ts` 之外的路径显示 “Page not found”，不再回落到 Overview。
-- **轮询**：`useAsync` 与 Logs 在隐藏标签页暂停轮询，重新可见时刷新一次后恢复；进行中的请求仍可完成，SSE 继续接收。
+- **轮询**：`useAsync` 与 Logs 在隐藏标签页暂停轮询，重新可见时刷新一次后恢复；隐藏页面不取消当前读取，SSE 继续接收。`useAsync` 为每次读取提供 `AbortSignal`，依赖变化、主动刷新和卸载时取消旧请求，同时保留过期响应保护；取消不作为业务错误。Conversation 与关联 Trial / ATIF 环境的读取传递该信号；`resetKey` 按资源身份立即隐藏上一资源的数据和错误，同一资源刷新仍保留已显示内容。
 - **删除**（不可恢复）：`POST runs/delete` 只删已终态且清理完成、不属于 bench trial 的 Run（远端 Run 须镜像同步结束）；
   全部校验通过才动手，删除记录、事件、租约与 Run 目录（容器以 root 写下的文件用该镜像的临时容器清掉；仍删不掉的
   目录在结果中列出）。bench job 只能整体删（`DELETE bench/jobs/:id`，非 running）：trial、全部 solve/verify Run 与
@@ -1478,7 +1478,10 @@ JSON 是辅助；"能跑 / 校准通过 / 真实 Agent 或 Policy 跑过 / 与�
   原始日志继续可查，预览上限 2 MiB。已有只含启动信息的日志不能还原对局；shared 模式不能 rescore，需重新运行才能记录。
 - Web `pages/trial/Conversation.tsx`：轮次目录 / 对话 / 检查器三栏（窄屏单栏）；工具卡片按 `callId` 合并调用与结果，错误与失败相关
   内容默认展开；检查器有 Checker、状态 diff（只看变化字段）、期望 vs 实际、Raw；顶部 verdict 横幅可跳到失败轮次。键位：`h/l` 轮次、
-  `/` 搜索、`e` 跳到失败证据。参考调用与实际调用的差异只作诊断，不当作判分规则。
+  `/` 搜索、`e` 跳到失败证据。轮次目录和消息区复用 TanStack Virtual，消息按轮次标题 / 单条事件扁平化，动态测量高度，只挂载可见内容及缓冲；单轮大量事件也不会全量挂载。
+  视图索引与筛选在 `conversation-model.ts`，虚拟列表在 `ConversationList.tsx`，消息 / 工具卡片在 `ConversationEvents.tsx`；搜索索引包含折叠的结果，事件标识不随筛选变化，工具展开状态跨虚拟卸载保留。
+  `?turn=`、失败跳转和快捷键都经虚拟索引定位，搜索定位首个命中；嵌入 ATIF 回放时仍只显示关联轮次。Conversation 的 Refresh 同时刷新目录、环境和会话读取，并取消旧请求。
+  参考调用与实际调用的差异只作诊断，不当作判分规则。
 - Trial 页通用：上一 / 下一 trial、下一个失败（按 task / method / seed 排序；`[` `]` `}`）。
 - **工具工作流的 CLI Agent 路径**：BFCL 用 adapter 自带的 stdio MCP 服务（`get_user_message` / `list_functions` / `call_function`）
   让 Agent 在一次会话里逐轮完成对话；调用按 fixed driver 的 evidence 格式记录，verify 独立重放，Agent 与服务的输出都不作评分依据。
