@@ -6,17 +6,21 @@ import json
 from pathlib import Path
 from urllib.request import urlopen
 
+import numpy as np
+
 from orbit_embodied.assets import tree_digest
 from orbit_embodied.binding import file_digest
+from orbit_embodied.driver import EpisodeFailure
+from orbit_embodied.evidence import validate_action_chunk
+from orbit_embodied.wire import policy_action_array
 
 
 NORMALIZATION_DIR = "lerobot/metaworld_mt50"
 CALVIN_NORMALIZATION_DIR = "InternRobotics/InternData-Calvin_ABC"
+REPLAN = 5
 
 
 def inputs(observation):
-    import numpy as np
-
     image = observation["front_rgb"]
     padding = np.zeros_like(image)
     return {"state": observation["state"], "prompt": observation["instruction"],
@@ -25,12 +29,22 @@ def inputs(observation):
 
 
 def calvin_inputs(observation):
-    import numpy as np
-
     data = inputs(observation)
     data["image"]["left_wrist_0_rgb"] = observation["wrist_rgb"]
     data["image_mask"]["left_wrist_0_rgb"] = np.True_
     return data
+
+
+def calvin_actions(raw):
+    actions = policy_action_array(raw)
+    controls = actions[:, :7] if actions.ndim == 2 else actions
+    try:
+        validate_action_chunk(controls, 7, REPLAN)
+    except ValueError as exc:
+        raise EpisodeFailure("policy_act", str(exc), rejected_actions=actions) from exc
+    controls = controls.copy()
+    controls[:, -1] = np.where(controls[:, -1] > 0, 1, -1)
+    return controls
 
 
 def main():
@@ -65,7 +79,7 @@ def main():
     from openpi.training.config import ModelTransformFactory
     from orbit_embodied.wire import serve_actions
 
-    config = Pi0Config(pi05=True, action_horizon=5, discrete_state_input=False)
+    config = Pi0Config(pi05=True, action_horizon=REPLAN, discrete_state_input=False)
     model = PI0Pytorch(config=config)
     load_model(model, str(args.checkpoint / "model.safetensors"))
     model.paligemma_with_expert.to_bfloat16_for_selected_params("bfloat16")
@@ -80,16 +94,10 @@ def main():
 
     @torch.inference_mode()
     def infer(observation):
-        actions = policy.infer(observation)["actions"][:, :action_size]
-        if calvin:
-            import numpy as np
+        raw = policy.infer(observation)["actions"]
+        return calvin_actions(raw) if calvin else raw[:, :action_size]
 
-            if not np.isfinite(actions).all():
-                raise ValueError("CALVIN policy returned non-finite actions")
-            actions[:, -1] = np.where(actions[:, -1] > 0, 1, -1)
-        return actions
-
-    metadata = {"calibration": False, "actionSize": action_size, "replanSteps": 5, "orbit": {
+    metadata = {"calibration": False, "actionSize": action_size, "replanSteps": REPLAN, "orbit": {
         "checkpointDigest": args.checkpoint_digest, "normalizationDigest": args.normalization_digest,
         "randomness": {"backend": "torch", "initialSeed": 0, "scope": "service"},
     }}

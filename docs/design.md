@@ -980,6 +980,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   固定步长评测按冻结间隔重规划。CALVIN 可在原生子任务完成时提前重规划，验证器复核完成信号和子任务进度。
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
+  DROID 和 CALVIN 拒绝的动作在夹爪转换前保存。无法表示为数组的返回值保留有界摘要。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
 - **冻结目录归档**：固定批量的 Solve 请求只保存一份冻结 reference 与一份批次计划，模拟器和 SDK 共用同一次准备。
   每个 Solve Run 在输出根目录归档一份 `reference.json`。episode contract 和 CPU Verify 请求只保存该 reference 的摘要，

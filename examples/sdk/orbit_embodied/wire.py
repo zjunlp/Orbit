@@ -1,6 +1,7 @@
 """Shared bounded policy payloads; object arrays and pickle are prohibited."""
 
 import io
+from reprlib import repr as bounded_repr
 
 import numpy as np
 
@@ -41,14 +42,25 @@ def _pack_rejection(reason, actions):
     return pack({"rejection": {"reason": reason, "summary": summary}})
 
 
+def policy_action_array(raw):
+    from .driver import EpisodeFailure
+
+    try:
+        return np.asarray(raw)
+    except (TypeError, ValueError):
+        try:
+            return np.asarray(raw, dtype=object)
+        except (TypeError, ValueError) as exc:
+            summary = {"dtype": "object", "shape": [], "preview": bounded_repr(raw)[:500]}
+            raise EpisodeFailure("policy_act", "policy action chunk cannot be represented as an array",
+                                 rejected_summary=summary) from exc
+
+
 def checked_policy_actions(raw, action_size, replan_steps, *, action_count=None, dtype=None):
     from .driver import EpisodeFailure
     from .evidence import validate_action_chunk
 
-    try:
-        actions = np.asarray(raw)
-    except ValueError:
-        actions = np.asarray(raw, dtype=object)
+    actions = policy_action_array(raw)
     try:
         validate_action_chunk(actions, action_size, replan_steps)
         if len(actions) != (action_count if action_count is not None else replan_steps):
@@ -134,6 +146,8 @@ async def serve_actions(policy, metadata, host, port, *, reset=None, report_fall
         except Exception as exc:
             if isinstance(exc, EpisodeFailure) and exc.rejected_actions is not None:
                 await connection.send(_pack_rejection(str(exc), np.asarray(exc.rejected_actions)))
+            elif isinstance(exc, EpisodeFailure) and exc.rejected_summary is not None:
+                await connection.send(pack({"rejection": {"reason": str(exc), "summary": exc.rejected_summary}}))
             else:
                 await connection.send(type(exc).__name__ + ": " + str(exc))
             await connection.close(code=1011, reason="policy inference failed")

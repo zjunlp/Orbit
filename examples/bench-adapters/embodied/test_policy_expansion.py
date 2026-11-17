@@ -181,6 +181,8 @@ class PolicyExpansionTests(unittest.TestCase):
                             self.assertFalse(output.exists())
 
     def test_droid_uses_native_camera_and_gripper_conventions(self):
+        from orbit_embodied.driver import EpisodeFailure
+
         droid = load("policies/openpi/serve_droid.py")
         front = np.full((2, 2, 3), 2, dtype=np.uint8)
         wrist = np.full((2, 2, 3), 3, dtype=np.uint8)
@@ -199,9 +201,30 @@ class PolicyExpansionTests(unittest.TestCase):
         np.testing.assert_array_equal(chunk[:, :7], actions[:8, :7])
         self.assertEqual(chunk[:, 7].tolist(), [0] + [255] * 7)
         self.assertEqual(actions[1, 7], 7)
-        actions[0, 0] = np.nan
-        with self.assertRaisesRegex(ValueError, "finite"):
-            droid.droid_actions(actions)
+        actions[0, 7] = np.nan
+        for raw in (actions, np.zeros((15, 7)), np.zeros((7, 8)), np.full((15, 8), 0.5 + 1j)):
+            with self.subTest(shape=raw.shape, dtype=raw.dtype), self.assertRaises(EpisodeFailure) as rejected:
+                droid.droid_actions(raw)
+            self.assertEqual(rejected.exception.kind, "policy_act")
+            self.assertIs(rejected.exception.rejected_actions, raw)
+
+    def test_calvin_preserves_raw_rejections_and_only_converts_control_dimensions(self):
+        from orbit_embodied.driver import EpisodeFailure
+
+        calvin = load("policies/openpi/serve_metaworld.py")
+        actions = np.zeros((5, 32), dtype=np.float32)
+        actions[:, 6] = [-0.25, 0, 0.25, -1, 1]
+        actions[:, 7:] = np.nan  # OpenPI can pad inactive action dimensions.
+        controls = calvin.calvin_actions(actions)
+        np.testing.assert_array_equal(controls[:, :6], actions[:, :6])
+        self.assertEqual(controls[:, 6].tolist(), [-1, -1, 1, -1, 1])
+        self.assertEqual(actions[0, 6], -0.25)
+        actions[0, 6] = np.nan
+        for raw in (actions, np.zeros((5, 6)), np.zeros((4, 32)), np.zeros(7)):
+            with self.subTest(shape=raw.shape), self.assertRaises(EpisodeFailure) as rejected:
+                calvin.calvin_actions(raw)
+            self.assertEqual(rejected.exception.kind, "policy_act")
+            self.assertIs(rejected.exception.rejected_actions, raw)
 
     def test_droid_randcam_has_a_separate_policy_binding_and_shares_weights(self):
         config = load("policies/openpi/configure_droid.py")

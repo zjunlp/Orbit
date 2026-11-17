@@ -672,6 +672,8 @@ class CoreTests(unittest.TestCase):
             ("numeric-text", np.full((6, 7), "0.25"), invalid, False),
             ("complex", np.full((6, 7), 1 + 2j), invalid, False),
             ("ragged", [[0], [0, 0]], invalid, False),
+            ("incompatible-arrays", [np.zeros((2, 7)), np.zeros((2, 8))],
+             "policy action chunk cannot be represented as an array", False),
             ("oversized", np.zeros((1024, 7)), wrong_count, False),
             ("valid", np.zeros((6, 7)), None, False),
         )
@@ -693,10 +695,13 @@ class CoreTests(unittest.TestCase):
                     rejection = json.loads((self.output / "chunks/0.rejected.json").read_text())
                     self.assertEqual(rejection["reason"], reason)
                     self.assertEqual(rejection["sourceObservation"], 0)
-                    if name == "ragged":
-                        chunk = np.asarray(chunk, dtype=object)
-                    self.assertEqual(rejection["dtype"], str(chunk.dtype))
-                    self.assertEqual(rejection["shape"], list(chunk.shape))
+                    if name == "incompatible-arrays":
+                        self.assertEqual((rejection["dtype"], rejection["shape"]), ("object", []))
+                    else:
+                        if name == "ragged":
+                            chunk = np.asarray(chunk, dtype=object)
+                        self.assertEqual(rejection["dtype"], str(chunk.dtype))
+                        self.assertEqual(rejection["shape"], list(chunk.shape))
                     raw_file = self.output / "chunks/0.rejected.npy"
                     if keep_array:
                         np.testing.assert_array_equal(np.load(raw_file, allow_pickle=False), chunk, strict=True)
