@@ -475,6 +475,8 @@ describe("trajectory export", () => {
         "--valid-only",
         "--outcome",
         "pass",
+        "--sensitive-text",
+        "redact",
         "--out",
         f.out,
         "--json",
@@ -487,6 +489,7 @@ describe("trajectory export", () => {
       tasks: ["task-a"],
       methods: ["method-a"],
       reasoning: "summary",
+      sensitiveText: "redact",
     });
     expect(manifest.entries[0].contexts[0]).toMatchObject({
       trial: "task-a",
@@ -498,31 +501,38 @@ describe("trajectory export", () => {
     });
     expect(() => f.request({ jobs: ["job-a"] })).toThrow(/exactly one/);
   });
-  it("rejects unsafe media, external child files and secret manifest metadata", async () => {
-    const f = fixture();
-    const source = trajectory();
-    source.steps[0]!.message = [
-      { type: "image", source: { media_type: "image/png", path: "../../private.png" } },
-    ];
-    f.add(f.run.id, source);
-    await expect(f.client.exportTrajectories(f.request())).rejects.toThrow(/unsafe.*media/);
-    const external = trajectory();
-    external.steps[1]!.observation!.results[0]!.subagent_trajectory_ref = [
-      { trajectory_path: "child.json" },
-    ];
-    f.add(f.run.id, external);
-    await expect(f.client.exportTrajectories(f.request())).rejects.toThrow(/external subagent/);
-    f.add(f.run.id);
-    const { addTrial } = job(f);
-    addTrial(`sk-proj-${"z".repeat(40)}`);
-    await expect(f.client.exportTrajectories(f.request())).rejects.toThrow(
-      /secret pattern at manifest/,
-    );
-    expect(existsSync(f.out)).toBe(false);
-    expect(
-      readdirSync(f.root).filter((name) => name.startsWith(".orbit-trajectory-export-")),
-    ).toEqual([]);
-  });
+  it.each(["reject", "redact"] as const)(
+    "rejects unsafe media, external child files and secret manifest metadata (%s)",
+    async (sensitiveText) => {
+      const f = fixture();
+      const source = trajectory();
+      source.steps[0]!.message = [
+        { type: "image", source: { media_type: "image/png", path: "../../private.png" } },
+      ];
+      f.add(f.run.id, source);
+      await expect(f.client.exportTrajectories(f.request({ sensitiveText }))).rejects.toThrow(
+        /unsafe.*media/,
+      );
+      const external = trajectory();
+      external.steps[1]!.observation!.results[0]!.subagent_trajectory_ref = [
+        { trajectory_path: "child.json" },
+      ];
+      f.add(f.run.id, external);
+      await expect(f.client.exportTrajectories(f.request({ sensitiveText }))).rejects.toThrow(
+        /external subagent/,
+      );
+      f.add(f.run.id);
+      const { addTrial } = job(f);
+      addTrial(`sk-proj-${"z".repeat(40)}`);
+      await expect(f.client.exportTrajectories(f.request({ sensitiveText }))).rejects.toThrow(
+        /secret pattern at manifest/,
+      );
+      expect(existsSync(f.out)).toBe(false);
+      expect(
+        readdirSync(f.root).filter((name) => name.startsWith(".orbit-trajectory-export-")),
+      ).toEqual([]);
+    },
+  );
   it("bounds worker media reads and refuses absent trajectories", async () => {
     const f = fixture();
     const deps = {
@@ -565,4 +575,51 @@ describe("trajectory export", () => {
       readdirSync(f.root).filter((name) => name.startsWith(".orbit-trajectory-export-")),
     ).toEqual([]);
   });
+});
+
+it.each(["atif", "chat-jsonl"] as const)(
+  "explicit sensitive-text redaction omits whole values and preserves original evidence (%s)",
+  async (format) => {
+    const f = fixture();
+    const source = trajectory();
+    const secret = `sk-proj-${"z".repeat(40)}`;
+    source.steps[0]!.message = `private ${secret}`;
+    source.steps[1]!.tool_calls![0]!.arguments = {
+      input: `call({password: "syntheticPassword123"})`,
+      token: "syntheticToken123",
+    };
+    const before = JSON.stringify(source);
+    f.add(f.run.id, source);
+    const result = await f.client.exportTrajectories(
+      f.request({ format, sensitiveText: "redact" }),
+    );
+    expect(result.redactions).toBe(3);
+    const manifest = TrajectoryExportManifest.parse(
+      JSON.parse(readFileSync(join(f.out, "manifest.json"), "utf8")),
+    );
+    expect(manifest.redactions).toHaveLength(3);
+    const output = readFileSync(
+      join(f.out, format === "atif" ? "runs/1/trajectory.json" : "dataset.jsonl"),
+      "utf8",
+    );
+    expect(output).not.toContain(secret);
+    expect(output).not.toContain("syntheticPassword123");
+    expect(output).not.toContain("syntheticToken123");
+    expect(output).toContain("[redacted]");
+    expect(JSON.stringify(source)).toBe(before);
+    assertNoSecrets(JSON.parse(readFileSync(join(f.out, "manifest.json"), "utf8")), "manifest");
+  },
+);
+it("does not relax media scanning in sensitive-text redaction mode", async () => {
+  const f = fixture();
+  const source = trajectory();
+  const data = Buffer.from("password=syntheticPrivateValue123");
+  const path = `media/${hash(data)}.png`;
+  source.steps[0]!.message = [{ type: "image", source: { media_type: "image/png", path } }];
+  f.add(f.run.id, source);
+  writeFileSync(join(f.runs.dirs(f.run.id).orbit, "trajectory", path), data);
+  await expect(f.client.exportTrajectories(f.request({ sensitiveText: "redact" }))).rejects.toThrow(
+    /secret/,
+  );
+  expect(existsSync(f.out)).toBe(false);
 });

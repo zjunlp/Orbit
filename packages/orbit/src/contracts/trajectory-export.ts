@@ -15,6 +15,7 @@ const ExportOptions = z.strictObject({
   outcome: z.enum(["pass", "fail"]).optional(),
   format: z.enum(["atif", "chat-jsonl"]).default("atif"),
   reasoning: z.enum(["raw", "summary", "none"]).default("summary"),
+  sensitiveText: z.enum(["reject", "redact"]).default("reject"),
   out: z.string().min(1).max(4096),
 });
 export const TrajectoryExportRequest = ExportOptions.refine(
@@ -55,6 +56,7 @@ export const TrajectoryExportManifest = z.strictObject({
   reasoning: z.enum(["raw", "summary", "none"]),
   filters: ExportOptions.omit({ out: true }),
   licenseNotice: z.string(),
+  redactions: z.array(z.string()).optional(),
   entries: z.array(
     z.strictObject({
       run: z.string(),
@@ -83,6 +85,7 @@ export const TrajectoryExportResult = z.strictObject({
   manifest: z.string(),
   runs: z.number().int().positive(),
   files: z.number().int().positive(),
+  redactions: z.number().int().nonnegative().optional(),
 });
 export type TrajectoryExportResult = z.infer<typeof TrajectoryExportResult>;
 

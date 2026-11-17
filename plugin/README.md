@@ -1,6 +1,6 @@
 # Orbit agent plugins
 
-One shared pair of skills teaches resource estimation, runs/sweeps, review and benchmark integration.
+Three shared skills cover experiment execution/review, benchmark integration and configuration evolution.
 Every host calls the same Orbit CLI; the skills fall back to `npx -y @zjunlp/orbit` when `orbit` is
 not on PATH. Requires Linux and Node.js 24.18+ (24.x); experiments also need Git and Docker.
 
@@ -20,10 +20,10 @@ command uses its native installer and does not duplicate the registration.
 
 | Host | Native integration | Skill names |
 | --- | --- | --- |
-| Claude Code | User plugin `orbit@orbit` from `zjunlp/Orbit` | `/orbit:orbit`, `/orbit:orbit-bench` |
-| Codex | Plugin `orbit@orbit` from the repository marketplace | `orbit:orbit`, `orbit:orbit-bench` |
-| DeepSeek Harness (`dsh`) | npm bundle in the explicitly selected profile | `orbit`, `orbit-bench` |
-| pi coding agent | User npm package declaring `pi.skills` | `/skill:orbit`, `/skill:orbit-bench` |
+| Claude Code | User plugin `orbit@orbit` from `zjunlp/Orbit` | `/orbit:orbit`, `/orbit:orbit-bench`, `/orbit:orbit-evolve` |
+| Codex | Plugin `orbit@orbit` from the repository marketplace | `orbit:orbit`, `orbit:orbit-bench`, `orbit:orbit-evolve` |
+| DeepSeek Harness (`dsh`) | npm bundle in the explicitly selected profile | `orbit`, `orbit-bench`, `orbit-evolve` |
+| pi coding agent | User npm package declaring `pi.skills` | `/skill:orbit`, `/skill:orbit-bench`, `/skill:orbit-evolve` |
 
 Tested with Claude Code 2.1.289, Codex 0.161.0, dsh 0.1.6-alpha.1 and pi 1.1.0
 (`@earendil-works/pi-coding-agent`). Older CLIs may need upgrading to expose the native commands.
@@ -51,6 +51,10 @@ pnpm orbit plugin install pi --source ./packages/orbit
 pi's local source must be a built package **directory** that remains on disk; it registers that
 path. To check the exact release artifact, unpack the tarball and point pi at the extracted
 `package/` directory. dsh copies local sources into its profile through pnpm's `file:` protocol.
+
+The `orbit-evolve` skill includes a minimal instruction bundle under its `assets/` directory. It
+uses the existing export, gate-plan and verdict commands; the host Agent edits candidates, and no
+daemon evolution loop is installed.
 
 All skills are authored under `plugin/skills/`; the build copies them into `dist/plugin/skills`.
 The dsh adapter only delegates to the host's filesystem skill provider. No dsh or pi runtime is

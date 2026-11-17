@@ -158,7 +158,8 @@ For bundle changes, use a frozen policy and this cost order:
 A finished job without a report may need the separate `orbit bench report JOB`; a pending job should
 be allowed to finish. Neither helper submits work. Static checks are conservative pattern checks;
 keep held-out task/answer material out of the bundle and keep its editor limited to evolve evidence.
-The full reference evolver and isolation workflow are separate features. Read the
+Use `orbit-evolve` for the reference editing, budget and lineage workflow; editor isolation remains
+a separate feature. Read the
 [evolution gate guide](https://github.com/zjunlp/Orbit/blob/main/docs/guides/bench-gate.md) for policy,
 report selection and command limitations.
 

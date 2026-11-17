@@ -27,7 +27,7 @@ import {
   trajectoryCounts,
   trajectoryMedia,
 } from "../sessions/export/convert.ts";
-import { assertNoSecrets, redactExport } from "../sessions/export/security.ts";
+import { assertNoSecrets, omitSensitiveText, redactExport } from "../sessions/export/security.ts";
 import { trajectoryTokens } from "../sessions/tokens.ts";
 import { UserError } from "./service.ts";
 
@@ -70,6 +70,7 @@ export async function exportTrajectories(
   let total = 0;
   const files: TrajectoryExportManifest["files"] = [];
   const entries: TrajectoryExportManifest["entries"] = [];
+  const redactions: string[] = [];
   const { out: _out, ...originalFilters } = request;
   let filters: unknown = originalFilters;
   const budget = (bytes: number) => {
@@ -103,8 +104,11 @@ export async function exportTrajectories(
       const redactor = deps.redactor(run);
       const source = await deps.trajectory(run);
       if (!source) throw new UserError(`Run ${run.id} has no Agent trajectory`);
+      const prepared = redactExport(prepareTrajectory(source, request.reasoning), redactor);
       const trajectory = AtifTrajectory.parse(
-        redactExport(prepareTrajectory(source, request.reasoning), redactor),
+        request.sensitiveText === "redact"
+          ? omitSensitiveText(prepared, `entries[${index}].trajectory`, redactions)
+          : prepared,
       );
       assertNoSecrets(trajectory, `entries[${index}].trajectory`);
       const directory = `runs/${index + 1}`;
@@ -175,6 +179,7 @@ export async function exportTrajectories(
           reasoning: request.reasoning,
           filters,
           licenseNotice: TRAJECTORY_LICENSE_NOTICE,
+          ...(request.sensitiveText === "redact" ? { redactions } : {}),
           entries,
           files,
         },
@@ -187,7 +192,13 @@ export async function exportTrajectories(
     reserved = true;
     await rename(stage, out);
     published = true;
-    return { out, manifest: join(out, "manifest.json"), runs: entries.length, files: files.length };
+    return {
+      out,
+      manifest: join(out, "manifest.json"),
+      runs: entries.length,
+      files: files.length,
+      ...(request.sensitiveText === "redact" ? { redactions: redactions.length } : {}),
+    };
   } finally {
     await dataset?.close().catch(() => {});
     if (!published) {

@@ -91,13 +91,21 @@ try {
     !existsSync(join(temp, "node_modules/@deepseek-ai/dsh-skill-filesystem")),
     "dsh stays an optional host dependency",
   );
-  for (const name of ["orbit", "orbit-bench"]) {
+  for (const name of ["orbit", "orbit-bench", "orbit-evolve"]) {
     assert.equal(
       readFileSync(join(pkg, "dist/plugin/skills", name, "SKILL.md"), "utf8"),
       readFileSync(join(root, "plugin/skills", name, "SKILL.md"), "utf8"),
       `packaged ${name} must match the canonical skill`,
     );
   }
+  assert.equal(
+    readFileSync(
+      join(pkg, "dist/plugin/skills/orbit-evolve/assets/minimal-bundle/AGENTS.md"),
+      "utf8",
+    ),
+    readFileSync(join(root, "plugin/skills/orbit-evolve/assets/minimal-bundle/AGENTS.md"), "utf8"),
+    "the evolver starter bundle must ship unchanged",
+  );
   for (const target of Object.values(installed.exports) as { types: string; import: string }[]) {
     assert.ok(existsSync(join(pkg, target.types)), `missing types: ${target.types}`);
     assert.ok(existsSync(join(pkg, target.import)), `missing runtime: ${target.import}`);
