@@ -1,12 +1,12 @@
 ---
 name: orbit-evolve
-description: Improve an Agent instruction or skill bundle from evolve-set failures, then evaluate a lineage-linked candidate with Orbit's frozen gate under explicit change and experiment budgets. Use for configuration evolution on registered benchmarks.
+description: Improve an Agent instruction or skill bundle from evolve-set failures, then evaluate a lineage-linked candidate with Orbit's frozen gate under explicit change and experiment budgets. Use for configuration evolution, an isolated Codex editor, or no-change, bounded-notes and ACE baseline comparisons on registered benchmarks.
 ---
 
 # Orbit: evolve a configuration bundle
 
-You are the editor and decision-maker. Orbit executes evaluations, exports evidence and records
-verdicts; its daemon does not launch an evolver or advance a loop. Use the existing `orbit` skill
+You control each editing and evaluation round. Orbit executes requested Runs, exports evidence and
+records verdicts; its daemon does not advance an evolution loop. Use the existing `orbit` skill
 for resource/connection setup. This workflow edits instruction/skill files, keeping the Agent,
 model, effort, CLI, auth kind and benchmark conditions fixed.
 
@@ -14,6 +14,20 @@ Use `orbit` on PATH, otherwise `npx -y @zjunlp/orbit`. Check `trajectory export 
 `bench gate plan --help`; an older installed package may need updating. In a source checkout,
 `node packages/orbit/src/bin.ts` is the CLI. Keep generated study artifacts outside the source checkout. Exports must also be outside Orbit's
 home/data directories; leave any provided parent bundle in place.
+
+## Choose the editing method
+
+For an ordinary improvement request, use the reference edit below. For a baseline study, first read
+[baseline variants](references/baselines.md) and select `no-change`, `bounded-notes` or `ace` before
+seeing held-out results. They share this workflow's budgets, frozen conditions and evidence rules.
+The selected variant replaces the editing step; `ace` also reads [its method](references/ace.md).
+No-change follows the dedicated A/A path instead of creating a child or using the promotion path.
+Use the packaged deterministic helper to enforce each baseline's construction limits. Keep methods
+on independent branches from the same parent; do not quietly mix their editing rules.
+
+For an isolated reference editor, read [isolated execution](references/isolated.md). It replaces the
+host reading/editing steps with one bounded Orbit Run and returns a candidate plus source trial IDs.
+Keep the evaluation and decision steps below on the host.
 
 ## Establish the round
 
@@ -62,7 +76,9 @@ whole affected text values and lists their paths in the manifest. Review those o
 sample if the remaining evidence cannot support an edit. Media/metadata scanning still rejects
 remaining hits. Do not copy unfiltered raw sessions to work around rejection.
 
-Summarize a concrete failure mechanism and one general instruction change that could address it.
+For the default reference edit, summarize a concrete failure mechanism and one general instruction
+change that could address it. Baseline variants construct their proposal using the selected method
+and helper, then resume at **Check, smoke and plan**.
 Edit a separate copy of the parent. Limit edits to `AGENTS.md`, `CLAUDE.md` and `skills/` text;
 do not change credentials, model/runtime settings, adapters, policies or task files. Inspect the
 complete diff, count added + deleted lines and changed-file bytes against the round limits.
@@ -70,7 +86,7 @@ An empty or over-budget diff is not a candidate to evaluate.
 
 Keep task IDs, answers, reference snippets and per-task lookup rules out of the candidate. Do not
 read gate/guard/final trajectories or use their failures to edit it. `informedBy` is self-reported;
-this V1 workflow is not physical isolation of the editor (V3 is separate).
+the host-driven route is not physical isolation. Use the V3 route above when isolation is required.
 
 ## Check, smoke and plan
 

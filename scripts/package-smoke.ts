@@ -1,7 +1,15 @@
 // Install the release tarball away from the checkout and exercise its public entrypoints.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -91,21 +99,68 @@ try {
     !existsSync(join(temp, "node_modules/@deepseek-ai/dsh-skill-filesystem")),
     "dsh stays an optional host dependency",
   );
-  for (const name of ["orbit", "orbit-bench", "orbit-evolve"]) {
-    assert.equal(
-      readFileSync(join(pkg, "dist/plugin/skills", name, "SKILL.md"), "utf8"),
-      readFileSync(join(root, "plugin/skills", name, "SKILL.md"), "utf8"),
-      `packaged ${name} must match the canonical skill`,
-    );
+  function checkSkillTree(relative: string) {
+    const source = join(root, "plugin/skills", relative);
+    for (const entry of readdirSync(source, { withFileTypes: true })) {
+      const path = join(relative, entry.name);
+      if (entry.isDirectory()) checkSkillTree(path);
+      else
+        assert.deepEqual(
+          readFileSync(join(pkg, "dist/plugin/skills", path)),
+          readFileSync(join(root, "plugin/skills", path)),
+          `packaged skill resource must match source: ${path}`,
+        );
+    }
   }
-  assert.equal(
-    readFileSync(
-      join(pkg, "dist/plugin/skills/orbit-evolve/assets/minimal-bundle/AGENTS.md"),
-      "utf8",
-    ),
-    readFileSync(join(root, "plugin/skills/orbit-evolve/assets/minimal-bundle/AGENTS.md"), "utf8"),
-    "the evolver starter bundle must ship unchanged",
+  for (const name of ["orbit", "orbit-bench", "orbit-evolve"]) checkSkillTree(name);
+  const evolve = join(pkg, "dist/plugin/skills/orbit-evolve");
+  const baselineRequest = join(temp, "baseline.json");
+  writeFileSync(
+    baselineRequest,
+    JSON.stringify({
+      variant: "bounded-notes",
+      base: join(evolve, "assets/minimal-bundle"),
+      parent: join(evolve, "assets/minimal-bundle"),
+      out: join(temp, "notes-bundle"),
+      limits: { changedLines: 5, changedBytes: 4096, noteLines: 2 },
+      notes: ["Verify the result before reporting completion."],
+    }),
   );
+  const baseline = JSON.parse(
+    run(process.execPath, [join(evolve, "scripts/build-baseline.mjs"), baselineRequest]),
+  );
+  assert.equal(baseline.totalNoteLines, 1);
+  assert.equal(
+    readFileSync(join(baseline.out, "AGENTS.md"), "utf8"),
+    readFileSync(join(evolve, "assets/minimal-bundle/AGENTS.md"), "utf8") +
+      "- Verify the result before reporting completion.\n",
+  );
+  run(process.execPath, [
+    "--input-type=module",
+    "-e",
+    `import assert from 'node:assert/strict';
+     const helper = await import(${JSON.stringify(join(evolve, "scripts/run-isolated.mjs"))});
+     assert.throws(() => helper.requestFrom({}), /invalid parent/);
+     const files = await import(${JSON.stringify(join(evolve, "scripts/isolated-files.mjs"))});
+     assert.throws(() => files.instructionEntries([{path:'../escape',body:'YQo='}]), /unsafe/);
+     const entries = files.instructionEntries([{path:'AGENTS.md',body:'VmVyaWZ5Lgo='}]);
+     files.writeSnapshot('isolated-package-candidate', entries);
+     assert.deepEqual(files.snapshot('isolated-package-candidate'), entries);`,
+  ]);
+  const copiedSkill = join(temp, "copied-evolve-skill");
+  cpSync(evolve, copiedSkill, { recursive: true });
+  run("npm", [
+    "exec",
+    "--package=@zjunlp/orbit",
+    "--offline",
+    "--",
+    "node",
+    "--input-type=module",
+    "-e",
+    `import assert from 'node:assert/strict';
+     const helper = await import(${JSON.stringify(join(copiedSkill, "scripts/run-isolated.mjs"))});
+     assert.throws(() => helper.requestFrom({}), /invalid parent/);`,
+  ]);
   for (const target of Object.values(installed.exports) as { types: string; import: string }[]) {
     assert.ok(existsSync(join(pkg, target.types)), `missing types: ${target.types}`);
     assert.ok(existsSync(join(pkg, target.import)), `missing runtime: ${target.import}`);

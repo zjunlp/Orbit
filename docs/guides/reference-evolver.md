@@ -12,6 +12,10 @@ The skill and a small generic `assets/minimal-bundle/AGENTS.md` are copied into 
 pi/dsh and discovered from the same source directory by Claude Code/Codex plugins. The starter is
 for a newly evaluated baseline, not a replacement for a parent's missing historical bundle.
 
+For controlled comparisons, [V2 baselines](evolution-baselines.md) provide no-change A/A, cumulative
+bounded notes and a pinned ACE adaptation through this same skill. The reference edit remains the
+default for ordinary improvement requests.
+
 ## Inputs and limits
 
 Start with a known parent revision and its exact bundle, Agent/model/effort/auth, frozen E1 task
