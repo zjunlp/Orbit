@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .conversions import connector_action_conversion
 from .openpi import WebSocketPolicy, libero_gripper, libero_rgb, quaternion_to_axis_angle
 from .wire import pack, unpack
 
@@ -45,7 +46,7 @@ class OpenVLAClient(WebSocketPolicy):
     """Send native observations; official image processing runs with the model."""
 
     name = "OpenVLA"
-    conversion = "libero-gripper"
+    conversion = connector_action_conversion("openvla-ws")
 
     def __init__(self, url, *, timeout=120, replan_steps=8):
         if replan_steps != 8:

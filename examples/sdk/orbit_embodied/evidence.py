@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from .binding import check_sample, digest, file_digest, reference_horizon, reset_seed, robodojo_layout
+from .conversions import CONVERSIONS, connector_action_conversion
 
 
 def validate_action_chunk(chunk, width, required):
@@ -245,7 +246,9 @@ def verify_episode(directory, sample_ref, episode_id, expected=None, *, referenc
     first_replan = reference.get("parameters", {}).get("firstReplanSteps", contract["replanSteps"])
     if type(first_replan) is not int or not 0 < first_replan <= contract["replanSteps"]:
         raise ValueError("invalid initial replan interval in episode evidence")
-    frozen_conversion = contract["identity"].get("policy", {}).get("actionConversion")
+    policy = identity.get("policy", {})
+    frozen_conversion = (connector_action_conversion(policy.get("connector"), policy.get("ioAdapter"))
+                         or policy.get("actionConversion"))
     calvin = reference.get("environment", {}).get("kind") == "calvin"
     width, = binding["benchmarkProfile"]["action"]["shape"]
     chunk_id, index, limit = 0, 0, first_replan
@@ -264,7 +267,6 @@ def verify_episode(directory, sample_ref, episode_id, expected=None, *, referenc
             if frozen_conversion is not None and timing.get("conversion") != frozen_conversion:
                 raise ValueError("action conversion differs from the frozen policy")
             if "conversion" in timing:
-                from .conversions import CONVERSIONS
                 raw_path = prefix + ".raw.npy"
                 if timing["conversion"] not in CONVERSIONS or raw_path not in manifest["files"]:
                     raise ValueError("converted action chunk lacks its raw model output")

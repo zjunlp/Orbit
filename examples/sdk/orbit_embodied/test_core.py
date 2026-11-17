@@ -580,6 +580,37 @@ class CoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "conversion"):
             self.verify()
 
+    def test_connector_gripper_conversion_is_bound_to_valid_raw_actions(self):
+        class Converting(SyntheticPolicy):
+            conversion = "libero-gripper"
+
+        for definition in ({"connector": "openvla-ws"}, {"connector": "groot-zmq", "ioAdapter": "libero-native"}):
+            with self.subTest(definition=definition), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary) / "episode"
+                result = run_episode(SyntheticBenchmark(success_at=2), Converting(), self.sample, self.binding,
+                                     directory, "synthetic-attempt", {"policy": definition})
+                self.assertTrue(result["valid"])
+
+                def verify():
+                    return verify_episode(directory, self.sample["sampleId"], "synthetic-attempt")
+
+                self.assertEqual(verify(), result)
+                raw_path = directory / "chunks/0.raw.npy"
+                raw = np.load(raw_path, allow_pickle=False)
+                raw[:, -1] = -np.inf  # Would still convert to the same finite native gripper command.
+                np.save(raw_path, raw, allow_pickle=False)
+                seal(directory, result)
+                with self.assertRaisesRegex(ValueError, "finite numeric"):
+                    verify()
+                raw_path.unlink()
+                timing_path = directory / "chunks/0.json"
+                timing = json.loads(timing_path.read_text())
+                del timing["conversion"]
+                write_json(timing_path, timing)
+                seal(directory, result)
+                with self.assertRaisesRegex(ValueError, "conversion differs from the frozen policy"):
+                    verify()
+
     def test_final_step_past_the_episode_deadline_is_invalid(self):
         import time
 
