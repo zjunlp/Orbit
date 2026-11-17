@@ -41,6 +41,29 @@ def _pack_rejection(reason, actions):
     return pack({"rejection": {"reason": reason, "summary": summary}})
 
 
+def checked_policy_actions(raw, action_size, replan_steps, *, action_count=None, dtype=None):
+    from .driver import EpisodeFailure
+    from .evidence import validate_action_chunk
+
+    try:
+        actions = np.asarray(raw)
+    except ValueError:
+        actions = np.asarray(raw, dtype=object)
+    try:
+        validate_action_chunk(actions, action_size, replan_steps)
+        if len(actions) != (action_count if action_count is not None else replan_steps):
+            raise ValueError("policy action count differs from the released model")
+        if dtype is None:
+            return actions
+        with np.errstate(over="ignore"):
+            native = actions.astype(dtype)
+        if not np.isfinite(native).all():
+            raise ValueError("policy action chunk has non-finite values after conversion to " + str(native.dtype))
+        return native
+    except ValueError as exc:
+        raise EpisodeFailure("policy_act", str(exc), rejected_actions=actions) from exc
+
+
 def serve_frozen_actions(build, asset_groups, action_size, replan_steps, randomness, *,
                          action_count=None, normalization_digest=None):
     import argparse
@@ -49,8 +72,6 @@ def serve_frozen_actions(build, asset_groups, action_size, replan_steps, randomn
     from pathlib import Path
 
     from .assets import policy_asset_digests
-    from .driver import EpisodeFailure
-    from .evidence import validate_action_chunk
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--weights", type=Path, required=True)
@@ -64,14 +85,7 @@ def serve_frozen_actions(build, asset_groups, action_size, replan_steps, randomn
     infer, reset = build(args.weights)
 
     def act(observation):
-        actions = np.asarray(infer(observation))
-        try:
-            validate_action_chunk(actions, action_size, replan_steps)
-            if len(actions) != (action_count if action_count is not None else replan_steps):
-                raise ValueError("policy action count differs from the released model")
-        except ValueError as exc:
-            raise EpisodeFailure("policy_act", str(exc), rejected_actions=actions) from exc
-        return actions
+        return checked_policy_actions(infer(observation), action_size, replan_steps, action_count=action_count)
 
     metadata = {"actionSize": action_size, "replanSteps": replan_steps,
                 "orbit": {**identities, "randomness": randomness}}

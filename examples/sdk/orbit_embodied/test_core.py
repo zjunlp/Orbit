@@ -669,6 +669,9 @@ class CoreTests(unittest.TestCase):
             ("wrong-width", np.zeros((6, 8)), invalid, True),
             ("wrong-count", np.zeros((5, 7)), wrong_count, True),
             ("object", np.full((6, 7), "invalid", dtype=object), invalid, False),
+            ("numeric-text", np.full((6, 7), "0.25"), invalid, False),
+            ("complex", np.full((6, 7), 1 + 2j), invalid, False),
+            ("ragged", [[0], [0, 0]], invalid, False),
             ("oversized", np.zeros((1024, 7)), wrong_count, False),
             ("valid", np.zeros((6, 7)), None, False),
         )
@@ -690,6 +693,8 @@ class CoreTests(unittest.TestCase):
                     rejection = json.loads((self.output / "chunks/0.rejected.json").read_text())
                     self.assertEqual(rejection["reason"], reason)
                     self.assertEqual(rejection["sourceObservation"], 0)
+                    if name == "ragged":
+                        chunk = np.asarray(chunk, dtype=object)
                     self.assertEqual(rejection["dtype"], str(chunk.dtype))
                     self.assertEqual(rejection["shape"], list(chunk.shape))
                     raw_file = self.output / "chunks/0.rejected.npy"

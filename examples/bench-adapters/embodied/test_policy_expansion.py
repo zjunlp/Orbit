@@ -115,6 +115,25 @@ class PolicyExpansionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "action semantics differ"):
             config.policy_profile(reference)
 
+    def test_model_action_decoders_validate_raw_values_before_float32_conversion(self):
+        from orbit_embodied import EpisodeFailure
+
+        dm05 = load("policies/dm05/serve_dm05.py")
+        gigaworld = load("policies/gigaworld-policy-01/serve_gigaworld.py")
+        for convert, shape in ((dm05.native_actions, (20, 7)), (gigaworld.native_chunk, (24, 12))):
+            with self.subTest(decoder=convert.__name__):
+                self.assertEqual(convert(np.zeros(shape, dtype=np.float64)).dtype, np.float32)
+                for raw, reason in (
+                    (np.full(shape, "0.25"), "invalid shape"),
+                    (np.full(shape, 1 + 2j), "invalid shape"),
+                    (np.full(shape, np.inf), "non-finite"),
+                    (np.full(shape, 1e100), "after conversion to float32"),
+                ):
+                    with self.assertRaisesRegex(EpisodeFailure, reason) as failure:
+                        convert(raw)
+                    self.assertEqual(failure.exception.kind, "policy_act")
+                    np.testing.assert_array_equal(failure.exception.rejected_actions, raw, strict=True)
+
     def test_droid_registration_requires_its_build_manifest_and_entrypoint(self):
         config = load("policies/openpi/configure_droid.py")
         molmo = load("benchmarks/molmospaces/configure_molmospaces.py")

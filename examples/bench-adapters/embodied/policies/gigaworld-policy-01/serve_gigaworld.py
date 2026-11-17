@@ -9,7 +9,7 @@ import random
 import numpy as np
 
 from orbit_embodied.binding import digest, file_digest
-from orbit_embodied.wire import serve_actions
+from orbit_embodied.wire import checked_policy_actions, serve_actions
 
 
 CHUNK = 24
@@ -42,10 +42,8 @@ def model_input(observation):
     }
 
 
-def native_chunk(actions):
-    actions = np.asarray(actions, dtype=np.float32)
-    if actions.shape != (CHUNK, 12) or not np.isfinite(actions).all():
-        raise ValueError("GigaWorld returned an invalid RoboCasa365 action chunk")
+def native_chunk(raw):
+    actions = checked_policy_actions(raw, 12, REPLAN, action_count=CHUNK, dtype=np.float32)
     # Convert the upstream LeRobot layout into the native RoboCasa HDF5 layout.
     return np.concatenate((actions[:, 5:], actions[:, :5]), axis=1)
 

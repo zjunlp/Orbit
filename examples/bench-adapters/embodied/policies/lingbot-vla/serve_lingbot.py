@@ -9,6 +9,7 @@ import numpy as np
 
 from orbit_embodied.assets import tree_digest
 from orbit_embodied.binding import file_digest
+from orbit_embodied.wire import checked_policy_actions, serve_actions
 
 
 CHUNK = 50
@@ -36,7 +37,6 @@ def main():
     os.environ["QWEN25_PATH"] = str(args.weights / "qwen")
 
     from deploy.lingbot_vla_policy import LingbotVLAServer, set_seed_everywhere
-    from orbit_embodied.wire import serve_actions
 
     set_seed_everywhere(0)
     model = LingbotVLAServer(str(args.weights / "policy"), use_length=CHUNK, robot_norm_path=str(NORM))
@@ -45,10 +45,7 @@ def main():
         model.reset(robo_name="robotwin")
 
     def infer(observation):
-        actions = np.asarray(model.infer(model_inputs(observation))["action"])
-        if actions.shape != (CHUNK, 14) or not np.isfinite(actions).all():
-            raise ValueError("LingBot-VLA must return fifty finite RoboTwin joint targets")
-        return actions
+        return checked_policy_actions(model.infer(model_inputs(observation))["action"], 14, CHUNK)
 
     metadata = {"actionSize": 14, "replanSteps": CHUNK, "orbit": {
         "checkpointDigest": args.checkpoint_digest, "normalizationDigest": args.normalization_digest,
