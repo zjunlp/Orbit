@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOTS = ["examples", "scripts"];
+const ROOTS = ["examples", "scripts", "plugin/skills"];
 const SKIP = new Set(["__pycache__", "node_modules", ".git", "dist"]);
 const CHECK = `
 import ast, sys

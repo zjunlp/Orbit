@@ -54,8 +54,9 @@ path. To check the exact release artifact, unpack the tarball and point pi at th
 
 The `orbit-evolve` skill includes baseline variants (no-change, bounded notes, ACE), a deterministic
 Node helper, and a minimal instruction bundle under its `assets/` directory. It uses the existing
-export, gate-plan and verdict commands; the host Agent edits candidates, and no
-daemon evolution loop is installed.
+export, gate-plan and verdict commands. The host can edit candidates directly or use the
+[isolated Codex editor](skills/orbit-evolve/references/isolated.md), which receives only a copied
+parent and evolve evidence. No daemon evolution loop is installed.
 
 All skills are authored under `plugin/skills/`; the build copies them into `dist/plugin/skills`.
 The dsh adapter only delegates to the host's filesystem skill provider. No dsh or pi runtime is

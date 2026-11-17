@@ -58,6 +58,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261117](20261117-isolated-evolver.md) Isolated reference editor with evolve-only inputs (V3)
 - [20261117](20261117-evolution-baselines.md) Evolution baseline variants (V2)
 
 - [20261117](20261117-reference-evolver.md) V1: host-driven reference evolver and safe evolve evidence

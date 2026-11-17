@@ -1,12 +1,12 @@
 ---
 name: orbit-evolve
-description: Improve an Agent instruction or skill bundle from evolve-set failures, then evaluate a lineage-linked candidate with Orbit's frozen gate under explicit change and experiment budgets. Use for configuration evolution or no-change, bounded-notes and ACE baseline comparisons on registered benchmarks.
+description: Improve an Agent instruction or skill bundle from evolve-set failures, then evaluate a lineage-linked candidate with Orbit's frozen gate under explicit change and experiment budgets. Use for configuration evolution, an isolated Codex editor, or no-change, bounded-notes and ACE baseline comparisons on registered benchmarks.
 ---
 
 # Orbit: evolve a configuration bundle
 
-You are the editor and decision-maker. Orbit executes evaluations, exports evidence and records
-verdicts; its daemon does not launch an evolver or advance a loop. Use the existing `orbit` skill
+You control each editing and evaluation round. Orbit executes requested Runs, exports evidence and
+records verdicts; its daemon does not advance an evolution loop. Use the existing `orbit` skill
 for resource/connection setup. This workflow edits instruction/skill files, keeping the Agent,
 model, effort, CLI, auth kind and benchmark conditions fixed.
 
@@ -24,6 +24,10 @@ The selected variant replaces the editing step; `ace` also reads [its method](re
 No-change follows the dedicated A/A path instead of creating a child or using the promotion path.
 Use the packaged deterministic helper to enforce each baseline's construction limits. Keep methods
 on independent branches from the same parent; do not quietly mix their editing rules.
+
+For an isolated reference editor, read [isolated execution](references/isolated.md). It replaces the
+host reading/editing steps with one bounded Orbit Run and returns a candidate plus source trial IDs.
+Keep the evaluation and decision steps below on the host.
 
 ## Establish the round
 
@@ -82,7 +86,7 @@ An empty or over-budget diff is not a candidate to evaluate.
 
 Keep task IDs, answers, reference snippets and per-task lookup rules out of the candidate. Do not
 read gate/guard/final trajectories or use their failures to edit it. `informedBy` is self-reported;
-this V1 workflow is not physical isolation of the editor (V3 is separate).
+the host-driven route is not physical isolation. Use the V3 route above when isolation is required.
 
 ## Check, smoke and plan
 
