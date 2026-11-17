@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from urllib.request import urlopen
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import digest, file_digest
 
 
@@ -63,7 +63,7 @@ def main():
         return
     if not all((args.checkpoint, args.checkpoint_digest, args.normalization_digest)):
         parser.error("checkpoint and both content digests are required")
-    if (tree_digest(args.checkpoint) != args.checkpoint_digest
+    if (checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest
             or normalization_digest(args.checkpoint) != args.normalization_digest):
         raise ValueError("X-VLA checkpoint or processor differs from the frozen registration")
 

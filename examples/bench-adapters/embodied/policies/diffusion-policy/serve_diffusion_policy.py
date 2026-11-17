@@ -9,7 +9,7 @@ from urllib.request import urlopen
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import digest, file_digest
 
 
@@ -96,7 +96,7 @@ def main():
     if not all((args.weights, args.checkpoint_digest, args.normalization_digest, args.backbone_digest)):
         parser.error("--weights and all three asset digests are required")
     checkpoint, encoder = args.weights / CHECKPOINT, args.weights / "clip"
-    if file_digest(checkpoint) != args.checkpoint_digest or tree_digest(encoder) != args.backbone_digest:
+    if file_digest(checkpoint) != args.checkpoint_digest or checkpoint_tree_digest(encoder) != args.backbone_digest:
         raise ValueError("Diffusion Policy inference assets differ from the frozen registration")
 
     import torch

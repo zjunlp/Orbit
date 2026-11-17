@@ -9,7 +9,7 @@ import sys
 HERE = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(HERE), str(HERE.parents[1] / "sdk")]
 from orbit_embodied import digest
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from adapter import file_digest
 
 
@@ -34,8 +34,8 @@ def main():
               "checkpoint": {"result": "not_run"}, "images": {},
               "nativeParity": "not_run", "positiveCalibration": "not_run"}
     if args.checkpoint:
-        measured = tree_digest(args.checkpoint)
-        normalization = tree_digest(args.checkpoint / "assets")
+        measured = checkpoint_tree_digest(args.checkpoint)
+        normalization = checkpoint_tree_digest(args.checkpoint / "assets")
         expected = reference["checkpoint"].get("contentDigest")
         expected_normalization = reference["checkpoint"].get("normalizationDigest")
         complete = all((args.checkpoint / name).is_dir() for name in reference["checkpoint"]["required"])

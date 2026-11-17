@@ -4,7 +4,7 @@ import argparse
 from dataclasses import replace
 from pathlib import Path
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 
 
 def main():
@@ -17,9 +17,9 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     checkpoint = Path(args.checkpoint)
-    if tree_digest(checkpoint) != args.checkpoint_digest:
+    if checkpoint_tree_digest(checkpoint) != args.checkpoint_digest:
         raise ValueError("checkpoint content digest mismatch")
-    if tree_digest(checkpoint / "assets") != args.normalization_digest:
+    if checkpoint_tree_digest(checkpoint / "assets") != args.normalization_digest:
         raise ValueError("normalization content digest mismatch")
     from openpi.policies.policy_config import create_trained_policy
     from openpi.serving.websocket_policy_server import WebsocketPolicyServer

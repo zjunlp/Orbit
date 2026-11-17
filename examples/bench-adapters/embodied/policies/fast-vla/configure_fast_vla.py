@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import digest, file_digest
 from native_runtime import build_policy_image, check_policy_source, export_source, policy_manifest, require_image
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 from orbit_embodied.binding import resolve_binding
 
 
@@ -78,9 +78,10 @@ def main():
             or file_digest(args.weights / DINO_CONFIG) != DINO_DIGEST
             or (args.weights / DINO / "refs/main").read_text().strip() != DINO_REVISION):
         raise ValueError("Fast-VLA backbone configuration differs from the released recipe")
-    checkpoint = tree_digest(args.weights / "actor")
+    checkpoint = checkpoint_tree_digest(args.weights / "actor")
     normalization = file_digest(args.weights / "actor/norm_stats.json")
-    backbone = digest({"dm05": tree_digest(args.weights / "dm05"), "vision": tree_digest(args.weights / "hub")})
+    backbone = digest({"dm05": checkpoint_tree_digest(args.weights / "dm05"),
+                       "vision": tree_digest(args.weights / "hub")})
     name = "fast-vla-robotwin"
     registration = {
         "name": name, "version": "1", "connector": "policy-ws", "replanSteps": 50,

@@ -8,7 +8,7 @@ from urllib.request import urlopen
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import file_digest
 from orbit_embodied.driver import EpisodeFailure
 from orbit_embodied.evidence import validate_action_chunk
@@ -62,7 +62,7 @@ def main():
         return
     if not all((args.checkpoint, args.checkpoint_digest, args.normalization_digest)):
         parser.error("checkpoint and both content digests are required")
-    if tree_digest(args.checkpoint) != args.checkpoint_digest:
+    if checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest:
         raise ValueError("policy checkpoint content digest mismatch")
     calvin = args.recipe == "calvin"
     norm = args.checkpoint / (CALVIN_NORMALIZATION_DIR if calvin else NORMALIZATION_DIR)

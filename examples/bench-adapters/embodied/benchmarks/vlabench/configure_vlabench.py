@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from native_runtime import image_id
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 from orbit_embodied.vlabench import ASSETS_ROOT, CAMERAS, OPEN_TRACK, RENDER_SIZE, TRACKS, track_catalog, track_path
 
 
@@ -62,7 +62,7 @@ def policy_definition(weights, image, profile):
                                         image], text=True).strip()
     if revision != OPENWAM_SOURCE:
         raise ValueError("OpenWAM image must be built from the pinned upstream revision")
-    checkpoint, normalization = tree_digest(weights), file_digest(weights / NORMALIZATION)
+    checkpoint, normalization = checkpoint_tree_digest(weights), file_digest(weights / NORMALIZATION)
     return {"name": POLICY_NAME, "version": "1", "connector": "policy-ws", "replanSteps": 1,
             "port": 8000, "callTimeoutSec": 300, "randomness": RANDOMNESS, "profile": profile,
             "checkpointDigest": checkpoint, "normalizationDigest": normalization,

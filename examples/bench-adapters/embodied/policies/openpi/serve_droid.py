@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import file_digest
 from orbit_embodied.driver import EpisodeFailure
 from orbit_embodied.evidence import validate_action_chunk
@@ -45,7 +45,7 @@ def main():
     parser.add_argument("--checkpoint-digest", required=True)
     parser.add_argument("--normalization-digest", required=True)
     args = parser.parse_args()
-    if (tree_digest(args.checkpoint) != args.checkpoint_digest
+    if (checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest
             or file_digest(args.checkpoint / NORMALIZATION) != args.normalization_digest):
         raise ValueError("DROID checkpoint differs from the frozen registration")
 

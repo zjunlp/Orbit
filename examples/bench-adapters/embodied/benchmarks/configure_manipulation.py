@@ -203,7 +203,7 @@ def register_vima(args, image):
 
 
 def register_vima_policy(args, sources):
-    from orbit_embodied.assets import tree_digest
+    from orbit_embodied.assets import checkpoint_tree_digest
     from serve_vima import CHECKPOINT, RANDOMNESS, T5_CONFIG, TOKENIZER
 
     for name in (CHECKPOINT, TOKENIZER, T5_CONFIG):
@@ -212,7 +212,7 @@ def register_vima_policy(args, sources):
     if any(args.weights.rglob("*.partial*")):
         raise ValueError("VIMA weights contain partial downloads")
     image = require_image(args.policy_image, manifest(args.kind, sources, "policy"))
-    weights, tokenizer = tree_digest(args.weights), file_digest(args.weights / TOKENIZER)
+    weights, tokenizer = checkpoint_tree_digest(args.weights), file_digest(args.weights / TOKENIZER)
     name = "vima-20m"
     server = "/opt/vima/serve_vima.py"
     definition = {

@@ -8,7 +8,7 @@ import traceback
 
 import zmq
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.evidence import file_digest
 from orbit_embodied.wire import pack, unpack
 
@@ -67,7 +67,7 @@ def main():
         return
     if not all((args.checkpoint, args.checkpoint_digest, args.normalization_digest, args.backbone_digest)):
         parser.error("checkpoint and all content digests are required")
-    if tree_digest(args.checkpoint) != args.checkpoint_digest:
+    if checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest:
         raise ValueError("GR00T N1.5 checkpoint content digest mismatch")
     if file_digest(args.checkpoint / "experiment_cfg/metadata.json") != args.normalization_digest:
         raise ValueError("GR00T N1.5 normalization content digest mismatch")
@@ -78,7 +78,7 @@ def main():
     from gr00t.model.backbone.eagle_backbone import DEFAULT_EAGLE_PATH
     from gr00t.model.policy import Gr00tPolicy
 
-    if tree_digest(DEFAULT_EAGLE_PATH) != args.backbone_digest:
+    if checkpoint_tree_digest(DEFAULT_EAGLE_PATH) != args.backbone_digest:
         raise ValueError("GR00T N1.5 bundled Eagle assets differ from the frozen source")
     if not torch.cuda.is_available():
         raise RuntimeError("GR00T N1.5 requires CUDA")

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from native_runtime import image_id
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 from orbit_embodied.binding import robocasa_horizon
 
 
@@ -128,7 +128,7 @@ def diffusion_policy(args, reference, model):
         source = model[key]
         check_source(args.diffusion_source if key == "source" else args.robomimic_source, source, source["files"])
     checkpoint = file_digest(args.weights / model["checkpointFile"])
-    backbone = tree_digest(args.weights / "clip")
+    backbone = checkpoint_tree_digest(args.weights / "clip")
     if checkpoint != model["checkpointDigest"] or backbone != model["backboneDigest"]:
         raise ValueError("inference assets differ from the published Diffusion Policy recipe")
     normalization = model["normalizationDigest"]
@@ -166,9 +166,9 @@ def configure_policy(args, reference, model, groot):
                 else ["_CHECKPOINT_METADATA", "params/manifest.ocdbt", "assets/norm_stats.json"])
     if any(not (weights / filename).is_file() for filename in required):
         raise ValueError("RoboCasa365 inference checkpoint is incomplete")
-    checkpoint = tree_digest(weights)
+    checkpoint = checkpoint_tree_digest(weights)
     normalization = (file_digest(weights / "experiment_cfg/metadata.json") if groot
-                     else tree_digest(weights / "assets"))
+                     else checkpoint_tree_digest(weights / "assets"))
     if checkpoint != model["checkpoint"]["digest"] or normalization != model["checkpoint"]["normalizationDigest"]:
         raise ValueError("checkpoint contents differ from the published RoboCasa365 inference files")
     service = {
@@ -179,7 +179,7 @@ def configure_policy(args, reference, model, groot):
                    "--normalization-digest", normalization]
     extra = {}
     if groot:
-        backbone = tree_digest(policy_root / model["backbone"]["path"])
+        backbone = checkpoint_tree_digest(policy_root / model["backbone"]["path"])
         if backbone != model["backbone"]["digest"]:
             raise ValueError("bundled Eagle assets differ from the published recipe")
         server = "/opt/orbit/serve_groot_n15.py"

@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, check_source, digest, file_digest, implementation_digest
 from native_runtime import MANIFEST_LABEL, export_source, image_id, require_image
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 
 
 SEPTEMBER = {"repository": "https://github.com/RoboTwin-Platform/RoboTwin",
@@ -149,8 +149,8 @@ def configure_policy(args, reference):
         raise ValueError("RoboTwin and OpenPI recipes differ")
 
     checkpoint = model["checkpoint"]
-    if (tree_digest(args.weights) != checkpoint["digest"]
-            or tree_digest(args.weights / "assets") != checkpoint["normalizationDigest"]):
+    if (checkpoint_tree_digest(args.weights) != checkpoint["digest"]
+            or checkpoint_tree_digest(args.weights / "assets") != checkpoint["normalizationDigest"]):
         raise ValueError("RoboTwin checkpoint differs from the published inference files")
 
     name = "pi05-robotwin-adjust-bottle"

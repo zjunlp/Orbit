@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import file_digest
 from native_runtime import build_policy_image, check_policy_source, policy_manifest, require_image
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import resolve_binding
 
 
@@ -57,7 +57,7 @@ def main():
                 "qwen/config.json", "qwen/tokenizer.json", "qwen/preprocessor_config.json")
     if not all((args.weights / path).is_file() for path in required):
         raise ValueError("LingBot-VLA checkpoint or Qwen processor is incomplete")
-    checkpoint, normalization = tree_digest(args.weights), file_digest(args.source / NORM)
+    checkpoint, normalization = checkpoint_tree_digest(args.weights), file_digest(args.source / NORM)
     name = "lingbot-vla-4b-robotwin"
     registration = {
         "name": name, "version": "1", "connector": "policy-ws", "replanSteps": 50, "callTimeoutSec": 300,

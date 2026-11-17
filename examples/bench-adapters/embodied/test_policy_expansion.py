@@ -230,6 +230,7 @@ class PolicyExpansionTests(unittest.TestCase):
         config = load("policies/openpi/configure_droid.py")
         molmo = load("benchmarks/molmospaces/configure_molmospaces.py")
         from orbit_embodied import resolve_binding
+        from orbit_embodied.assets import tree_digest
 
         standard = molmo.profile()
         randcam = molmo.profile()
@@ -239,22 +240,28 @@ class PolicyExpansionTests(unittest.TestCase):
         observation_map = {name: name for name in standard["observations"]}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "params").mkdir()
-            (root / "params/manifest.ocdbt").write_bytes(b"fixture")
-            (root / "assets/droid").mkdir(parents=True)
-            (root / "assets/droid/norm_stats.json").write_text("{}")
+            weights = root / "weights"
+            (weights / "params").mkdir(parents=True)
+            (weights / "params/manifest.ocdbt").write_bytes(b"fixture")
+            (weights / "assets/droid").mkdir(parents=True)
+            (weights / "assets/droid/norm_stats.json").write_text("{}")
+            expected_checkpoint = tree_digest(weights)
+            download = weights / ".cache/huggingface/download"
+            download.mkdir(parents=True)
+            (download / "manifest.ocdbt.metadata").write_text("synthetic download metadata")
             reference_path, output = root / "reference.json", root / "policy.json"
             reference = {"benchmarkProfile": randcam, "environment": {"kind": "molmospaces", "frontCamera": camera},
                          "observationMap": observation_map,
                          "parameters": {"replanSteps": 8}}
             argv = ["configure_droid.py", "--policy-image", "test:policy", "--reference-file", str(reference_path),
-                    "--weights", str(root), "--output", str(output), "--share-gpu"]
+                    "--weights", str(weights), "--output", str(output), "--share-gpu"]
             with patch.object(sys, "argv", argv), patch.object(config, "require_image", return_value="sha256:" + "a" * 64):
                 reference_path.write_text(json.dumps(reference))
                 config.main()
                 policy = json.loads(output.read_text())
                 self.assertEqual(policy["name"], "pi05-droid-molmospaces-randcam")
                 self.assertEqual(policy["weights"]["dataset"], "pi05-droid-molmospaces")
+                self.assertEqual(policy["checkpointDigest"], expected_checkpoint)
                 self.assertEqual(policy["service"]["gpusOf"], "main")
                 resolve_binding(randcam, policy["profile"], observation_map)
                 with self.assertRaisesRegex(ValueError, "incompatible semantics for front_rgb"):

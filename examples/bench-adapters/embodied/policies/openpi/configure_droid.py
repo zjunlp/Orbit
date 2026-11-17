@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import file_digest
 from native_runtime import build_policy_image, check_policy_source, policy_manifest, require_image
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import resolve_binding
 
 
@@ -73,7 +73,7 @@ def main():
     profile = policy_profile(reference)
     if not (args.weights / "params/manifest.ocdbt").is_file() or list(args.weights.rglob("*.partial")):
         raise ValueError("DROID checkpoint download is incomplete")
-    checkpoint = tree_digest(args.weights)
+    checkpoint = checkpoint_tree_digest(args.weights)
     normalization = file_digest(args.weights / "assets/droid/norm_stats.json")
     name = WEIGHTS_DATASET + "-randcam" if profile["id"] == RANDCAM_PROFILE else WEIGHTS_DATASET
     placement = {"gpusOf": "main", "gpus": 0} if args.share_gpu else {"role": "policy", "gpus": 1}

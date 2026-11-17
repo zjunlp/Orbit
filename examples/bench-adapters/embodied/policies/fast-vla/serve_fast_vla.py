@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
 from orbit_embodied.binding import digest, file_digest
 from orbit_embodied.wire import checked_policy_actions, serve_actions
 
@@ -42,8 +42,9 @@ def main():
     parser.add_argument("--normalization-digest", required=True)
     parser.add_argument("--backbone-digest", required=True)
     args = parser.parse_args()
-    backbone = digest({"dm05": tree_digest(args.weights / "dm05"), "vision": tree_digest(args.weights / "hub")})
-    if (tree_digest(args.weights / "actor") != args.checkpoint_digest
+    backbone = digest({"dm05": checkpoint_tree_digest(args.weights / "dm05"),
+                       "vision": tree_digest(args.weights / "hub")})
+    if (checkpoint_tree_digest(args.weights / "actor") != args.checkpoint_digest
             or file_digest(args.weights / "actor/norm_stats.json") != args.normalization_digest
             or backbone != args.backbone_digest):
         raise ValueError("Fast-VLA assets differ from the frozen registration")

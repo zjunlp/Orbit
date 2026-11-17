@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from orbit_embodied.assets import tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest
 from orbit_embodied.binding import file_digest
 from orbit_embodied.wire import checked_policy_actions, serve_actions
 
@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--checkpoint-digest", required=True)
     parser.add_argument("--normalization-digest", required=True)
     args = parser.parse_args()
-    if (tree_digest(args.weights) != args.checkpoint_digest
+    if (checkpoint_tree_digest(args.weights) != args.checkpoint_digest
             or file_digest(args.weights / "norm_stats.json") != args.normalization_digest):
         raise ValueError("DM0.5 assets differ from the frozen registration")
 
