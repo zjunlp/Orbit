@@ -394,3 +394,25 @@ describe("synthetic gate calibration", () => {
     expect(accepted / runs).toBeLessThanOrEqual(0.05);
   });
 });
+
+it("checks each guard's declared metric without relabeling immutable reports", () => {
+  const f = fixture();
+  const guard = f.pair("guard:0", "other", Array(60).fill(60), Array(60).fill(60));
+  f.policy.guard.push({
+    ...guard.dataset,
+    metric: "resolved",
+    margin: 5,
+  });
+  for (const job of [guard.a, guard.b])
+    job.metrics = [
+      { name: "resolved", label: "Resolved", range: [0, 100], higherIsBetter: true, primary: true },
+    ];
+  for (const report of [guard.ra, guard.rb]) report.metric = "resolved";
+  const before = JSON.stringify(f.evidence);
+  const result = f.check();
+  expect(result.decision).toBe("accept");
+  expect(
+    result.checks.find((c) => c.set === "guard:0" && c.kind === "non-inferiority")?.status,
+  ).toBe("pass");
+  expect(JSON.stringify(f.evidence)).toBe(before);
+});

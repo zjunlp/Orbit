@@ -77,3 +77,17 @@ it("pairs attempts by immutable report and sample, never a later rescore", () =>
   expect(gatePairs(r, "gate", entry.task)).toEqual([]);
   expect(gatePairs(r, "unknown", entry.task)).toEqual([]);
 });
+
+it("shows the selected metric for the target and each guard", () => {
+  const r = record();
+  r.policy.gate.metric = "resolved";
+  r.policy.guard.push({
+    benchmark: "gui",
+    tasks: { file: "gui.txt", sha256: "a".repeat(64) },
+    metric: "success",
+    margin: 5,
+  });
+  const html = renderToStaticMarkup(<GateDetail record={r} />);
+  expect(html).toContain("fixture: resolved");
+  expect(html).toContain("gui: success");
+});

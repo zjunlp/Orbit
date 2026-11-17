@@ -155,7 +155,7 @@ export function gate(
       for (const r of evidence.reports) {
         if (
           r.jobId !== j.id ||
-          r.metric !== policy.metric ||
+          r.metric !== (policy.gate.metric ?? policy.metric) ||
           !r.methods.some((m) => m.method === method)
         )
           continue;
@@ -448,7 +448,7 @@ export function gate(
         (x) =>
           x.report.planDigest === planDigest(x.job) &&
           contentDigest(x.report.official) === contentDigest(x.job.official ?? null) &&
-          x.report.metric === policy.metric &&
+          x.report.metric === (dataset.metric ?? policy.metric) &&
           x.report.aggregator === (x.job.spec.samplePlan ? "orbit-report/2" : REPORT_AGGREGATOR) &&
           matrix(x.job, x.method),
       );
@@ -497,7 +497,9 @@ export function gate(
       required,
     );
     if (!taskOK || !reportsOK || !conditionsOK) continue;
-    const metric = resolveMetrics(a.job.metrics).find((m) => m.name === policy.metric);
+    const metric = resolveMetrics(a.job.metrics).find(
+      (m) => m.name === (dataset.metric ?? policy.metric),
+    );
     if (!metric) {
       add(set, "conditions", "insufficient", "metric is not declared", required);
       continue;

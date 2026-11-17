@@ -6,7 +6,11 @@ const Tasks = z.strictObject({
   file: z.string().min(1),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
-const Dataset = z.strictObject({ benchmark: z.string().min(1), tasks: Tasks });
+const Dataset = z.strictObject({
+  benchmark: z.string().min(1),
+  tasks: Tasks,
+  metric: z.string().min(1).optional(),
+});
 export const GatePolicy = z.strictObject({
   version: z.literal(1),
   alpha: z.number().min(1e-12).max(0.25).default(0.05),
