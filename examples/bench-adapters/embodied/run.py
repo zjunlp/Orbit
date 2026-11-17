@@ -283,7 +283,8 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         native = {"ee": RoboTwinCartesianBenchmark, "lingbot-va-ee": RoboTwinLingBotBenchmark,
                   "absolute-ee": RoboTwinAbsolutePoseBenchmark,
                   "qpos-chunk-16": RoboTwinJointChunkBenchmark}.get(controller, RoboTwinBenchmark)
-        benchmark = native(reference, sample["taskId"])
+        batch_index = request["batch"]["index"] if request.get("batch") else None
+        benchmark = native(reference, sample["taskId"], batch_index=batch_index)
     elif kind in ("maniskill3", "metaworld"):
         from orbit_embodied.tabletop import ManiSkillBenchmark, MetaWorldBenchmark
         native = ManiSkillBenchmark if kind == "maniskill3" else MetaWorldBenchmark

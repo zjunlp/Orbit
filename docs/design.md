@@ -1030,6 +1030,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/benchmarks/robotwin/README.md)
+  固定批次按原生套件的 `clear_cache_freq` 在 episode 之间清理 SAPIEN 渲染缓存，周期以批次内的样本序号计算。
   X-VLA 在 Clean 和 Randomized 各使用独立的末端位姿配置，沿用原生场景和专家筛选逻辑。策略输出转换为 16 维原生控制目标，每 30 步重规划。
   LingBot-VA Clean 同样走原生末端位姿控制。首个动作块执行 16 步，后续每块最多 32 步，仿真每四步采集一组相机帧，供模型更新其 episode 内的缓存。
 - **ManiSkill3 与 Meta-World**：两个 RLinf recipe 分别使用原生 SAPIEN WidowX 和 MuJoCo Sawyer 环境。冻结样本种子、观测和控制语义，

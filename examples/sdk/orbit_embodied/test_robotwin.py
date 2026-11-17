@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from orbit_embodied.binding import digest, seed_asset
+from orbit_embodied.driver import SampleRejected
 from orbit_embodied.robotwin import (
     RoboTwinAbsolutePoseBenchmark, RoboTwinBenchmark, RoboTwinJointChunkBenchmark, setup_native_scene,
 )
@@ -58,6 +59,48 @@ class NativeControlEnvironment:
 
 
 class RobotwinTests(unittest.TestCase):
+    def test_batch_closes_native_scenes_on_the_configured_cache_cadence(self):
+        profile = reference()
+        profile["environment"]["assets"]["digest"] = "sha256:" + "1" * 64
+        task = "adjust_bottle"
+        sample = {"taskId": task, "environmentSeed": 42, "initialStateId": "0",
+                  "initialStateDigest": seed_asset(profile, task)}
+        render = ModuleType("sapien.render")
+        render.clear_cache = Mock()
+        with patch.dict(sys.modules, {render.__name__: render}), \
+                patch.object(RoboTwinBenchmark, "_native_args", return_value={"clear_cache_freq": 5}), \
+                patch.object(RoboTwinBenchmark, "_instruction"), \
+                patch.object(RoboTwinBenchmark, "observation"), \
+                patch("orbit_embodied.robotwin.setup_native_scene"):
+            for index in (None, *range(11)):
+                with self.subTest(batch_index=index):
+                    benchmark = RoboTwinBenchmark(profile, task, batch_index=index)
+                    env = Mock(step_lim=benchmark.horizon)
+                    with patch.object(benchmark, "_expert_scene", return_value=(env, {})) as expert:
+                        if index == 4:
+                            expert.side_effect = SampleRejected("fixture expert rejection")
+                            with self.assertRaises(SampleRejected):
+                                benchmark.reset(sample)
+                        else:
+                            benchmark.reset(sample)
+                    benchmark.close()
+                    benchmark.close()
+                    if index == 4:
+                        env.close_env.assert_not_called()
+                    else:
+                        env.close_env.assert_called_once_with()
+                    self.assertEqual(render.clear_cache.call_count, int(index in (4, 9)))
+                    render.clear_cache.reset_mock()
+
+            benchmark = RoboTwinBenchmark(profile, task, batch_index=4)
+            env = Mock(step_lim=benchmark.horizon)
+            with patch.object(benchmark, "_expert_scene", return_value=(env, {})):
+                benchmark.reset(sample)
+            render.clear_cache.side_effect = RuntimeError("fixture rendering device loss")
+            with self.assertRaisesRegex(RuntimeError, "rendering device loss"):
+                benchmark.close()
+            env.close_env.assert_called_once_with()
+
     def test_native_pose_controller_reads_live_pose_after_each_control(self):
         pose = RoboTwinAbsolutePoseBenchmark(reference(), "adjust_bottle")
         pose.env = NativeControlEnvironment()
