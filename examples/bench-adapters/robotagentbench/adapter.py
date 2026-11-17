@@ -18,6 +18,7 @@ from orbit_bench import main, valid, invalid, pinned
 REVISION = "fa207f52d8da139f591f9dc590eb002c58f72383"
 CONFIG = {"prepared", "image"}
 PUBLIC_KEY = "ORBIT_RAB_EVIDENCE_PUBLIC_KEY"
+EVIDENCE_HELPER = HERE.parents[1] / "tools/orbit-gui-service/evidence.py"
 SPECIAL = ("coffee_bag_interference", "coffee_machine_push_interference",
            "coffee_bag_then_machine_interference", "coffee_button_lighting_interference")
 
@@ -130,9 +131,9 @@ def solve(req):
     stage = Path(trial["staging"])
     stage.mkdir(parents=True, exist_ok=True)
     copy_runtime(runtime, stage / "runtime")
-    for name in ("service.py", "verify.py", "proxy.py"):
+    for name in ("service.py", "proxy.py"):
         shutil.copyfile(HERE / name, stage / name)
-    shutil.copyfile(HERE.parents[1] / "tools/orbit-gui-service/evidence.py", stage / "evidence_helpers.py")
+    shutil.copyfile(EVIDENCE_HELPER, stage / "evidence_helpers.py")
     key = stage / "private.pem"
     key.touch(mode=0o600, exist_ok=False)
     subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(key)], check=True, capture_output=True)
@@ -184,9 +185,12 @@ def solve(req):
 
 def verify(req):
     root, config, _ = settings(req)
-    stage = Path(req["trial"]["staging"])
+    stage = Path(req["trial"]["staging"]) / "verify"
     service = req["solve"]["run"]["spec"]["services"][0]
     public = service["env"][PUBLIC_KEY]
+    stage.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(HERE / "verify.py", stage / "verify.py")
+    shutil.copyfile(EVIDENCE_HELPER, stage / "evidence_helpers.py")
     return {"spec": {"image": config["image"], "network": False,
         "command": ["python", "/adapter/verify.py", "/solve"], "timeoutMin": 10,
         "resources": {"cpus": 2, "memGB": 4, "gpus": 0},
