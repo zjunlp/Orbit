@@ -65,6 +65,9 @@ import {
   PolicyDefinition,
   type PolicyDefinitionInput,
   PolicyList,
+  PreparationCatalog,
+  type PreparationInput,
+  PreparationStatus,
   ReconcileReport,
   Run,
   RunDeletion,
@@ -292,6 +295,11 @@ export class OrbitClient {
       BenchCatalog,
       `/bench/catalog${refresh.length ? `?refresh=${refresh.map(enc).join(",")}` : ""}`,
     );
+  benchResources = () => this.call(PreparationCatalog, "/bench/resources");
+  benchPrepare = (family: string, body: PreparationInput) =>
+    this.call(Run, `/bench/resources/${enc(family)}/prepare`, { method: "POST", body });
+  benchPreparation = (id: string) =>
+    this.call(PreparationStatus, `/bench/preparations/${enc(id)}`, { timeoutMs: 180_000 });
   benchCalibrate = (body: CalibrationRequestInput) =>
     this.call(BenchJob, "/bench/calibrations", { method: "POST", body, timeoutMs: 180_000 });
   agentCatalog = () => this.call(AgentCatalog, "/agents/catalog");

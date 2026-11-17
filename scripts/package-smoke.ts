@@ -48,6 +48,16 @@ try {
   run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball]);
   assert.equal(run(cli, ["--version"]).trim(), manifest.version);
   const pkg = join(temp, "node_modules/@zjunlp/orbit");
+  for (const file of [
+    "bench-adapters/humaneval/adapter.py",
+    "bench-adapters/harbor-suites/adapter.mjs",
+    "sdk/orbit_bench/__init__.py",
+    "bench-adapters/embodied/benchmarks/behavior-1k/configure_behavior.py",
+  ])
+    assert.ok(
+      existsSync(join(pkg, "dist/bench-assets/examples", file)),
+      `missing packaged benchmark asset: ${file}`,
+    );
   assert.ok(existsSync(join(pkg, "LICENSE")));
   assert.ok(existsSync(join(pkg, "README.md")));
   const notices = readFileSync(join(pkg, "dist/web/THIRD_PARTY_LICENSES.md"), "utf8");
@@ -98,6 +108,13 @@ try {
     run("npm", ["exec", "--offline", "--", "orbit", "doctor", "--json"], temp, true),
   );
   assert.equal(typeof report.ok, "boolean");
+  const resources = JSON.parse(run(cli, ["bench", "resources", "--json"]));
+  assert.equal(resources.recipes.length, 52);
+  assert.ok(
+    resources.recipes.every(
+      (recipe: { id: string; resources: unknown[] }) => recipe.id && recipe.resources.length,
+    ),
+  );
   assert.ok(report.checks.length > 0);
   console.log(
     `doctor: ${report.ok ? "passed" : "prerequisites missing"}; ${report.checks.length} real checks`,

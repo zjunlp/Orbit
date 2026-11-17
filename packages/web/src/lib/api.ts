@@ -39,6 +39,9 @@ import type {
   MethodList,
   Metrics,
   NotifyTarget,
+  PreparationCatalog,
+  PreparationInput,
+  PreparationStatus,
   Run,
   RunCursor,
   RunDeletion,
@@ -221,6 +224,13 @@ export const api = {
     req<BenchCatalog>(
       `/bench/catalog${refresh.length ? `?refresh=${refresh.map(enc).join(",")}` : ""}`,
     ),
+  benchResources: () => req<PreparationCatalog>("/bench/resources"),
+  benchPrepare: (family: string, body: PreparationInput) =>
+    req<Run>(`/bench/resources/${enc(family)}/prepare`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  benchPreparation: (id: string) => req<PreparationStatus>(`/bench/preparations/${enc(id)}`),
   benchCalibrate: (body: CalibrationRequestInput) =>
     req<BenchJob>("/bench/calibrations", { method: "POST", body: JSON.stringify(body) }),
   benchJob: (id: string) => req<BenchJobDetail>(`/bench/jobs/${enc(id)}`),
