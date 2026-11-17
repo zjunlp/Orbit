@@ -40,6 +40,7 @@ def solve_batch(req, item, adapter_dir):
                             "ORBIT_METHOD_CONFIG": json.dumps(method.get("config") or {})})
         run["network"] = True
     else:
+        run["network"] = True
         run["agentTask"] = {"instruction": (
             "Answer every prompt in /input/task.json independently, using only its provided text. "
             "Write $ORBIT_OUTPUT/answers.json as a JSON object mapping each question id to its answer string. "

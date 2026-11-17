@@ -35,7 +35,7 @@ def tasks(req):
         "supported": r["instance_id"] in images,
         "reason": None if r["instance_id"] in images else "Install the official instance image and add its immutable id to imageMap",
         "tags": {"repo": r["repo"]}} for r in rows],
-        "capabilities": {"identity": {"id": "swe-bench", "name": "SWE-bench", "version": RELEASE["revision"], "variant": "Lite-test"},
+        "capabilities": {"identity": {"id": "swebench", "name": "SWE-bench", "version": RELEASE["revision"], "variant": "Lite-test"},
             "methods": ["cli", "external", "oracle", "empty"], "scoreKind": "scalar", "rescore": "evidence",
             "conditions": {"Scoring": "Official 3.0.15 test script, log parser and F2P/P2P resolved decision",
                 "Isolation": "Fresh instance image; private test patch and reference; no Docker socket",
@@ -89,6 +89,7 @@ def solve(req):
         run["env"].update({"ORBIT_TASK_FILE": "/input/task.json", "ORBIT_METHOD_CONFIG": json.dumps(method.get("config") or {})})
         run["network"] = True
     else:
+        run["network"] = True
         run["agentTask"] = {"instruction": "Fix the issue in /input/task.json in the repository /testbed. "
             "Write your final unified diff to $ORBIT_OUTPUT/model.patch (for example git diff BASE_COMMIT). "
             "Keep the original tests intact. Only model.patch is evaluated in a fresh container. "

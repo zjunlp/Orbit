@@ -102,6 +102,8 @@ examples/      bench-adapters/<benchmark>/: external bench adapters (not part of
 `examples/sdk/orbit_bench/batch.py` shares file-submission Run planning and immutable-input checks
 for independent question batches (LegalBench, LawBench and MMAU). It does not implement an Agent
 loop or grader; each adapter retains its native scoring, task unit and private reference handling.
+CLI solve runs for the question adapters, SWE-bench and miniF2F enable networking for model access,
+like external methods. Empty/reference controls stay offline; each verifier retains its declared network policy.
 
 规则（由 `pnpm check:boundaries` 强制，定义在 `scripts/boundaries.ts`）：
 
@@ -1834,6 +1836,7 @@ evidence stay private to the service. This removes the additional internal Docke
 Reference/empty checks can execute native traces offline, which does not validate live services
 or prompt-injection defenses. See the [task record](tasks/20261116-remaining-benchmarks.md).
 
+SWE-bench uses the canonical family identity `swebench` in the adapter, catalog and resource preparation.
 SWE-bench Lite uses immutable official instance images, original eval scripts and native
 F2P/P2P resolved reports in fresh verifier containers. The Python harness environment is kept
 out of the repository test process. Tasks lacking installed images remain listed unsupported.

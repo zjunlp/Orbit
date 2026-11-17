@@ -103,6 +103,7 @@ def solve(req):
         run['env'].update({'ORBIT_TASK_FILE': '/input/task.json', 'ORBIT_METHOD_CONFIG': json.dumps(method.get('config') or {})})
         run['network'] = True
     else:
+        run['network'] = True
         run['agentTask'] = {'instruction': 'Prove the original Lean 3 theorem in /input/task.json. Write only its proof expression '
             '(for example begin ... end) to $ORBIT_OUTPUT/proof.lean. The verifier supplies the immutable statement and prelude. '
             'Use /tools/lean/bin/lean with the provided LEAN_PATH to try proofs locally. Lean 3.42.1 and the original mathlib are installed. '
