@@ -41,6 +41,10 @@ const timings: {
   mountedTurns: number;
 }[] = [];
 page.on("pageerror", (e) => errors.push(e.message));
+page.on("response", (response) => {
+  if (response.url().startsWith(base) && response.status() >= 400)
+    errors.push(`HTTP ${response.status()}: ${new URL(response.url()).pathname}`);
+});
 const samples = {
   "many-turns": longConversation("many-turns"),
   "single-turn": longConversation("single-turn"),

@@ -19,10 +19,10 @@ tool expansion and current-Trial content during slow reads.
 | Check | Revision | Result | Notes |
 | --- | --- | --- | --- |
 | Web regression | working tree | passed | 155 tests, including large-fixture mount bounds and cancellation propagation |
-| Chromium interaction | working tree | passed | URL/history, h/l/e, failure jump, tool search/expansion, virtual remount and mobile; delayed reads on Trial switch; API/raw reads and uncooperative transport |
+| Chromium interaction | working tree | passed | URL/history, h/l/e, failure jump, tool search/expansion, virtual remount, mobile and static resources; delayed reads on Trial switch; API/raw reads and uncooperative transport |
 | Formal performance comparison and recording | final implementation | passed | Same Chromium 153.0.8010.12, viewport and host; five samples each; [measurements and reproduction](../guides/conversation-performance.md); separate real-browser recording with synthetic API data |
 | Initial `pnpm verify` attempts | working tree | failed | Existing embodied adapter tests needed websockets/msgpack dependencies; no product or test logic changed |
-| `pnpm verify` | final implementation | passed | Script 9, Orbit 931 (32 existing skips), Web 155; type/boundary checks and both builds pass. Existing PPT size warning only |
+| `pnpm verify` | final implementation | passed | Script 9, Orbit 931 (32 existing skips), Web 155; type/boundary checks and both builds pass. Non-fatal PPT-size and Web chunk-size warnings |
 
 ## Next / open issues
 
