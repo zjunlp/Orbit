@@ -595,6 +595,10 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
 - **跨环境实验工具（V4）**：仓库脚本冻结双臂链、E1 划分、共同编辑器/评测条件与全局/单链/终测预算；运行仍经 V3 与既有 bench / E3，脚本不创建 daemon 进化状态。
   采集器只读 HTTP API 导出真实 job/report/Run，保留失败与重试；离线复算不可变判定，只有 accept 推进父包，核对所有已开始编辑的 evolve-only 来源与时序。终测须在所有链关闭后开始，按原指标逐格计算完整种子配对差与任务级区间；相同端点复用结果不产生差值区间或新增样本，缺项与未知用量不补 0。
   正式比较要求各链独立 Orbit home，避免共享家族的 alpha 支出互相影响；共享历史仅限明确标记的预演。当前限 Codex、非批处理固定任务集；第二 Agent 与正式效果验证另行开展。所有研究结果留在源码外，[方法说明](guides/evolution-study.md)。
+- **迁移证据矩阵（V5）**：`GET /bench/transfer` 从已有 E3 不可变记录生成只读投影，不新增实体、回填报告或发起评测。可同时按完整 `parentBundle` / `childBundle` SHA-256 筛选；CLI 为 `orbit bench transfer --parent-bundle … --child-bundle … [--json]`。
+  行按精确父/子 bundle，列按 benchmark 身份/版本、Agent/模型与 basis（除 bundle）、冻结执行条件/资源、指标、任务文件/任务集和 gate/guard/final 用途区分；不兼容的父子证据单独列出且无差值。A/A、相同包和无法确定精确包摘要的记录列为排除项。
+  只使用每条记录显式选择的报告及保存的配对统计；不自动挑选当前、最新或最优报告，同一格多条判定逐条保留。差值统一显示原指标的 child−parent，95% 正态区间仅用于描述，判定仍采用保存的单侧 t 检验；条件/来源前提不通过时无估计，覆盖不足可显示描述性差值但标证据不足。
+  Web `/configurations/transfer` 提供筛选、格子证据和原判定入口，配置页/判定页互相导航；显示局部检查和整条准入决定的区别，不生成行列总分。未被保存判定选择的评测不自动进入矩阵，正式 V4 研究及跨 Agent 效果仍需另行验证。[使用指南](guides/transfer-matrix.md)。
 - **进化判定 Web 复盘（E5）**：Configurations 的版本来源链展示最近判定；`/configurations/gates` 列出最近最多 100 条记录，可按子版本精确筛选；`/configurations/gates/:id` 展示不可变记录详情。
   接受、拒绝、证据不足与 A/A 校准有明确区分，不合成当前最优版本。详情显示性能/守护/成本、前提缺项、单侧区间、轮次和 alpha、冻结策略及报告修订、泄漏剔除清单。
   退步任务按所选报告内的 sample 配对，读取报告保存的 solve Run ID 并排展示 ATIF，父子步骤独立导航；不替换为 Trial 的最新重试。源 Run 删除时保留冻结分数并说明轨迹不可用。
@@ -1606,6 +1610,7 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   其他指标或无报告时用当前 trial，并返回 `reportRevision: null`，不冒充不可变历史。
   同条件的不同版本按配对任务比较，公共任务的资源覆盖必须一致；显式 parent 优先且不静默替换为其他版本；严格任务子集标 “regression subset”。
   Web 按条件与任务集分开趋势，支持指标选择、固定报告链接及退步任务入口；缺少报告或证据时明确保留缺项。
+- 迁移矩阵 `/configurations/transfer` 是已有判定的只读视图（§7 V5）；按改动 × benchmark/Agent 展示，细分模型、版本、资源、任务集和用途；缺项留空、不合计，多次评估逐条查阅，筛选和所选格子保存在 URL。
 - 重试归并也要求配置 revision 一致，不能把变更过的配置包或 CLI 的结果归入旧版本。
   用户或 Agent 可根据失败证据修复环境后重试，或调整评测配置并比较可比结果；页面不将这些变化称为方法进化。
 

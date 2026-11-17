@@ -61,7 +61,7 @@ function setup() {
     policy: f.policy,
     taskSets: f.evidence.taskSets,
   });
-  return { ...f, root, paths, store, app, client, save, input };
+  return { ...f, root, paths, store, app, client, bench, save, input };
 }
 
 describe("gate records and evidence resolution", () => {
@@ -326,4 +326,80 @@ it("resolves per-dataset metrics through CLI input, HTTP clients, planning and f
   expect(record.verdict.decision).toBe("accept");
   expect((await f.client.benchGateRecord(record.id)).policy.gate.metric).toBe("resolved");
   expect(f.store.listRuns()).toEqual([]);
+});
+
+describe("transfer CLI and read-only API", () => {
+  it("reads archived evidence after live jobs are deleted without backfilling or writing state", async () => {
+    const f = setup();
+    f.save();
+    const record = await f.client.benchGate(f.input());
+    const query = { parentBundle: "a".repeat(64), childBundle: "b".repeat(64) };
+    const before = await f.client.benchTransfer(query);
+    expect(before.rows[0]?.cells[0]?.assessments[0]?.record).toBe(record.id);
+    f.store.deleteJob(f.target.a.id);
+    f.store.deleteJob(f.target.b.id);
+    const backfill = vi.spyOn(f.bench, "reports");
+    const addReport = vi.spyOn(f.store, "addReport");
+    const addGate = vi.spyOn(f.store, "addGate");
+    const putJob = vi.spyOn(f.store, "putJob");
+    expect(await f.client.benchTransfer(query)).toEqual(before);
+    expect(await f.client.benchTransfer()).toEqual(before);
+    expect((await f.client.benchTransfer({ ...query, childBundle: "c".repeat(64) })).rows).toEqual(
+      [],
+    );
+    for (const spy of [backfill, addReport, addGate, putJob]) expect(spy).not.toHaveBeenCalled();
+    expect(f.store.listRuns()).toEqual([]);
+  });
+
+  it("keeps absent reports absent and rejects invalid or unauthorized reads", async () => {
+    const f = setup();
+    for (const job of f.evidence.jobs) f.store.putJob(job);
+    await f.client.benchGate(f.input());
+    expect((await f.client.benchTransfer()).rows[0]?.cells[0]?.assessments[0]).toMatchObject({
+      status: "missing",
+      delta: null,
+    });
+    expect(f.store.reports(f.target.a.id)).toEqual([]);
+    expect(f.store.reports(f.target.b.id)).toEqual([]);
+    expect((await f.app.request("/api/v1/bench/transfer")).status).toBe(401);
+    for (const query of [
+      "parentBundle=short",
+      `parentBundle=${"a".repeat(64)}`,
+      `parentBundle=${"a".repeat(64)}&childBundle=${"a".repeat(64)}`,
+      "unexpected=1",
+    ]) {
+      expect(
+        (
+          await f.app.request(`/api/v1/bench/transfer?${query}`, {
+            headers: { Authorization: "Bearer fixture" },
+          })
+        ).status,
+      ).toBe(400);
+    }
+  });
+
+  it("prints saved evidence through the client and requires full bundle filters", async () => {
+    const f = setup();
+    f.save();
+    await f.client.benchGate(f.input());
+    const print = vi.fn();
+    const getClient = vi.fn(async () => f.client);
+    const run = async (args: string[]) => {
+      const program = new Command().exitOverride().configureOutput({ writeErr: () => {} });
+      registerBench(program, getClient, print);
+      await program.parseAsync(["bench", "transfer", ...args], { from: "user" });
+    };
+    await expect(run(["--parent-bundle", "a".repeat(64)])).rejects.toThrow("child-bundle");
+    await expect(
+      run(["--parent-bundle", "short", "--child-bundle", "b".repeat(64)]),
+    ).rejects.toThrow("full SHA-256");
+    expect(getClient).not.toHaveBeenCalled();
+    await run(["--parent-bundle", "a".repeat(64), "--child-bundle", "b".repeat(64), "--json"]);
+    expect(print).toHaveBeenCalledTimes(1);
+    const [json, matrix, format] = print.mock.calls[0] ?? [];
+    expect(json).toBe(true);
+    expect(matrix.rows).toHaveLength(1);
+    expect(format()).toContain("Δ 15; 95% CI [15, 15]; paired 60/60");
+    expect(format()).toContain("gate-0@1:candidate");
+  });
 });

@@ -502,9 +502,11 @@ cost: { max_wall_ratio: 1.5, max_token_ratio: 1.5 }
 
 不新增实体。一个格子由（父 bundle 摘要，子 bundle 摘要，Agent 与模型，benchmark）确定，值是该条件下子相对父的配对差、区间与判定。
 
-- [ ] `orbit bench transfer --parent-bundle <digest> --child-bundle <digest> [--json]` 与 `GET /bench/transfer`。
-- [ ] Web：行是进化出的改动，列是"benchmark 族 × Agent"，格子显示配对差与区间；没有数据的格子留空，不补 0，不给行列合计。
-- [ ] 测试：条件不一致（benchmark 版本、资源条件）的结果不进入同一格。
+- [x] `orbit bench transfer --parent-bundle <digest> --child-bundle <digest> [--json]` 与 `GET /bench/transfer`。
+- [x] Web：行是进化出的改动，列是"benchmark 族 × Agent"，格子显示配对差与区间；没有数据的格子留空，不补 0，不给行列合计。
+- [x] 测试：条件不一致（benchmark 版本、资源条件）的结果不进入同一格。
+
+实现范围：[迁移矩阵指南](guides/transfer-matrix.md)。只读已有 E3 保存判定及显式选择的冻结报告；多次判定全部保留，不自动选择未判定的评测。CLI/API/Web 与条件隔离测试已覆盖；不代表 V4 正式实验或跨 Agent 效果已完成验证。
 
 ## 9. S：支撑事项
 

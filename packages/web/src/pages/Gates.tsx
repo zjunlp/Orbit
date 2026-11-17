@@ -10,7 +10,7 @@ import { TopBar } from "../components/TopBar.tsx";
 import { Empty, Link, Loading } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { dateTime, jobPath, runPath, trialPath } from "../lib/format.ts";
-import { gatePairs, gatePath, verdictLabel } from "../lib/gates.ts";
+import { gatePairs, gatePath, gateTransferPath, verdictLabel } from "../lib/gates.ts";
 import { setQuery, useLocation } from "../lib/router.ts";
 import { useAsync } from "../lib/use.ts";
 import { TrajectoryTab } from "./run/Trajectory.tsx";
@@ -99,7 +99,11 @@ export function GatesPage() {
     <>
       <TopBar
         crumbs={[{ label: "Configurations", href: "/configurations" }, { label: "Gate records" }]}
-      />
+      >
+        <Link className="btn" href="/configurations/transfer">
+          Transfer matrix
+        </Link>
+      </TopBar>
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
           <div>
@@ -236,6 +240,7 @@ export function GatePage({ id }: { id: string }) {
 export function GateDetail({ record }: { record: GateRecord }) {
   const loc = useLocation();
   const v = record.verdict;
+  const transferPath = gateTransferPath(record);
   const selection = record.evidence.selections.find((s) => s.set === loc.query.get("set"));
   const task = loc.query.get("task");
   const issues = v.checks.filter((c) => c.required && c.status !== "pass");
@@ -253,6 +258,9 @@ export function GateDetail({ record }: { record: GateRecord }) {
               : "Configuration promotion assessment"}
           </p>
           <h1>{verdictLabel(record)}</h1>
+          {transferPath && (
+            <Link href={transferPath}>Transfer evidence for this bundle change →</Link>
+          )}
           <p className="mono">
             {v.inputs.parent} → {v.inputs.child}
           </p>

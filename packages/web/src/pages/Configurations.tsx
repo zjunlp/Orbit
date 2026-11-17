@@ -81,6 +81,9 @@ export function ConfigurationsPage() {
   return (
     <>
       <TopBar crumbs={[{ label: "Evaluation configurations" }]}>
+        <Link className="btn" href="/configurations/transfer">
+          Transfer matrix
+        </Link>
         <Link className="btn sm" href="/configurations/gates">
           Gate records
         </Link>

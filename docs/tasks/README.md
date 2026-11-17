@@ -58,6 +58,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261117](20261117-transfer-matrix.md) V5: read-only transfer evidence matrix in CLI, API and Web
+
 - [20261117](20261117-evolution-cross-environment.md) V4: prospective cross-environment studies and bounded Codex preview
 - [20261117](20261117-isolated-evolver.md) Isolated reference editor with evolve-only inputs (V3)
 - [20261117](20261117-evolution-baselines.md) Evolution baseline variants (V2)

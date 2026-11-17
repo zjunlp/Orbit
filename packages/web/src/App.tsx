@@ -17,6 +17,7 @@ import { Resources } from "./pages/Resources.tsx";
 import { RunDetail } from "./pages/RunDetail.tsx";
 import { Runs } from "./pages/Runs.tsx";
 import { Settings } from "./pages/Settings.tsx";
+import { TransferPage } from "./pages/Transfer.tsx";
 import { TrialPage } from "./pages/Trial.tsx";
 import {
   matchRoute,
@@ -34,6 +35,7 @@ const VIEWS: Record<RouteName, (params: string[]) => React.ReactNode> = {
   agents: () => <AgentsPage />,
   configurations: () => <ConfigurationsPage />,
   gates: () => <GatesPage />,
+  transfer: () => <TransferPage />,
   gate: ([id]) => <GatePage key={id} id={id as string} />,
   bench: () => <BenchJobs />,
   runs: () => <Runs />,
