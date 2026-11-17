@@ -34,4 +34,4 @@ Updated 2026-11-17. Architecture: [design](design.md). Docs map: [docs/README](R
 1. Web: Catalog filter memoization.
 2. EFE GPU tasks, licensed-data volumes, KVM calibration of MobileWorld / OSWorld-V2.
 3. Real Agent bench jobs (RCB first); R4 on two machines; later, official-runner comparison for a few classic benchmarks.
-4. Evolution line: T1–T4, T5 native ATIF adoption and X1 export implemented; E1–E3 and bounded E6 development calibration implemented; T6 trajectory review and E5 verdict UI implemented; E4 flow helpers implemented; next V0/V1, then V2; additional importers remain on demand ([plan](evolution-plan.md)).
+4. Evolution line: T1–T4, T5 native ATIF adoption and X1 export implemented; E1–E3 and bounded E6 development calibration implemented; T6 trajectory review and E5 verdict UI implemented; E4 flow helpers and bounded V0 pilot/sizing implemented; default-margin guard sufficiency remains open; next V1, then V2; additional importers remain on demand ([plan](evolution-plan.md)).

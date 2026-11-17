@@ -112,7 +112,7 @@ export function resolveGateEvidence(store: Store, input: unknown, allowAmbiguous
           !job ||
           gateBenchmark(job) !== dataset.benchmark ||
           job.taskFile?.sha256 !== dataset.tasks.sha256 ||
-          report.metric !== policy.metric
+          report.metric !== (dataset.metric ?? policy.metric)
         )
           return [];
         return report.methods

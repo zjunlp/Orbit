@@ -31,6 +31,12 @@ unknown policy fields and changed files are rejected. Policy files are limited t
 to 8 MiB each, 32 MiB in total and 32 datasets. Full policy defaults are frozen into the saved record.
 Rules are user-declared: saving a policy with a verdict does not prove it was chosen before seeing results.
 
+Each `gate`, `guard[]` or `final[]` dataset may specify `metric`; it defaults to the top-level
+`metric`. Select the exact declared metric saved in that family's immutable reports (for example,
+Harbor's `resolved` alongside another family's `score`). Margins and thresholds use the selected
+metric's native units; there is no aliasing or automatic score conversion. Both sides must report
+the same selected metric. Older policies retain their top-level metric behavior.
+
 ## Plan evaluations and check bundles
 
 E4 adds two read-only helpers:

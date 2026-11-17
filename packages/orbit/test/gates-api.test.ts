@@ -305,3 +305,25 @@ describe("gate CLI", () => {
     expect(() => readGateInput(file, parent.revision, child.revision)).toThrow();
   });
 });
+
+it("resolves per-dataset metrics through CLI input, HTTP clients, planning and frozen records", async () => {
+  const f = setup();
+  f.policy.gate.metric = "resolved";
+  for (const job of f.evidence.jobs)
+    job.metrics = [
+      { name: "resolved", label: "Resolved", range: [0, 100], higherIsBetter: true, primary: true },
+    ];
+  for (const report of f.evidence.reports) report.metric = "resolved";
+  f.save();
+  const file = join(f.root, "gate.yaml");
+  writeFileSync(file, stringify(f.policy));
+  writeFileSync(join(f.root, "gate.txt"), f.evidence.taskSets[0]?.content ?? "");
+  const input = readGateInput(file, parent.revision, child.revision);
+  expect(input.policy.gate.metric).toBe("resolved");
+  const plan = await f.client.benchGatePlan(input);
+  expect(plan.rows.every((row) => row.status === "available")).toBe(true);
+  const record = await f.client.benchGate(input);
+  expect(record.verdict.decision).toBe("accept");
+  expect((await f.client.benchGateRecord(record.id)).policy.gate.metric).toBe("resolved");
+  expect(f.store.listRuns()).toEqual([]);
+});

@@ -319,25 +319,29 @@ function reportCosts(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([id, own]) => {
       const run = getRun(id);
-      const start = run?.startedAt ? Date.parse(run.startedAt) : Number.NaN;
-      const end = run?.endedAt ? Date.parse(run.endedAt) : Number.NaN;
-      const wallSeconds =
-        run &&
-        isTerminal(run.state) &&
-        run.cleanup === "done" &&
-        Number.isFinite(start) &&
-        Number.isFinite(end) &&
-        end >= start
-          ? (end - start) / 1000
-          : null;
       return {
         run: id,
         tasks: [...own.tasks].sort(),
         complete: own.complete,
-        wallSeconds,
-        tokens: run?.tokens ? { ...run.tokens } : null,
+        ...reportRunCost(run),
       };
     });
+}
+
+/** Saved solve interval and usage, also usable for explicit post-cleanup cost snapshots. */
+export function reportRunCost(run: Run | null) {
+  const start = run?.startedAt ? Date.parse(run.startedAt) : Number.NaN;
+  const end = run?.endedAt ? Date.parse(run.endedAt) : Number.NaN;
+  const wallSeconds =
+    run &&
+    isTerminal(run.state) &&
+    run.cleanup === "done" &&
+    Number.isFinite(start) &&
+    Number.isFinite(end) &&
+    end >= start
+      ? (end - start) / 1000
+      : null;
+  return { wallSeconds, tokens: run?.tokens ? { ...run.tokens } : null };
 }
 
 /** Whether two reports say the same thing (plan, rule and every entry); then no new revision. */

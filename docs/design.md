@@ -577,6 +577,10 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   `gate check-bundle DIR` / `POST /bench/gates/check-bundle` 在 daemon 本机只读检查，复用配置修订的有界文件读取和导出密钥规则；检查 held-out ID、已声明参考文件摘要和可选 `policy.bundle` 上限。
   静态检查拒绝外链、环与特殊文件，最多返回 100 条定位；不回显疑似凭据。无参考摘要明确 not_run，短 ID 子串可误报，不证明不存在编码答案或未知泄漏；不替代 V3 隔离。
   `orbit` skill 采用静态检查→进化集冒烟→准入→冻结守护集→多轮后终测的次序。配置 bundle 摘要仍兼容原算法；共享读取增加 64 层/20000 项限制。
+- **试点规模分析（V0）**：仓库脚本 `scripts/evolution-pilot.ts` 只读显式 A/A 不可变记录与 E1 划分，复算判定并核对来源、文件摘要与 evolve-only 成员；每任务每侧一个有界指标，不新建执行路径或状态。
+  输出配对翻转率及单侧 Wilson 上界、无效/未决/成本覆盖，并按首轮 alpha 与功效给出条件样本量估算。零观测翻转不当成零方差，缺失成本不补 0；A/A 不证明未来 bundle 效果或自适应功效。
+  准入规模不足保留 insufficient；具体选族、测量、冻结策略与结果留在源码外。原报告成本未收齐时可显式提供已完成 Run 快照，只补缺项并标注来源，不改写报告或判定；共用原报告成本提取。
+  策略的 gate/guard/final 任务集可各自声明 metric，缺省沿用顶层 metric；解析、纯判定、流程计划与 Web 按该原生指标读取不可变报告，不做别名或换算，旧策略摘要与行为保持兼容。
 - **进化判定 Web 复盘（E5）**：Configurations 的版本来源链展示最近判定；`/configurations/gates` 列出最近最多 100 条记录，可按子版本精确筛选；`/configurations/gates/:id` 展示不可变记录详情。
   接受、拒绝、证据不足与 A/A 校准有明确区分，不合成当前最优版本。详情显示性能/守护/成本、前提缺项、单侧区间、轮次和 alpha、冻结策略及报告修订、泄漏剔除清单。
   退步任务按所选报告内的 sample 配对，读取报告保存的 solve Run ID 并排展示 ATIF，父子步骤独立导航；不替换为 Trial 的最新重试。源 Run 删除时保留冻结分数并说明轨迹不可用。

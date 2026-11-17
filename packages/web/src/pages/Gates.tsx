@@ -258,7 +258,7 @@ export function GateDetail({ record }: { record: GateRecord }) {
           </p>
           <p>
             {record.mode === "promotion" && v.level ? v.level : "No promotion level"} ·{" "}
-            {record.policy.gate.benchmark} · {record.policy.metric}
+            {record.policy.gate.benchmark} · {record.policy.gate.metric ?? record.policy.metric}
           </p>
         </div>
         <div className="gate-budget">
@@ -292,6 +292,12 @@ export function GateDetail({ record }: { record: GateRecord }) {
           </ul>
         </section>
       )}
+      <p className="gate-note">
+        Metrics:{" "}
+        {[record.policy.gate, ...record.policy.guard, ...record.policy.final]
+          .map((dataset) => `${dataset.benchmark}: ${dataset.metric ?? record.policy.metric}`)
+          .join(" · ")}
+      </p>
       <div className="gate-check-groups">
         {[
           { title: "Performance", kinds: ["improvement"] },

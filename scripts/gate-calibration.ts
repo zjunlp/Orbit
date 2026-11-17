@@ -57,7 +57,9 @@ export function calibrateGateRecords(
     byTask.set(a.task, values);
   }
   const job = aa.evidence.jobs.find((j) => j.id === selection.parent.job);
-  const metric = resolveMetrics(job?.metrics ?? []).find((m) => m.name === aa.policy.metric);
+  const metric = resolveMetrics(job?.metrics ?? []).find(
+    (m) => m.name === (aa.policy.gate.metric ?? aa.policy.metric),
+  );
   if (!metric) throw new Error("calibration metric is unavailable");
   const direction = metric.higherIsBetter ? 1 : -1;
   const differences = [...byTask.values()].map(

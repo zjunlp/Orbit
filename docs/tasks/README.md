@@ -58,6 +58,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261117](20261117-evolution-pilot.md) V0: task-level repeat noise, solve cost and conditional gate sizing
 - [20261117](20261117-remaining-benchmarks-main-merge.md) Reconcile expanded benchmark catalog with main and resource preparation
 
 - [20261116](20261116-gate-workflow.md) E4: read-only evaluation plans and bundle preflight
