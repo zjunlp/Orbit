@@ -33,4 +33,4 @@ The retired C1–C7 categories, L0/L1/L2 tiers and fidelity levels appear only i
 | Extend embodied evaluations | [Policy and benchmark onboarding](guides/embodied-onboarding.md) · [Policy integration checks](guides/policy-integration-checks.md) · [Development checks](guides/embodied-development.md) |
 | Runs and machines | [Trajectories](guides/trajectories.md) · [Trajectory export](guides/trajectory-export.md) · [Checkpoints](guides/checkpoints.md) · [Multi-node](guides/multi-node.md) · [Docker userns-remap](guides/docker-userns-remap.md) |
 | Agents and notifications | [Plugins](../plugin/README.md) · [Notifications](guides/notifications.md) |
-| Maintainers | [Releasing](guides/releasing.md) |
+| Maintainers | [Releasing](guides/releasing.md) · [Conversation performance checks](guides/conversation-performance.md) |

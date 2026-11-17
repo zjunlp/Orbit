@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { api } from "../src/lib/api.ts";
+import { readRunFile } from "../src/lib/run-file.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -75,4 +76,39 @@ it("loads every cursor page instead of silently capping the run list", async () 
   expect(fetch).toHaveBeenCalledTimes(2);
   const url = new URL(fetch.mock.calls[1]?.[0], "http://orbit.test");
   expect(JSON.parse(url.searchParams.get("before") ?? "")).toEqual(cursor);
+});
+
+it("passes cancellation through conversation and Trial reads, including raw files", async () => {
+  const controller = new AbortController();
+  const fetch = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+    expect(init.signal).toBe(controller.signal);
+    return new Response("null");
+  });
+  vi.stubGlobal("fetch", fetch);
+  const signal = controller.signal;
+  await api.run("run", signal);
+  await api.benchJob("job", signal);
+  await api.artifacts("run", signal);
+  await api.session("run", signal);
+  await api.trajectory("run", signal);
+  await api.environment("run", "conversation.json", "conversation", "solve", signal);
+  expect(await readRunFile("run", "conversation.json", "the conversation", 1024, signal)).toBe(
+    "null",
+  );
+  expect(fetch).toHaveBeenCalledTimes(7);
+});
+
+it("propagates aborted response-body reads without wrapping them as HTTP failures", async () => {
+  const aborted = new DOMException("Cancelled body", "AbortError");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.reject(aborted),
+      text: () => Promise.reject(aborted),
+    }),
+  );
+  await expect(api.session("run")).rejects.toBe(aborted);
+  await expect(readRunFile("run", "conversation.json", "the conversation")).rejects.toBe(aborted);
 });

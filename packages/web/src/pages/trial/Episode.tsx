@@ -29,12 +29,16 @@ const shown = (value: number | null | undefined) =>
 
 export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; solve?: Run }) {
   const sessionRun = solve ?? run;
-  const session = useAsync(() => api.session(sessionRun.id), [sessionRun.id, sessionRun.state]);
+  const session = useAsync(
+    (signal) => api.session(sessionRun.id, signal),
+    [sessionRun.id, sessionRun.state],
+    { resetKey: sessionRun.id },
+  );
   const source = useRunFile(run, file.path, {
     what: "the episode index",
     maxBytes: MAX_BYTES,
     parse: parseEpisode,
-    load: () => api.environment(run.id, file.path, "episode", sessionRun.id),
+    load: (signal) => api.environment(run.id, file.path, "episode", sessionRun.id, signal),
     loadKey: sessionRun.id,
   });
   const artifacts = source.listing;

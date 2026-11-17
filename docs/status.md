@@ -1,6 +1,6 @@
 # Orbit status
 
-Updated 2026-11-16. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
+Updated 2026-11-17. Architecture: [design](design.md). Docs map: [docs/README](README.md). Task records: [index](tasks/README.md).
 
 **Stage.** R0–R2 validated on this machine. R3 benchmarks run: LongDS with one complete native Codex task, Harbor with oracle/empty samples. R4 (multi-node) only as two daemons on one machine. No release blockers.
 
@@ -18,7 +18,7 @@ Updated 2026-11-16. Architecture: [design](design.md). Docs map: [docs/README](R
 - **Calibrated samples.** Bounded empty/oracle or scripted calibration for HumanEval, EFE MetaWorld+, BFCL, τ²-bench, MiniWoB, LIBERO, TextArena, Cua Bench basic desktop, CUA-Lite MiniWoB; BFCL also has a real CLI Agent check; public HLE with tools has text/image CLI samples, original-prompt alternate-judge controls and rescore checks.
 - **GUI.** Private signed GUI service (`orbit-computer` CLI/MCP); Claude Code and Codex verified on sampled MiniWoB/BrowserGym tasks; MCP servers wired into Claude/Codex homes ([GUI guide](guides/gui-bench-web.md)).
 - **Embodied.** Native policy evaluation with semantic bindings, frozen samples, CPU evidence verification and rescore; shared model services in batches ([quickstart](guides/embodied-quickstart.md), [compatibility](guides/embodied-compatibility.md)). BEHAVIOR-1K uses its native R1Pro evaluator; RobotAgentBench adds raw-22 Agent tools alongside RLE-Bench, EmbodiedCLBench and EmbodiedLab T0 (BEHAVIOR / RobotAgentBench native preparation and calibration deferred).
-- **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial views follow evidence shapes, including RoboDojo/RoboLab timelines and recorded TextArena conversations; configuration lineage with immutable gate verdicts, missing-evidence details and frozen parent/child trajectory comparisons.
+- **Web.** Overview · Benchmarks · Agents · Configurations · Evaluations · Runs · Resources; trial views follow evidence shapes, including RoboDojo/RoboLab timelines and recorded TextArena conversations; virtualized long conversations with searchable tool results, URL/keyboard navigation and cancellable Trial reads; configuration lineage with immutable gate verdicts, missing-evidence details and frozen parent/child trajectory comparisons.
 - **Multi-node.** Workers join by token; placement, hashed code bundles, named datasets, mirrored logs and artifacts ([guide](guides/multi-node.md)).
 
 ## Main gaps
@@ -30,7 +30,7 @@ Updated 2026-11-16. Architecture: [design](design.md). Docs map: [docs/README](R
 
 ## Next
 
-1. Web: Catalog filter memoization, abort stale `useAsync` requests, virtualize long conversations.
+1. Web: Catalog filter memoization.
 2. EFE GPU tasks, licensed-data volumes, KVM calibration of MobileWorld / OSWorld-V2.
 3. Real Agent bench jobs (RCB first); R4 on two machines; later, official-runner comparison for a few classic benchmarks.
 4. Evolution line: T1–T4, T5 native ATIF adoption and X1 export implemented; E1–E3 and bounded E6 development calibration implemented; T6 trajectory review and E5 verdict UI implemented; next V0/E4/V1, then V2; additional importers remain on demand ([plan](evolution-plan.md)).
