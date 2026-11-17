@@ -7,6 +7,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Core platform: daemon, runs, resources, state
 
+- [20261117](20261117-benchmark-resource-preparation.md) Unified official-source benchmark resource preparation
+
 - [20260929](20260929-ts-rewrite-r0.md) R0: TypeScript rewrite skeleton (Orbit)
 - [20260930](20260930-r1-research-loop.md) R1: single-node research loop
 - [20260930](20260930-r4-multinode.md) R4: multi-node placement

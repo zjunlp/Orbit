@@ -7,6 +7,9 @@ const [, , first, ...rest] = process.argv;
 if (first === "__docker-shim") {
   const { shimMain } = await import("./runs/shim.ts");
   shimMain(rest[0] ?? "", rest.slice(1));
+} else if (first === "__prepare") {
+  const { preparationMain } = await import("./bench/preparation-worker.ts");
+  await preparationMain(rest[0] ?? "");
 } else if (first === "__adapter") {
   const { adapterMain } = await import("./bench/adapter.ts");
   await adapterMain(rest[0] ?? "", rest[1] ?? "");

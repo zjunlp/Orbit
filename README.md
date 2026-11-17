@@ -284,6 +284,17 @@ Keep personal experiment notes, scores and artifacts in user-owned storage. The 
 
 Compare methods under the same resource rules, keeping execution, evaluation validity and cleanup separate. Only valid scores enter aggregates.
 
+New installation: open **Benchmarks → Prepare resources** to choose any supported benchmark,
+download from its official sources or reuse local files, complete any upstream access requirements,
+and register the prepared setup. Specialized native prerequisites are listed explicitly.
+See [resource preparation](docs/guides/benchmark-resources.md).
+
+```bash
+orbit bench resources
+orbit bench prepare humaneval
+orbit bench preparation <run>
+```
+
 | Integration | Use it for | Guide |
 | --- | --- | --- |
 | **Harbor format** | [TB-Science](https://github.com/harbor-framework/terminal-bench-science), Terminal-Bench and other Harbor datasets; `bench tasks` lists supported tasks | [Adapter guide](docs/guides/bench-adapter.md) |

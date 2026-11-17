@@ -1774,6 +1774,34 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 原生具身家族与模型组合的详细范围见 [具身兼容矩阵](guides/embodied-compatibility.md)。其中 RoboCasa365 的
 GR00T recipe 是 N1.5，LIBERO 与 SimplerEnv 使用 N1.7；矩阵中的真实抽样验证不表示完整套件统计等价。
 
+### 9.19 Benchmark 资源准备（2026-11-17）
+
+§9.18 的所有已适配家族都有资源准备配方，源码在 `bench/preparation-recipes.ts`，公共形状在
+`contracts/preparation.ts`。配方描述官方地址、版本/校验和、许可入口、本地复用、所需环境字段及原始准备步骤；
+不另建 benchmark 注册表，也不托管或重新分发上游数据。随 npm 包分发 Orbit 自有的 adapters、SDK 和准备工具，
+保持 examples 的相对目录布局；Harbor suites TypeScript adapter 编译成可独立执行的包内入口。
+
+CLI `bench resources [family]` / `bench prepare <family>` / `bench preparation <run>` 与 Web
+**Benchmarks → Prepare resources** 共用 daemon HTTP API：`GET /bench/resources`、
+`POST /bench/resources/:family/prepare`、`GET /bench/preparations/:id`。浏览目录不触发下载；用户明确开始准备后
+创建普通 `backend=process` Run，固定到当前节点，共用排队、日志、超时、取消、Docker shim 子容器清理和恢复。
+下载代理只作用于准备进程/显式构建；不修改全局配置或评测网络约束。token 仅按 daemon 环境变量名传递。
+
+缓存默认放在数据目录的 `bench-resources/<family>`，也允许指定安装/源码目录外的空目录。
+目录归属标记防止混用家族或覆盖无关文件；同一 daemon 不并发准备同一路径。Git 下载固定版本并递归准备子模块，
+文件下载保留 `.partial`，提供 SHA-256 时必须匹配。复用已有 checkout 不执行 checkout/reset，版本或 tracked diff
+不符合则拒绝。原生资源的深层校验仍委托已有 configurator/adapter。需要人工申请、许可证或专用运行环境时显示
+官方说明和缺失项，保留已完成下载，不将占位数据或未准备的环境当作成功。
+
+worker 只产生资源与 benchmark 定义文件；daemon 在 Run 成功且 cleanup=done 后调用同一 adapter 验证路径，
+预先校验全部定义及数据映射，等待结束后再次检查冲突，然后同步写现有 BenchmarkRegistry / DatasetRegistry。
+不同配置的已有登记不覆盖。终态保存为既有 RunEvent；daemon 重启从成功 Run 补完未记录的登记步骤，不引入新的
+任务状态机、表或执行器。API 的 running / needs_input / registered / failed / cancelled 是 Run 与登记事件的投影。
+仅登记成功不代表运行可用或校准通过，覆盖与 calibration 继续使用既有接口。导入定义要求显式家族身份；CUA-Lite
+的 WebVoyager / Online-Mind2Web 入口保留原有 collection 身份与任务覆盖关联，避免重新标记其他套件。
+
+用法与仍需人工完成的原生前提见 [资源准备指南](guides/benchmark-resources.md)。
+
 ## 10. 路线
 
 | 阶段 | 目标 | 验收 |

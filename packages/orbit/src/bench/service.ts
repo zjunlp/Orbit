@@ -2,7 +2,17 @@
 // solve Run's after phase, for verifiers that need its container) on the same lease model as every
 // other run. BenchService owns job-level operations; the TrialMachine (trials.ts) advances trials
 // when their runs change and recovers open trials from the store after a daemon restart.
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { cp } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { AuthEntry, AuthStore } from "../auth/index.ts";
@@ -25,6 +35,7 @@ import {
   type BenchJobSubmissionInput,
   BenchLabels,
   type Benchmark,
+  BenchmarkInput,
   type BenchReport,
   BenchRescore,
   type BenchRescoreInput,
@@ -60,6 +71,7 @@ import { dirBytes } from "../records/index.ts";
 import { AUTH_TEST_GROUP, NotFoundError, type RunService, UserError } from "../runs/service.ts";
 import type { AgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
+import { DatasetRegistry } from "../workspace/datasets.ts";
 import { gitSource } from "../workspace/snapshot.ts";
 import { supportedBenchmarks } from "./benchmarks/index.ts";
 import { catalogEntry, type Listing } from "./catalog.ts";
@@ -73,6 +85,7 @@ import {
   jobRevision,
   methodLines,
 } from "./hub.ts";
+import { BenchmarkPreparation } from "./preparation.ts";
 import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
 
@@ -123,6 +136,7 @@ const LISTING_TTL_MS = 10 * 60_000;
 
 export class BenchService {
   readonly policies: PolicyRegistry;
+  readonly preparation: BenchmarkPreparation;
   private readonly deps: BenchServiceDeps;
   /** Agent definitions; built-ins when the caller (tests, embedders) did not supply a registry. */
   private readonly agents: AgentRegistry;
@@ -136,6 +150,14 @@ export class BenchService {
   constructor(deps: BenchServiceDeps) {
     this.deps = deps;
     this.policies = new PolicyRegistry(join(deps.paths.home, "policies.json"));
+    this.preparation = new BenchmarkPreparation({
+      ...deps,
+      self: deps.self ?? [],
+      datasets: new DatasetRegistry(deps.paths.datasets),
+      validate: (input) => this.validateRegistration(input),
+      commit: (input) => deps.registry.put(input),
+      registrations: () => deps.registry.list(),
+    });
     this.agents = deps.agents ?? builtinRegistry();
     this.calibrations = new CalibrationLifecycle({
       store: deps.store,
@@ -169,6 +191,7 @@ export class BenchService {
    */
   start(): void {
     this.stopped = false;
+    this.preparation.recover();
     for (const job of this.deps.store.listJobs(10_000)) this.calibrations.arm(job);
     for (const t of this.deps.store.pendingTrialCleanup()) {
       if (this.trials.reconcileCleanup(t))
@@ -183,6 +206,7 @@ export class BenchService {
 
   stop(): void {
     this.stopped = true;
+    this.preparation.stop();
     this.calibrations.stop();
   }
 
@@ -197,6 +221,34 @@ export class BenchService {
   }
 
   // ---- benchmarks ----
+
+  async register(value: unknown): Promise<Benchmark> {
+    return this.deps.registry.put(await this.validateRegistration(value));
+  }
+
+  private async validateRegistration(value: unknown): Promise<BenchmarkInput> {
+    const input = BenchmarkInput.parse(value);
+    if (!existsSync(input.path)) throw new UserError(`benchmark path not found: ${input.path}`);
+    if (input.adapter.startsWith("/")) {
+      try {
+        if (!statSync(input.adapter).isFile()) throw new Error();
+        accessSync(input.adapter, constants.X_OK);
+      } catch {
+        throw new UserError(`adapter is not an executable file: ${input.adapter}`);
+      }
+    }
+    const { tasks } = await this.infoOf({ ...input, createdAt: "", updatedAt: "" });
+    if (input.resources) {
+      try {
+        const ids = tasks.map((t) => t.id);
+        resolveResources(loadResources(input.resources), ids, ids);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+    }
+    const labels = input.labels ?? this.deps.registry.get(input.name)?.labels;
+    return { ...input, ...(labels ? { labels } : {}) };
+  }
 
   benchmark(name: string): Benchmark {
     const b = this.deps.registry.get(name);
