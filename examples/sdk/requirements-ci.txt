@@ -4,3 +4,6 @@ scipy==1.15.3
 msgpack==1.1.0
 msgpack-numpy==0.4.8
 websockets==13.1
+pyzmq==26.2.0
+openpi-client==0.1.2
+h5py==3.12.1
