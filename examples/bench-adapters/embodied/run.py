@@ -100,8 +100,16 @@ def verify_simulator_assets(requests):
             raise ValueError("missing frozen simulator asset identity for " + root)
         if expected.setdefault(root, assets["digest"]) != assets["digest"]:
             raise ValueError("conflicting simulator asset digests in solve batch")
-    environment = requests[0]["reference"].get("environment", {})
-    if environment.get("kind") == "chores":
+    reference = requests[0]["reference"]
+    environment = reference.get("environment", {})
+    kind = environment.get("kind")
+    if kind == "robolab":
+        from orbit_embodied.robolab import check_runtime
+        check_runtime(reference)
+    elif kind == "maniskill3":
+        from orbit_embodied.tabletop import check_plate25_runtime
+        check_plate25_runtime(environment)
+    elif kind == "chores":
         from orbit_embodied.chores import read_asset_manifest, verify_asset_files
         assets = environment["assets"]
         root = Path(assets["target"])
@@ -110,7 +118,7 @@ def verify_simulator_assets(requests):
             raise ValueError("mounted simulator manifest differs from the frozen registration")
         verify_asset_files(root, environment["catalog"], (request["sample"]["taskId"] for request in requests),
                            manifest)
-    elif environment.get("kind") == "hssd-ov":
+    elif kind == "hssd-ov":
         assets = environment["assets"]
         root = Path(assets["target"])
         manifest = json.loads((root / "orbit-hssd-ov-scenes.json").read_text())
@@ -126,6 +134,15 @@ def verify_simulator_assets(requests):
     for root, checksum in expected.items():
         if tree_digest(root) != checksum:
             raise ValueError("mounted simulator asset digest mismatch: " + root)
+
+
+def solve_preparation(requests):
+    """Reuse successful checks only within the current Solve Run."""
+    @lru_cache(maxsize=1)
+    def prepare():
+        verify_simulator_assets(requests)
+
+    return prepare
 
 
 def main(argv):
@@ -195,17 +212,12 @@ def main(argv):
                      "batch": {"plan": plan, "index": index}}
                     for index, episode in enumerate(request["episodes"])]
         write_json(root / "reference.json", reference, compact=True)
-
-        @lru_cache(maxsize=1)
-        def prepare():
-            verify_simulator_assets(episodes)
-
-        run_batch(plan, episodes, root, partial(execute_episode, prepare=prepare))
+        run_batch(plan, episodes, root, partial(execute_episode, prepare=solve_preparation(episodes)))
         return
     if measured != request["implementationDigest"]:
         raise ValueError("driver implementation changed after planning")
     write_json(root / "reference.json", reference, compact=True)
-    execute_episode(request, argv[2], prepare=lambda: verify_simulator_assets([request]))
+    execute_episode(request, argv[2], prepare=solve_preparation([request]))
 
 
 def execute_episode(request, destination, cancelled=None, *, prepare=None):
@@ -285,16 +297,18 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
                   "qpos-chunk-16": RoboTwinJointChunkBenchmark}.get(controller, RoboTwinBenchmark)
         batch_index = request["batch"]["index"] if request.get("batch") else None
         benchmark = native(reference, sample["taskId"], batch_index=batch_index)
-    elif kind in ("maniskill3", "metaworld"):
-        from orbit_embodied.tabletop import ManiSkillBenchmark, MetaWorldBenchmark
-        native = ManiSkillBenchmark if kind == "maniskill3" else MetaWorldBenchmark
-        benchmark = native(reference, sample["taskId"])
+    elif kind == "maniskill3":
+        from orbit_embodied.tabletop import ManiSkillBenchmark
+        benchmark = ManiSkillBenchmark(reference, sample["taskId"], prepare_runtime=prepare)
+    elif kind == "metaworld":
+        from orbit_embodied.tabletop import MetaWorldBenchmark
+        benchmark = MetaWorldBenchmark(reference, sample["taskId"])
     elif kind == "maniskill3-tabletop":
         from orbit_embodied.tabletop import ManiSkillTabletopBenchmark
         benchmark = ManiSkillTabletopBenchmark(reference, sample["taskId"])
     elif kind == "robolab":
         from orbit_embodied.robolab import RoboLabBenchmark
-        benchmark = RoboLabBenchmark(reference, sample["taskId"])
+        benchmark = RoboLabBenchmark(reference, sample["taskId"], prepare_runtime=prepare)
     elif kind == "robodojo":
         from orbit_embodied.robodojo import RoboDojoBenchmark
         benchmark = RoboDojoBenchmark(reference, sample["taskId"])

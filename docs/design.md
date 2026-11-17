@@ -983,6 +983,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   DROID 和 CALVIN 拒绝的动作在夹爪转换前保存。无法表示为数组的返回值保留有界摘要。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
 - **冻结目录归档**：固定批量的 Solve 请求只保存一份冻结 reference 与一份批次计划，模拟器和 SDK 共用同一次准备。
+  RoboLab 和 ManiSkill Plate-25 的运行时与只读资产校验在每个 Solve Run 的准备阶段执行一次，批次内各 episode 复用该结果。
   每个 Solve Run 在输出根目录归档一份 `reference.json`。episode contract 和 CPU Verify 请求只保存该 reference 的摘要，
   CPU 重评从只读 Solve 输出加载目录，并核对登记、Run 和 contract 的摘要。旧 Run 继续从 episode 内嵌 reference 重评。
 - **随机性**：OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务可登记发布配方的初始种子，

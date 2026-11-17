@@ -1,5 +1,6 @@
 """Native Gymnasium episodes for the pinned ManiSkill3 and Meta-World recipes."""
 
+from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 
@@ -76,14 +77,22 @@ def check_maniskill_assets(target, expected):
         raise ValueError("ManiSkill task asset digest mismatch")
 
 
+def check_plate25_runtime(config):
+    if "version" in config and version("mani_skill") != config["version"]:
+        raise ValueError("ManiSkill package differs from the frozen Plate-25 recipe")
+    assets = config["assets"]
+    check_maniskill_assets(assets["target"], assets["digest"])
+
+
 class ManiSkillBenchmark(TabletopBenchmark):
+    def __init__(self, reference, task, *, prepare_runtime=None):
+        super().__init__(reference, task)
+        self.prepare_runtime = prepare_runtime if prepare_runtime is not None else partial(check_plate25_runtime, self.config)
+
     def make_env(self, _seed):
-        if "version" in self.config and version("mani_skill") != self.config["version"]:
-            raise ValueError("ManiSkill package differs from the frozen Plate-25 recipe")
+        self.prepare_runtime()
         import gymnasium as gym
         import orbit_maniskill_task  # noqa: F401
-        assets = self.config["assets"]
-        check_maniskill_assets(assets["target"], assets["digest"])
         return gym.make(self.task, num_envs=1, obs_mode="rgb+segmentation",
                         control_mode="arm_pd_ee_target_delta_pose_align2_gripper_pd_joint_pos",
                         sim_backend="gpu", sim_config={"sim_freq": 500, "control_freq": 5},

@@ -14,7 +14,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "examples/sdk"))
@@ -399,6 +399,74 @@ class AdapterPlanningTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "mounted simulator asset digest mismatch"):
                         run.main(argv)
                     self.assertEqual(measure.call_count, 2)
+
+    def test_robolab_and_plate25_prepare_runtime_once_per_solve(self):
+        from orbit_embodied import robolab, tabletop
+
+        spec = importlib.util.spec_from_file_location("native_embodied_run", ADAPTER.with_name("run.py"))
+        run = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(run)
+
+        for kind, batched in product(("robolab", "maniskill3"), (False, True)):
+            with self.subTest(kind=kind, batched=batched), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                assets = root / "assets"
+                assets.mkdir()
+                asset = assets / "scene"
+                asset.write_text("frozen assets")
+                version_file = root / "VERSION"
+                version_file.write_text("5.0.0")
+                lab = root / "isaaclab"
+                (lab / "source/isaaclab/config").mkdir(parents=True)
+                (lab / "VERSION").write_text("fixture")
+                (lab / "source/isaaclab/config/extension.toml").write_text("fixture")
+                environment = {"kind": kind, "tasks": ["fixture"], "horizon": 2, "version": "3.0.1",
+                               "assets": {"target": str(assets), "digest": tree_digest(assets)},
+                               "sourceRoot": str(root), "isaacLabPackageVersion": "0.44.8",
+                               "isaacLabSource": {"root": str(lab), "digest": robolab.isaaclab_source_digest(lab)},
+                               "isaacSimVersionFile": str(version_file), "isaacSim": "5.0.0"}
+                reference = {"id": "fixture", "environment": environment, "reference": {"files": {}},
+                             "benchmarkProfile": {"action": {"shape": [8]}},
+                             "parameters": {"settleSteps": 0, "replanSteps": 5}}
+                episodes = [{"sample": {"taskId": "fixture", "benchmarkProfile": "fixture", "sampleId": str(index)},
+                             "trialId": str(index), "episodeId": str(index), "implementationDigest": "driver",
+                             "policy": {"connector": "policy-ws"}, "binding": {}}
+                            for index in range(2)]
+                plan = {"members": [{"trialId": episode["trialId"], "episodeId": episode["episodeId"],
+                                     "sampleRef": episode["sample"]["sampleId"]} for episode in episodes]}
+                payload = {"reference": reference, "referenceDigest": digest(reference),
+                           **({"plan": {**plan, "digest": digest(plan)}, "episodes": episodes} if batched else episodes[0])}
+                request = root / "request.json"
+                write_json(request, payload)
+
+                start = Mock(side_effect=RuntimeError("synthetic simulator entry point"))
+                module = robolab if kind == "robolab" else tabletop
+
+                def run_fixture(benchmark, *args, prepare, **kwargs):
+                    prepare()
+                    with self.assertRaisesRegex(RuntimeError, "synthetic simulator entry point"):
+                        benchmark.make_env(0)
+                    return {"valid": True}
+
+                with patch.object(run, "archive_implementation", return_value="driver"), \
+                        patch.object(run, "run_episode", side_effect=run_fixture), \
+                        patch.object(module, "tree_digest", wraps=tree_digest) as measure, \
+                        patch.object(module, "version", return_value="0.44.8" if kind == "robolab" else "3.0.1"), \
+                        patch.object(robolab, "simulation_app", start), \
+                        patch.dict(sys.modules, {"gymnasium": SimpleNamespace(make=start),
+                                                 "orbit_maniskill_task": SimpleNamespace()}), \
+                        patch.dict("os.environ", {"ORBIT_RUN_ID": "fixture"}):
+                    argv = ["batch" if batched else "solve", str(request), str(root / "output")]
+                    run.main(argv)
+                    self.assertEqual(measure.call_count, 1)
+                    self.assertEqual(Path(measure.call_args.args[0]), assets)
+                    self.assertEqual(start.call_count, 2 if batched else 1)
+                    start.reset_mock()
+                    asset.write_text("edited assets")
+                    with self.assertRaisesRegex(ValueError, "asset digest mismatch"):
+                        run.main(argv)
+                    self.assertEqual(measure.call_count, 2)
+                    start.assert_not_called()
 
     def test_versioned_evidence_cannot_skip_the_solve_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
