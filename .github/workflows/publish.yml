@@ -34,6 +34,7 @@ jobs:
       - run: python3 -m pip install -r examples/sdk/requirements-ci.txt
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+      - run: pnpm test:embodied-sdk
       - run: pnpm pack:release
       - run: pnpm smoke:package dist/*.tgz
       - run: npm publish ./dist/*.tgz --access public --provenance --tag "$PUBLISH_TAG"

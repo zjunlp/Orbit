@@ -31,8 +31,5 @@ jobs:
       - run: python3 -m pip install -r examples/sdk/requirements-ci.txt
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
-      - name: Run embodied SDK tests
-        env:
-          PYTHONPATH: examples/sdk
-        run: python3 -B -m unittest discover -s examples/sdk/orbit_embodied -t examples/sdk -v
+      - run: pnpm test:embodied-sdk
       - run: pnpm smoke:package
