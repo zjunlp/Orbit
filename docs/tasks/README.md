@@ -58,6 +58,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261117](20261117-evolution-baselines.md) Evolution baseline variants (V2)
+
 - [20261117](20261117-reference-evolver.md) V1: host-driven reference evolver and safe evolve evidence
 
 - [20261117](20261117-evolution-pilot.md) V0: task-level repeat noise, solve cost and conditional gate sizing

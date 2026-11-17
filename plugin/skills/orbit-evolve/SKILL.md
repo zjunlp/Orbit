@@ -1,6 +1,6 @@
 ---
 name: orbit-evolve
-description: Improve an Agent instruction or skill bundle from evolve-set failures, then evaluate a lineage-linked candidate with Orbit's frozen gate under explicit change and experiment budgets. Use for configuration evolution on registered benchmarks.
+description: Improve an Agent instruction or skill bundle from evolve-set failures, then evaluate a lineage-linked candidate with Orbit's frozen gate under explicit change and experiment budgets. Use for configuration evolution or no-change, bounded-notes and ACE baseline comparisons on registered benchmarks.
 ---
 
 # Orbit: evolve a configuration bundle
@@ -14,6 +14,16 @@ Use `orbit` on PATH, otherwise `npx -y @zjunlp/orbit`. Check `trajectory export 
 `bench gate plan --help`; an older installed package may need updating. In a source checkout,
 `node packages/orbit/src/bin.ts` is the CLI. Keep generated study artifacts outside the source checkout. Exports must also be outside Orbit's
 home/data directories; leave any provided parent bundle in place.
+
+## Choose the editing method
+
+For an ordinary improvement request, use the reference edit below. For a baseline study, first read
+[baseline variants](references/baselines.md) and select `no-change`, `bounded-notes` or `ace` before
+seeing held-out results. They share this workflow's budgets, frozen conditions and evidence rules.
+The selected variant replaces the editing step; `ace` also reads [its method](references/ace.md).
+No-change follows the dedicated A/A path instead of creating a child or using the promotion path.
+Use the packaged deterministic helper to enforce each baseline's construction limits. Keep methods
+on independent branches from the same parent; do not quietly mix their editing rules.
 
 ## Establish the round
 
@@ -62,7 +72,9 @@ whole affected text values and lists their paths in the manifest. Review those o
 sample if the remaining evidence cannot support an edit. Media/metadata scanning still rejects
 remaining hits. Do not copy unfiltered raw sessions to work around rejection.
 
-Summarize a concrete failure mechanism and one general instruction change that could address it.
+For the default reference edit, summarize a concrete failure mechanism and one general instruction
+change that could address it. Baseline variants construct their proposal using the selected method
+and helper, then resume at **Check, smoke and plan**.
 Edit a separate copy of the parent. Limit edits to `AGENTS.md`, `CLAUDE.md` and `skills/` text;
 do not change credentials, model/runtime settings, adapters, policies or task files. Inspect the
 complete diff, count added + deleted lines and changed-file bytes against the round limits.

@@ -47,7 +47,7 @@ CLAUDE_CONFIG_DIR="$orbit_plugin_test" claude plugin list --json
 ```
 
 This calls the real Claude CLI without changing your normal plugin settings. All three skills
-(`orbit`, `orbit-bench`, `orbit-evolve`) and the evolver starter bundle must appear in the installed
+(`orbit`, `orbit-bench`, `orbit-evolve`) and all nested evolver resources (starter, method references, executable baseline helper) must appear in the installed
 plugin. Repeat the install to check an existing registration. It does not invoke a model or spend inference credits.
 
 For the other native installers, use isolated agent homes as well (the CLIs must be on PATH;

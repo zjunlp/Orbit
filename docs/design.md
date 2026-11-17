@@ -95,7 +95,7 @@ packages/orbit/src/
 packages/web/  React SPA (Vite, uPlot); imports `@zjunlp/orbit/contracts` types only; built into
                packages/orbit/dist/web and served by the daemon
 assets/        canonical project logo and icon; referenced by README and the Web build
-plugin/        canonical skills/orbit and skills/orbit-bench; portable / Claude manifests and dsh bundle patch
+plugin/        canonical orbit, orbit-bench and orbit-evolve skills; portable / Claude manifests and dsh bundle patch
 examples/      bench-adapters/<benchmark>/: external bench adapters (not part of the package)
 ```
 
@@ -580,6 +580,9 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
 - **参考进化器（V1）**：`plugin/skills/orbit-evolve` 及其最小 bundle 随现有插件分发，宿主 Agent 只从 evolve 失败导出学习，在父包副本上作有界指令修改，复用静态检查、smoke、E4 计划、血缘提交与 E3 判定；daemon 不运行进化循环，不新增记录库。
   改动行/字节、轮数、评测 token 与下一阶段预留由宿主显式核算；成本未知不补 0，编辑器 token 单列，无法承诺模型调用内的精确 token 截断。仅 accept 采用子版本，reject/insufficient 留父版本，保持冻结门槛。
   V1 是流程约束，不是物理隔离；原始结果、预算与候选留在源码外，V3 另行加固。
+- **进化基线（V2）**：`orbit-evolve` 的 no-change / bounded-notes / ace 三种变体共用 V1 评测流程。no-change 保留字节和执行位，使用同版本独立作业与 calibration-aa，不创建子版本或晋级；笔记仅追加到 AGENTS.md，按固定原始 base 累计限行。
+  ACE 固定官方源码快照的串行 ADD/计数机制，由宿主先反思再整理，稳定编号/计数随 AGENTS.md 内容版本保存；只使用 evolve 失败，不宣称复现论文成绩，不实现批量 reducer、语义裁剪或 harness 搜索。
+  随技能发布的纯 Node 辅助脚本从现有包生成新目录，校验格式、整段变更行预算与整文件字节预算，其他文件和执行位原样保留；不是新配置实体或执行路径。静态泄漏/密钥/摘要检查仍由 E4 负责。具体方法与适配边界见 [基线指南](guides/evolution-baselines.md)。
 - **进化判定 Web 复盘（E5）**：Configurations 的版本来源链展示最近判定；`/configurations/gates` 列出最近最多 100 条记录，可按子版本精确筛选；`/configurations/gates/:id` 展示不可变记录详情。
   接受、拒绝、证据不足与 A/A 校准有明确区分，不合成当前最优版本。详情显示性能/守护/成本、前提缺项、单侧区间、轮次和 alpha、冻结策略及报告修订、泄漏剔除清单。
   退步任务按所选报告内的 sample 配对，读取报告保存的 solve Run ID 并排展示 ATIF，父子步骤独立导航；不替换为 Trial 的最新重试。源 Run 删除时保留冻结分数并说明轨迹不可用。
