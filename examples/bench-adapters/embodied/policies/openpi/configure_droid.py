@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from adapter import file_digest
 from native_runtime import build_policy_image, check_policy_source, policy_manifest, require_image
 from orbit_embodied.assets import tree_digest
+from orbit_embodied.binding import resolve_binding
 
 
 SOURCE = {"repository": "https://github.com/omarrayyann/openpi",
@@ -19,6 +20,26 @@ DOCKERFILE = POLICY / "droid-policy.Dockerfile"
 INTERPRETER = "/.venv/bin/python"
 WEIGHTS_DATASET = "pi05-droid-molmospaces"
 RANDCAM_CAMERA = "randomized_zed2_analogue_1"
+RANDCAM_PROFILE = "pi05-droid-jointpos-randcam-input/1"
+
+
+def policy_profile(reference):
+    benchmark, environment = reference["benchmarkProfile"], reference["environment"]
+    randcam = benchmark["id"] == "molmospaces-franka-droid-exocentric/1"
+    if (environment["kind"] != "molmospaces"
+            or benchmark["id"] not in ("molmospaces-franka-droid/1", "molmospaces-franka-droid-exocentric/1")
+            or reference["parameters"]["replanSteps"] != 8):
+        raise ValueError("expected the frozen eight-step MolmoSpaces DROID recipe")
+    profile = json.loads((POLICY / "droid-profile.json").read_text())
+    if randcam:
+        if environment.get("frontCamera") != RANDCAM_CAMERA:
+            raise ValueError("expected the published MolmoBot RandCam exocentric camera")
+        profile["id"] = RANDCAM_PROFILE
+        profile["observations"]["front_rgb"]["camera"] = RANDCAM_CAMERA
+    elif environment.get("frontCamera") is not None:
+        raise ValueError("the standard MolmoSpaces DROID recipe requires the native shoulder camera")
+    resolve_binding(benchmark, profile, reference["observationMap"])
+    return profile
 
 
 def main():
@@ -49,24 +70,16 @@ def main():
         parser.error("--policy-image requires --reference-file, --weights and --output")
     image = require_image(args.policy_image, manifest)
     reference = json.loads(args.reference_file.read_text())
-    profile = reference["benchmarkProfile"]
-    randcam = profile["id"] == "molmospaces-franka-droid-exocentric/1"
-    if (profile["id"] not in ("molmospaces-franka-droid/1", "molmospaces-franka-droid-exocentric/1")
-            or reference["parameters"]["replanSteps"] != 8):
-        raise ValueError("expected the frozen eight-step MolmoSpaces DROID recipe")
-    if randcam and (reference["environment"].get("frontCamera") != RANDCAM_CAMERA
-                    or profile["observations"]["front_rgb"].get("camera") != RANDCAM_CAMERA):
-        raise ValueError("expected the published MolmoBot RandCam exocentric camera")
+    profile = policy_profile(reference)
     if not (args.weights / "params/manifest.ocdbt").is_file() or list(args.weights.rglob("*.partial")):
         raise ValueError("DROID checkpoint download is incomplete")
     checkpoint = tree_digest(args.weights)
     normalization = file_digest(args.weights / "assets/droid/norm_stats.json")
-    name = WEIGHTS_DATASET + "-randcam" if randcam else WEIGHTS_DATASET
-    profile_id = "pi05-droid-jointpos-randcam-input/1" if randcam else "pi05-droid-jointpos-input/1"
+    name = WEIGHTS_DATASET + "-randcam" if profile["id"] == RANDCAM_PROFILE else WEIGHTS_DATASET
     placement = {"gpusOf": "main", "gpus": 0} if args.share_gpu else {"role": "policy", "gpus": 1}
     policy = {
         "name": name, "version": "1", "connector": "policy-ws", "replanSteps": 8,
-        "profile": {**profile, "id": profile_id},
+        "profile": profile,
         "checkpointDigest": checkpoint, "normalizationDigest": normalization,
         "randomness": {"backend": "jax", "initialKey": 0, "scope": "service"},
         "weights": {"dataset": WEIGHTS_DATASET, "target": "/weights"},

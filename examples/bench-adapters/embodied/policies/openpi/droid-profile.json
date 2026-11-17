@@ -1,0 +1,48 @@
+{
+  "id": "pi05-droid-jointpos-input/1",
+  "observations": {
+    "front_rgb": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "layout": "HWC",
+      "shape": [224, 224, 3],
+      "camera": "droid-shoulder"
+    },
+    "wrist_rgb": {
+      "semantic": "rgb",
+      "dtype": "uint8",
+      "layout": "HWC",
+      "shape": [224, 224, 3],
+      "camera": "droid-wrist"
+    },
+    "state.arm": {
+      "semantic": "joint-position",
+      "dtype": "float32",
+      "shape": [7],
+      "frame": "franka-droid-joints",
+      "unit": "radian"
+    },
+    "state.gripper": {
+      "semantic": "gripper-position",
+      "dtype": "float32",
+      "shape": [1],
+      "frame": "franka-droid-gripper",
+      "unit": "radian"
+    },
+    "instruction": {
+      "semantic": "language-instruction",
+      "dtype": "string",
+      "shape": []
+    }
+  },
+  "action": {
+    "semantic": "absolute-arm-joints-and-binary-gripper",
+    "controller": "joint_position",
+    "shape": [8],
+    "frame": "franka-droid-joints",
+    "unit": "radian-and-native-gripper-command",
+    "rotation": "absolute-joint-angle",
+    "gripper": "0-open-255-closed",
+    "order": ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7", "gripper"]
+  }
+}

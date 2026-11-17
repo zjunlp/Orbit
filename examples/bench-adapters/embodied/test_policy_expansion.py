@@ -2,6 +2,7 @@
 
 from argparse import Namespace
 from fnmatch import fnmatch
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -116,6 +117,7 @@ class PolicyExpansionTests(unittest.TestCase):
 
     def test_droid_registration_requires_its_build_manifest_and_entrypoint(self):
         config = load("policies/openpi/configure_droid.py")
+        molmo = load("benchmarks/molmospaces/configure_molmospaces.py")
         from native_runtime import MANIFEST_LABEL
 
         manifest = config.policy_manifest("openpi-droid-policy", {"openpi": config.SOURCE},
@@ -130,9 +132,11 @@ class PolicyExpansionTests(unittest.TestCase):
             (weights / "assets/droid").mkdir(parents=True)
             (weights / "assets/droid/norm_stats.json").write_text("{}")
             reference = root / "reference.json"
+            benchmark = molmo.profile()
             reference.write_text(json.dumps({
-                "benchmarkProfile": {"id": "molmospaces-franka-droid/1"},
+                "benchmarkProfile": benchmark, "environment": {"kind": "molmospaces"},
                 "parameters": {"replanSteps": 8},
+                "observationMap": {name: name for name in benchmark["observations"]},
             }))
             output = root / "policy.json"
             argv = ["configure_droid.py", "--policy-image", "test:policy", "--reference-file", str(reference),
@@ -198,7 +202,8 @@ class PolicyExpansionTests(unittest.TestCase):
             (root / "assets/droid").mkdir(parents=True)
             (root / "assets/droid/norm_stats.json").write_text("{}")
             reference_path, output = root / "reference.json", root / "policy.json"
-            reference = {"benchmarkProfile": randcam, "environment": {"frontCamera": camera},
+            reference = {"benchmarkProfile": randcam, "environment": {"kind": "molmospaces", "frontCamera": camera},
+                         "observationMap": observation_map,
                          "parameters": {"replanSteps": 8}}
             argv = ["configure_droid.py", "--policy-image", "test:policy", "--reference-file", str(reference_path),
                     "--weights", str(root), "--output", str(output), "--share-gpu"]
@@ -217,6 +222,40 @@ class PolicyExpansionTests(unittest.TestCase):
                 reference_path.write_text(json.dumps(reference))
                 with self.assertRaisesRegex(ValueError, "published MolmoBot RandCam"):
                     config.main()
+
+    def test_lingbot_and_droid_registration_reject_camera_and_action_order_mismatches(self):
+        lingbot = load("policies/lingbot-vla/configure_lingbot.py")
+        droid = load("policies/openpi/configure_droid.py")
+        molmo = load("benchmarks/molmospaces/configure_molmospaces.py")
+        standard = molmo.profile()
+        standard_reference = {"benchmarkProfile": standard, "environment": {"kind": "molmospaces"},
+                              "observationMap": {name: name for name in standard["observations"]},
+                              "parameters": {"replanSteps": 8}}
+        randcam_reference = copy.deepcopy(standard_reference)
+        randcam_reference["benchmarkProfile"]["id"] = "molmospaces-franka-droid-exocentric/1"
+        randcam_reference["benchmarkProfile"]["observations"]["front_rgb"]["camera"] = "randomized_zed2_analogue_1"
+        randcam_reference["environment"]["frontCamera"] = "randomized_zed2_analogue_1"
+        robotwin_reference = json.loads((ADAPTER / "profiles/robotwin-demo-clean.json").read_text())
+
+        for config, reference, camera, expected_id in (
+            (lingbot, robotwin_reference, "head_camera", "lingbot-vla-robotwin-joint-input/1"),
+            (droid, standard_reference, "front_rgb", "pi05-droid-jointpos-input/1"),
+            (droid, randcam_reference, "wrist_rgb", "pi05-droid-jointpos-randcam-input/1"),
+        ):
+            with self.subTest(profile=expected_id):
+                benchmark = reference["benchmarkProfile"]
+                self.assertEqual(config.policy_profile(reference), {**benchmark, "id": expected_id})
+                changed = copy.deepcopy(reference)
+                changed["benchmarkProfile"]["observations"][camera]["camera"] = "wrong-camera"
+                with self.assertRaisesRegex(ValueError, "incompatible semantics for " + camera):
+                    config.policy_profile(changed)
+                changed = copy.deepcopy(reference)
+                changed["benchmarkProfile"]["action"]["order"].reverse()
+                with self.assertRaisesRegex(ValueError, "action semantics differ"):
+                    config.policy_profile(changed)
+        standard_reference["environment"]["frontCamera"] = "wrong-camera"
+        with self.assertRaisesRegex(ValueError, "requires the native shoulder camera"):
+            droid.policy_profile(standard_reference)
 
     def test_fast_vla_registration_checks_its_fixed_history_and_joint_semantics(self):
         config = load("policies/fast-vla/configure_fast_vla.py")
