@@ -83,7 +83,7 @@ export function requiredTasks(flipProbability: number, points: number, alpha = 0
   return Math.max(30, Math.ceil((z ** 2 * flipProbability) / (points / 100) ** 2));
 }
 
-function validateSplit(split: FrozenSplit) {
+export function validateSplit(split: FrozenSplit) {
   const manifest = BenchSplitManifest.parse(split.manifest);
   const seen = new Set<string>();
   const selected = {} as Record<Partition, Set<string>>;
