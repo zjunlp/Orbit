@@ -230,7 +230,7 @@ class PolicyExpansionTests(unittest.TestCase):
         runner = load("run.py")
         request = {"reference": recipe, "sample": {"benchmarkProfile": recipe["id"], "taskId": min(config.TASKS)},
                    "policy": {"connector": "policy-ws", "replanSteps": 1}, "binding": {}, "episodeId": "example",
-                   "trialId": "trial", "implementationDigest": "test"}
+                   "trialId": "trial", "implementationDigest": "test", "referenceDigest": digest}
         with patch.dict("os.environ", {"ORBIT_RUN_ID": "run"}), patch.object(runner, "run_episode") as rollout:
             runner.execute_episode(request, None)
             rollout.assert_called_once()

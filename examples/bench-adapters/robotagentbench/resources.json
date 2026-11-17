@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "default": {
+    "cpus": 2,
+    "memGB": 4,
+    "gpus": 0,
+    "timeoutMin": 120,
+    "evidence": "The Agent role only drives public tools. Native RTX simulation is a separate service: 8 CPUs, 32GB RAM, 1 RTX GPU with 16GB VRAM; provisional until real calibration.",
+    "confidence": "low"
+  },
+  "tasks": {}
+}

@@ -1,4 +1,4 @@
-import { resolveMetrics } from "@zjunlp/orbit/metrics";
+import { formatOfficialCoverage, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CiBars, useMetric } from "../../components/BenchMetrics.tsx";
 import { IconCompare } from "../../components/icons.tsx";
@@ -153,6 +153,13 @@ export function BenchJobDetail({ id }: { id: string }) {
       <div className="page">
         <div className="page-pad col" style={{ gap: 16 }}>
           <h1 className="page-title">{jobLabel(job)}</h1>
+          {!!job.policyWarnings?.length && (
+            <ul className="warnbox" aria-label="Checkpoint scope">
+              {job.policyWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
           <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: -8 }}>
             <JobState state={job.state} />
             <span className="chip mono">{job.spec.benchmark}</span>
@@ -301,8 +308,8 @@ function Reports({ id, version }: { id: string; version: number }) {
                         (m.missing ? `, ${m.missing} missing` : "") +
                         `, tokens: ${formatTokenUsage(m.tokenUsage)}` +
                         (m.orbit ? `, Orbit ${m.orbit.mean.toFixed(2)}` : "") +
-                        (m.official?.value != null
-                          ? `, official ${m.official.value.toFixed(2)}`
+                        (m.official
+                          ? `, official ${m.official.value?.toFixed(2) ?? "—"} (${formatOfficialCoverage(m.official, m.planned)})`
                           : ""),
                     )
                     .join(" · ")}

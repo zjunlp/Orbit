@@ -14,6 +14,7 @@ export const tau2Bench: Omit<SupportedBenchmark, "registrationNames"> = {
       interfaces: ["tool-api", "response"],
       platforms: ["software-system"],
       world: ["controlled"],
+      participants: [],
       scoringEvidence: ["trajectory", "final-state"],
       scoringMethods: ["rule-check"],
     }),

@@ -290,6 +290,12 @@ export function SupportedCard({
           <TaxonomyTags e={entry} field="platforms" limit={2} />
         </div>
         <div className="benchmark-card-footer">
+          <Link
+            className="btn sm"
+            href={`/benchmarks?mode=resources&family=${encodeURIComponent(entry.id)}`}
+          >
+            Prepare resources
+          </Link>
           <span className="integration-verification" title={entry.verification.detail}>
             <IconLayers size={12} /> {entry.integrations.length}{" "}
             {entry.integrations.length === 1 ? "integration" : "integrations"}

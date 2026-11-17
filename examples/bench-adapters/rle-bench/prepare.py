@@ -7,16 +7,38 @@ import json
 import os
 from pathlib import Path
 import shlex
+import stat
 import subprocess
 import sys
+from tempfile import NamedTemporaryFile
 from urllib.parse import urlsplit
 
-from adapter import REVISION, catalog, checked_root, prepared_digest
+from adapter import REVISION, catalog, checked_root, preparation_lock, prepared_digest
 
 GENERATORS = {
     "task01": "build_levels.py", "task02": "build_groups.py", "task03": "build_levels.py",
     "task04": "build_tasks.py", "task05": "build_subtasks.py",
 }
+
+
+def record_preparation(root, *, refresh=False):
+    path = root / "orbit-catalog.json"
+    lock = preparation_lock(root)
+    if refresh:
+        previous = json.loads(path.read_text())
+        if previous.get("revision") != REVISION or previous.get("digest") != lock["digest"]:
+            raise ValueError("prepared RLE task files changed; regenerate and rebuild with prepare.py")
+    mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
+    temp = NamedTemporaryFile(mode="w", dir=root, prefix=".orbit-catalog-", delete=False)
+    temporary = Path(temp.name)
+    try:
+        with temp:
+            json.dump(lock, temp, indent=2)
+            temp.write("\n")
+            os.fchmod(temp.fileno(), mode)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def main():
@@ -25,14 +47,22 @@ def main():
     parser.add_argument("--catalog", action="store_true")
     parser.add_argument("--task", choices=("task07", "task08"))
     parser.add_argument("--build", action="store_true")
+    parser.add_argument("--refresh-digests", action="store_true",
+                        help="upgrade an existing preparation lock without regenerating tasks or images")
     args = parser.parse_args()
     if sys.version_info < (3, 11):
         parser.error("Python 3.11+ is required by the upstream task generators")
-    if not args.catalog and not args.task:
-        parser.error("choose --catalog and/or --task")
+    if args.refresh_digests and (args.catalog or args.task or args.build):
+        parser.error("--refresh-digests cannot be combined with generation or build options")
+    if not args.catalog and not args.task and not args.refresh_digests:
+        parser.error("choose --catalog and/or --task, or --refresh-digests")
     if args.build and not args.task:
         parser.error("--build requires --task")
     root = checked_root({"benchmark": {"path": str(args.checkout)}})
+    if args.refresh_digests:
+        catalog(root)
+        record_preparation(root, refresh=True)
+        return
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
 
     def run(argv):
@@ -93,8 +123,7 @@ def main():
                 lock.setdefault("packageIndex", {})[tag] = index or "https://pypi.org/simple"
             path.write_text(json.dumps(lock, indent=2) + "\n")
     catalog(root)
-    (root / "orbit-catalog.json").write_text(json.dumps(
-        {"revision": REVISION, "digest": prepared_digest(root)}, indent=2) + "\n")
+    record_preparation(root)
 
 
 if __name__ == "__main__":

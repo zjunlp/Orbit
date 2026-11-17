@@ -7,7 +7,14 @@ export const maniskill3: Omit<SupportedBenchmark, "registrationNames"> = {
   description:
     "Evaluate manipulation tasks across a native tabletop catalog and the RLinf Plate-25 recipe.",
   taxonomyGroups: [
-    group("Native manipulation tasks", { ...native, modalities: ["text", "image"] }),
+    group("Plate-25 and visual tabletop profiles", {
+      ...native,
+      modalities: ["text", "image"],
+    }),
+    group("Tabletop profiles with target coordinates", {
+      ...native,
+      modalities: ["text", "image", "structured-data"],
+    }),
   ],
   integrations: [
     nativeRoute(

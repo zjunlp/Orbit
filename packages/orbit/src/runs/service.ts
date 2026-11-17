@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AuthStore } from "../auth/index.ts";
 import { type OrbitPaths, type RunDirs, runDirs } from "../config/paths.ts";
@@ -317,6 +317,7 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     for (const a of this.active.values()) {
       a.logs?.kill();
       clearTimeout(a.timeout);
+      clearTimeout(a.setupTimeout);
     }
     for (const u of this.samplers.values()) u.halt();
   }
@@ -841,32 +842,64 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
     return launch.passEnv(this.context, run);
   }
 
-  /** Stop the run when its timeout is reached (from `startedAt`, so also after a restart). */
+  /** Execution and Agent installation deadlines are anchored to container start, including recovery. */
   private armTimeout(run: Run): void {
+    const dirs = this.dirs(run.id);
     if (
-      !run.spec.timeoutMin ||
       this.stopped ||
       run.exitCode !== null ||
-      phases.readCode(join(this.dirs(run.id).orbit, "phases", "main.exit")) !== null
+      phases.readCode(join(dirs.orbit, "phases", "main.exit")) !== null
     )
       return;
     this.disarmTimeout(run.id);
     const ctl = this.control(run.id);
     const started = run.startedAt ? Date.parse(run.startedAt) : Date.now();
-    const left = Math.max(0, started + run.spec.timeoutMin * 60_000 - Date.now());
-    const t = setTimeout(() => {
-      const now = this.store.getRun(run.id);
-      if (now && !isTerminal(now.state)) this.requestStop(now, "timeout");
-    }, left);
-    ctl.timeout = t;
-    t.unref();
+    const setupBudgetSec = phases.readCode(join(dirs.root, launch.AGENT_SETUP_BUDGET));
+    const setupTimeoutFile = join(dirs.root, launch.AGENT_SETUP_TIMEOUT);
+    const installing = () =>
+      !existsSync(join(dirs.agent, launch.AGENT_SETUP_DONE)) &&
+      !existsSync(join(dirs.agent, launch.AGENT_SETUP_FAILED));
+    if (run.containerId && setupBudgetSec && existsSync(setupTimeoutFile)) {
+      void docker.stopContainer(run.containerId);
+      return;
+    }
+    if (run.containerId && setupBudgetSec && installing()) {
+      ctl.setupTimeout = setTimeout(
+        () => {
+          const current = this.store.getRun(run.id);
+          if (
+            !current?.containerId ||
+            current.state !== "running" ||
+            current.exitCode !== null ||
+            current.stopRequested ||
+            !installing()
+          )
+            return;
+          const reason = `${launch.AGENT_INSTALL_FAILED} (timed out after ${setupBudgetSec}s); see orbit/agent/setup.log`;
+          writeFileSync(setupTimeoutFile, reason);
+          this.store.addEvent(run.id, "harness", reason);
+          this.disarmTimeout(run.id);
+          void docker.stopContainer(current.containerId);
+        },
+        Math.max(0, started + setupBudgetSec * 1000 - Date.now()),
+      ).unref();
+    }
+    if (run.spec.timeoutMin) {
+      const left = Math.max(0, started + run.spec.timeoutMin * 60_000 - Date.now());
+      ctl.timeout = setTimeout(() => {
+        const now = this.store.getRun(run.id);
+        if (now && !isTerminal(now.state)) this.requestStop(now, "timeout");
+      }, left).unref();
+    }
   }
 
   private disarmTimeout(id: string): void {
     const ctl = this.active.get(id);
     if (!ctl) return;
     clearTimeout(ctl.timeout);
+    clearTimeout(ctl.setupTimeout);
     ctl.timeout = undefined;
+    ctl.setupTimeout = undefined;
   }
 
   /** A run's networks: `default` (internal when the run has no network) plus declared ones. */

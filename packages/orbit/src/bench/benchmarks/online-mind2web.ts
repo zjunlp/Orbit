@@ -7,8 +7,25 @@ export const onlineMind2web: Omit<SupportedBenchmark, "registrationNames"> = {
   description:
     "Retrieve information from live websites through the native browser and terminal evaluator.",
   taxonomyGroups: [
-    group("Reviewed live-web subset", {
+    group("GitHub issue and commit retrieval", {
       ...browser,
+      domains: ["software"],
+      taskTypes: ["retrieval"],
+      world: ["live"],
+      scoringEvidence: ["response", "trajectory"],
+      scoringMethods: ["model-judge"],
+    }),
+    group("Reinforcement-learning paper retrieval", {
+      ...browser,
+      domains: ["machine-learning"],
+      taskTypes: ["retrieval"],
+      world: ["live"],
+      scoringEvidence: ["response", "trajectory"],
+      scoringMethods: ["model-judge"],
+    }),
+    group("Recipe and weather retrieval", {
+      ...browser,
+      domains: ["general-knowledge"],
       taskTypes: ["retrieval"],
       world: ["live"],
       scoringEvidence: ["response", "trajectory"],

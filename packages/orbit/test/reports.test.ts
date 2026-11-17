@@ -15,12 +15,14 @@ import {
   AdapterTasksResponse,
   BenchJob,
   OfficialRule,
+  OfficialValue,
   Outcome,
   type ReportEntry,
   Run,
   ScoreResult,
   Trial,
 } from "../src/contracts/index.ts";
+import { formatOfficialCoverage } from "../src/contracts/metrics.ts";
 import { Store } from "../src/store/index.ts";
 
 const home = mkdtempSync(join(tmpdir(), "orbit-reports-"));
@@ -102,10 +104,36 @@ describe("official aggregation", () => {
       metric: "score",
       value: 200 / 3,
       samples: 3,
+      planned: 4,
+      excluded: 0,
       missing: 1,
       partial: true,
     });
     expect(officialValue(entries, exclude, "score").value).toBe(100);
+  });
+
+  it("marks excluded or missing metric values partial even after every trial finishes", () => {
+    const rule = OfficialRule.parse({ name: "r", errors: "exclude", unit: "sample" });
+    const entries = [e("x", "valid", 100), e("x", "invalid", null), e("y", "valid", null)];
+    const value = officialValue(entries, rule, "score");
+    expect(value).toEqual({
+      metric: "score",
+      value: 100,
+      samples: 1,
+      planned: 3,
+      excluded: 2,
+      missing: 0,
+      partial: true,
+    });
+    expect(formatOfficialCoverage(value, entries.length)).toBe("1/3 scored, 2 excluded, partial");
+    const legacy = OfficialValue.parse({
+      metric: "score",
+      value: 100,
+      samples: 1,
+      missing: 0,
+      partial: false,
+    });
+    expect(formatOfficialCoverage(legacy, entries.length)).toBe("1/3 scored, 2 excluded, partial");
   });
 
   it("is declared by the adapter and appears next to Orbit's view in the summary", () => {

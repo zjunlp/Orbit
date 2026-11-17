@@ -2,6 +2,7 @@ import type { GuiTrace, SessionMessage } from "@zjunlp/orbit/contracts";
 import { useMemo, useState } from "react";
 import { copy, Empty, Link, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
+import type { ReplayControl } from "../../lib/atif.ts";
 import { bytes } from "../../lib/format.ts";
 import { actionOverlay, stepMessages } from "../../lib/gui-action.ts";
 import { overlayOpen, useHotkeys } from "../../lib/hotkeys.ts";
@@ -29,10 +30,12 @@ export function TrajectoryFile({
     what: "the trajectory",
     maxBytes: MAX_BYTES,
     parse: parseTrajectory,
-    load: () => api.environment(run.id, file.path, "gui"),
+    load: (signal) => api.environment(run.id, file.path, "gui", run.id, signal),
   });
   const a = source.listing;
-  const session = useAsync(() => api.session(run.id), [run.id, run.state]);
+  const session = useAsync((signal) => api.session(run.id, signal), [run.id, run.state], {
+    resetKey: run.id,
+  });
   const files = useMemo(() => new Set(a.data?.files.map((f) => f.path) ?? []), [a.data]);
   const problem =
     (source.missing
@@ -80,29 +83,36 @@ export function TrajectoryViewer({
   files,
   listingTruncated,
   messages = [],
+  control,
 }: {
   trajectory: GuiTrace;
   runId: string;
   files: Set<string>;
   listingTruncated: boolean;
   messages?: SessionMessage[];
+  control?: ReplayControl;
 }) {
   const loc = useLocation();
-  const index = trajectoryStep(loc.query.get("step"), trajectory.steps.length);
+  const index = control?.index ?? trajectoryStep(loc.query.get("step"), trajectory.steps.length);
   const before = loc.query.get("frame") === "before";
   const { action, observation } = trajectoryFrame(trajectory, index, before);
   const last = trajectory.steps.length - 1;
   const aligned = stepMessages(trajectory, index, messages);
   const [original, setOriginal] = useState(false);
-  const select = (step: number) => setQuery({ step: String(Math.max(0, Math.min(last, step))) });
-  useHotkeys({
-    ArrowLeft: () => {
-      if (!overlayOpen()) select(index - 1);
-    },
-    ArrowRight: () => {
-      if (!overlayOpen()) select(index + 1);
-    },
-  });
+  const select = (step: number) =>
+    control ? control.select(step) : setQuery({ step: String(Math.max(0, Math.min(last, step))) });
+  useHotkeys(
+    control
+      ? {}
+      : {
+          ArrowLeft: () => {
+            if (!overlayOpen()) select(index - 1);
+          },
+          ArrowRight: () => {
+            if (!overlayOpen()) select(index + 1);
+          },
+        },
+  );
   const firstError = trajectory.steps.findIndex((step) => Boolean(step.actionError));
   const start = Math.max(0, Math.min(index - 10, trajectory.steps.length - 21));
   const visible = trajectory.steps.slice(start, start + 21);

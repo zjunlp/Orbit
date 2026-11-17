@@ -26,14 +26,22 @@ const pythonAdapters = readdirSync(adapterDirsRoot, { withFileTypes: true })
   })
   .sort();
 
-it.each(pythonAdapters)("checks the %s Python adapter", (name) => {
-  const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
-  execFileSync("python3", ["-B", "-m", "unittest", "discover", "-s", dir], {
-    encoding: "utf8",
-    timeout: 10_000,
-    stdio: "pipe",
-  });
-});
+const adapterTimeoutMs = 10_000;
+it.each(pythonAdapters)(
+  "checks the %s Python adapter",
+  (name) => {
+    const dir = fileURLToPath(
+      new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url),
+    );
+    execFileSync("python3", ["-B", "-m", "unittest", "discover", "-s", dir], {
+      encoding: "utf8",
+      timeout: adapterTimeoutMs,
+      stdio: "pipe",
+    });
+  },
+  // Let the child process report its own timeout and stderr.
+  adapterTimeoutMs + 1_000,
+);
 
 it.each([
   "legalbench",

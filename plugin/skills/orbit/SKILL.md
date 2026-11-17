@@ -137,6 +137,31 @@ scores stay in each trial's history, the summary uses the latest.
 To add a benchmark Orbit does not know (write an adapter, a resources file) or to size its tasks
 from measured runs (`orbit bench usage`), use the `orbit-bench` skill.
 
+### Configuration changes and evolution gates
+
+For bundle changes, use a frozen policy and this cost order:
+
+1. Run `orbit bench gate check-bundle /path/to/bundle --policy gate.yaml`. Address failed checks;
+   absent reference hashes are `not_run`, not a claim that answer material is absent.
+2. Run a small **evolve-set** smoke. Read only evolve failures to change instructions/skills;
+   preserve `--parent`, `--note` and `--informed-by` references. Both content revisions must exist
+   before planning. Use the same Agent/model/CLI and evaluation conditions for parent and child.
+3. Run `orbit bench gate plan --policy gate.yaml --parent PARENT --child CHILD`. Review its missing,
+   pending, ambiguous and blocked rows before explicitly executing a suggested command. Retain
+   `--expect-revision` and `--expect-tasks-sha256`; reconcile drift instead of dropping the guards.
+4. Evaluate the gate set, then the policy's frozen guard sets spanning the pilot's six-dimensional
+   profiles. Select report revisions explicitly when requested; do not choose the best rescore or
+   resample guards after seeing results. `orbit bench gate` saves the evidence and three-way decision.
+5. After several accepted rounds, evaluate the frozen final sets and a second Agent when authorized.
+   `insufficient` needs missing evidence or a revised prospective study, not an acceptance claim.
+
+A finished job without a report may need the separate `orbit bench report JOB`; a pending job should
+be allowed to finish. Neither helper submits work. Static checks are conservative pattern checks;
+keep held-out task/answer material out of the bundle and keep its editor limited to evolve evidence.
+The full reference evolver and isolation workflow are separate features. Read the
+[evolution gate guide](https://github.com/zjunlp/Orbit/blob/main/docs/guides/bench-gate.md) for policy,
+report selection and command limitations.
+
 ## 7. Record conclusions
 
 After analysing a run or a group, attach a short note so the human sees it next to the results:

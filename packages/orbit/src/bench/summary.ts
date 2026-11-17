@@ -158,8 +158,8 @@ function entry(t: Trial, metric: string, getRun?: (id: string) => Run | null): R
 
 /**
  * A method's value under the benchmark's own rule (design §9.7). Pending, cancelled and lost
- * samples are missing (the value is then partial); invalid ones are left out or count as
- * `failValue`, as the rule says; valid ones without a value of the metric are left out.
+ * samples are missing. Invalid ones are left out or count as `failValue`, as the rule says.
+ * Valid ones without the metric are excluded. Either kind of omission makes the value partial.
  */
 export function officialValue(
   entries: ReportEntry[],
@@ -182,7 +182,17 @@ export function officialValue(
     for (const u of used) by.set(u.task, [...(by.get(u.task) ?? []), u.v]);
     value = mean([...by.values()].map((xs) => mean(xs) as number));
   }
-  return { metric, value, samples: used.length, missing, partial: missing > 0 };
+  const planned = entries.length;
+  const samples = used.length;
+  return {
+    metric,
+    value,
+    samples,
+    planned,
+    excluded: planned - samples - missing,
+    missing,
+    partial: samples < planned,
+  };
 }
 
 /** The metric a job's official rule is about: the rule's own, else the job's primary metric. */

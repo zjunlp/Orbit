@@ -5,7 +5,12 @@ export const robocasaV02: Omit<SupportedBenchmark, "registrationNames"> = {
   id: "robocasa-v02",
   name: "RoboCasa v0.2",
   description: "Evaluate the original RoboCasa atomic kitchen manipulation tasks.",
-  taxonomyGroups: [group("Original kitchen manipulation", native)],
+  taxonomyGroups: [
+    group("Original kitchen manipulation", {
+      ...native,
+      modalities: ["text", "image"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "24 atomic tasks with held-out object instances, fixed kitchen layouts and PandaOmron arm control.",

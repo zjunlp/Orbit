@@ -9,6 +9,7 @@ export const mobileworld: Omit<SupportedBenchmark, "registrationNames"> = {
     group("Mobile task adapter", {
       ...browser,
       platforms: ["mobile"],
+      world: ["controlled"],
       scoringEvidence: ["final-state"],
       scoringMethods: ["rule-check"],
     }),

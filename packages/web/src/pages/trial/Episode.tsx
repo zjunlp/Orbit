@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, PALETTE } from "../../components/Chart.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
 import { api, fileUrl, type ReviewFile, type Run } from "../../lib/api.ts";
+import type { ReplayControl } from "../../lib/atif.ts";
 import {
   channelNames,
   chunkTiming,
@@ -20,18 +21,24 @@ import "./episode.css";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const seconds = (value: number) => Number(value.toFixed(4)).toString();
+const fallbackLabel = (value: EpisodeTrajectory["chunks"][number]["fallback"]) =>
+  value === "empty-plan" ? "Empty plan" : value === "invalid-plan" ? "Invalid plan" : null;
 /** A recorded number at reading precision: four significant digits, no float noise. */
 const shown = (value: number | null | undefined) =>
   value == null ? "—" : Number(value.toPrecision(4)).toString();
 
 export function EpisodeFile({ run, file, solve }: { run: Run; file: ReviewFile; solve?: Run }) {
   const sessionRun = solve ?? run;
-  const session = useAsync(() => api.session(sessionRun.id), [sessionRun.id, sessionRun.state]);
+  const session = useAsync(
+    (signal) => api.session(sessionRun.id, signal),
+    [sessionRun.id, sessionRun.state],
+    { resetKey: sessionRun.id },
+  );
   const source = useRunFile(run, file.path, {
     what: "the episode index",
     maxBytes: MAX_BYTES,
     parse: parseEpisode,
-    load: () => api.environment(run.id, file.path, "episode", sessionRun.id),
+    load: (signal) => api.environment(run.id, file.path, "episode", sessionRun.id, signal),
     loadKey: sessionRun.id,
   });
   const artifacts = source.listing;
@@ -196,20 +203,35 @@ export function EpisodeViewer({
   mediaRunId = runId,
   files,
   messages = [],
+  control,
 }: {
   trace: EpisodeTrajectory;
   runId: string;
   mediaRunId?: string | null;
   files: Set<string>;
   messages?: SessionMessage[];
+  control?: ReplayControl;
 }) {
   const videoLimit = Math.floor(
     MAX_VIDEO_BYTES / Math.max(1, trace.cameras.filter((camera) => camera.video).length),
   );
-  const [index, setIndex] = useState(0);
+  const [localIndex, setLocalIndex] = useState(0);
+  const index = control?.index ?? localIndex;
+  const setIndex = (next: number | ((current: number) => number)) => {
+    const value = typeof next === "function" ? next(index) : next;
+    if (control) control.select(value);
+    else setLocalIndex(value);
+  };
   const channels = useMemo(() => channelNames(trace), [trace]);
   const [channel, setChannel] = useState(channels.paired[0] ?? "");
   const timing = useMemo(() => chunkTiming(trace.chunks), [trace]);
+  const fallbacks = trace.chunks.filter((chunk) => fallbackLabel(chunk.fallback));
+  const fallbackRecorded = trace.chunks.some(
+    (chunk) => chunk.fallback && chunk.fallback !== "unrecorded",
+  );
+  const fallbackExpected =
+    trace.chunks.some((chunk) => chunk.fallback !== undefined) ||
+    trace.cameras.some((camera) => camera.name === "navigation_views");
   const linked = useMemo(
     () =>
       trace.samples.some((row) => row.sessionStepIds?.length || row.sessionMessageIndexes?.length),
@@ -219,14 +241,14 @@ export function EpisodeViewer({
   const [playing, setPlaying] = useState(false);
   const last = trace.samples.length - 1;
   useEffect(() => {
-    if (!playing || index >= last) return;
+    if (control || !playing || index >= last) return;
     const delay = Math.max(
       16,
       ((trace.samples[index + 1]?.time ?? 0) - (sample?.time ?? 0)) * 1000,
     );
-    const timer = setTimeout(() => setIndex((current) => Math.min(last, current + 1)), delay);
+    const timer = setTimeout(() => setLocalIndex((current) => Math.min(last, current + 1)), delay);
     return () => clearTimeout(timer);
-  }, [playing, index, last, trace, sample]);
+  }, [playing, index, last, trace, sample, control]);
   useEffect(() => {
     if (index === last) setPlaying(false);
   }, [index, last]);
@@ -282,7 +304,7 @@ export function EpisodeViewer({
         <button
           type="button"
           className="btn sm"
-          disabled={last === 0}
+          disabled={last === 0 || !!control}
           onClick={() => {
             if (index === last) setIndex(0);
             setPlaying(!playing);
@@ -315,6 +337,7 @@ export function EpisodeViewer({
         {chunks.map((chunk) => (
           <span key={`${chunk.start}-${chunk.end}-${chunk.label}`} className="chip">
             Chunk {chunk.label ?? `${seconds(chunk.start)}–${seconds(chunk.end)}s`}
+            {fallbackLabel(chunk.fallback) && ` · ${fallbackLabel(chunk.fallback)}`}
           </span>
         ))}
       </div>
@@ -378,6 +401,28 @@ export function EpisodeViewer({
           <span className="faint">No chunk boundaries recorded</span>
         )}
       </section>
+      {fallbackExpected && (
+        <section aria-label="Policy-reported fallbacks" className="episode-chunks">
+          <b>Policy-reported fallbacks</b>
+          <span>{fallbackRecorded ? `${fallbacks.length} recorded` : "Not recorded"}</span>
+          {fallbacks.map((chunk) => {
+            const step = sampleAt(trace, chunk.start);
+            return (
+              <button
+                type="button"
+                key={chunk.start}
+                className="btn sm"
+                onClick={() => {
+                  setPlaying(false);
+                  setIndex(step);
+                }}
+              >
+                Step {step + 1} · {fallbackLabel(chunk.fallback)}
+              </button>
+            );
+          })}
+        </section>
+      )}
       <section aria-label="Action and joint curves">
         <h3>Actions and body state</h3>
         {channels.all.length > 1 && (

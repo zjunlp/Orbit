@@ -119,12 +119,16 @@ export function turnStats(t: Turn): TurnStats {
 
 /** Whether a turn or event contains `q` (case-insensitive) in its text, call or result. */
 export function matches(e: ConversationEvent, q: string): boolean {
-  if (!q) return true;
+  return !q || searchText(e).includes(q.toLowerCase());
+}
+
+/** Search payload is indexed once per conversation, including collapsed tool results. */
+export function searchText(e: ConversationEvent): string {
   const hay =
     e.type === "message"
       ? e.text
       : `${e.name} ${JSON.stringify(e.arguments)} ${typeof e.result === "string" ? e.result : JSON.stringify(e.result ?? "")} ${e.error ?? ""}`;
-  return hay.toLowerCase().includes(q.toLowerCase());
+  return hay.toLowerCase();
 }
 
 /** Strings holding JSON (as checkers often report results) parsed, at any depth. */

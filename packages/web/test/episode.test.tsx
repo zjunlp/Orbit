@@ -83,6 +83,9 @@ describe("saved embodied episode", () => {
         t.chunks[0].inferSeconds = -1;
       },
       (t: ReturnType<typeof fixture>) => {
+        t.chunks[0].fallback = "bad-status";
+      },
+      (t: ReturnType<typeof fixture>) => {
         t.mediaPhase = "other";
       },
       (t: ReturnType<typeof fixture>) => {
@@ -172,6 +175,29 @@ describe("saved embodied episode", () => {
     );
     expect(html).toContain("Camera media unavailable");
     expect(html).toContain("Action chunks");
+  });
+  it("shows fallback reasons and distinguishes a legacy episode from zero fallbacks", () => {
+    const raw = fixture();
+    raw.chunks[0].fallback = "invalid-plan";
+    const render = () =>
+      renderToStaticMarkup(
+        <EpisodeViewer
+          trace={parseEpisode(JSON.stringify(raw))}
+          runId="fixture"
+          files={new Set()}
+        />,
+      );
+    const invalid = render();
+    expect(invalid).toContain("Policy-reported fallbacks");
+    expect(invalid).toContain("Step 1 · Invalid plan");
+    expect(invalid).not.toContain("random action");
+    expect(invalid).toContain("1 recorded");
+    raw.chunks[0].fallback = "empty-plan";
+    expect(render()).toContain("Step 1 · Empty plan");
+    raw.chunks[0].fallback = "unrecorded";
+    expect(render()).toContain("Not recorded");
+    raw.chunks[0].fallback = "none";
+    expect(render()).toContain("0 recorded");
   });
   it("summarizes one policy call per step instead of listing every chunk", () => {
     const raw = fixture();

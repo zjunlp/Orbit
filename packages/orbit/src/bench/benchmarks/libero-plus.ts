@@ -6,7 +6,7 @@ export const liberoPlus: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "LIBERO-Plus",
   description:
     "Measure manipulation robustness across 10,030 variants and seven perturbation categories.",
-  taxonomyGroups: [group("LIBERO robustness", native)],
+  taxonomyGroups: [group("LIBERO robustness", { ...native, targets: ["control", "robustness"] })],
   integrations: [
     nativeRoute(
       "Four native suites, with one official initial state per perturbation variant.",

@@ -67,7 +67,8 @@ export const PAGES = [
     icon: IconLayers,
     rail: "Evaluate",
     title: "Evaluation configurations",
-    terms: "evaluation configurations models reasoning effort versions",
+    terms: "evaluation configurations models reasoning effort versions evolution gates",
+    covers: /^\/configurations\//,
   },
   {
     name: "bench",
@@ -120,6 +121,8 @@ export const PAGES = [
 
 /** Pages below the top level; matched before the top-level pages, in this order. */
 const DETAIL_ROUTES = [
+  { name: "gates", pattern: /^\/configurations\/gates$/ },
+  { name: "gate", pattern: /^\/configurations\/gates\/([^/]+)$/ },
   { name: "run", pattern: /^\/runs\/([^/]+)$/ },
   { name: "trial", pattern: /^\/bench\/([^/]+)\/trials\/([^/]+)$/ },
   { name: "benchCompare", pattern: /^\/bench\/compare$/ },

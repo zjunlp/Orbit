@@ -45,7 +45,7 @@ import { EventsTab } from "./run/Events.tsx";
 import { LogsTab } from "./run/Logs.tsx";
 import { MetricsTab } from "./run/Metrics.tsx";
 import { Overview } from "./run/Overview.tsx";
-import { SessionTab } from "./run/Session.tsx";
+import { TrajectoryTab } from "./run/Trajectory.tsx";
 
 const TABS = ["overview", "logs", "metrics", "artifacts", "code", "session", "events"] as const;
 type Tab = (typeof TABS)[number];
@@ -55,7 +55,7 @@ const TAB_LABEL: Record<Tab, string> = {
   metrics: "Metrics",
   artifacts: "Artifacts",
   code: "Code",
-  session: "Session",
+  session: "Trajectory",
   events: "Events",
 };
 
@@ -346,7 +346,7 @@ function RunView({ run }: { run: Run }) {
         )}
         {tab === "artifacts" && <ArtifactsTab run={run} artifacts={artifacts.data} />}
         {tab === "code" && <DiffTab run={run} />}
-        {tab === "session" && <SessionTab run={run} />}
+        {tab === "session" && <TrajectoryTab key={run.id} run={run} />}
         {tab === "events" && <EventsTab run={run} />}
       </div>
     </>

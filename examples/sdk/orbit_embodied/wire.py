@@ -4,6 +4,8 @@ import io
 
 import numpy as np
 
+POLICY_FALLBACKS = ("none", "empty-plan", "invalid-plan")
+
 
 def pack(value):
     import msgpack
@@ -29,7 +31,7 @@ def unpack(value):
     return msgpack.unpackb(value, object_hook=decode, raw=False)
 
 
-async def serve_actions(policy, metadata, host, port, *, reset=None):
+async def serve_actions(policy, metadata, host, port, *, reset=None, report_fallback=False):
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
     from http import HTTPStatus
@@ -46,7 +48,11 @@ async def serve_actions(policy, metadata, host, port, *, reset=None):
     def predict(message, reset_episode):
         if reset_episode:
             reset()
-        return pack({"actions": policy(unpack(message))})
+        prediction = policy(unpack(message))
+        if report_fallback:
+            actions, fallback = prediction
+            return pack({"actions": actions, "fallback": fallback})
+        return pack({"actions": prediction})
 
     async def handler(connection):
         if reset is not None:

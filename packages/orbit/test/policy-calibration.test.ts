@@ -1,14 +1,16 @@
 // Real contracts, store and lifecycle with explicit synthetic model/adapter/Run replies; no inference.
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
+import { Command } from "commander";
 import { afterEach, expect, it, vi } from "vitest";
 import { planConsolidation } from "../src/bench/consolidate.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { contentDigest } from "../src/bench/samples.ts";
 import { BenchService } from "../src/bench/service.ts";
+import { registerBench } from "../src/cli/bench.ts";
 import { calibrate } from "../src/cli/calibrate.ts";
 import type { OrbitClient } from "../src/client/index.ts";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
@@ -51,7 +53,7 @@ function plan(count = 2) {
   return { version: 1 as const, items, digest: contentDigest(items) };
 }
 
-function fixture() {
+function fixture(fixedBatch = true) {
   const home = mkdtempSync(join(tmpdir(), "orbit-policy-calibrate-"));
   const paths = orbitPaths({ ORBIT_HOME: home });
   ensureHome(paths);
@@ -108,7 +110,7 @@ function fixture() {
           profile: "synthetic",
           semanticProfile: profile,
           observationMap: {},
-          batch: { maxEpisodes: 128 },
+          ...(fixedBatch ? { batch: { maxEpisodes: 128 } } : {}),
         },
       },
     }),
@@ -216,6 +218,68 @@ it("bounds policy requests and rejects mixing legacy calibration fields or overs
       methods: [{ name: "p", agent: "policy", policyRef: "p" }],
     }).success,
   ).toBe(false);
+});
+
+it("explains how to validate a policy when the benchmark has no fixed batches", async () => {
+  const f = fixture(false);
+  await expect(f.bench.calibrate(f.request)).rejects.toThrow(
+    /orbit bench run --sample-plan.*orbit bench rescore/,
+  );
+  expect(f.submit).not.toHaveBeenCalled();
+  expect(f.store.listJobs()).toHaveLength(0);
+});
+
+it("keeps checkpoint scope warnings advisory and exposes them in both CLI output modes", async () => {
+  const f = fixture();
+  const original = f.bench.policies.get("synthetic");
+  if (!original) throw new Error("Missing fixture policy");
+  const listing = await AdapterClient.prototype.tasks();
+  for (const task of listing.tasks) task.tags.taskType = "FetchType";
+  f.bench.policies.put({
+    ...original,
+    recommendedScope: { profiles: ["chores-small/1"], taskTypes: ["PickupType"] },
+  });
+  const job = await f.bench.calibrate(f.request);
+  expect(job.policyWarnings).toEqual([
+    "policy: synthetic recommends chores-small/1. This plan uses synthetic.",
+    "policy: synthetic recommends PickupType. The plan also includes FetchType.",
+  ]);
+  expect(f.store.getJob(job.id)?.policyWarnings).toEqual(job.policyWarnings);
+  expect(job.spec.methods[0]?.policySnapshot).toEqual(original);
+  await f.firstScores(job.id);
+  f.finish(f.store.trials(job.id)[0]?.verifyRunId ?? null);
+  await expect.poll(() => f.bench.job(job.id).calibration?.phase).toBe("done");
+  const report = CalibrationReport.parse(f.bench.job(job.id).calibration);
+  expect(report).toMatchObject({ calibrated: true, policyWarnings: job.policyWarnings });
+
+  const client = {
+    benchCalibrate: async () => job,
+    benchJob: async () => ({ calibration: report }),
+  } as unknown as OrbitClient;
+  const planPath = join(f.home, "samples.json");
+  writeFileSync(planPath, JSON.stringify(f.request.samplePlan));
+  const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+  const args = [
+    "bench",
+    "calibrate",
+    job.spec.benchmark,
+    "--policy",
+    f.request.policyRef,
+    "--sample-plan",
+    planPath,
+  ];
+  for (const json of [false, true]) {
+    stderr.mockClear();
+    const program = new Command();
+    const print = vi.fn();
+    registerBench(program, async () => client, print);
+    await program.parseAsync(json ? [...args, "--json"] : args, { from: "user" });
+    expect(print).toHaveBeenCalledWith(json ? true : undefined, report, expect.any(Function));
+    if (json) expect(stderr).not.toHaveBeenCalled();
+    else
+      for (const warning of job.policyWarnings ?? [])
+        expect(stderr).toHaveBeenCalledWith(`Warning: ${warning}`);
+  }
 });
 
 it("accepts valid zero native scores, shares a solve, rescores one episode and keeps policy checks apart", async () => {

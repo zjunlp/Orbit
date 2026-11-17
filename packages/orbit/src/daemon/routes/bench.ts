@@ -1,14 +1,7 @@
-import { accessSync, constants, existsSync, statSync } from "node:fs";
 import type { Hono } from "hono";
-import { loadResources, resolveResources } from "../../bench/resources.ts";
 import type { BenchReport } from "../../contracts/index.ts";
-import {
-  BenchLabels,
-  type Benchmark,
-  BenchmarkInput,
-  PolicyDefinition,
-} from "../../contracts/index.ts";
-import { NotFoundError, UserError } from "../../runs/service.ts";
+import { BenchLabels, type Benchmark, PolicyDefinition } from "../../contracts/index.ts";
+import { NotFoundError } from "../../runs/service.ts";
 import type { AppDeps } from "../app.ts";
 import { num } from "../http.ts";
 
@@ -26,35 +19,14 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.get("/benchmarks", (c) =>
     c.json<{ benchmarks: Benchmark[] }>({ benchmarks: benchmarks.list() }),
   );
-  api.post("/benchmarks", async (c) => {
-    const input = BenchmarkInput.parse(await c.req.json());
-    if (!existsSync(input.path)) throw new UserError(`benchmark path not found: ${input.path}`);
-    if (input.adapter.startsWith("/")) {
-      try {
-        if (!statSync(input.adapter).isFile()) throw new Error();
-        accessSync(input.adapter, constants.X_OK);
-      } catch {
-        throw new UserError(`adapter is not an executable file: ${input.adapter}`);
-      }
-    }
-    // Listing the tasks once checks that the adapter answers (and the resources file fits) first.
-    const { tasks } = await bench.infoOf({
-      ...input,
-      createdAt: "",
-      updatedAt: "",
-    });
-    if (input.resources) {
-      try {
-        const ids = tasks.map((t) => t.id);
-        resolveResources(loadResources(input.resources), ids, ids);
-      } catch (e) {
-        throw new UserError((e as Error).message);
-      }
-    }
-    // Re-registering keeps the labels unless new ones are given.
-    const labels = input.labels ?? benchmarks.get(input.name)?.labels;
-    return c.json(benchmarks.put({ ...input, ...(labels ? { labels } : {}) }), 201);
-  });
+  api.post("/benchmarks", async (c) => c.json(await bench.register(await c.req.json()), 201));
+  api.get("/bench/resources", (c) => c.json(bench.preparation.catalog()));
+  api.post("/bench/resources/:family/prepare", async (c) =>
+    c.json(await bench.preparation.submit(c.req.param("family"), await c.req.json()), 201),
+  );
+  api.get("/bench/preparations/:id", async (c) =>
+    c.json(await bench.preparation.status(c.req.param("id"))),
+  );
   api.delete("/benchmarks/:name", (c) => {
     if (!benchmarks.remove(c.req.param("name"))) throw new NotFoundError("benchmark not found");
     return c.json({ ok: true });
@@ -76,6 +48,15 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.post("/bench/calibrations", async (c) =>
     c.json(await bench.calibrate(await c.req.json()), 201),
   );
+  api.post("/bench/gates/plan", async (c) => c.json(bench.gatePlan(await c.req.json())));
+  api.post("/bench/gates/check-bundle", async (c) =>
+    c.json(bench.gateBundleCheck(await c.req.json())),
+  );
+  api.post("/bench/gates", async (c) => c.json(bench.gate(await c.req.json()), 201));
+  api.get("/bench/gates", (c) =>
+    c.json(bench.gates(c.req.query("child"), num(c.req.query("limit"), 100))),
+  );
+  api.get("/bench/gates/:id", (c) => c.json(bench.gateRecord(c.req.param("id"))));
   api.get("/bench/jobs", (c) => c.json(bench.jobs(num(c.req.query("limit"), 200))));
   api.post("/bench/jobs", async (c) =>
     c.json(await bench.submit(await c.req.json(), { folder: c.req.query("folder") }), 201),

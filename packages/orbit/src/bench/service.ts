@@ -2,7 +2,17 @@
 // solve Run's after phase, for verifiers that need its container) on the same lease model as every
 // other run. BenchService owns job-level operations; the TrialMachine (trials.ts) advances trials
 // when their runs change and recovers open trials from the store after a daemon restart.
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { cp } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { AuthEntry, AuthStore } from "../auth/index.ts";
@@ -25,6 +35,7 @@ import {
   type BenchJobSubmissionInput,
   BenchLabels,
   type Benchmark,
+  BenchmarkInput,
   type BenchReport,
   BenchRescore,
   type BenchRescoreInput,
@@ -60,6 +71,7 @@ import { dirBytes } from "../records/index.ts";
 import { AUTH_TEST_GROUP, NotFoundError, type RunService, UserError } from "../runs/service.ts";
 import type { AgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
+import { DatasetRegistry } from "../workspace/datasets.ts";
 import { gitSource } from "../workspace/snapshot.ts";
 import { supportedBenchmarks } from "./benchmarks/index.ts";
 import { catalogEntry, type Listing } from "./catalog.ts";
@@ -73,6 +85,7 @@ import {
   jobRevision,
   methodLines,
 } from "./hub.ts";
+import { BenchmarkPreparation } from "./preparation.ts";
 import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
 
@@ -81,6 +94,9 @@ export { compareJobs, summarize } from "./summary.ts";
 
 import { assignSolveBatches } from "./batches.ts";
 import { CalibrationLifecycle } from "./calibration.ts";
+import { checkGateBundle } from "./gate-bundle.ts";
+import { planGate } from "./gate-plan.ts";
+import { evaluateGate } from "./gates.ts";
 import { PolicyRegistry } from "./policies.ts";
 import { AdapterClient } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
@@ -120,6 +136,7 @@ const LISTING_TTL_MS = 10 * 60_000;
 
 export class BenchService {
   readonly policies: PolicyRegistry;
+  readonly preparation: BenchmarkPreparation;
   private readonly deps: BenchServiceDeps;
   /** Agent definitions; built-ins when the caller (tests, embedders) did not supply a registry. */
   private readonly agents: AgentRegistry;
@@ -133,6 +150,14 @@ export class BenchService {
   constructor(deps: BenchServiceDeps) {
     this.deps = deps;
     this.policies = new PolicyRegistry(join(deps.paths.home, "policies.json"));
+    this.preparation = new BenchmarkPreparation({
+      ...deps,
+      self: deps.self ?? [],
+      datasets: new DatasetRegistry(deps.paths.datasets),
+      validate: (input) => this.validateRegistration(input),
+      commit: (input) => deps.registry.put(input),
+      registrations: () => deps.registry.list(),
+    });
     this.agents = deps.agents ?? builtinRegistry();
     this.calibrations = new CalibrationLifecycle({
       store: deps.store,
@@ -166,6 +191,7 @@ export class BenchService {
    */
   start(): void {
     this.stopped = false;
+    this.preparation.recover();
     for (const job of this.deps.store.listJobs(10_000)) this.calibrations.arm(job);
     for (const t of this.deps.store.pendingTrialCleanup()) {
       if (this.trials.reconcileCleanup(t))
@@ -180,6 +206,7 @@ export class BenchService {
 
   stop(): void {
     this.stopped = true;
+    this.preparation.stop();
     this.calibrations.stop();
   }
 
@@ -194,6 +221,34 @@ export class BenchService {
   }
 
   // ---- benchmarks ----
+
+  async register(value: unknown): Promise<Benchmark> {
+    return this.deps.registry.put(await this.validateRegistration(value));
+  }
+
+  private async validateRegistration(value: unknown): Promise<BenchmarkInput> {
+    const input = BenchmarkInput.parse(value);
+    if (!existsSync(input.path)) throw new UserError(`benchmark path not found: ${input.path}`);
+    if (input.adapter.startsWith("/")) {
+      try {
+        if (!statSync(input.adapter).isFile()) throw new Error();
+        accessSync(input.adapter, constants.X_OK);
+      } catch {
+        throw new UserError(`adapter is not an executable file: ${input.adapter}`);
+      }
+    }
+    const { tasks } = await this.infoOf({ ...input, createdAt: "", updatedAt: "" });
+    if (input.resources) {
+      try {
+        const ids = tasks.map((t) => t.id);
+        resolveResources(loadResources(input.resources), ids, ids);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+    }
+    const labels = input.labels ?? this.deps.registry.get(input.name)?.labels;
+    return { ...input, ...(labels ? { labels } : {}) };
+  }
 
   benchmark(name: string): Benchmark {
     const b = this.deps.registry.get(name);
@@ -234,23 +289,32 @@ export class BenchService {
     if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
     const folder = Folder.safeParse(opts.folder ?? "");
     if (!folder.success) throw new UserError(folder.error.issues[0]?.message ?? "invalid folder");
-    const { tasksFile, taskSet: expectedTaskSet, ...spec } = parsed.data;
+    const { tasksFile, taskSet: expectedTaskSet, expectedRevisions, ...spec } = parsed.data;
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
+    const batch = info.capabilities?.embodied?.batch;
+    if (spec.batchSize && (!batch || spec.batchSize > batch.maxEpisodes)) {
+      if (spec.calibration?.mode === "policy") {
+        if (batch)
+          throw new UserError(
+            `Policy calibration supports at most ${batch.maxEpisodes} episodes for ${b.name}`,
+          );
+        throw new UserError(
+          `${b.name} does not support fixed-batch policy calibration. Run an ordinary evaluation with orbit bench run --sample-plan, then rescore a completed trial with orbit bench rescore.`,
+        );
+      }
+      throw new UserError("batchSize exceeds the benchmark's declared fixed-batch support");
+    }
     const all = info.tasks;
     const source = await gitSource(b.path);
     const file = tasksFile
       ? resolveTaskFile(tasksFile, spec.tasks, all, taskBenchmark(b, info, source))
       : undefined;
     if (file) spec.tasks = file.tasks;
-    if (
-      spec.batchSize &&
-      (!info.capabilities?.embodied?.batch ||
-        spec.batchSize > info.capabilities.embodied.batch.maxEpisodes)
-    )
-      throw new UserError("batchSize exceeds the benchmark's declared fixed-batch support");
     const names = new Set<string>();
     const resolvedBindings: Record<string, ResolvedBinding> = {};
+    const policyWarnings: string[] = [];
+    const plannedTasks = new Set(spec.samplePlan?.items.map((sample) => sample.taskId));
     for (const m of spec.methods) {
       if (names.has(m.name)) throw new UserError(`duplicate method name: ${m.name}`);
       names.add(m.name);
@@ -264,7 +328,8 @@ export class BenchService {
           throw new UserError(
             "policy integration checks require a real model registration, not a calibration fixture",
           );
-        m.policySnapshot = structuredClone(policy);
+        const { recommendedScope, ...snapshot } = policy;
+        m.policySnapshot = structuredClone(snapshot);
         const endpoint = info.capabilities?.embodied;
         if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
         // Legacy OpenPI registrations use the native runner's five-step default.
@@ -282,6 +347,27 @@ export class BenchService {
         } catch (e) {
           throw new UserError(`${m.name}: ${(e as Error).message}`);
         }
+        if (recommendedScope) {
+          if (!recommendedScope.profiles.includes(endpoint.profile))
+            policyWarnings.push(
+              `${m.name}: ${policy.name} recommends ${recommendedScope.profiles.join(", ")}. This plan uses ${endpoint.profile}.`,
+            );
+          const supportedTypes = recommendedScope.taskTypes;
+          if (supportedTypes) {
+            const outside = new Set(
+              all.flatMap((task) => {
+                const type = task.tags.taskType;
+                return plannedTasks.has(task.id) && type && !supportedTypes.includes(type)
+                  ? [type]
+                  : [];
+              }),
+            );
+            if (outside.size)
+              policyWarnings.push(
+                `${m.name}: ${policy.name} recommends ${supportedTypes.join(", ")}. The plan also includes ${[...outside].sort().join(", ")}.`,
+              );
+          }
+        }
       }
     }
     resolveTaskSelection(spec, all);
@@ -295,6 +381,11 @@ export class BenchService {
     checkPlanAgainstBenchmark(spec, all, info.capabilities);
     this.checkLineage(spec);
     const revisions = await this.revisions(spec.methods);
+    for (const [name, expected] of Object.entries(expectedRevisions ?? {}))
+      if (revisions[name]?.revision !== expected)
+        throw new UserError(
+          `${name}: expected configuration revision ${expected}, got ${revisions[name]?.revision ?? "none"}; reconcile the method, bundle or CLI before submitting`,
+        );
     for (const [name, lineage] of Object.entries(spec.lineage))
       if (lineage.parent && lineage.parent === revisions[name]?.revision)
         throw new UserError(
@@ -319,6 +410,7 @@ export class BenchService {
       ...(file ? { taskFile: file.record } : {}),
       benchmarkSnapshot: structuredClone(b),
       ...(spec.samplePlan ? { resolvedBindings } : {}),
+      ...(policyWarnings.length ? { policyWarnings } : {}),
       ...(info.capabilities ? { capabilities: structuredClone(info.capabilities) } : {}),
       ...(info.official ? { official: structuredClone(info.official) } : {}),
       revisions,
@@ -954,6 +1046,30 @@ export class BenchService {
       this.deps.log?.(`bench job ${jobId}: report: ${(e as Error).message}`);
       return null;
     }
+  }
+
+  gatePlan(input: unknown) {
+    return planGate(this.deps.store, input, this.deps.registry.list());
+  }
+
+  gateBundleCheck(input: unknown) {
+    return checkGateBundle(input);
+  }
+
+  gate(input: unknown) {
+    return evaluateGate(this.deps.store, input);
+  }
+
+  gates(child?: string, limit = 100) {
+    if (child !== undefined && !/^[a-f0-9]{12}$/.test(child))
+      throw new UserError("child must be a 12-digit configuration revision");
+    return { records: this.deps.store.listGates(child, Math.min(limit, 500)) };
+  }
+
+  gateRecord(id: string) {
+    const record = this.deps.store.getGate(id);
+    if (!record) throw new NotFoundError(`gate record not found: ${id}`);
+    return record;
   }
 
   /**

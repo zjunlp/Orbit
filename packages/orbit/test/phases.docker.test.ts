@@ -2,7 +2,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { solveVerdict } from "../src/bench/classify.ts";
 import { OrbitClient } from "../src/client/index.ts";
 import { orbitPaths } from "../src/config/paths.ts";
 import { type StartedDaemon, startDaemon } from "../src/daemon/server.ts";
@@ -111,6 +112,58 @@ describe.runIf(process.env.ORBIT_E2E === "1")("real durable ending phases", () =
     expect(readFileSync(output(run.id, "after/tmp/verdict"), "utf8")).toBe("verdict\n");
     expect(existsSync(output(run.id, "rendered"))).toBe(false);
   }, 60000);
+
+  it.each([false, true])(
+    "bounds Agent installation and leaves the main command its own budget (stall=%s)",
+    async (stall) => {
+      const name = stall ? "setup-stalls" : "setup-finishes";
+      await client.agentPut({
+        name,
+        install: {
+          kind: "install",
+          binary: "sh",
+          script: stall ? 'echo installing; trap "" TERM; sleep 60' : "echo installing",
+        },
+        auth: { secretEnv: { "api-key": "FIXTURE_AGENT_KEY" } },
+        command: { run: ["sh", "-c", "{instruction}"] },
+      });
+      await client.authPut({ name, harness: name, kind: "api-key", secret: "fixture" });
+      vi.stubEnv("ORBIT_AGENT_SETUP_TIMEOUT_SEC", "3");
+      try {
+        const run = await client.submit({
+          ...base,
+          auth: name,
+          command: ["sh", "-c", 'sleep 4; echo ran > "$ORBIT_OUTPUT/agent"'],
+          services: [{ name: "sim", image, command: ["sleep", "3600"], cpus: 0.25, memGB: 0.1 }],
+          hooks: [{ service: "sim", command: "true", timeoutSec: 5 }],
+        });
+        if (stall) {
+          await expect
+            .poll(() => existsSync(join(paths.runs, run.id, "orbit/agent/setup.log")), {
+              timeout: 20000,
+            })
+            .toBe(true);
+          await daemon.stop();
+          await start();
+        }
+        const done = await finish(run.id);
+        expect(done).toMatchObject({
+          state: stall ? "failed" : "succeeded",
+          cleanup: "done",
+          lease: { state: "released" },
+        });
+        expect(await docker.containersWithLabel(docker.LABEL_PARENT, run.id)).toEqual([]);
+        expect(existsSync(output(run.id, "agent"))).toBe(!stall);
+        if (stall) {
+          expect(done.reason).toContain("Agent install failed (timed out after 3s)");
+          expect(solveVerdict(done)).toMatchObject({ verify: false, failure: "agent_install" });
+        }
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+    60000,
+  );
 
   it("times out a finalizer with TERM-resistant children before collecting", async () => {
     const run = await client.submit({

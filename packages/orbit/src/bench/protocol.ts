@@ -193,16 +193,24 @@ export function toRunSpec(
   const spec = {
     ...rest,
     command: agentTask
-      ? agentCommand(agentDef(), method, agentTask.instruction, Boolean(agentTask.tools?.length))
+      ? [
+          ...(agentTask.wrapper ?? []),
+          ...agentCommand(
+            agentDef(),
+            method,
+            agentTask.instruction,
+            Boolean(agentTask.tools?.length),
+          ),
+        ]
       : command,
     env: { ...b.env, ...((rest.env as Record<string, string> | undefined) ?? {}) },
     snapshot: false,
   } as RunSpecInput;
   if (phase === "solve" && isCliMethod(method)) {
-    // The Agent reaches its model API; native runners get the auth to inject into their containers.
+    // Offline adapters can provide a separate model transport; otherwise CLI agents use the network.
     spec.auth = method.auth;
     spec.agentBundle = agentToolsBundle(agentDef(), method.bundle, agentTask?.tools, staging);
-    spec.network = true;
+    spec.network = (s.network as boolean | undefined) ?? true;
   }
   if (agentTask && spec.root && spec.backend !== "process") {
     const uid = process.getuid?.();

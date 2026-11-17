@@ -31,11 +31,20 @@ import type {
   EnvironmentKind,
   FolderMoveResult,
   FolderStat,
+  GateBundleCheck,
+  GateBundleInput,
+  GatePlan,
+  GateRecord,
+  GateRecordSummary,
+  GateSubmissionInput,
   Ledger,
   LogChunk,
   MethodList,
   Metrics,
   NotifyTarget,
+  PreparationCatalog,
+  PreparationInput,
+  PreparationStatus,
   Run,
   RunCursor,
   RunDeletion,
@@ -146,7 +155,7 @@ export const api = {
     } while (before);
     return runs;
   },
-  run: (id: string) => req<Run>(`/runs/${enc(id)}`),
+  run: (id: string, signal?: AbortSignal) => req<Run>(`/runs/${enc(id)}`, { signal }),
   resume: (id: string) =>
     req<Run>(`/runs/${enc(id)}/resume`, { method: "POST", body: JSON.stringify({}) }),
   cancel: (id: string) => req<Run>(`/runs/${enc(id)}/cancel`, { method: "POST" }),
@@ -159,24 +168,34 @@ export const api = {
   logs: (id: string, offset: number, limit = 1024 * 1024) =>
     req<LogChunk>(`/runs/${enc(id)}/logs?offset=${offset}&limit=${limit}`),
   metrics: (id: string) => req<Metrics>(`/runs/${enc(id)}/metrics`),
-  artifacts: (id: string) => req<Artifacts>(`/runs/${enc(id)}/artifacts`),
+  artifacts: (id: string, signal?: AbortSignal) =>
+    req<Artifacts>(`/runs/${enc(id)}/artifacts`, { signal }),
   diff: (id: string) => req<{ patch: string; truncated: boolean }>(`/runs/${enc(id)}/diff`),
-  environment: <K extends EnvironmentKind>(id: string, path: string, kind: K, session = id) =>
+  environment: <K extends EnvironmentKind>(
+    id: string,
+    path: string,
+    kind: K,
+    session = id,
+    signal?: AbortSignal,
+  ) =>
     req<EnvironmentByKind[K]>(
       `/runs/${enc(id)}/environment?${new URLSearchParams({ path, kind, session })}`,
+      { signal },
     ),
   exportTrajectories: (input: TrajectoryExportInput) =>
     req<TrajectoryExportResult>("/trajectory/export", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  trajectory: (id: string) => req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory`),
+  trajectory: (id: string, signal?: AbortSignal) =>
+    req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory`, { signal }),
   rebuildTrajectory: (id: string, source?: AtifSource) =>
     req<AtifTrajectory | null>(`/runs/${enc(id)}/trajectory/rebuild`, {
       method: "POST",
       body: JSON.stringify({ source }),
     }),
-  session: (id: string) => req<RunSessions>(`/runs/${enc(id)}/session`),
+  session: (id: string, signal?: AbortSignal) =>
+    req<RunSessions>(`/runs/${enc(id)}/session`, { signal }),
   ledger: () => req<Ledger>("/ledger"),
   doctor: () => req<DoctorReport>("/doctor"),
   authProfiles: () => req<{ profiles: AuthProfile[] }>("/auth").then((r) => r.profiles),
@@ -218,11 +237,33 @@ export const api = {
     req<BenchCatalog>(
       `/bench/catalog${refresh.length ? `?refresh=${refresh.map(enc).join(",")}` : ""}`,
     ),
+  benchResources: () => req<PreparationCatalog>("/bench/resources"),
+  benchPrepare: (family: string, body: PreparationInput) =>
+    req<Run>(`/bench/resources/${enc(family)}/prepare`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  benchPreparation: (id: string) => req<PreparationStatus>(`/bench/preparations/${enc(id)}`),
   benchCalibrate: (body: CalibrationRequestInput) =>
     req<BenchJob>("/bench/calibrations", { method: "POST", body: JSON.stringify(body) }),
-  benchJob: (id: string) => req<BenchJobDetail>(`/bench/jobs/${enc(id)}`),
+  benchJob: (id: string, signal?: AbortSignal) =>
+    req<BenchJobDetail>(`/bench/jobs/${enc(id)}`, { signal }),
   benchReports: (id: string) =>
     req<{ reports: BenchReport[] }>(`/bench/jobs/${enc(id)}/reports`).then((r) => r.reports),
+  benchGatePlan: (body: GateSubmissionInput) =>
+    req<GatePlan>("/bench/gates/plan", { method: "POST", body: JSON.stringify(body) }),
+  benchGateBundleCheck: (body: GateBundleInput) =>
+    req<GateBundleCheck>("/bench/gates/check-bundle", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  benchGate: (body: GateSubmissionInput) =>
+    req<GateRecord>("/bench/gates", { method: "POST", body: JSON.stringify(body) }),
+  benchGates: (child?: string) =>
+    req<{ records: GateRecordSummary[] }>(
+      `/bench/gates${child ? `?child=${enc(child)}` : ""}`,
+    ).then((r) => r.records),
+  benchGateRecord: (id: string) => req<GateRecord>(`/bench/gates/${enc(id)}`),
   benchCancel: (id: string) => req<BenchJob>(`/bench/jobs/${enc(id)}/cancel`, { method: "POST" }),
   /** Pass the preview digest as `expect` when applying. */
   benchConsolidate: (id: string, body: BenchConsolidateInput) =>

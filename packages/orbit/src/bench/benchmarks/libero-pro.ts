@@ -6,7 +6,9 @@ export const liberoPro: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "LIBERO-PRO",
   description:
     "Evaluate manipulation across object, position, language, task and environment perturbations.",
-  taxonomyGroups: [group("Task and instruction robustness", native)],
+  taxonomyGroups: [
+    group("Task and instruction robustness", { ...native, targets: ["control", "robustness"] }),
+  ],
   integrations: [
     nativeRoute(
       "The initial release's twenty leaderboard conditions, with BDDL language and seeded native initial states.",

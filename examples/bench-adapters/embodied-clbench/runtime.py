@@ -1,14 +1,23 @@
 """Native environment transport, explicit reference calibration, and independent replay."""
-import hashlib
+from contextlib import suppress
 from functools import wraps
+import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
-import sys
+import signal
 import socket
 import socketserver
+import subprocess
+import sys
 import threading
+import time
+
+NATIVE_TOOL_TIMEOUT_S = 120
+FINALIZE_TIMEOUT_S = NATIVE_TOOL_TIMEOUT_S + 85
+
 
 def load_native():
     global dialogue, TongSimFrameworkRuntime, load_tongsim_task, native_mcp
@@ -92,31 +101,65 @@ def ensure_images(result):
             raise RuntimeError("Official visual observation is missing; text-only fallback is forbidden")
 
 
+def run_native_call(runtime_root, session_id, command, payload, timeout_sec):
+    deadline = time.monotonic() + timeout_sec
+    request = json.dumps([str(runtime_root), session_id, command, payload])
+    argv = [sys.executable, __file__, "tool"]
+    # The framework starts its own environment subprocess. Stop the entire group on timeout.
+    with subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True, start_new_session=True) as child:
+        try:
+            output, error = child.communicate(request, timeout=max(0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            with suppress(ProcessLookupError):
+                os.killpg(child.pid, signal.SIGKILL)
+            child.communicate()
+            raise TimeoutError(f"Native tool {command} timed out after {timeout_sec:g}s") from None
+        if child.returncode:
+            raise RuntimeError(f"Native tool {command} failed (exit {child.returncode}): {error.strip()[-4000:]}")
+        return json.loads(output)
+
+
+def native_tool():
+    from tongbench_eval.graph_env.runtime.framework_runtime import TongSimFrameworkRuntime
+
+    runtime_root, session_id, command, payload = json.load(sys.stdin)
+    runtime = TongSimFrameworkRuntime(Path(runtime_root))
+    if command == "act":
+        return runtime.act(session_id, payload)
+    if command == "observe":
+        return runtime.observe(session_id)
+    if command == "status":
+        return runtime.status(session_id)
+    raise ValueError(f"Unsupported native tool command: {command}")
+
+
 def dispatcher(runtime, sessions, evidence):
     lock = threading.Lock()
+    timed_out = False
 
-    def dispatch(step, command, payload=None, timeout_sec=120):
-        del timeout_sec
+    def dispatch(step, command, payload=None, timeout_sec=NATIVE_TOOL_TIMEOUT_S):
+        nonlocal timed_out
         with lock:
+            if timed_out:
+                raise RuntimeError("The environment is closed after a native tool timeout")
             try:
                 index = step["index"]
                 if type(index) is not int or index < 0 or index >= len(sessions):
                     raise ValueError("Invalid sequence index")
+                if not math.isfinite(timeout_sec) or timeout_sec <= 0:
+                    raise ValueError("Native tool timeout must be positive and finite")
                 session_id = sessions[index]["session_id"]
-                if command == "observe":
-                    result = runtime.observe(session_id)
-                elif command == "act":
-                    result = runtime.act(session_id, payload or {})
-                elif command == "status":
-                    result = runtime.status(session_id)
-                else:
-                    raise ValueError(f"Unsupported native tool command: {command}")
+                result = run_native_call(runtime.runtime_root, session_id, command, payload or {}, timeout_sec)
                 ensure_images(result)
                 with (evidence / "events.jsonl").open("a") as handle:
                     handle.write(json.dumps({"index": index, "command": command, "payload": payload or {}, "result": result}) + "\n")
                 return result
             except Exception as exc:
-                write(evidence / "environment_error.json", {"error": f"{type(exc).__name__}: {exc}"})
+                timed_out = isinstance(exc, TimeoutError)
+                write(evidence / "environment_error.json", {
+                    "error": f"{type(exc).__name__}: {exc}", "timed_out": timed_out,
+                })
                 raise
     return dispatch
 
@@ -149,6 +192,10 @@ def guarded_tool(function, gate, closing):
 def drain_and_export(evidence, gate, closing):
     closing.set()
     with gate:
+        error = evidence / "environment_error.json"
+        failure = read(error) if error.is_file() else {}
+        if failure.get("timed_out"):
+            raise RuntimeError(failure["error"])
         if not (evidence / "finalized.json").is_file():
             export(evidence)
 
@@ -189,7 +236,7 @@ def serve(plan):
 
 def finalize():
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.settimeout(85)
+        client.settimeout(FINALIZE_TIMEOUT_S)
         client.connect("/tmp/clbench-finalize.sock")
         client.sendall(b"finalize\n")
         response = b""
@@ -280,6 +327,9 @@ def verify(plan):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["tool"]:
+        json.dump(native_tool(), sys.stdout)
+        sys.exit(0)
     load_native()
     operation, plan_path = sys.argv[1:]
     plan = read(plan_path)

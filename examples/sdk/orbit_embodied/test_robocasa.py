@@ -131,7 +131,7 @@ class RoboCasaRegistrationTests(unittest.TestCase):
                         chunks = directory / "chunks"
                         (chunks / ("2." + suffix)).write_bytes((chunks / ("0." + suffix)).read_bytes())
                     save([{**row, "chunk": 2} for row in rows[:8]] + rows[8:], result)
-                    with self.assertRaisesRegex(ValueError, "fixed chunk schedule"):
+                    with self.assertRaisesRegex(ValueError, "invalid chunk sequence"):
                         verify_episode(directory, sample["sampleId"], episode_id, expected)
                 else:
                     save([{**rows[0], "nativeDone": True}, *rows[1:]], result)

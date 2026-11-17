@@ -6,7 +6,16 @@ export const robomimic: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "RoboMimic",
   description:
     "Evaluate policies on the five classic proficient-human manipulation tasks in robosuite.",
-  taxonomyGroups: [group("Demonstration-conditioned manipulation", native)],
+  taxonomyGroups: [
+    group("Low-dimensional PH manipulation", {
+      ...native,
+      modalities: ["structured-data"],
+    }),
+    group("RGB PH manipulation", {
+      ...native,
+      modalities: ["image", "structured-data"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "PH v1.5.1 environments with separate low-dimensional and RGB policy profiles.",

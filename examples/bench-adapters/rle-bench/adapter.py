@@ -69,26 +69,67 @@ def catalog(root):
     }
 
 
-def prepared_digest(root, family=None):
-    digest = hashlib.sha256()
-    for task in sorted((root / "tasks").rglob("task.toml")):
-        relative = task.relative_to(root / "tasks")
-        if not re.fullmatch(r"task0[1-9]", relative.parts[0]):
-            continue
-        if family is not None and relative.parts[0] != family:
+def prepared_files(root, family=None):
+    tasks = root / "tasks"
+    for task in sorted(tasks.rglob("task.toml")):
+        task_family = task.relative_to(tasks).parts[0]
+        if task_family not in COUNTS or (family is not None and task_family != family):
             continue
         for path in sorted(task.parent.rglob("*")):
             if "__pycache__" in path.parts or path.suffix == ".pyc":
                 continue
-            if path.is_symlink():
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode):
                 raise ValueError(f"prepared task contains a symlink: {path}")
-            if path.is_file():
-                digest.update(path.relative_to(root).as_posix().encode() + b"\0")
-                with path.open("rb") as source:
-                    while chunk := source.read(1024 * 1024):
-                        digest.update(chunk)
-                digest.update(b"\0")
+            if stat.S_ISREG(info.st_mode):
+                yield (task_family, path.relative_to(root).as_posix(), info)
+
+
+def prepared_snapshot(files):
+    # ctime detects same-size writes even when mtime was restored. Inode/device detect replacement.
+    digest = hashlib.sha256()
+    for family, relative, info in files:
+        row = [family, relative, info.st_dev, info.st_ino, info.st_mode,
+               info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+        digest.update(json.dumps(row).encode() + b"\n")
     return digest.hexdigest()
+
+
+def prepared_hashes(root, files):
+    digest = hashlib.sha256()
+    families = {}
+    for family, relative, _ in files:
+        if family not in families:
+            families[family] = hashlib.sha256()
+        family_digest = families[family]
+        key = relative.encode() + b"\0"
+        digest.update(key)
+        family_digest.update(key)
+        with (root / relative).open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+                family_digest.update(chunk)
+        digest.update(b"\0")
+        family_digest.update(b"\0")
+    return digest.hexdigest(), {family: sha.hexdigest() for family, sha in families.items()}
+
+
+def prepared_digest(root, family=None):
+    return prepared_hashes(root, prepared_files(root, family))[0]
+
+
+def prepared_cache_key(snapshot, digest, families):
+    return hashlib.sha256(json.dumps([snapshot, digest, families], sort_keys=True).encode()).hexdigest()
+
+
+def preparation_lock(root):
+    files = list(prepared_files(root))
+    snapshot = prepared_snapshot(files)
+    digest, families = prepared_hashes(root, files)
+    if snapshot != prepared_snapshot(prepared_files(root)):
+        raise ValueError("prepared RLE task files changed during hashing; retry preparation")
+    return {"revision": REVISION, "digest": digest, "families": families,
+            "cacheKey": prepared_cache_key(snapshot, digest, families)}
 
 
 def check_prepared(root):
@@ -96,8 +137,21 @@ def check_prepared(root):
     if not path.is_file():
         raise ValueError("missing preparation digest; run prepare.py CHECKOUT --catalog")
     lock = json.loads(path.read_text())
-    if lock.get("revision") != REVISION or lock.get("digest") != prepared_digest(root):
-        raise ValueError("prepared RLE task files changed; regenerate and rebuild with prepare.py")
+    message = "prepared RLE task files changed; regenerate and rebuild with prepare.py"
+    if lock.get("revision") != REVISION:
+        raise ValueError(message)
+
+    files = list(prepared_files(root))
+    snapshot = prepared_snapshot(files)
+    families = lock.get("families")
+    if (isinstance(families, dict) and set(families) == {family for family, _, _ in files}
+            and lock.get("cacheKey") == prepared_cache_key(snapshot, lock.get("digest"), families)):
+        return families
+
+    digest, families = prepared_hashes(root, files)
+    if lock.get("digest") != digest or snapshot != prepared_snapshot(prepared_files(root)):
+        raise ValueError(message)
+    return families
 
 
 def delegate(req):
@@ -113,7 +167,7 @@ def delegate(req):
     if req["op"] != "score":
         root = checked_root(req)
         mapping = catalog(root)
-        check_prepared(root)
+        family_digests = check_prepared(root)
         if "trial" in forwarded and forwarded["trial"]:
             task = forwarded["trial"]["task"]
             if task not in mapping:
@@ -125,7 +179,10 @@ def delegate(req):
     )
     if result.returncode:
         raise ValueError(f"Orbit Harbor planning failed: {result.stderr.strip()[:2000]}")
-    return json.loads(result.stdout)
+    reply = json.loads(result.stdout)
+    if req["op"] in ("solve", "verify"):
+        pin_images(req, reply["spec"], family_digests)
+    return reply
 
 
 def tasks(req):
@@ -160,14 +217,13 @@ def tasks(req):
     return reply
 
 
-def pin_images(req, spec):
+def pin_images(req, spec, family_digests):
     cfg = req["benchmark"].get("config", {})
     path = Path(cfg.get("imageMap") or Path(req["benchmark"]["path"]) / "orbit-images.json")
     lock = json.loads(path.read_text())
     if lock.get("revision") != REVISION:
         raise ValueError("image map must belong to the pinned RLE-Bench revision")
     images = lock["images"]
-    family_digests = {}
 
     def visit(value):
         if isinstance(value, dict):
@@ -179,9 +235,7 @@ def pin_images(req, spec):
                     expected = lock.get("inputs", {}).get(original)
                     if not expected:
                         raise ValueError(f"image map lacks build input digest for {original}")
-                    if family not in family_digests:
-                        family_digests[family] = prepared_digest(Path(req["benchmark"]["path"]), family)
-                    if expected != family_digests[family]:
+                    if expected != family_digests.get(family):
                         raise ValueError(f"image build inputs changed for {original}; rebuild it")
                 resolved = images.get(original, original)
                 if not pinned(resolved):
@@ -201,7 +255,6 @@ def solve(req):
     if req["trial"]["task"] in UNSUPPORTED:
         raise ValueError(UNSUPPORTED[req["trial"]["task"]])
     reply = delegate(req)
-    pin_images(req, reply["spec"])
     reply["spec"].setdefault("env", {})["PYTHONDONTWRITEBYTECODE"] = "1"
     if req["trial"]["method"]["agent"] not in ("empty", "oracle"):
         reply.setdefault("issues", []).append(NETWORK_NOTE)
@@ -212,7 +265,6 @@ def verify(req):
     if req["trial"]["task"] in UNSUPPORTED:
         raise ValueError(UNSUPPORTED[req["trial"]["task"]])
     reply = delegate(req)
-    pin_images(req, reply["spec"])
     reply["spec"].setdefault("env", {})["PYTHONDONTWRITEBYTECODE"] = "1"
     return reply
 

@@ -7,10 +7,44 @@ export const frontiersweV2: Omit<SupportedBenchmark, "registrationNames"> = {
   description:
     "Solve frontier software and scientific programming tasks in their original Harbor environments.",
   taxonomyGroups: [
-    group("Original coding-agent tasks", {
+    group("Software implementation: flash filesystem", {
       ...workspace,
-      domains: ["software", "science", "machine-learning"],
-      taskTypes: ["implementation", "optimization"],
+      domains: ["software"],
+      taskTypes: ["implementation"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+      scoringMethods: ["execution-test"],
+    }),
+    group("Software optimization: Cranelift", {
+      ...workspace,
+      domains: ["software"],
+      taskTypes: ["optimization"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+      scoringMethods: ["execution-test"],
+    }),
+    group("Scientific model development: interatomic potential", {
+      ...workspace,
+      domains: ["science", "machine-learning"],
+      taskTypes: ["implementation"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+      scoringMethods: ["execution-test"],
+    }),
+    group("Model post-training: multi-GPU finetuning", {
+      ...workspace,
+      domains: ["machine-learning"],
+      taskTypes: ["training", "optimization"],
+      world: ["controlled"],
+      participants: [],
+      scoringEvidence: ["artifact"],
+      scoringMethods: ["execution-test"],
+    }),
+    group("Other original tasks: subject classification pending", {
+      ...workspace,
       scoringEvidence: ["artifact"],
       scoringMethods: ["execution-test"],
     }),

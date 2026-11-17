@@ -81,7 +81,12 @@ export const AdapterRunSpec = z
   .looseObject({
     command: z.array(z.string()).min(1).optional(),
     agentTask: z
-      .object({ instruction: z.string().min(1), tools: AgentTools.optional() })
+      .object({
+        instruction: z.string().min(1),
+        tools: AgentTools.optional(),
+        /** Prefix for the resolved Agent CLI argv, executed after any harness installation. */
+        wrapper: z.array(z.string()).min(1).optional(),
+      })
       .optional(),
   })
   .refine((s) => !ORBIT_OWNED_SPEC_FIELDS.some((k) => k in s), {

@@ -24,6 +24,9 @@ from the current recipe.
 | LIBERO-Plus | [Perturbation suites and OFT](benchmarks/libero-plus/README.md) |
 | LIBERO-PRO | [Original leaderboard perturbations](benchmarks/libero-pro/README.md) |
 | LIBERO-Mem | [Ordered subgoals and π₀.₅](benchmarks/libero-mem/README.md) |
+| EB-Navigation | [All five navigation subsets](benchmarks/eb-navigation/README.md) · [SeeNav-Agent and Qwen2.5-VL](policies/seenav/README.md) |
+| CHORES-S / CHORES-L | [Native Stretch suites](benchmarks/chores/README.md) · [SPOC and FLaRe](policies/chores/README.md) |
+| HSSD-OV | [Native Habitat protocol](benchmarks/hssd-ov/README.md) · [LightNav-0](policies/lightnav-0/README.md) |
 | VLABench | [Native tracks and OpenWAM](benchmarks/vlabench/README.md) |
 | SimplerEnv | [Native catalogs and scene grids](benchmarks/simpler-env/README.md) · [GR00T N1.7](policies/groot/README.md) · [StarVLA QwenGR00T](policies/starvla/README.md) |
 | RoboCasa v0.2 | [Atomic-24](benchmarks/robocasa-v02/README.md) |
@@ -31,6 +34,7 @@ from the current recipe.
 | RoboTwin 2.0 | [Clean, Randomized, π₀.₅ and X-VLA](benchmarks/robotwin/README.md) · [LingBot-VLA](policies/lingbot-vla/README.md) · [LingBot-VLA 2.0](policies/lingbot-vla-v2/README.md) · [Fast-VLA](policies/fast-vla/README.md) · [LingBot-VA](policies/lingbot-va/README.md) |
 | ManiSkill3 and Meta-World | [Tabletop, Plate-25 and MT50](benchmarks/tabletop/README.md) |
 | RLBench | [MT100 and RVT-18](benchmarks/rlbench/README.md) |
+| BEHAVIOR-1K | [2026 R1Pro public test and licensed assets](benchmarks/behavior-1k/README.md) |
 | CALVIN | [ABC→D](benchmarks/calvin/README.md) |
 | RoboDojo and RoboLab | [RoboDojo](benchmarks/robodojo/README.md) · [RoboLab](benchmarks/robolab/README.md) |
 | RoboMimic | [PH low-dimensional and RGB profiles](benchmarks/robomimic/README.md) |

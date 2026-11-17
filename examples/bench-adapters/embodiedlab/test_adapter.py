@@ -55,8 +55,10 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         self.assertEqual(spec['resources']['gpus'], 0)
         self.assertEqual(spec['services'][0]['gpus'], 1)
         self.assertEqual(spec['services'][0]['role'], 'sim')
-        self.assertEqual(spec['timeoutMin'], 130)
-        self.assertNotIn('mounts', spec)
+        self.assertNotIn('timeoutMin', spec)
+        self.assertEqual(spec['agentTask']['wrapper'], ['python', '/orbit-lab-start.py'])
+        self.assertEqual(spec['mounts'], [{'source': str(self.root / 'staging/start.py'),
+                                          'target': '/orbit-lab-start.py', 'mode': 'ro'}])
         self.assertEqual(spec['volumeMounts'], [{'volume': 'workspace', 'target': '/task'}])
         binds = spec['services'][0]['binds']
         self.assertEqual({b['target'] for b in binds}, {'/adapter', '/upstream'})
@@ -69,7 +71,8 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         self.req['trial']['resources'] = {'cpus': 6, 'memGB': 12, 'gpus': 0, 'timeoutMin': 90}
         spec = adapter.solve(self.req)['spec']
         self.assertEqual(spec['resources'], {'cpus': 6, 'memGB': 12, 'gpus': 0})
-        self.assertEqual(spec['timeoutMin'], 130)
+        plan = json.loads((self.root / 'staging/plan.json').read_text())
+        self.assertEqual(plan['wall_s'], 7800)
         self.assertEqual(spec['services'][0]['gpus'], 1)
         self.req['trial']['resources']['gpus'] = 1
         with self.assertRaisesRegex(ValueError, 'simulator service'):
@@ -85,7 +88,7 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
             with self.subTest(timeout=timeout):
                 self.req['trial']['timeoutMin'] = timeout
                 reply = adapter.solve(self.req)
-                self.assertEqual(reply['spec']['timeoutMin'], 130)
+                self.assertNotIn('timeoutMin', reply['spec'])
                 self.assertEqual(reply['issues'], [])
                 plan = json.loads((self.root / 'staging/plan.json').read_text())
                 self.assertEqual(plan['wall_s'], plan['official_wall_s'])
@@ -94,11 +97,11 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         self.req['benchmark']['config']['wallSeconds'] = '120'
         self.assertNotIn('official', adapter.tasks(self.req))
         reply = adapter.solve(self.req)
-        self.assertEqual(reply['spec']['timeoutMin'], 2)
+        self.assertEqual(json.loads((self.root / 'staging/plan.json').read_text())['wall_s'], 120)
         self.assertIn('Bounded smoke', reply['issues'][0])
         self.req['trial']['timeoutMin'] = 1
         reply = adapter.solve(self.req)
-        self.assertEqual(reply['spec']['timeoutMin'], 1)
+        self.assertEqual(json.loads((self.root / 'staging/plan.json').read_text())['wall_s'], 60)
         self.assertIn('60s replaces native', reply['issues'][0])
         self.assertNotIn('official', adapter.tasks(self.req))
         self.req['benchmark']['config']['wallSeconds'] = '9000'
@@ -142,7 +145,44 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         self.assertFalse(reply['invalid'])
         self.assertEqual(reply['score'], 0)
         self.assertEqual(reply['metrics']['processScore'], 40)
+        self.assertNotIn('Native stop reason', reply['review']['details'])
 
+    def test_wall_limit_is_reported_alongside_a_valid_submission(self):
+        out = self.root / 'verified'
+        out.mkdir()
+        self.req['verify'] = {'output': str(out)}
+        plan = {k: self.req['trial'][k] for k in ('task', 'seed', 'method')}
+        plan.update(wall_s=7800, official_wall_s=7800)
+        (out / 'result.json').write_text(json.dumps({'valid': True, 'task_completed': True,
+            'reward': 1, 'process_score': .8, 'plan': plan, 'status': 'submitted', 'close_reason': 'wall_limit'}))
+        reply = adapter.score(self.req)
+        self.assertFalse(reply['invalid'])
+        self.assertEqual(reply['score'], 1)
+        self.assertEqual(reply['review']['details']['Native stop reason'], 'Wall-clock budget exhausted')
+
+    def test_empty_uses_same_start_handshake(self):
+        self.req['trial']['method']['agent'] = 'empty'
+        spec = adapter.solve(self.req)['spec']
+        self.assertEqual(spec['command'], ['python', '/orbit-lab-start.py', 'true'])
+
+    def test_wall_clock_starts_once_at_launch(self):
+        lab = service.Lab(None, {'wall_s': 60}, {'tools': [{'name': 'wait'}]})
+        timer = types.SimpleNamespace(start=lambda: None, cancel=lambda: None)
+        with patch.object(service.threading, 'Timer', return_value=timer) as timer_factory:
+            with patch.object(service.time, 'monotonic', return_value=100):
+                self.assertIsNone(lab.deadline)
+                with self.assertRaisesRegex(RuntimeError, 'has not started'):
+                    lab.call('wait', {})
+            with patch.object(service.time, 'monotonic', return_value=200):
+                self.assertEqual(lab.start(), {'remaining_s': 60})
+            with patch.object(service.time, 'monotonic', return_value=220):
+                self.assertEqual(lab.start(), {'remaining_s': 40})
+            with patch.object(service.time, 'monotonic', return_value=260):
+                self.assertEqual(lab.start(), {'remaining_s': 0})
+                with self.assertRaisesRegex(RuntimeError, 'closed'):
+                    lab.call('wait', {})
+        self.assertEqual(lab.deadline, 260)
+        timer_factory.assert_called_once_with(60, lab.finalize)
 
     def test_long_native_call_returns_operation_without_holding_poll_lock(self):
         started, release = threading.Event(), threading.Event()
@@ -156,6 +196,7 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         fake_envd._json_value = lambda value: value
         fake_sdk = types.ModuleType('embodiedlab_sdk')
         lab = service.Lab(ExplicitWorkerDouble(), {'wall_s': 60}, {'tools': [{'name': 'wait'}]})
+        lab.start()
         try:
             with patch.dict(sys.modules, {'embodiedlab_sdk': fake_sdk, 'embodiedlab_sdk.envd': fake_envd}), patch.object(service, 'ROOT', self.root):
                 response = lab.call('wait', {'seconds': 1})
@@ -173,7 +214,7 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         finally:
             release.set()
             lab.executor.shutdown(wait=True)
-
+            lab.timer.cancel()
 
     def test_renderer_failure_is_not_overridden_by_native_ready_marker(self):
         private = self.root / 'native-worker'
@@ -244,6 +285,7 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
                 closed.set()
         worker = ExplicitWorkerDouble()
         lab = service.Lab(worker, {'wall_s': 60}, {'tools': [{'name': 'wait'}]})
+        lab.start()
         fake_envd = types.ModuleType('embodiedlab_sdk.envd')
         fake_envd._json_value = lambda value: value
         fake_sdk = types.ModuleType('embodiedlab_sdk')
@@ -287,6 +329,7 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
                 self.assertTrue(lab.finalized)
                 with patch.dict(os.environ, {adapter.PUBLIC_KEY: public}):
                     result = verify.validate_seal(evidence)
+                self.assertEqual(result['close_reason'], 'agent_stop')
                 self.assertEqual(set(result['sha256']), {'public-calls.jsonl', 'native/result.json'})
                 nested.write_text('{"value": 2}')
                 with patch.dict(os.environ, {adapter.PUBLIC_KEY: public}):
@@ -295,6 +338,7 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         finally:
             release.set()
             lab.executor.shutdown(wait=True)
+            lab.timer.cancel()
 
 
 if __name__ == '__main__':

@@ -13,6 +13,7 @@ import { api, type MethodLine, type MethodRevisionEntry } from "../lib/api.ts";
 import { ago, dateTime, jobPath, trialPath } from "../lib/format.ts";
 import { setQuery, useLocation } from "../lib/router.ts";
 import { useAsync } from "../lib/use.ts";
+import { VersionGates } from "./Gates.tsx";
 import "./hub.css";
 
 const SCORE = primaryMetric(resolveMetrics([]));
@@ -80,6 +81,9 @@ export function ConfigurationsPage() {
   return (
     <>
       <TopBar crumbs={[{ label: "Evaluation configurations" }]}>
+        <Link className="btn sm" href="/configurations/gates">
+          Gate records
+        </Link>
         <Link className="btn primary sm" href="/bench/new">
           New evaluation
         </Link>
@@ -195,6 +199,7 @@ function LineView({ line }: { line: MethodLine }) {
   const metrics = series[0]?.x.metrics ?? [SCORE];
   return (
     <div className="col" style={{ gap: 12, minWidth: 0 }}>
+      <VersionGates key={line.name} line={line} />
       <section className="card">
         <div className="card-h">
           <IconLayers size={14} /> {line.name}

@@ -26,19 +26,28 @@ The full vocabulary and matching rules live in [design §9.17](design.md#917-ben
 A task or profile can have multiple values. Counts are discovery metadata, not evidence of calibration
 or model capability; product families, local registrations and evaluated tasks remain separate counts.
 
+The catalog includes 62 families, combining the [source-backed taxonomy audit](tasks/20261116-benchmark-taxonomy-evidence.md)
+with native navigation, BEHAVIOR-1K and RobotAgentBench integrations.
+BiGym 2.0, CLIPort and LIBERO-Mem already had native adapters and sample checks; this audit adds their
+missing product entries. Classification describes only the implemented route. Unknown values stay
+unknown; separate input layouts and evaluation tracks keep separate profiles so joint filters cannot
+combine unrelated conditions. Review videos are not policy video inputs, fixed histories are not live
+users, and sampled calibration does not establish full-suite equivalence.
+
 | Area | Benchmark families | Setup and scope |
 | --- | --- | --- |
 | Code generation and terminal work | HumanEval; SWE-bench; Terminal-Bench 4.0; FrontierSWE v2 | [SWE-bench adapter](../examples/bench-adapters/swebench/) · [HumanEval adapter](../examples/bench-adapters/humaneval/) · [Harbor support](tasks/20261010-harbor-verifier-modes.md) |
 | Research and model development | ASI-Bench; LongDS-Bench; ResearchClawBench; PostTrainBench; Terminal-Bench Science; WANDR | [ASI conditions](tasks/20261009-asi-runner-timeouts.md) · [LongDS adapter](../examples/bench-adapters/longds/) · [ResearchClawBench adapter](../examples/bench-adapters/researchclawbench/) · [Adapter protocol](tasks/20261003-bench-adapter-protocol.md) |
 | Tools, user interaction and games | BFCL; τ²-bench; TextArena; AutomationBench | [BFCL](tasks/20261105-sample-bfcl-multiturn.md) · [τ²-bench](tasks/20261105-sample-tau2.md) · [Game integration](tasks/20261105-samples-c1-c7.md) |
 | Browser, desktop and mobile tasks | MiniWoB++; WebVoyager; Online-Mind2Web; Cua Bench; MobileWorld; OSWorld-V2 | [GUI guide](guides/gui-bench-web.md) · [CUA-Lite](../examples/bench-adapters/cua-lite/) · [Cua Bench](../examples/bench-adapters/cua-bench/) · [MobileWorld](../examples/bench-adapters/mobileworld/) · [OSWorld-V2](../examples/bench-adapters/osworld-v2/) |
+| Scientific reasoning | Humanity's Last Exam | [Restricted with-tools adapter](../examples/bench-adapters/hle/) · original public split; HLE-Diamond and official-harness parity excluded |
 | Visual reasoning | Chartography | [Native no-tools adapter](../examples/bench-adapters/chartography/) · released data calibration pending |
 | Legal reasoning | LegalBench; LawBench | [LegalBench](../examples/bench-adapters/legalbench/) · [LawBench](../examples/bench-adapters/lawbench/) · complete native task sets; human grading and ChERRANT exclusions apply |
 | Healthcare and financial QA | HealthBench; FinanceBench | [HealthBench](../examples/bench-adapters/healthbench/) · [FinanceBench](../examples/bench-adapters/financebench/) · private native rubrics or answer-bound human review |
 | Conversational memory and tool utility | LongMemEval; AgentDojo; AppWorld | [LongMemEval](../examples/bench-adapters/longmemeval/) · [AgentDojo](../examples/bench-adapters/agentdojo/) · [AppWorld](../examples/bench-adapters/appworld/) · declared retrieval condition, clean utility and stateful API tasks only |
 | Formal mathematics | miniF2F | [Original Lean 3 adapter](../examples/bench-adapters/minif2f/) · fixed theorem statements and independent kernel checking |
 | Audio understanding | MMAU | [Audio test-mini adapter](../examples/bench-adapters/mmau/) · original WAVs and string matcher; external audio-capable method required |
-| Embodied coding-agent tasks | Embodied First Exam; RLE-Bench; EmbodiedCLBench; EmbodiedLab | [Harness adapters](tasks/20261110-embodied-harness-benchmarks.md) · [EFE integration](tasks/20261104-p3-browsergym-efe.md) · [Execution boundaries](design.md#94-被评测对象agent-与-policy) |
+| Embodied coding-agent tasks | Embodied First Exam; RLE-Bench; EmbodiedCLBench; EmbodiedLab; RobotAgentBench | [RobotAgentBench](../examples/bench-adapters/robotagentbench/) · [Harness adapters](tasks/20261110-embodied-harness-benchmarks.md) · [EFE integration](tasks/20261104-p3-browsergym-efe.md) · [Execution boundaries](design.md#94-被评测对象agent-与-policy) |
 | Native embodied policies | [Families and task coverage](guides/embodied-compatibility.md#benchmark-接入范围) | [Quickstart](guides/embodied-quickstart.md) · [Verified policies](guides/embodied-compatibility.md#真实模型实测) · [Onboarding](guides/embodied-onboarding.md) |
 
 The area column is a reading aid. The six-dimensional filters use the source catalog's explicit

@@ -7,6 +7,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Core platform: daemon, runs, resources, state
 
+- [20261117](20261117-benchmark-resource-preparation.md) Unified official-source benchmark resource preparation
+
 - [20260929](20260929-ts-rewrite-r0.md) R0: TypeScript rewrite skeleton (Orbit)
 - [20260930](20260930-r1-research-loop.md) R1: single-node research loop
 - [20260930](20260930-r4-multinode.md) R4: multi-node placement
@@ -27,6 +29,10 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261106](20261106-gpu-sharing.md) Joint GPU admission and shared GPU memory budgets
 
 ## Agents, auth, plugins, notifications
+
+- [20261116](20261116-web-trajectory-gates.md) T6/E5: unified trajectory and evolution verdict review
+
+- [20261115](20261115-bench-gate.md) E3/E6: gate CLI/API, immutable evidence and development calibration
 
 - [20261114](20261114-gate-core.md) E2: immutable-evidence evolution verdict and calibrated statistics
 
@@ -51,6 +57,14 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261106](20261106-codex-startup-validity.md) Codex 启动配置失败的评测有效性
 
 ## Bench core: protocol, validity, metrics, reports
+
+- [20261117](20261117-remaining-benchmarks-main-merge.md) Reconcile expanded benchmark catalog with main and resource preparation
+
+- [20261116](20261116-gate-workflow.md) E4: read-only evaluation plans and bundle preflight
+
+- [20261116](20261116-local-branch-integration.md) Integrate local feature branches and reconcile catalog/adapter changes
+
+- [20261116](20261116-benchmark-taxonomy-evidence.md) Audit benchmark classification against implemented protocols and restore missing catalog families
 
 - [20260930](20260930-r3-bench.md) R3: benchmarks on the Run / lease model
 - [20261003](20261003-bench-adapter-protocol.md) Bench adapter protocol and ResearchClawBench
@@ -91,6 +105,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261105](20261105-sample-tau2.md) Direct τ²-bench user-session sample
 - [20261105](20261105-samples-c1-c7.md) C1 / C7 样板：HumanEval（固定输入）与 TextArena（游戏）
 - [20261110](20261110-benchmark-gaps.md) Native benchmark integrations and availability
+- [20261116](20261116-hle-with-tools.md) Public HLE with restricted web/code tools and native-prompt grading
 - [20261110](20261110-harbor-verifier-gpu-models.md) Preserve Harbor verifier GPU model requirements
 
 ## GUI benchmarks
@@ -104,6 +119,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261104](20261104-p6-mainline.md) P6 主线：CLI Agent 桥的通用化、MCP 接线与 EFE coding agent
 
 ## Embodied: policies and native benchmarks
+
+- [20261113](20261113-behavior-robotagent.md) BEHAVIOR-1K and RobotAgentBench: adapters implemented; native calibration deferred
 
 - [20261103](20261103-embodied-infra-research.md) 具身评测与调度基础设施源码调研
 - [20261104](20261104-p4-policy.md) P4：Policy 路线与按角色分配 GPU
@@ -156,6 +173,15 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261113](20261113-molmobot-v2.md) Native MolmoBot v2 evaluation
 - [20261113](20261113-lingbot-vla-v2.md) LingBot-VLA 2.0 on native RoboTwin
 - [20261114](20261114-libero-mem.md) Native LIBERO-Mem with ordered subgoals
+- [20261114](20261114-eb-navigation.md) Native EB-Navigation and matched SeeNav/Qwen policies
+- [20261114](20261114-eb-navigation-review.md) EB-Navigation policy input video and planner regression
+- [20261114](20261114-vln-chores-hssd.md) Native CHORES and HSSD-OV with SPOC, FLaRe and LightNav-0
+- [20261115](20261115-embodied-evidence-coverage.md) Native embodied verification and official score coverage
+- [20261115](20261115-embodied-shared-reference.md) Shared frozen reference in native embodied Solve evidence
+- [20261116](20261116-seenav-fallbacks.md) SeeNav fallback diagnostics in Trial evidence
+- [20261116](20261116-embodied-catalog-checkpoints.md) Embodied product catalog and CHORES checkpoint scope
+- [20261116](20261116-embodied-agent-adapter-maintenance.md) Cadence and preparation fixes for embodied Agent adapters
+- [20261116](20261116-agent-setup-deadline.md) Agent installation deadline and EmbodiedLab native stop reason
 - [20261114](20261114-xiaomi-robocasa365.md) Xiaomi-Robotics-1 on native RoboCasa365
 - [20261114](20261114-gigaworld-robocasa365.md) GigaWorld-Policy-0.1 on native RoboCasa365
 
@@ -171,6 +197,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261110](20261110-evaluation-configurations.md) Evaluation configurations in the Web UI
 - [20261112](20261112-trial-review-views.md) Trial review views and grouped evidence
 - [20261112](20261112-trial-evidence-shapes.md) Native episode timelines and TextArena game conversations
+- [20261117](20261117-conversation-performance.md) Long Conversation virtualization and cancellable reads
 
 ## Docs, presentation and integration merges
 

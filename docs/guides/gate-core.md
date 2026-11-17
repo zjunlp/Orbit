@@ -1,8 +1,8 @@
 # 进化判定核心（E2）
 
-E2 提供纯内存判定接口，供后续 E3 的 daemon、策略文件与 CLI 接入使用。当前可在仓库内调用
+E2 提供纯内存判定接口，E3 已通过 daemon、策略文件与 CLI 接入（[使用说明](bench-gate.md)）。可在仓库内调用
 `bench/gate.ts` 的 `gate(parentRevision, childRevision, policy, evidence)`；统计函数通过已有
-`@zjunlp/orbit/metrics` 导出，Web 可复用。此包尚未提供 `orbit bench gate` 或判定记录 API。
+`@zjunlp/orbit/metrics` 导出，Web 可复用。核心自身不读写状态；命令与判定记录由 E3 提供。
 
 ## 输入与证据
 
@@ -16,7 +16,7 @@ E2 提供纯内存判定接口，供后续 E3 的 daemon、策略文件与 CLI �
 `max_invalid_increase`（默认 0.05）。最后一项是子版本不可用样本率相对父版本允许增加的绝对比例，
 包括 invalid、unknown、pending 和有效性虽有效但未记录指标的样本；超限属于前提不足。
 没有指标范围且未指定 pass_value 时，不生成通过/失败任务名单。
-`alpha` 支持 1e-12 至 0.25，配对任务数至少为 2；文件读取和 YAML 解析属于 E3。
+`alpha` 支持 1e-12 至 0.25，配对任务数至少为 2；文件读取和 YAML 解析由 E3 提供。
 
 `GateEvidence` 由调用方提供，包含：
 
@@ -82,7 +82,7 @@ p 值作为对照；多 seed 均值不是二值时不伪造二值检验。McNema
 数值与独立 SciPy 参考交叉核验；固定种子的合成二值配对模拟检查零差异的接受率、300 个任务下的提升
 检出率，以及 12 个独立轮次的累计接受率。它们是开发验证，不是实际 benchmark 上进化有效的证据。
 配对 t 推断有分布/近似假设；alpha 消耗也要求每轮检验有效。独立合成轮次的结果不证明任意自适应反复
-使用固定准入集都能控制错误率。真实 A/A、破坏性与泄漏校准属于 E6。
+使用固定准入集都能控制错误率。E6 已补充有界开发任务上的真实 Codex A/A 与破坏性校准，以及过期条件/泄漏的受控 API 测试；不代表真实 benchmark 全量校准。
 
 统计依据：[NIST 配对观测](https://itl.nist.gov/div898/handbook/prc/section3/prc311.htm)、
 [statsmodels 精确 McNemar](https://www.statsmodels.org/stable/generated/statsmodels.stats.contingency_tables.mcnemar.html)、

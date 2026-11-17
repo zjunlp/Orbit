@@ -12,6 +12,8 @@ import {
 } from "../src/lib/conversation.ts";
 import { failedTrial, neighbours } from "../src/pages/Trial.tsx";
 import { ConversationViewer } from "../src/pages/trial/Conversation.tsx";
+import { conversationRows, indexConversation } from "../src/pages/trial/conversation-model.ts";
+import { longConversation } from "./fixtures/conversation.ts";
 
 vi.mock("../src/lib/router.ts", () => ({
   useLocation: () => ({ query: new URLSearchParams() }),
@@ -167,4 +169,53 @@ it("shows only the selected turn's ATIF steps alongside the verifier conversatio
   expect(html).toContain("Agent at this turn");
   expect(html).toContain("Bound conversation call");
   expect(html).not.toContain("Unrelated session step");
+});
+
+for (const sample of ["many-turns", "single-turn"] as const) {
+  it(`bounds the initial rendered events for the synthetic ${sample} fixture`, () => {
+    const c = longConversation(sample);
+    expect(ConversationTrajectory.safeParse(c).success).toBe(true);
+    expect(c.turns).toHaveLength(sample === "many-turns" ? 1000 : 1);
+    expect(c.turns.reduce((count, turn) => count + turn.events.length, 0)).toBe(
+      sample === "many-turns" ? 10000 : 5000,
+    );
+    const html = renderToStaticMarkup(<ConversationViewer c={c} />);
+    const mounted = (html.match(/data-event-key=/g) ?? []).length;
+    expect(mounted).toBeGreaterThan(0);
+    expect(mounted).toBeLessThan(50);
+    expect((html.match(/class="conv-turn-link/g) ?? []).length).toBeLessThan(30);
+  });
+}
+
+it("indexes collapsed results, arguments, errors and message text with stable event keys", () => {
+  const c = longConversation("many-turns");
+  const indexed = indexConversation(c);
+  const result = conversationRows(indexed, "RESULT-MARKER-9999");
+  expect(result.hits).toBe(1);
+  expect(result.rows[result.firstMatch ?? -1]).toMatchObject({
+    key: "999:event:9",
+    kind: "event",
+    event: { id: "call-9999" },
+  });
+  expect(conversationRows(indexed, "needle-tool-9999").hits).toBe(1);
+  expect(conversationRows(indexed, "needle-event-9998").hits).toBe(1);
+  expect(conversationRows(indexed, "no-such-event").firstMatch).toBeUndefined();
+  expect(conversationRows(indexed, "").rows.find((row) => row.key === "999:event:9")?.key).toBe(
+    result.rows[result.firstMatch ?? -1]?.key,
+  );
+  const aligned = conversationRows(indexed, "", 850);
+  expect(aligned.hits).toBe(10);
+  expect(aligned.rows.every((row) => row.turn.index === 850)).toBe(true);
+});
+
+it("keeps empty turns and non-contiguous turn indexes addressable", () => {
+  const c = parseConversation(JSON.stringify(conv));
+  c.turns = [
+    { index: 9, events: [] },
+    { index: 42, events: c.turns[0]?.events ?? [] },
+  ];
+  const rows = conversationRows(indexConversation(c), "");
+  expect(rows.starts.get(9)).toBe(0);
+  expect(rows.rows[1]).toMatchObject({ kind: "empty", last: true });
+  expect(rows.starts.get(42)).toBe(2);
 });

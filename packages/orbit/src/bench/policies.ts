@@ -1,7 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import { PolicyDefinition, type PolicyDefinitionInput, PolicyList } from "../contracts/index.ts";
 import { writePrivateJson } from "../lib/private-json.ts";
 import { UserError } from "../runs/errors.ts";
+
+const LIGHTNAV_HSSD_ACTION = {
+  semantic: "discrete_navigation_action_id",
+  shape: [1],
+  order: ["action_id"],
+  controller: "habitat-stretch-25cm-30deg-stop/1",
+  frame: "agent",
+  unit: "index",
+  rotation: "30-deg-yaw",
+  gripper: "none",
+} satisfies PolicyDefinition["profile"]["action"];
 
 /** What each model connector needs declared explicitly; a new connector adds one entry. */
 const CONNECTOR_RULES: Record<PolicyDefinition["connector"], (d: PolicyDefinition) => string[]> = {
@@ -40,6 +52,17 @@ export function connectorIssues(definition: PolicyDefinition): string[] {
   const issues = CONNECTOR_RULES[definition.connector](definition);
   if (definition.normalizationKey && definition.connector !== "openvla-ws")
     issues.push("normalizationKey is supported by the OpenVLA connector");
+  if (definition.actionConversion === "lightnav-hssd-velocity/1") {
+    if (definition.connector !== "policy-ws")
+      issues.push("actionConversion requires the policy-ws connector");
+    if (
+      definition.replanSteps !== 1 ||
+      !isDeepStrictEqual(definition.profile.action, LIGHTNAV_HSSD_ACTION)
+    )
+      issues.push(
+        "LightNav action conversion requires replanSteps=1 and the HSSD-OV discrete action profile",
+      );
+  }
   if (definition.ioAdapter === "robotwin-native" && definition.connector !== "openpi-ws")
     issues.push("The native RoboTwin recipe requires the OpenPI connector");
   return issues;

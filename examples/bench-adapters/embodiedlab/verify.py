@@ -36,6 +36,9 @@ def verify(root, output):
     from benchmark.evaluation.process import score_trial
     from scripts.trial import infrastructure_end, STATUS_BY_END_REASON
     seal = validate_seal(root)
+    close_reason = seal['close_reason']
+    if close_reason == 'not_started':
+        raise ValueError('The Agent command never started the native trial')
     trial = output / 'native-trial'
     shutil.copytree(root, trial, dirs_exist_ok=True)
     plan = seal['plan']
@@ -68,8 +71,8 @@ def verify(root, output):
     process_score = score_trial(trial)
     (output / 'process_score.json').write_text(json.dumps(process_score, indent=2))
     status = ('submitted' if report else STATUS_BY_END_REASON.get(end.get('end_reason'),
-              'timeout' if seal['close_reason'] == 'wall_limit' else 'not_submitted'))
-    return {'valid': True, 'plan': plan, 'status': status,
+              'timeout' if close_reason == 'wall_limit' else 'not_submitted'))
+    return {'valid': True, 'plan': plan, 'status': status, 'close_reason': close_reason,
             'task_completed': bool(report and report['task_completed']),
             'reward': report['reward'] if report else 0,
             'process_score': process_score['process_score'], 'process_level': process_score['level']}

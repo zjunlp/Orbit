@@ -18,6 +18,13 @@ Use `orbit` when it is on PATH. Otherwise replace `orbit` in the commands below 
 `npx -y @zjunlp/orbit` (requires Node.js 24.18+ in the 24.x line); no source checkout is needed
 to use the CLI. Run `doctor` before the first benchmark job.
 
+For an already supported benchmark, start with `orbit bench resources <family>` and
+`orbit bench prepare <family>`. This downloads official resources, reuses local paths with
+`--reuse RESOURCE=PATH`, and lists authorization or native environment prerequisites.
+Follow `orbit logs <run> -f`, then check `orbit bench preparation <run>` for registration
+and next steps. Preparation is distinct from calibration. The installed package carries
+these adapters and helpers; see the [resource guide](https://github.com/zjunlp/Orbit/blob/main/docs/guides/benchmark-resources.md).
+
 ## 1. Study the benchmark first
 
 Before writing anything, find out from the benchmark's own code and docs (and write it down for the

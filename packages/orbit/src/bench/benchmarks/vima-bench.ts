@@ -6,7 +6,12 @@ export const vimaBench: Omit<SupportedBenchmark, "registrationNames"> = {
   name: "VIMA-Bench",
   description:
     "Evaluate multimodal prompt following and generalization with native PyBullet manipulation primitives.",
-  taxonomyGroups: [group("Multimodal manipulation", native)],
+  taxonomyGroups: [
+    group("Multimodal manipulation test partitions", {
+      ...native,
+      targets: ["control", "instruction-following", "generalization"],
+    }),
+  ],
   integrations: [
     nativeRoute(
       "Four official test partitions with multimodal prompt assets and independently served VIMA.",

@@ -5,21 +5,29 @@ import { agentdojo } from "./agentdojo.ts";
 import { appworld } from "./appworld.ts";
 import { asiBench } from "./asi-bench.ts";
 import { automationbench } from "./automationbench.ts";
+import { behavior1k } from "./behavior-1k.ts";
 import { bfcl } from "./bfcl.ts";
+import { bigym2 } from "./bigym2.ts";
 import { calvin } from "./calvin.ts";
 import { chartography } from "./chartography.ts";
+import { chores } from "./chores.ts";
+import { cliport } from "./cliport.ts";
 import { colosseumV2 } from "./colosseum-v2.ts";
 import { cuaBench } from "./cua-bench.ts";
+import { ebNavigation } from "./eb-navigation.ts";
 import { embodiedClbench } from "./embodied-clbench.ts";
 import { embodiedFirstExam } from "./embodied-first-exam.ts";
 import { embodiedlab } from "./embodiedlab.ts";
 import { financebench } from "./financebench.ts";
 import { frontiersweV2 } from "./frontierswe-v2.ts";
 import { healthbench } from "./healthbench.ts";
+import { hle } from "./hle.ts";
+import { hssdOv } from "./hssd-ov.ts";
 import { humaneval } from "./humaneval.ts";
 import { lawbench } from "./lawbench.ts";
 import { legalbench } from "./legalbench.ts";
 import { libero } from "./libero.ts";
+import { liberoMem } from "./libero-mem.ts";
 import { liberoPlus } from "./libero-plus.ts";
 import { liberoPro } from "./libero-pro.ts";
 import { longds } from "./longds.ts";
@@ -42,6 +50,7 @@ import { robocasa365 } from "./robocasa365.ts";
 import { robodojo } from "./robodojo.ts";
 import { robolab } from "./robolab.ts";
 import { robomimic } from "./robomimic.ts";
+import { robotagentbench } from "./robotagentbench.ts";
 import { robotwin } from "./robotwin.ts";
 import { simplerEnv } from "./simpler-env.ts";
 import { swebench } from "./swebench.ts";
@@ -61,9 +70,12 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   appworld,
   agentdojo,
   automationbench,
+  behavior1k,
+  robotagentbench,
   frontiersweV2,
   wandr,
   chartography,
+  hle,
   humaneval,
   financebench,
   healthbench,
@@ -91,6 +103,7 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   mobileworld,
   osworld,
   libero,
+  liberoMem,
   liberoPlus,
   vlabench,
   simplerEnv,
@@ -109,6 +122,11 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   liberoPro,
   robodojo,
   robolab,
+  bigym2,
+  cliport,
+  ebNavigation,
+  chores,
+  hssdOv,
 ];
 
 const SUPPORTED = definitions.map((entry) =>
@@ -116,7 +134,16 @@ const SUPPORTED = definitions.map((entry) =>
 );
 const knownIds = new Set(SUPPORTED.map((entry) => entry.id));
 const nativeProfiles: Record<string, string> = {
+  "behavior1k-r1pro-native/1": "behavior-1k",
   "libero-panda-raw/1": "libero",
+  "libero-mem-panda-raw/1": "libero-mem",
+  "bigym2-g1-pitch/1": "bigym2",
+  "bigym2-g1-no-pitch/1": "bigym2",
+  "cliport-native-pick-place-rgbd/1": "cliport",
+  "cliport-native-push-rgbd/1": "cliport",
+  "eb-navigation-projected/1": "eb-navigation",
+  "chores-stretch-rgb/1": "chores",
+  "hssd-ov-stretch-discrete/1": "hssd-ov",
   "libero-plus-panda-raw/1": "libero-plus",
   "molmospaces-franka-droid/1": "molmospaces",
   "colosseum-v2-single-arm/1": "colosseum-v2",

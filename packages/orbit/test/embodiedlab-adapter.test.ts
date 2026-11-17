@@ -46,6 +46,9 @@ finally:
   expect(spec.services[0]?.role).toBe("sim");
   expect(spec.services[0]?.gpus).toBe(1);
   expect(spec.resources.gpus).toBe(0);
-  expect(spec.mounts).toEqual([]);
+  expect(solve.spec.agentTask?.wrapper).toEqual(["python", "/orbit-lab-start.py"]);
+  expect(spec.mounts.map(({ mode, target }) => ({ mode, target }))).toEqual([
+    { mode: "ro", target: "/orbit-lab-start.py" },
+  ]);
   expect(spec.services[0]?.collect).toEqual(["/evidence"]);
 });

@@ -24,12 +24,20 @@ import {
   sampleLabel,
   trialRunIds,
 } from "../contracts/index.ts";
-import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "../contracts/metrics.ts";
+import {
+  fmtCi,
+  fmtMetric,
+  formatOfficialCoverage,
+  primaryMetric,
+  resolveMetrics,
+} from "../contracts/metrics.ts";
 import type { Print } from "./auth.ts";
 import { calibrate } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
 import { formatTokens, formatTokenUsage, compactTable as table } from "./format.ts";
+import { registerGate } from "./gate.ts";
 import { kv, numericOption } from "./options.ts";
+import { registerPreparation } from "./preparation.ts";
 import { readTaskFile } from "./task-file.ts";
 
 type Job = BenchJobList["jobs"][number];
@@ -160,7 +168,9 @@ function formatReport(r: BenchReport): string {
         String(m.invalid),
         String(m.unknown),
         v(m.orbit?.mean),
-        m.official ? `${v(m.official.value)}${m.official.partial ? " (partial)" : ""}` : "-",
+        m.official
+          ? `${v(m.official.value)} (${formatOfficialCoverage(m.official, m.planned)})`
+          : "-",
         formatTokenUsage(m.tokenUsage),
         Object.entries(m.failures)
           .map(([k, n]) => `${k}:${n}`)
@@ -191,6 +201,7 @@ function formatJob(d: BenchJobDetail): string {
   const metrics = resolveMetrics(job.metrics);
   const lines = [
     `${job.id}  ${job.state}  ${job.spec.benchmark}${job.spec.name ? `  (${job.spec.name})` : ""}`,
+    ...(job.policyWarnings ?? []).map((warning) => `Warning: ${warning}`),
     ...(job.source
       ? [
           `benchmark at ${job.source.describe ?? job.source.commit.slice(0, 12)}${job.source.dirty && !job.source.describe?.endsWith("-dirty") ? " (dirty)" : ""}`,
@@ -220,7 +231,7 @@ function formatJob(d: BenchJobDetail): string {
                 const o = s.official;
                 if (!o) return `${s.method} -`;
                 const m = metrics.find((x) => x.name === o.metric);
-                return `${s.method} ${o.value === null ? "-" : m ? fmtMetric(o.value, m) : String(o.value)}${o.partial ? ` (partial, ${o.missing} missing)` : ""}`;
+                return `${s.method} ${o.value === null ? "-" : m ? fmtMetric(o.value, m) : String(o.value)} (${formatOfficialCoverage(o, s.trials)})`;
               })
               .join(" · "),
         ]
@@ -375,6 +386,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .command("bench")
     .description("benchmarks: planned samples or task × method × seed as solve + verify runs");
 
+  registerGate(bench, client, print);
+  registerPreparation(bench, client, print);
   bench
     .command("add-file <file>")
     .description("register a benchmark from a JSON definition")
@@ -636,6 +649,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     )
     .option("-n, --name <name>", "job name")
     .option("-f, --folder <path>", "file the job and its runs in a folder, e.g. rcb/noskills")
+    .option(
+      "--expect-revision <revision>",
+      "require one method to resolve to this exact content revision",
+    )
+    .option("--expect-tasks-sha256 <hash>", "require --tasks-file to match this SHA-256")
     .option("--parent <revision>", "the method revision these methods were derived from")
     .option("--note <text>", "what changed in these methods")
     .option(
@@ -650,6 +668,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
         name: string,
         o: {
           parent?: string;
+          expectRevision?: string;
+          expectTasksSha256?: string;
           note?: string;
           informedBy: string[];
           method: string[];
@@ -670,6 +690,12 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
         if (o.tasksFile && o.task.length)
           throw new Error("--tasks-file and --task are mutually exclusive");
         const taskFile = o.tasksFile ? readTaskFile(resolve(o.tasksFile)) : undefined;
+        if (
+          o.expectTasksSha256 &&
+          (!/^[a-f0-9]{64}$/.test(o.expectTasksSha256) ||
+            taskFile?.tasksFile.sha256 !== o.expectTasksSha256)
+        )
+          throw new Error("--tasks-file does not match --expect-tasks-sha256");
         if (o.samplePlan && o.seeds !== undefined)
           throw new Error("--sample-plan and --seeds are mutually exclusive");
         if (o.batchSize !== undefined && !o.samplePlan)
@@ -682,6 +708,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           methods.push(...(JSON.parse(readFileSync(o.methodsFile, "utf8")) as unknown[]));
         if (methods.length === 0)
           throw new Error("give at least one --method (e.g. --method oracle)");
+        if (o.expectRevision && (methods.length !== 1 || !/^[a-f0-9]{12}$/.test(o.expectRevision)))
+          throw new Error("--expect-revision requires exactly one method and a 12-digit revision");
         // Lineage applies to the methods under test, not to the calibration baselines.
         const lineage =
           o.parent || o.note || o.informedBy.length
@@ -712,6 +740,9 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
                 }
               : {}),
             methods: methods as never,
+            ...(o.expectRevision
+              ? { expectedRevisions: { [(methods[0] as { name: string }).name]: o.expectRevision } }
+              : {}),
             ...(samplePlan
               ? { samplePlan, ...(o.batchSize === undefined ? {} : { batchSize: o.batchSize }) }
               : { seeds: o.seeds }),
@@ -722,11 +753,11 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
           },
           o.folder,
         );
-        print(
-          o.json,
-          job,
-          () =>
+        print(o.json, job, () =>
+          [
             `started ${job.id}: ${job.spec.methods.length} methods × ${job.spec.samplePlan ? `${job.spec.samplePlan.items.length} planned samples` : `${job.spec.tasks.length} tasks × ${job.spec.seeds} seeds`}`,
+            ...(job.policyWarnings ?? []).map((warning) => `Warning: ${warning}`),
+          ].join("\n"),
         );
       },
     );

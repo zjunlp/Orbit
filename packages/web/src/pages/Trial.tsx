@@ -13,7 +13,7 @@ import {
   SCORE,
 } from "@zjunlp/orbit/metrics";
 import { planRank, sampleLabel, sampleOrder } from "@zjunlp/orbit/naming";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo } from "react";
 import { IconAlert } from "../components/icons.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { Empty, Link, Loading, StateBadge, toast, useNow } from "../components/ui.tsx";
@@ -50,7 +50,7 @@ import { navigate, setQuery, useLocation } from "../lib/router.ts";
 import { upsertRun, useRun } from "../lib/runs-store.ts";
 import { useAsync } from "../lib/use.ts";
 import { ArtifactsTab } from "./run/Artifacts.tsx";
-import { SessionTab } from "./run/Session.tsx";
+import { TrajectoryTab } from "./run/Trajectory.tsx";
 import { GraderView, ReportView } from "./trial/Legacy.tsx";
 import { Value } from "./trial/parts.tsx";
 import { DetailsView, EvidenceView, FILE_VIEWS } from "./trial/Review.tsx";
@@ -65,18 +65,17 @@ interface TabDef {
 /** A run from the live store, else fetched once. */
 function useRunOnce(id: string | null): Run | undefined {
   const live = useRun(id ?? "");
-  const [fetched, setFetched] = useState<Run>();
-  useEffect(() => {
-    if (!id || live) return;
-    api.run(id).then(
-      (r) => {
-        setFetched(r);
-        upsertRun(r);
-      },
-      () => undefined,
-    );
-  }, [id, live]);
-  return id ? (live ?? fetched) : undefined;
+  const fetched = useAsync(
+    async (signal) => {
+      if (!id || live) return undefined;
+      const run = await api.run(id, signal);
+      if (!signal.aborted) upsertRun(run);
+      return run;
+    },
+    [id, !!live],
+    { resetKey: id },
+  );
+  return id ? (live ?? fetched.data) : undefined;
 }
 
 /** The trial's other metrics; the score itself is the headline of the page. */
@@ -100,7 +99,11 @@ function TrialMetrics({ o, metrics }: { o: Outcome | null; metrics: MetricDef[] 
 }
 
 export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }) {
-  const d = useAsync(() => api.benchJob(jobId), [jobId], { poll: true, pollMs: 5000 });
+  const d = useAsync((signal) => api.benchJob(jobId, signal), [jobId], {
+    poll: true,
+    pollMs: 5000,
+    resetKey: jobId,
+  });
   const trial = d.data?.trials.find((t) => t.id === trialId);
   const job = d.data?.job;
   const solve = useRunOnce(trial?.solveRunId ?? null);
@@ -341,7 +344,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
 
 const ALWAYS_TABS: TabDef[] = [
   { key: "config", label: "Configuration" },
-  { key: "session", label: "Agent session" },
+  { key: "session", label: "Agent trajectory" },
   { key: "outputs", label: "Outputs" },
 ];
 const LEGACY_TABS: TabDef[] = [
@@ -391,7 +394,16 @@ function TabBody(props: {
   if (tab === "config") return <TrialConfiguration job={job} trial={trial} />;
   if (tab === "report") return solve ? <ReportView run={solve} /> : notStarted("solve");
   if (tab === "judge") return verify ? <GraderView run={verify} /> : notStarted("verify");
-  if (tab === "session") return solve ? <SessionTab run={solve} /> : notStarted("solve");
+  if (tab === "session")
+    return solve ? (
+      <TrajectoryTab
+        key={`${trial.id}/${solve.id}`}
+        run={solve}
+        trialContext={{ job: job.id, trial: trial.id }}
+      />
+    ) : (
+      notStarted("solve")
+    );
   if (tab === "outputs") return <OutputsView solve={solve} verify={verify} />;
   return <Empty title="Unknown tab" />;
 }

@@ -21,6 +21,9 @@
 | [LIBERO](libero-suites.md) | 5 个套件，130 个任务 | 5 个套件全部接入，包含 LIBERO-90 | 130 个任务做过 reset 和控制步检查。[Spatial](../tasks/20261109-embodied-benchmark-coverage.md) · [Object、Goal、Long](../tasks/20261107-libero-suites.md) · [LIBERO-90](../tasks/20261108-libero-90.md) |
 | [LIBERO-Plus](../../examples/bench-adapters/embodied/benchmarks/libero-plus/README.md) | 4 个套件，10,030 个扰动变体 | 全部变体，每变体 1 个原生初态 | 核对全部初态文件解析，原生 GPU 检查覆盖每套 7 个扰动类别，共 28 个变体。[记录](../tasks/20261109-libero-plus.md) |
 | [LIBERO-Mem](../../examples/bench-adapters/embodied/benchmarks/libero-mem/README.md) | 10 个有序操作任务，每任务 20 个发布初态 | 10 个任务与全部 200 个初态，按原生子目标进度计分 | 全部任务通过原生 reset、观测和控制检查。π₀.₅ 冻结样本通过 CPU 证据校验和重评。[记录](../tasks/20261114-libero-mem.md) |
+| [EB-Navigation](../../examples/bench-adapters/embodied/benchmarks/eb-navigation/README.md) | 5 个公开子集，共 300 条 episode | 完整目录及 SeeNav 双视角标注协议，按原生距离条件和步数上限计分 | 300 条通过原生 reset、目标对象及双视角渲染检查。每个子集一条固定动作对照，核对控制、距离、停止与 CPU 验证。[记录](../tasks/20261114-eb-navigation.md) |
+| [CHORES-S / CHORES-L](../../examples/bench-adapters/embodied/benchmarks/chores/README.md) | 两套各 10 类任务，分别有 1,887 和 2,091 条样本 | 全目录，原生 Stretch 控制、终止与 SEL；SPOC/FLaRe 独立登记 | 全部样本通过上游任务解析和 Orbit 计划生成。两个套件均有 SPOC 与 FLaRe 的真实权重样本通过仿真、CPU 校验和重评。[记录](../tasks/20261114-vln-chores-hssd.md) |
+| [HSSD-OV](../../examples/bench-adapters/embodied/benchmarks/hssd-ov/README.md) | 43 个场景、1,751 条样本 | 全目录，原生 Habitat 对象导航、停止和测地距离；LightNav-0 采用离散动作投影 | 所有样本通过 Habitat 目录加载和 Orbit 计划生成。固定动作验证覆盖原生 STOP 和 CPU 重评，LightNav-0 真实权重通过独立五步开发配置的仿真、CPU 校验及重评。[记录](../tasks/20261114-vln-chores-hssd.md) |
 | [VLABench](../../examples/bench-adapters/embodied/benchmarks/vlabench/README.md) | 6 条 Policy 轨道。五条固定轨道共 2,460 个场景，Cross Task 开放轨道有 96 个任务 ID | 6 条轨道全接入，Cross Task 按选定种子生成场景 | 全量核对轨道目录，6 条轨道均有抽样 reset、渲染和控制检查。[记录](../tasks/20261109-vlabench.md) |
 | [SimplerEnv](../../examples/bench-adapters/embodied/benchmarks/simpler-env/README.md) | Prepackaged 为 Google 21、WidowX 7 个任务；固定网格分别有 1,164（Google Visual Matching）、1,992（Google Variant Aggregation）和 96（WidowX Visual Matching）个初态 | 两套 Prepackaged、三套网格、三套网格的策略终止协议，另有 GR00T 专用登记 | 141 次原生检查覆盖任务 ID 和代表性场景设置；三套网格做过脚本停止与证据检查。Google 的 OptiX 降噪异常可用独立关闭降噪配置。[目录](../tasks/20261108-simplerenv-task-sets.md) · [终止协议](../tasks/20261109-embodied-benchmark-coverage.md) |
 | [RoboCasa v0.2](../../examples/bench-adapters/embodied/benchmarks/robocasa-v02/README.md) | Atomic-24，24 个任务，每任务 50 个种子 | 24 个任务，完整计划 1,200 个样本 | 24 个任务通过 CPU reset、相机和原生控制。另有固定动作对照及脚本 episode 重评。[记录](../tasks/20261109-robocasa-v02.md) |
@@ -40,6 +43,7 @@
 | [LIBERO-PRO](../../examples/bench-adapters/embodied/benchmarks/libero-pro/README.md) | 初版四个原版套件、五类排行榜扰动，共 200 个目录条目 | 20 个条件全部登记，固定 BDDL 和构造种子生成 10,000 个计划样本 | 200 个条目都通过原生 reset 和一步控制。两组短原生对照、一个 220 步固定动作 episode 和 CPU 重评通过。OpenVLA-OFT 在 Spatial Language 和 Spatial Task 各完成一条有效短测，CPU 重评一致。[原生接入](../tasks/20261110-libero-pro.md) · [模型短测](../tasks/20261111-embodied-policy-expansion.md) |
 | [BiGym 2.0](../../examples/bench-adapters/embodied/benchmarks/bigym2/README.md) | 正式 learned-policy 协议 20 个任务，每任务 100 个种子 | 20 个任务全部接入，按 20D / 21D 动作分成两组登记，共 2,000 个计划样本 | 全部任务做过原生 reset、相机和一步控制。两种动作规格各有一条完整固定动作对照，并通过 CPU 验证和重评。训练权重待补。[记录](../tasks/20261112-bigym2.md) |
 | [CLIPort](../../examples/bench-adapters/embodied/benchmarks/cliport/README.md) | 语言条件测试集 18 个条目，每条目 100 个 oracle 合格种子 | 18 个条目全部接入，分为 16 个吸盘抓放任务和 2 个铲形末端推扫任务。完整计划共 1,800 个样本 | 全部条目各生成 2 个 oracle 合格样本，冻结 reset 后的步数上限。真实权重短测通过独立 CPU 验证与重评。[记录](../tasks/20261112-cliport.md) |
+| [BEHAVIOR-1K](../../examples/bench-adapters/embodied/benchmarks/behavior-1k/README.md) | 完整发布活动目录；具备 2026 R1Pro public-test 元数据的子集可准备 | 23D 原生命令、固定公开实例及官方评测循环 | 目录、契约和 CPU 证据回归通过；原生物理与模型校准待兼容 RTX 运行时。[记录](../tasks/20261113-behavior-robotagent.md) |
 
 ## 真实模型实测
 
@@ -49,6 +53,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 
 | Policy / 权重 | 已实测的 benchmark 协议 | 真实模型样本与参考证据 |
 | --- | --- | --- |
+| SeeNav-Agent 与 Qwen2.5-VL-3B-Instruct | EB-Navigation，SeeNav 双视角标注配方 | 同一模型运行镜像，每款模型各两条配对冻结样本。均完成原生控制、CPU 验证与重评。[记录](../tasks/20261114-eb-navigation.md) |
 | π₀.₅ 官方 LIBERO，`pi05-libero` 或共享 GPU 登记 | LIBERO Spatial、Object、Goal、Long 的 OpenPI recipe | 四套件均有抽样；Spatial 的固定输入、动作及共享编译模型控制通过，独立 GPU 进程逐位对照失败。[Spatial](../tasks/20261105-embodied-eval.md) · [扩展](../tasks/20261107-libero-suites.md) |
 | π₀.₅ 官方 LIBERO，八步重规划登记 | LIBERO-Mem | 首个任务用 GPU 完成一个冻结样本并通过 CPU 证据校验；同一初态另经 Orbit 的完整 CPU 流水线和重评。[记录](../tasks/20261114-libero-mem.md) |
 | GR00T N1.7 的套件权重，`groot-n17-libero[-<suite>]` | LIBERO Spatial、Object、Goal、Long 的 OpenPI recipe | 四套件均有抽样；Spatial 有短参考边界检查。[Spatial](../tasks/20261106-embodied-endpoints.md) · [扩展](../tasks/20261107-libero-suites.md) |

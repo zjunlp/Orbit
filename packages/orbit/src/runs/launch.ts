@@ -98,7 +98,11 @@ export async function launch(ctx: Context, id: string): Promise<void> {
       if (h.setup) {
         // An Agent that installs inside the run: the install script runs before the command, and a
         // failure is recorded as the environment's (see `AGENT_INSTALL_FAILED`), not the method's.
+        // A checkpoint may carry the previous setup result in the restored Agent home.
+        rmSync(join(dirs.agent, AGENT_SETUP_DONE), { force: true });
+        rmSync(join(dirs.agent, AGENT_SETUP_FAILED), { force: true });
         writeFileSync(join(dirs.agent, AGENT_SETUP_FILE), `${h.setup}\n`, { mode: 0o700 });
+        writeFileSync(join(dirs.root, AGENT_SETUP_BUDGET), String(agentSetupBudgetSec()));
         spec.command = withAgentSetup(spec.command);
         ctx.store.addEvent(run.id, "harness", "installing the Agent CLI inside the container");
       }
@@ -163,8 +167,17 @@ export function passEnv(ctx: Context, run: Run): Record<string, string> {
 export const AGENT_SETUP_FILE = ".orbit-setup.sh";
 /** Written by the wrapper when the install script fails; the run is then an environment failure. */
 export const AGENT_SETUP_FAILED = ".orbit-setup.failed";
+export const AGENT_SETUP_DONE = ".orbit-setup.done";
+/** Daemon-only files under the run root, outside the container mounts. */
+export const AGENT_SETUP_BUDGET = "agent-setup-budget-sec";
+export const AGENT_SETUP_TIMEOUT = "agent-setup-timeout";
 /** Reason prefix of a run whose Agent could not be installed. */
 export const AGENT_INSTALL_FAILED = "Agent install failed";
+
+function agentSetupBudgetSec(): number {
+  const seconds = Number(process.env.ORBIT_AGENT_SETUP_TIMEOUT_SEC ?? 900);
+  return Number.isInteger(seconds) && seconds > 0 && seconds <= 2_147_483 ? seconds : 900;
+}
 
 /**
  * Run the Agent install script, then the command. npm and uv install into the Agent home and the
@@ -176,6 +189,7 @@ export function withAgentSetup(command: string[]): string[] {
     `export PATH="\${NPM_CONFIG_PREFIX:+$NPM_CONFIG_PREFIX/bin:}\${HOME:-/tmp}/.local/bin:$PATH"`,
     `sh "$a/${AGENT_SETUP_FILE}" > "$a/setup.log" 2>&1; c=$?`,
     `if [ "$c" -ne 0 ]; then echo "$c" > "$a/${AGENT_SETUP_FAILED}"; echo "[orbit] ${AGENT_INSTALL_FAILED} (exit $c):" >&2; tail -n 40 "$a/setup.log" >&2; exit 125; fi`,
+    `: > "$a/${AGENT_SETUP_DONE}" || exit 125`,
     'exec "$@"',
   ].join("\n");
   return ["/bin/sh", "-c", script, "sh", ...command];

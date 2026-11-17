@@ -4,13 +4,18 @@ import { Link } from "../components/ui.tsx";
 import { useLocation } from "../lib/router.ts";
 import { BenchmarkLibrary } from "./bench/BenchmarkLibrary.tsx";
 import { BenchCatalogView } from "./bench/Catalog.tsx";
+import { PreparationView } from "./bench/Preparation.tsx";
 
 export function BenchmarksPage() {
   const { query } = useLocation();
   const local = query.get("mode") === "local" || query.has("ev");
+  const preparing = query.get("mode") === "resources";
   return (
     <>
       <TopBar crumbs={[{ label: "Benchmarks" }]}>
+        <Link className="btn sm" href="/benchmarks?mode=resources">
+          Prepare resources
+        </Link>
         <Link className="btn sm" href={local ? "/benchmarks" : "/benchmarks?mode=local"}>
           {local ? "All benchmarks" : "Local setups"}
         </Link>
@@ -20,7 +25,7 @@ export function BenchmarksPage() {
       </TopBar>
       <div className="page">
         <div className="page-pad library-page">
-          {local ? <BenchCatalogView /> : <BenchmarkLibrary />}
+          {preparing ? <PreparationView /> : local ? <BenchCatalogView /> : <BenchmarkLibrary />}
         </div>
       </div>
     </>

@@ -36,7 +36,7 @@ function registration(
 
 it("ships one supported family per benchmark even with no local registrations", () => {
   const supported = supportedBenchmarks([]);
-  expect(supported).toHaveLength(53);
+  expect(supported).toHaveLength(62);
   expect(new Set(supported.map((row) => row.id)).size).toBe(supported.length);
   expect(supported.every((row) => row.registrationNames.length === 0)).toBe(true);
   expect(
@@ -92,6 +92,31 @@ it("links known built-in adapters and exact native semantic profiles only", () =
   );
 });
 
+it("discovers the added embodied families and retains both CHORES registrations", () => {
+  const local = [
+    ["eb-navigation", "eb-navigation-projected/1"],
+    ["hssd-ov", "hssd-ov-stretch-discrete/1"],
+    ["libero-mem", "libero-mem-panda-raw/1"],
+    ["bigym2", "bigym2-g1-no-pitch/1"],
+    ["cliport", "cliport-native-push-rgbd/1"],
+  ].map(([family, profile]) => {
+    const entry = registration(`local-${family}`, "derived", "derived");
+    entry.capabilities = { embodied: { semanticProfile: { id: profile } } } as never;
+    return entry;
+  });
+  for (const variant of ["CHORES-S", "CHORES-L"]) {
+    const entry = registration(variant.toLowerCase(), "chores");
+    entry.identity.variant = variant;
+    local.push(entry);
+  }
+  const rows = supportedBenchmarks(local);
+  for (const id of ["eb-navigation", "hssd-ov", "libero-mem", "bigym2", "cliport"])
+    expect(rows.find((row) => row.id === id)?.registrationNames).toEqual([`local-${id}`]);
+  const chores = rows.find((row) => row.id === "chores");
+  expect(chores?.registrationNames).toEqual(["chores-l", "chores-s"]);
+  expect(chores?.suites).toEqual(["CHORES-S", "CHORES-L"]);
+});
+
 it("retains profile boundaries and keeps limited integrations visibly limited", () => {
   const rows = supportedBenchmarks([]);
   expect(rows.find((row) => row.id === "robodojo")?.verification.detail).toMatch(/checked/);
@@ -124,6 +149,28 @@ it("retains profile boundaries and keeps limited integrations visibly limited", 
   ).toEqual(["gui"]);
 });
 
+it("links the implemented BiGym, CLIPort and LIBERO-Mem profiles without inventing versions", () => {
+  const profiles = [
+    ["bigym2-g1-no-pitch/1", "bigym2"],
+    ["bigym2-g1-pitch/1", "bigym2"],
+    ["cliport-native-pick-place-rgbd/1", "cliport"],
+    ["cliport-native-push-rgbd/1", "cliport"],
+    ["libero-mem-panda-raw/1", "libero-mem"],
+  ] as const;
+  for (const [profile, family] of profiles) {
+    const entry = registration("local-policy-benchmark", "derived", "derived");
+    entry.capabilities = { embodied: { semanticProfile: { id: profile } } } as never;
+    const rows = supportedBenchmarks([entry]);
+    expect(rows.filter((row) => row.registrationNames.length).map((row) => row.id)).toEqual([
+      family,
+    ]);
+    entry.capabilities = { embodied: { semanticProfile: { id: `${profile}0` } } } as never;
+    expect(supportedBenchmarks([entry]).every((row) => row.registrationNames.length === 0)).toBe(
+      true,
+    );
+  }
+});
+
 it("links collection registrations only to explicitly listed runnable benchmark suites", () => {
   const collection = registration("local-browser-setup", "cua-lite");
   collection.listing = {
@@ -154,6 +201,25 @@ it("links collection registrations only to explicitly listed runnable benchmark 
   expect(supportedBenchmarks([collection]).every((row) => row.registrationNames.length === 0)).toBe(
     true,
   );
+});
+
+it("keeps reviewed task subjects and input layouts separate in taxonomy filters", () => {
+  const rows = supportedBenchmarks([]);
+  const matches = (id: string, filter: Parameters<typeof taxonomyMatches>[1]) =>
+    rows
+      .find((row) => row.id === id)
+      ?.taxonomyGroups.filter((g) => taxonomyMatches(g.taxonomy, filter));
+  expect(
+    matches("frontierswe-v2", { domains: ["science"], taskTypes: ["implementation"] }),
+  ).toHaveLength(1);
+  expect(
+    matches("frontierswe-v2", { domains: ["science"], taskTypes: ["optimization"] }),
+  ).toHaveLength(0);
+  expect(matches("robomimic", { modalities: ["image"] })).toHaveLength(1);
+  expect(matches("robomimic", { modalities: ["text"] })).toHaveLength(0);
+  expect(matches("tau2-bench", { participants: ["simulated-user"] })).toHaveLength(0);
+  expect(matches("textarena", { participants: ["opponent"] })).toHaveLength(0);
+  expect(matches("libero-mem", { targets: ["memory"] })).toHaveLength(1);
 });
 
 it("keeps embodied harness benchmark identities and learning conditions separate", () => {

@@ -9,6 +9,7 @@ export const webvoyager: Omit<SupportedBenchmark, "registrationNames"> = {
   taxonomyGroups: [
     group("Reviewed recipe-query subset", {
       ...browser,
+      domains: ["general-knowledge"],
       taskTypes: ["retrieval"],
       world: ["controlled"],
       scoringEvidence: ["response", "trajectory"],

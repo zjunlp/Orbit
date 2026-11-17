@@ -48,6 +48,12 @@ import {
   FolderExportResult,
   FolderList,
   FolderMoveResult,
+  GateBundleCheck,
+  type GateBundleInput,
+  GateList,
+  GatePlan,
+  GateRecord,
+  type GateSubmissionInput,
   Health,
   Ledger,
   LogChunk,
@@ -62,6 +68,9 @@ import {
   PolicyDefinition,
   type PolicyDefinitionInput,
   PolicyList,
+  PreparationCatalog,
+  type PreparationInput,
+  PreparationStatus,
   ReconcileReport,
   Run,
   RunDeletion,
@@ -289,6 +298,11 @@ export class OrbitClient {
       BenchCatalog,
       `/bench/catalog${refresh.length ? `?refresh=${refresh.map(enc).join(",")}` : ""}`,
     );
+  benchResources = () => this.call(PreparationCatalog, "/bench/resources");
+  benchPrepare = (family: string, body: PreparationInput) =>
+    this.call(Run, `/bench/resources/${enc(family)}/prepare`, { method: "POST", body });
+  benchPreparation = (id: string) =>
+    this.call(PreparationStatus, `/bench/preparations/${enc(id)}`, { timeoutMs: 180_000 });
   benchCalibrate = (body: CalibrationRequestInput) =>
     this.call(BenchJob, "/bench/calibrations", { method: "POST", body, timeoutMs: 180_000 });
   agentCatalog = () => this.call(AgentCatalog, "/agents/catalog");
@@ -304,6 +318,17 @@ export class OrbitClient {
     this.call(z.object({ reports: z.array(BenchReport) }), `/bench/jobs/${enc(id)}/reports`).then(
       (r) => r.reports,
     );
+  benchGatePlan = (body: GateSubmissionInput) =>
+    this.call(GatePlan, "/bench/gates/plan", { method: "POST", body });
+  benchGateBundleCheck = (body: GateBundleInput) =>
+    this.call(GateBundleCheck, "/bench/gates/check-bundle", { method: "POST", body });
+  benchGate = (body: GateSubmissionInput) =>
+    this.call(GateRecord, "/bench/gates", { method: "POST", body });
+  benchGates = (child?: string) =>
+    this.call(GateList, `/bench/gates${child ? `?child=${enc(child)}` : ""}`).then(
+      (r) => r.records,
+    );
+  benchGateRecord = (id: string) => this.call(GateRecord, `/bench/gates/${enc(id)}`);
   benchCancel = (id: string) =>
     this.call(BenchJob, `/bench/jobs/${enc(id)}/cancel`, { method: "POST" });
   benchCompare = (ids: string[]) =>

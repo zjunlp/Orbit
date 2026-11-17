@@ -1,0 +1,212 @@
+.atif-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+.atif-tab > .toolbar {
+  padding: 12px 20px;
+  flex-wrap: wrap;
+}
+.atif-view {
+  padding: 16px 20px;
+  min-width: 0;
+}
+.atif-heading {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.atif-heading label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.atif-heading select {
+  max-width: 340px;
+}
+.atif-grid {
+  display: grid;
+  grid-template-columns: 210px minmax(300px, 1fr) minmax(290px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+.atif-nav {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+}
+.atif-nav input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.atif-step-list {
+  height: 560px;
+  max-height: 72vh;
+  overflow: auto;
+}
+.atif-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-left: 3px solid transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.atif-step:hover,
+.atif-step.on {
+  background: var(--hover);
+}
+.atif-step.on {
+  border-color: var(--accent);
+}
+.atif-step small {
+  width: 100%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0.65;
+}
+.atif-detail,
+.atif-environment {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.atif-detail > .toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.atif-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  opacity: 0.7;
+  margin-bottom: 18px;
+}
+.atif-detail pre {
+  overflow: auto;
+  max-height: 440px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  background: var(--hover);
+  border-radius: 6px;
+}
+.atif-detail img {
+  max-width: 100%;
+  max-height: 480px;
+  object-fit: contain;
+}
+.atif-detail audio {
+  max-width: 100%;
+}
+.atif-detail details {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.atif-detail summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.atif-tool summary {
+  font-weight: 600;
+}
+.atif-result {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.atif-child {
+  margin: 10px 0;
+}
+.atif-warning {
+  color: var(--st-queued);
+  padding: 8px 12px;
+  border-left: 3px solid currentColor;
+}
+.atif-env {
+  padding: 0 12px;
+  border-left: 1px solid var(--border);
+}
+.atif-env > select {
+  width: 100%;
+}
+.atif-env > a {
+  display: block;
+  padding: 10px 0;
+}
+.atif-env-preview {
+  min-width: 0;
+}
+.atif-env-preview .gui-trajectory {
+  padding: 8px 0;
+}
+.atif-env-preview .gui-trajectory-grid {
+  display: block;
+}
+.atif-env-preview .gui-step-list,
+.atif-env-preview .gui-controls,
+.atif-env-preview .conv-sidebar {
+  display: none;
+}
+.atif-env-preview .conversation-viewer {
+  padding: 0;
+}
+.atif-env-preview .episode-viewer {
+  padding: 0;
+}
+.atif-view.compact .atif-grid {
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+.atif-full {
+  display: block;
+  margin-top: 14px;
+}
+@media (max-width: 1200px) {
+  .atif-grid {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+  .atif-environment {
+    grid-column: 2;
+  }
+}
+@media (max-width: 720px) {
+  .atif-grid,
+  .atif-view.compact .atif-grid {
+    grid-template-columns: 1fr;
+  }
+  .atif-nav {
+    position: static;
+  }
+  .atif-step-list {
+    height: 180px;
+  }
+  .atif-environment {
+    grid-column: 1;
+  }
+  .atif-heading select {
+    max-width: 240px;
+  }
+}
+
+.atif-env-preview .conv-body {
+  display: block;
+}
+.atif-env-preview .conv-rail {
+  display: none;
+}
+.atif-env-preview .conv-main,
+.atif-env-preview .conv-aside {
+  padding: 8px 0;
+}

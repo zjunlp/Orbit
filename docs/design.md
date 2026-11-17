@@ -13,8 +13,8 @@ Orbit 是让验收有据可依的实验室，位于做决策的 Agent 与负责�
 标题中的 Evolve 需要证据证明进化是真的，Any Environment 是证明的方式：
 跨多类 benchmark 与多种 Agent 是进化门的前提，只在诞生地测过的改进不算验证。
 
-前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期、API/CLI、环境对齐与训练数据导出；进化门已有任务集冻结和纯判定核心（§7），CLI 与判定存储仍待 E3 接入，
-当前产品的配置版本/血缘（§9.16）仍不作方法进化声明。
+前三项已实现（范围见 [status.md](status.md)）；统一轨迹（§9.8）已有 ATIF 契约、Codex / Claude Code 转换、Run 生命周期、API/CLI、环境对齐与训练数据导出；进化门已有任务集冻结、纯判定核心、CLI/API 与不可变判定记录（§7），并完成有界开发校准；
+对配置版本给出准入判定，跨 benchmark 的进化效果仍需真实实验验证。
 统一轨迹、导出、分叉、进化门与进化实验的分步计划见 [evolution-plan.md](evolution-plan.md)；它是计划而不是设计，
 各工作包落地时把定稿写回本文；§9.8 已采用 ATIF，Run 生成、存储、重建与读取已实现。
 具身设备后端是未来方向。规划、分析与迭代仍由 Agent 主导，Orbit 不提出改动，只提供执行、证据与判定依据。
@@ -224,6 +224,11 @@ init, readOnly, tmpfs, capAdd, capDrop, securityOpt, pidsLimit?, collect }`，�
   bench 记为 invalid），再停止服务，把日志与 `collect` 路径存到 `output/services/<name>/`。
 - 清理：删除 Run 容器、`orbit.parent` 服务容器和网络，全部确认后才释放租约；daemon 重启后同样按标签清理。
 
+原生 CLI 的默认网络保持开启，但 adapter 显式设置 `network: false` 时不得覆盖。
+有服务的 Run 显式 `runNetworks: []` 表示 Docker `--network none`，不是 Docker 默认 bridge。
+HLE 用只读挂载的 Unix socket 与独立联网服务通信，分别约束模型 API 和过滤后的网页工具；
+题目与标准答案分开挂载，评分凭据仅挂载到独立 verifier。
+
 **after 阶段**（`RunSpec.after`，Harbor shared verifier 用）：`{ command, timeoutMin, env, passEnv, copy[{ source, target }],
 network?, collect }`，在 `command` 结束（或到时被停）后于**同一容器**里运行，看到它留下的文件与仍在运行的进程：
 - 容器命令包一层 `/orbit/phases/run.sh`：命令在自己的 session 中后台运行（有 `setsid` 时），退出码写入
@@ -365,7 +370,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   Runs 页选中整个 job 行可删除该 job。
 - **Run 详情**：Overview（生命周期时间线、清理核对、笔记、指标迷你图、日志尾）、Logs（虚拟列表、ANSI、
   搜索、跟随）、Metrics（uPlot，平滑、同步十字线）、Artifacts、Code（相对快照 commit 的 diff）、
-  Session（提交者会话标出提交点，与 Run 内 Agent 会话并排）、Events。
+  Trajectory（ATIF 逐步复盘，另保留提交者会话）、Events。
 - **Compare**：`?ids=` / `?group=`，按 seed 聚合 mean ± std、相对基线的变化、曲线叠加、配置差异。
 - **Resources**：GPU 卡片（Orbit 租约 / 外部占用 / 空闲、显存与利用率，以及占用显存的每个进程：用户、
   命令、PID、容器或 Run、已运行多久）、租约与队列、worker 节点表（§8）。
@@ -375,7 +380,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 - **页面框架**：一级页面在面包屑下有统一的 `PageHeader`（标题 + 一句说明），内容区最宽 `--content-max`（1600px）居中；
   侧栏底部为连接状态与快捷键 / 主题 / 折叠三个图标；job 状态用彩色徽标，`<details class="card">` 统一带折叠箭头。
 - **地址**：旧地址先由 `legacyHref` 重定向；`routes.ts` 之外的路径显示 “Page not found”，不再回落到 Overview。
-- **轮询**：`useAsync` 与 Logs 在隐藏标签页暂停轮询，重新可见时刷新一次后恢复；进行中的请求仍可完成，SSE 继续接收。
+- **轮询**：`useAsync` 与 Logs 在隐藏标签页暂停轮询，重新可见时刷新一次后恢复；隐藏页面不取消当前读取，SSE 继续接收。`useAsync` 为每次读取提供 `AbortSignal`，依赖变化、主动刷新和卸载时取消旧请求，同时保留过期响应保护；取消不作为业务错误。Conversation 与关联 Trial / ATIF 环境的读取传递该信号；`resetKey` 按资源身份立即隐藏上一资源的数据和错误，同一资源刷新仍保留已显示内容。
 - **删除**（不可恢复）：`POST runs/delete` 只删已终态且清理完成、不属于 bench trial 的 Run（远端 Run 须镜像同步结束）；
   全部校验通过才动手，删除记录、事件、租约与 Run 目录（容器以 root 写下的文件用该镜像的临时容器清掉；仍删不掉的
   目录在结果中列出）。bench job 只能整体删（`DELETE bench/jobs/:id`，非 running）：trial、全部 solve/verify Run 与
@@ -393,6 +398,8 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
   认不出时用截断的命令）。只影响显示，记录中的 name 仍为空、command 完整保留。
 - **Settings**：容器内 Agent 版本、auth profile（掩码、测试、删除）、通知目标（发测试、删除）、浏览器通知开关。
   Web 不录入密钥：添加 profile / 目标只走 CLI。
+
+> 进化判定接口：`POST /bench/gates`，`GET /bench/gates?child=REV&limit=N`，`GET /bench/gates/:id`；契约和不可变证据规则见 §7。
 
 ## 6. 认证（auth）、Agent 注册表与通知
 
@@ -514,7 +521,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   `oracle`（跑参考解）、`empty`（不作答，用于检验适配器），或 `policy`（独立具身策略，见 §9.4a）。这些保留名不能注册为 Agent。
   `policy` 通过 `policyRef` 选择已登记定义，提交时保存 `policySnapshot`；不接收 CLI 的 auth、model 或 bundle。
   提交 job 前检查 Agent 已注册、auth profile 的 harness 与之一致且 kind 受该 Agent 支持；`agentCommand` 由定义的模板渲染。
-  `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`），安装失败记为环境失败、不 verify；
+  `install` 型 Agent 在 Docker solve Run 的命令前安装（`orbit/agent/setup.log`）。独立的安装时限由 daemon 的
+  `ORBIT_AGENT_SETUP_TIMEOUT_SEC` 控制，默认 900 秒，从容器启动计时。安装失败或到期归为 `agent_install`，跳过 verify。
   process Run 拒绝 `install` 型 Agent。ASI 与 LongDS 的原生 runner 只启动 codex / claude-code，由 adapter 在 `capabilities.methods` 中声明，
   提交与兼容矩阵按同一声明拒绝其他 Agent（`<benchmark> does not support <agent> methods`）。
   `bundle` 目录（AGENTS.md / CLAUDE.md、skills）复制进 Agent home（`RunSpec.agentBundle`）；Agent 版本由 Run 的
@@ -546,7 +554,7 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   新作业持久化 `BenchJob.taskSet`，沿用原 Hub 的有序去重 ID 规范 JSON SHA-256 前 12 位；文件提交还保存 taskFile 的完整文件哈希和可选清单，不保存内容或客户端路径。
   Hub 优先读已保存摘要；旧作业缺省回退既有计算且不在读取时重写。文件作业禁止归并追加任务；普通作业追加时更新摘要，无任务变动的旧作业保持原样。
   任务文件 8 MiB、清单 1 MiB、至多 100000 个任务；普通文件有界读取。输出必须不存在、父目录存在且位于 Orbit home/data 之外，私有临时目录验证后发布，文件 0600、目录 0700。
-  详细使用见 [任务集指南](guides/task-sets.md)。准入判定核心见下文 E2，CLI 与存储由 E3 接入。
+  详细使用见 [任务集指南](guides/task-sets.md)。准入判定与记录见下文 E2/E3。
 - **进化判定纯核心（E2）**：`contracts/gate.ts` 定义 GatePolicy/GateEvidence/GateVerdict，`bench/gate.ts` 接收父/子配置修订、规范策略和显式证据；不读文件、store、Run 当前值或时钟，不提交任务。
   证据是作业冻结元数据、不可变报告修订、任务文件内容快照及每个集合的显式父/子报告引用；调用方提供完整相关历史，不自动选最优作业或报告。
   校验 E1 文件 SHA/taskSet、配置 basis 摘要、报告 plan/metric/aggregator/样本矩阵、版本与执行条件；仅接受已知且除 bundle 外一致的基础项，dirty/approximate 为证据不足。
@@ -556,7 +564,25 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   α_k = α·6/(π²k²)，按同一准入文件哈希和根血缘下已形成报告的不同子版本首次提交顺序计轮，含兄弟候选；根父版本与重评分/补建报告不重复计轮，不增账本。
   新报告方法内的可选 costs 保存所有 solve Run（含先前失败重试）的任务归属/完整性、执行墙钟与 token，批次 Run 去重，缺失 Run 保留 null；复制 token 值，不改旧报告。
   仅在终态且 cleanup done、起止时间有效时记录执行墙钟，不含排队/清理等待；token 用 input+output，缓存/reasoning 不重加、不估价。成本缺项、未知归属或共享 Run 跨被剔除任务时 not_checked，不当通过。
-  结果包含 accept/reject/insufficient、in-domain/cross-domain/transferable、checks、退步任务、轮次/α、策略摘要、报告引用和剔除清单。CLI/API/保存判定属于 E3；真实校准属于 E6。详见 [核心说明](guides/gate-core.md)。
+  结果包含 accept/reject/insufficient、in-domain/cross-domain/transferable、checks、退步任务、轮次/α、策略摘要、报告引用和剔除清单。CLI/API/保存判定见下文 E3；校准见 E6。详见 [核心说明](guides/gate-core.md)。
+- **进化判定入口与记录（E3）**：`orbit bench gate --policy FILE --parent REV --child REV [--reports FILE] [--json]`，以及 `gate list/show`。
+  CLI 有界读取 YAML（1 MiB）与相对路径任务文件（每个 8 MiB、合计 32 MiB），daemon 验证策略/哈希并从已有作业、报告与旧判定快照解析完整相关血缘及候选历史；不重建报告、不读当前 Run 成本、不提交任务。
+  `POST /bench/gates` 计算并保存；`GET /bench/gates?child=REV&limit=N` 返回最多 500 条摘要；`GET /bench/gates/:id` 返回完整记录。client 与 Web 共用契约；Web 判定记录与版本链入口见下文 E5。
+  每侧只有一份匹配报告时可自动选择；重评分或多个作业必须给出显式 `{set,parent:{job,revision,method},child:{…}}`，不取最新或最高分。缺证据为 insufficient，文件损坏或引用歧义为请求错误。
+  既有 SQLite 增加 `bench_gates` 文档表；只追加、不覆盖。记录包含 evaluator 版本、用途、规范策略全文、全部输入证据和 verdict。源作业删除/归并后仍可复算，旧记录保存的已评测候选继续计入预算；从未被记录捕获就被删除的历史无法恢复。
+  命令退出码 0/2/3 分别为 accept/reject/insufficient，输入或 API 错误为 1。策略由用户预先约定，保存摘要本身不证明它早于结果冻结。
+- **进化流程助手（E4）**：`orbit bench gate plan` / `POST /bench/gates/plan` 复用 E3 的输入和证据解析、E2 的前提检查；按任务集与父/子版本列出 available/missing/pending/ambiguous/blocked，不回填报告、不保存判定、不提交任务。
+  仅从无歧义的已保存 CLI 方法与 benchmark 执行模板建议命令；保留种子、options、checkpoint 与血缘。需显式提供的样本计划或已变动登记保留阻塞原因；多份报告继续要求显式选择。
+  命令携带任务文件 SHA-256 与预期配置修订；`bench run --expect-revision` 对单方法提交传 transient `expectedRevisions`，daemon 在计算实际修订后、创建 job/Run 前核对，避免改动后运行另一版本。
+  `gate check-bundle DIR` / `POST /bench/gates/check-bundle` 在 daemon 本机只读检查，复用配置修订的有界文件读取和导出密钥规则；检查 held-out ID、已声明参考文件摘要和可选 `policy.bundle` 上限。
+  静态检查拒绝外链、环与特殊文件，最多返回 100 条定位；不回显疑似凭据。无参考摘要明确 not_run，短 ID 子串可误报，不证明不存在编码答案或未知泄漏；不替代 V3 隔离。
+  `orbit` skill 采用静态检查→进化集冒烟→准入→冻结守护集→多轮后终测的次序。配置 bundle 摘要仍兼容原算法；共享读取增加 64 层/20000 项限制。
+- **进化判定 Web 复盘（E5）**：Configurations 的版本来源链展示最近判定；`/configurations/gates` 列出最近最多 100 条记录，可按子版本精确筛选；`/configurations/gates/:id` 展示不可变记录详情。
+  接受、拒绝、证据不足与 A/A 校准有明确区分，不合成当前最优版本。详情显示性能/守护/成本、前提缺项、单侧区间、轮次和 alpha、冻结策略及报告修订、泄漏剔除清单。
+  退步任务按所选报告内的 sample 配对，读取报告保存的 solve Run ID 并排展示 ATIF，父子步骤独立导航；不替换为 Trial 的最新重试。源 Run 删除时保留冻结分数并说明轨迹不可用。
+- **进化门开发校准（E6）**：显式 `--calibration-aa` 对相同配置修订、不同 job/trial/solve-attempt 的独立运行执行相同统计；只允许准入集、使用首轮 alpha，记录用途为 calibration-aa，无晋级等级、不产生新的子版本轮次。
+  `examples/gate-calibration` 提供有界算术开发任务，真实 CLI 求解、离线容器独立评分；正常/破坏性 bundle 的证据和用量不伪造。`scripts/gate-calibration.ts` 复算不可变记录，并对任务级配对差做中心化 bootstrap；无波动时明确标记退化分布。
+  过期 CLI 条件、泄漏闭包由受控 API 测试验证；小任务校准不证明实际 benchmark 的功效或自适应重复使用的误差控制。[使用指南](guides/bench-gate.md)。
 - **重新评分**（`POST /bench/jobs/:id/rescore`，`orbit bench rescore <job> [-t task] [-m method] [--trial id]`，
   Web job 页与 trial 页的 Rescore）：不重跑 Agent。只对已结束 job 中已完成、solve 输出仍在本机且需要 verify 的
   trial；当前 `{verifyRunId, outcome, endedAt}` 移入 `Trial.history`，trial 回到 `solving`（solve Run 不变），
@@ -645,8 +671,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   verify 与 score 用 Run 记录里的公钥核验签名，伪造或缺失签名记 `scorer_error`（无效）。daemon 采集时只写入真实目录（不跟随运行
   预置的符号链接，含 output 根目录），复制失败时目标处不留运行自己写的内容。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
-  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction, tools? }` 二选一。`tools` 最多 8 个 stdio MCP server（`name`、非空 `command` argv、可选 `env`），只交给 Agent 启动，不能覆盖 Orbit 管理的 Run 字段；旧 adapter 无需增加字段。Agent 方法（codex / claude-code）的
-  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染），并设置 auth、bundle 与
+  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction, tools?, wrapper? }` 二选一。`tools` 最多 8 个 stdio MCP server（`name`、非空 `command` argv、可选 `env`），只交给 Agent 启动，不能覆盖 Orbit 管理的 Run 字段；旧 adapter 无需增加字段。Agent 方法（codex / claude-code）的
+  solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，从该 Agent 定义的 `command.run` 模板渲染）。可选 `wrapper` argv 加在解析好的 Agent 命令前，在 Agent CLI 安装完成后执行。Orbit 设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
   `command`；external 也给 adapter 自己的 `command`，Orbit 只加方法的 solve `passEnv`，不注入 CLI 或强改网络。
   verify 不能请求 Agent。显式 `passEnv` 在对应阶段优先于 adapter 的同名环境默认值，避免 Harbor 模板空值遮住凭据；变量值仍不入记录。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
@@ -930,6 +956,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **Policy 登记**：`PolicyDefinition` 是共享形状（固定镜像、readiness、checkpoint/归一化摘要、命名权重 dataset、随机流声明）；
   各 connector 的必需字段（OFT 的 8 步 LIBERO recipe、GR00T 的执行长度/动作顺序/backbone 摘要）在 `bench/policies.ts` 登记时检查。
   提交时保存权威快照。`gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
+  可选的 `recommendedScope` 声明权重的建议评测 profile 与任务族。超出范围的计划在提交时记录提示，并随校准报告返回。
+  Binding、执行快照和校准判定独立于提示。
 - **样本身份**：`spec.samplePlan` 是带摘要的有序计划；sampleId 由任务、profile、初态资产摘要与索引、环境 seed、模型 seed 和重复
   编号生成。新分支用 sampleRef、禁止 seed，联合契约拒绝混用；旧 seed 作业、报告与 n→n−1 规则不变，新报告为 `orbit-report/2`，
   报告与 Trial 导航按计划顺序列出样本。WidowX 的重置种子为 `environmentSeed + initialStateId`，计划和批次拒绝别名到同一重置的样本。
@@ -938,9 +966,14 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   有效样本；Web 对比把后端未配对的任务列为 “No paired result”。新旧作业不直接归并，归并逐样本核对冻结预算。
 - **SDK 与证据**：Benchmark adapter、PolicyClient、connector、driver、证据写入分离；SDK 核心只依赖标准库与 NumPy。原生判定与
   Orbit 有效性分开，可选媒体失败不改变分数。证据原子封存，含 contract、binding、初态、逐步动作、请求的动作块、源码包摘要；
+  CPU 验证使用 Solve 的动作块形状、最小长度和数值规则，逐步核对消费顺序及重规划边界。
+  固定步长评测按冻结间隔重规划。CALVIN 可在原生子任务完成时提前重规划，验证器复核完成信号和子任务进度。
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
   重评只读 solve 证据，不启动模型或仿真，验证容器以宿主用户、无网络运行。
+- **冻结目录归档**：固定批量的 Solve 请求只保存一份冻结 reference 与一份批次计划，模拟器和 SDK 共用同一次准备。
+  每个 Solve Run 在输出根目录归档一份 `reference.json`。episode contract 和 CPU Verify 请求只保存该 reference 的摘要，
+  CPU 重评从只读 Solve 输出加载目录，并核对登记、Run 和 contract 的摘要。旧 Run 继续从 episode 内嵌 reference 重评。
 - **随机性**：模型可声明服务级随机流。OpenPI 使用 JAX key 0，GR00T 和 OFT 使用 Torch seed 0，`policy-ws` Torch 服务
   可以登记发布配方的初始种子，例如 GigaWorld 的 42。批次按冻结顺序推进服务的随机流，样本中的 `policySeed` 保持为 0。
 - **Connector**：`openpi-ws`（OpenPI 预处理在客户端）、`groot-zmq`（官方 GR00T 服务，`ioAdapter` 在原生 LIBERO 与 GR00T 输入间
@@ -950,6 +983,20 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   Google Robot 固定矩形相机、xyzw 状态、单步重规划及原生 sticky gripper，复用 Gym driver。
   SimplerEnv 固定网格可独立登记 RT-1/Octo 的策略终止协议，直接执行 7 维原生动作并另收终止信号，最终一步的原生 done 决定成功。
   原始动作在任何转换前检查数值类型与有限性，拒绝的数组以禁止 pickle 的文件保存，归为 `policy_act`。
+- **EB-Navigation** 使用 AI2-THOR 5.0.0 的无头 Vulkan 渲染，按原生 8 个离散动作控制，目标水平距离不超过 1 米或第 20 步时结束。
+  SeeNav 和原版 Qwen2.5-VL 在相同的标注双视角、动作反馈及提示词下运行。CPU 验证根据冻结目标和逐步位置复核距离与停止判定，
+  Web 复用现有时间轴，同步播放原始第一视角、俯视和送入模型的标注双视角视频。
+  SeeNav 的空计划和非法计划沿用上游兜底动作。策略报告的原因随动作块进入证据，Trial 时间轴与原生执行动作分开显示。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/eb-navigation/README.md)
+- **CHORES-S / CHORES-L** 共用原生 Stretch 仿真和 20 个离散动作，按任务冻结初态、目标和步数上限。SPOC 和 FLaRe
+  读取相同的双 RGB、指令和抓持状态。CPU 校验核对原生终止条件和 SEL，并按 `sub_done` 动作重建 RoomVisit 已确认房间。
+  Web 同步播放双相机视频并显示动作和位姿。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/chores/README.md)
+- **HSSD-OV** 按 StopWatch 协议冻结目标类别、初始位姿、可接受的实例视点和 navmesh 摘要。CPU 校验按轨迹复算
+  Habitat 动作对应的位姿、测地距离、STOP 判定和 SPL。LightNav-0 Policy 将上游速度输出投影到同一套 Habitat 离散动作。
+  场景准备和登记均核对固定的发布资产清单摘要，覆盖原始文件与派生场景。
+  策略登记冻结投影版本并校验单步 HSSD-OV 动作契约，每个动作块封存归一化速度和解码状态，CPU 重评根据原始动作块复算离散动作。
+  [评测协议](../examples/bench-adapters/embodied/benchmarks/hssd-ov/README.md)
 - **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
   Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。
@@ -1009,6 +1056,10 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   两者的源码/资产检查与实际 GPU 任务校准分别记录，接入配置不代表已校准。
   Isaac 启动器只在 Linux 查询到一致的实际 R535.256+ 驱动时，采用 NVIDIA 公布的 Vulkan 版本误报兼容参数，并记录版本与处理原因；
   其他版本或查询失败保留原生驱动检查。该处理不修改主机驱动、原生场景或成功判定。
+- **BEHAVIOR-1K**：固定 2026 R1Pro public-test 配方，公开初态序号 0–19 对应原生 ID 301–320，环境种子固定 0。
+  沿用原生 BatchedEvaluator.run 的初始化、首次查询豁免、真实时间预算、终止及 Q-score；不另造 rollout 循环。
+  23D 原生命令和 RGBA 相机由独立 Policy 提供，CPU verifier 复核动作原始输出、原生 float32 转换、实例及终止记录。
+  全部发布活动保留目录，缺少挑战元数据的活动明确不可用。许可数据与密钥只读挂入，密钥不进入摘要、证据或源码。
 - **证据封存**：benchmark 可在 `finalize_evidence` 中关闭原生写入器，再计算必需证据摘要；例如 HDF5 的 close 会改变文件，flush 不能替代。
   收尾失败使 episode 无效，保留已有失败原因；视频等可选媒体仍可在封存后结束。取消中的未完成样本不新增封存。
 - **固定批次**：`spec.batchSize` 按方法、计划顺序和相同生效预算拆分，成员、attemptId、episodeId 与清单摘要提交时冻结；模型服务
@@ -1027,7 +1078,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 
 ### 9.4b 具身 harness benchmark（Agent 评测）
 
-RLE-Bench, EmbodiedCLBench and EmbodiedLab evaluate an Agent together with its harness,
+RLE-Bench, EmbodiedCLBench, EmbodiedLab and RobotAgentBench evaluate an Agent together with its harness,
 tools and task conditions. They use the existing external adapter protocol and `agentTask`
 CLI launch path; they do not register an independent VLA Policy or introduce an Agent loop.
 Model selection and credentials remain Method/auth configuration, including Ark Agent Plan.
@@ -1048,12 +1099,17 @@ Model selection and credentials remain Method/auth configuration, including Ark 
   independent verifier consumes sealed service evidence and the submitted experiment result,
   using the native experiment evaluator. T1's additional services and unreleased T2 are
   explicitly unsupported.
+- **RobotAgentBench** reuses the pinned native raw-22 worker and RawRobotBridge as public MCP tools.
+  Saved configuration ordinals retain their actual seeds. Private per-trial Runtime copies preserve original namespace aliases;
+  Orbit owns the simulator GPU and cleanup. Original delayed ACK, worker exit and source-owner shutdown receipts are all required.
+  Finished native total / maximum and native success remain separate; abandonment is invalid. Dedicated owners and
+  OpenEnd/discovery score profiles stay unsupported. [Setup and limits](../examples/bench-adapters/robotagentbench/README.md).
 
 Native images, datasets, instance state and run evidence stay outside the source checkout.
 Readiness, execution outcome, cleanup and evaluation validity remain separate. Unusable
 model backends and missing or untrustworthy environment evidence are invalid evaluations. Discovery metadata uses §9.17 and
 retains per-profile support limits; sampled checks do not establish full-suite parity.
-Implementation and validation: [task record](tasks/20261110-embodied-harness-benchmarks.md).
+Implementation and validation: [harness adapters](tasks/20261110-embodied-harness-benchmarks.md) · [BEHAVIOR / RobotAgentBench](tasks/20261113-behavior-robotagent.md).
 
 ### 9.5 Agent 与环境的桥
 
@@ -1140,7 +1196,9 @@ starting，占用启动名额却没有任何进展。现在两者都有 `ORBIT_I
   官方聚合在 **job × method** 层计算，不对 native summary 再求平均（两批 1/1 与 1/9 的批次均值 55.6%，episode 成功率 20%）。
 - **已实现（P2）**：`Outcome.failure`（封闭枚举，classify 与 adapter 填写）与 `Outcome.episode`；adapter 声明的 `OfficialRule`
   （`errors: exclude|fail`、`unit: sample|task`、`failValue`、`metric`）在提交时存入 `BenchJob.official`，`MethodSummary.official`
-  给出官方值、样本数、missing 与 partial；`bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
+  给出按官方规则计算的值，以及本次计划数、计分数、缺失数、排除数；计划中有样本未计入即标 `partial`。
+  计划覆盖率以本次 job 为范围，完整上游套件分数仍须满足上游的样本范围要求。
+  `bench_reports` 表按 `(job, revision)` 追加报告（`buildReport`，`orbit-report/1`），
   在 job 结束、取消、重新评分或归并后、且结果与上一修订不同时写入，旧 job 首次读取时补一份 `backfill`；计划 digest 由
   benchmark、tasks、seeds、methods、options 计算。API `GET /bench/jobs/:id/reports`，CLI `orbit bench report`，Web job 页 Reports。
   原生具身评测已支持固定共享 solve 批次及逐 episode 尝试定位；通用 attempt/retry 的显式计数与自动重试规则仍后置。
@@ -1193,6 +1251,11 @@ Orbit 扩展放在 `extra.orbit`，包含来源文件摘要、导入器版本、
 不改变执行结果、分数、有效性或阻止资源释放。worker 生成/持有原始文件，主节点代理 ATIF、媒体和重建请求。
 CLI：`orbit trajectory show <run> [--json]`、`orbit trajectory rebuild <runs...> [--json]`。
 详细使用见 [轨迹指南](guides/trajectories.md)。
+
+**Web 逐步复盘（T6）**：Run 的 Trajectory 与 Trial 的 Agent trajectory 直接读取 ATIF，保留旧 `?tab=session` URL；Submitter session 仍可查看宿主提交会话。
+虚拟步骤列表、搜索、嵌入子 Agent 选择、折叠工具调用/结果与 reasoning、压缩边界、逐步 token 和已记录检查点；不展示 opaque reasoning，不伪造缺失用量或步骤执行耗时，时间戳差仅标为到下一步的间隔。
+右侧复用 GUI/Episode/Conversation viewer，按根会话的显式步骤引用同步；无匹配或外置子轨迹缺失时明确提示。共享 solve 批次使用当前 Trial 身份，历史 solve 不复用后续尝试的环境。转换失败或无会话时仍可看环境证据。
+步骤/子轨迹位置保存在 URL，支持焦点内左右键；媒体只走本地 trajectory media 端点。检查点分叉仍待 F2/F3。
 
 **Token 记账（T3）**：`sessions/tokens.ts` 从 ATIF 生成 `Run.tokens`，在轨迹生成/重建、缓存读取补记及 worker 同步时保存，沿用同一 Run 生命周期。
 根轨迹与嵌入子轨迹各计一次，忽略复制上下文和非模型调用。`input` 含缓存读取/写入，`output` 含 reasoning；细分字段不能再加到总量上。
@@ -1419,7 +1482,10 @@ JSON 是辅助；"能跑 / 校准通过 / 真实 Agent 或 Policy 跑过 / 与�
   原始日志继续可查，预览上限 2 MiB。已有只含启动信息的日志不能还原对局；shared 模式不能 rescore，需重新运行才能记录。
 - Web `pages/trial/Conversation.tsx`：轮次目录 / 对话 / 检查器三栏（窄屏单栏）；工具卡片按 `callId` 合并调用与结果，错误与失败相关
   内容默认展开；检查器有 Checker、状态 diff（只看变化字段）、期望 vs 实际、Raw；顶部 verdict 横幅可跳到失败轮次。键位：`h/l` 轮次、
-  `/` 搜索、`e` 跳到失败证据。参考调用与实际调用的差异只作诊断，不当作判分规则。
+  `/` 搜索、`e` 跳到失败证据。轮次目录和消息区复用 TanStack Virtual，消息按轮次标题 / 单条事件扁平化，动态测量高度，只挂载可见内容及缓冲；单轮大量事件也不会全量挂载。
+  视图索引与筛选在 `conversation-model.ts`，虚拟列表在 `ConversationList.tsx`，消息 / 工具卡片在 `ConversationEvents.tsx`；搜索索引包含折叠的结果，事件标识不随筛选变化，工具展开状态跨虚拟卸载保留。
+  `?turn=`、失败跳转和快捷键都经虚拟索引定位，搜索定位首个命中；嵌入 ATIF 回放时仍只显示关联轮次。Conversation 的 Refresh 同时刷新目录、环境和会话读取，并取消旧请求。
+  参考调用与实际调用的差异只作诊断，不当作判分规则。
 - Trial 页通用：上一 / 下一 trial、下一个失败（按 task / method / seed 排序；`[` `]` `}`）。
 - **工具工作流的 CLI Agent 路径**：BFCL 用 adapter 自带的 stdio MCP 服务（`get_user_message` / `list_functions` / `call_function`）
   让 Agent 在一次会话里逐轮完成对话；调用按 fixed driver 的 evidence 格式记录，verify 独立重放，Agent 与服务的输出都不作评分依据。
@@ -1519,7 +1585,7 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   用户或 Agent 可根据失败证据修复环境后重试，或调整评测配置并比较可比结果；页面不将这些变化称为方法进化。
 
 **不做**：跨 benchmark 总分或总榜；单一 Ready 徽章合并安装、凭据、能力、校准与有效性；按 hub 声称的套件数宣传接入量；
-独立 Method 系统或方法进化声明；Web 内的科研编排。
+独立 Method 系统；Web 内的科研编排。对配置版本给出准入判定与证据（§7），不把更换模型或预算自动称为方法进化。
 
 ### 9.17 Benchmark 六维分类 v1（2026-11-09）
 
@@ -1712,7 +1778,35 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 原生具身家族与模型组合的详细范围见 [具身兼容矩阵](guides/embodied-compatibility.md)。其中 RoboCasa365 的
 GR00T recipe 是 N1.5，LIBERO 与 SimplerEnv 使用 N1.7；矩阵中的真实抽样验证不表示完整套件统计等价。
 
-### 9.19 Additional native question and utility adapters (2026-11-16)
+### 9.19 Benchmark 资源准备（2026-11-17）
+
+§9.18 的所有已适配家族都有资源准备配方，源码在 `bench/preparation-recipes.ts`，公共形状在
+`contracts/preparation.ts`。配方描述官方地址、版本/校验和、许可入口、本地复用、所需环境字段及原始准备步骤；
+不另建 benchmark 注册表，也不托管或重新分发上游数据。随 npm 包分发 Orbit 自有的 adapters、SDK 和准备工具，
+保持 examples 的相对目录布局；Harbor suites TypeScript adapter 编译成可独立执行的包内入口。
+
+CLI `bench resources [family]` / `bench prepare <family>` / `bench preparation <run>` 与 Web
+**Benchmarks → Prepare resources** 共用 daemon HTTP API：`GET /bench/resources`、
+`POST /bench/resources/:family/prepare`、`GET /bench/preparations/:id`。浏览目录不触发下载；用户明确开始准备后
+创建普通 `backend=process` Run，固定到当前节点，共用排队、日志、超时、取消、Docker shim 子容器清理和恢复。
+下载代理只作用于准备进程/显式构建；不修改全局配置或评测网络约束。token 仅按 daemon 环境变量名传递。
+
+缓存默认放在数据目录的 `bench-resources/<family>`，也允许指定安装/源码目录外的空目录。
+目录归属标记防止混用家族或覆盖无关文件；同一 daemon 不并发准备同一路径。Git 下载固定版本并递归准备子模块，
+文件下载保留 `.partial`，提供 SHA-256 时必须匹配。复用已有 checkout 不执行 checkout/reset，版本或 tracked diff
+不符合则拒绝。原生资源的深层校验仍委托已有 configurator/adapter。需要人工申请、许可证或专用运行环境时显示
+官方说明和缺失项，保留已完成下载，不将占位数据或未准备的环境当作成功。
+
+worker 只产生资源与 benchmark 定义文件；daemon 在 Run 成功且 cleanup=done 后调用同一 adapter 验证路径，
+预先校验全部定义及数据映射，等待结束后再次检查冲突，然后同步写现有 BenchmarkRegistry / DatasetRegistry。
+不同配置的已有登记不覆盖。终态保存为既有 RunEvent；daemon 重启从成功 Run 补完未记录的登记步骤，不引入新的
+任务状态机、表或执行器。API 的 running / needs_input / registered / failed / cancelled 是 Run 与登记事件的投影。
+仅登记成功不代表运行可用或校准通过，覆盖与 calibration 继续使用既有接口。导入定义要求显式家族身份；CUA-Lite
+的 WebVoyager / Online-Mind2Web 入口保留原有 collection 身份与任务覆盖关联，避免重新标记其他套件。
+
+用法与仍需人工完成的原生前提见 [资源准备指南](guides/benchmark-resources.md)。
+
+### 9.20 Additional native question and utility adapters (2026-11-16)
 
 HealthBench and LongMemEval use the existing solve/verify/score protocol with original
 per-question conversations or timestamped histories. Grader inputs and API credentials stay
@@ -1741,6 +1835,12 @@ or the grouped scenario metric. Both adapters preserve native reference/empty co
 miniF2F keeps the original Lean 3 statements and libraries, exports the elaborated theorem with
 its dependencies, rejects nonstandard axioms and runs the native independent leanchecker.
 A successful Lean parse with admitted goals is insufficient for a valid proof.
+
+The ten additional families appear in the resource preparation catalog through guided native
+setup and the existing definition-import path. Missing setup remains pending; automatic
+acquisition and configuration are not implemented for these entries. Imported definitions
+retain their adapter, runtime, data-integrity, judge and toolchain settings and pass through
+the same daemon validation before registration.
 
 ## 10. 路线
 

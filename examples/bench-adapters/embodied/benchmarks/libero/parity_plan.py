@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, SDK, digest, file_digest, implementation_digest
+from orbit_embodied.evidence import read_episode_reference
 
 
 def main():
@@ -41,11 +42,18 @@ def main():
     sample = contract["sample"]
     if sample["initialStateId"] != "0" or sample["environmentSeed"] != 7 or sample["policySeed"] != 0:
         raise ValueError("this comparison supports the official first-episode random prefix only")
-    if contract["identity"]["reference"] != reference:
+    identity = contract["identity"]
+    if "referenceDigest" in identity:
+        saved_reference = read_episode_reference(episode, batched=False)
+        if digest(saved_reference) != identity["referenceDigest"]:
+            raise ValueError("the original solve reference archive differs from its contract")
+    else:
+        saved_reference = identity["reference"]
+    if saved_reference != reference:
         raise ValueError("the original solve used another reference")
-    if contract["identity"]["implementationDigest"] != implementation_digest():
+    if identity["implementationDigest"] != implementation_digest():
         raise ValueError("the SDK/driver changed since the original solve; run a fresh candidate first")
-    policy = contract["identity"]["policy"]
+    policy = identity["policy"]
     if policy["kind"] != "model" or policy["randomness"] != {"backend": "jax", "initialKey": 0, "scope": "service"}:
         raise ValueError("comparison needs a real JAX model with the declared service-scoped key")
     service = next(s for s in run["spec"]["services"] if s["role"] == "policy")
@@ -60,7 +68,7 @@ def main():
         "pairedRuntime": args.paired_runtime,
         "benchmarkImage": run["spec"]["image"], "policyImage": service["image"],
         "orbitEvidenceDigest": file_digest(episode / "evidence-manifest.json"),
-        "orbitImplementationDigest": contract["identity"]["implementationDigest"],
+        "orbitImplementationDigest": identity["implementationDigest"],
         "fixedInitialStates": ["0", "1"], "fixedActionSteps": 32,
         "horizon": reference["horizons"][suite], "settleSteps": reference["parameters"]["settleSteps"],
         "comparison": {"arrays": "exact dtype, shape and values", "absoluteTolerance": 0,
