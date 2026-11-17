@@ -199,6 +199,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261116](20261116-embodied-catalog-checkpoints.md) Embodied product catalog and CHORES checkpoint scope
 - [20261116](20261116-embodied-agent-adapter-maintenance.md) Cadence and preparation fixes for embodied Agent adapters
 - [20261116](20261116-agent-setup-deadline.md) Agent installation deadline and EmbodiedLab native stop reason
+- [20261117](20261117-galaxea-vla-g05.md) GalaxeaVLA G0.5 on native RoboTwin 2.0
 - [20261114](20261114-xiaomi-robocasa365.md) Xiaomi-Robotics-1 on native RoboCasa365
 - [20261114](20261114-gigaworld-robocasa365.md) GigaWorld-Policy-0.1 on native RoboCasa365
 

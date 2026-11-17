@@ -36,25 +36,34 @@ def load_tests(loader, tests, pattern):
 
 
 class PolicyExpansionTests(unittest.TestCase):
-    def assert_action_policy_registration(self, script, reference, observation, field, incompatible):
+    def assert_action_policy_registration(self, script, reference, observation, field, incompatible, release_assets=None):
         config = ADAPTER / "policies" / script
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             reference_path, output = root / "reference.json", root / "policy.json"
             argv = [str(config), "--source", str(root), "--policy-image", "test:policy",
                     "--reference-file", str(reference_path), "--weights", str(root), "--output", str(output)]
-            identities = {"checkpointDigest": "sha256:" + "a" * 64, "normalizationDigest": "sha256:" + "b" * 64}
+            identities = release_assets or {
+                "checkpointDigest": "sha256:" + "a" * 64, "normalizationDigest": "sha256:" + "b" * 64,
+            }
             with patch.object(sys, "argv", argv), patch.object(sys, "path", [str(config.parent), str(ADAPTER), *sys.path]), \
                     patch("native_runtime.check_policy_source"), \
                     patch("native_runtime.require_image", return_value="sha256:" + "c" * 64), \
                     patch("native_runtime.file_digest", return_value="sha256:" + "d" * 64), \
-                    patch("orbit_embodied.assets.policy_asset_digests", return_value=identities):
+                    patch("orbit_embodied.assets.policy_asset_digests", return_value=identities) as assets:
                 reference_path.write_text(json.dumps(reference))
                 runpy.run_path(str(config), run_name="__main__")
                 registered = json.loads(output.read_text())
                 self.assertEqual(registered["profile"]["observations"], reference["benchmarkProfile"]["observations"])
                 self.assertEqual(registered["profile"]["action"], reference["benchmarkProfile"]["action"])
                 output.unlink()
+                if release_assets:
+                    for field_name in release_assets:
+                        assets.return_value = {**identities, field_name: "sha256:" + "0" * 64}
+                        with self.assertRaisesRegex(ValueError, "pinned release assets: " + field_name):
+                            runpy.run_path(str(config), run_name="__main__")
+                        self.assertFalse(output.exists())
+                    assets.return_value = identities
 
                 descriptor = reference["benchmarkProfile"]["observations"][observation]
                 original = descriptor[field]
@@ -88,6 +97,40 @@ class PolicyExpansionTests(unittest.TestCase):
     def test_motus_registration_rejects_wrong_camera_and_action_order(self):
         self.assert_action_policy_registration("motus/configure_motus.py", self.robotwin_recipe("qpos-chunk-16"),
                                                "head_camera", "camera", "left_camera")
+
+    def test_g05_registration_rejects_wrong_camera_and_action_order(self):
+        from adapter import solve_spec
+
+        reference = self.robotwin_recipe("qpos-chunk-8")
+        self.assertNotIn("resizeSize", reference["parameters"])
+        recipe = "policies/galaxea-vla-g05/configure_g05.py"
+        with patch.object(sys, "path", [str((ADAPTER / recipe).parent), *sys.path]):
+            assets = load(recipe).RELEASE_ASSETS
+        self.assert_action_policy_registration("galaxea-vla-g05/configure_g05.py", reference,
+                                               "right_camera", "camera", "left_camera", release_assets=assets)
+        solve = solve_spec({"options": {"gpuId": "0"}}, {"image": "test:sim", "simGpus": "1", "profileDigest": "test"},
+                           reference["environment"], ADAPTER)
+        self.assertEqual(solve["spec"]["resources"]["gpuIds"], ["0"])
+
+    def test_g05_updates_native_observations_between_policy_queries(self):
+        from orbit_embodied.test_robotwin import NativeControlEnvironment
+
+        run = load("run.py")
+        reference = self.robotwin_recipe("qpos-chunk-8")
+        request = {
+            "sample": {"taskId": "adjust_bottle", "benchmarkProfile": reference["id"]},
+            "reference": reference, "policy": {"connector": "policy-ws", "replanSteps": 8},
+            "binding": {}, "episodeId": "fixture", "referenceDigest": "fixture",
+            "trialId": "fixture", "implementationDigest": "fixture",
+        }
+        with patch.object(run, "run_episode") as execute, patch.dict("os.environ", {"ORBIT_RUN_ID": "fixture"}):
+            run.execute_episode(request, ADAPTER)
+        benchmark, policy = execute.call_args.args[:2]
+        self.assertEqual(policy.replan_steps, 8)
+        benchmark.env = NativeControlEnvironment()
+        for step in range(1, 9):
+            outcome = benchmark.step(np.zeros(14))
+            self.assertEqual(outcome.observation["head_camera"][0, 0, 0], step * 2)
 
     def test_robomme_pi05_registration_rejects_wrong_state_units_and_action_order(self):
         config = load("benchmarks/robomme/configure_robomme.py")

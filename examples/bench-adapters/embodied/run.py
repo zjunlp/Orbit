@@ -340,7 +340,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
             or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin", "robolab", "robodojo",
                             "robomimic", "vima-bench", "molmospaces", "colosseum-v2")
                 and parameters["renderSize"] != expected_render_size)
-            or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
+            or (request["policy"]["connector"] == "openpi-ws" and parameters.get("resizeSize", 224) != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],
                 {"referenceDigest": request["referenceDigest"], "policy": request["policy"],

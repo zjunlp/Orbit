@@ -54,6 +54,7 @@ DROID、LingBot 和 StarVLA 的 GPU 短测使用开发镜像。加入镜像来�
 
 | Policy / 权重 | 已实测的 benchmark 协议 | 真实模型样本与参考证据 |
 | --- | --- | --- |
+| [GalaxeaVLA G0.5](../../examples/bench-adapters/embodied/policies/galaxea-vla-g05/README.md) | RoboTwin 2.0 原版 Clean 与 Randomized，LeRobot System 1 转换权重，每 8 步重规划关节目标 | 两套各验证一条冻结的 `adjust_bottle` 样本。每条完成 9 步，覆盖两个动作块，独立 CPU 验证与计分一致。[记录](../tasks/20261117-galaxea-vla-g05.md) |
 | [Hy-Embodied-0.5-VLA](../../examples/bench-adapters/embodied/policies/hy-embodied-vla/README.md) | RoboTwin 2.0 原版 Clean，双臂绝对末端位姿，每步更新上游相机历史 | 冻结 `adjust_bottle` 完成 8 步短测，覆盖第 7 步后的重新推理。CPU 核对所录动作。[记录](../tasks/20261116-hy-embodied-vla.md) |
 | [Motus](../../examples/bench-adapters/embodied/policies/motus/README.md) | RoboTwin 2.0 原版 Randomized，每 16 步重规划关节目标 | 冻结 `adjust_bottle` 完成 17 步短测，覆盖两个动作块。CPU 核对所录动作。[记录](../tasks/20261116-motus.md) |
 | [官方 RoboMME π₀.₅](../../examples/bench-adapters/embodied/policies/robomme-pi05/README.md) | RoboMME 公开测试集，无历史关节控制 | 冻结 `PickHighlight` 完成 17 步短测，覆盖第 16 步后的重规划。CPU 核对所录动作。[记录](../tasks/20261116-robomme-hy-vla-motus.md) |

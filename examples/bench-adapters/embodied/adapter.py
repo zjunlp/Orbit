@@ -315,11 +315,11 @@ def solve_spec(trial, config, environment, destination):
     memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16, "behavior1k": 32,
                  "robomme": 16}.get(environment.get("kind"), 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
-    if environment.get("kind") in ("eb-navigation", "chores", "hssd-ov"):
+    if environment.get("kind") in ("eb-navigation", "chores", "hssd-ov", "robotwin"):
         gpu = trial.get("options", {}).get("gpuId")
         if gpu is not None:
             if not gpu or "," in gpu or resources["gpus"] != 1:
-                raise ValueError("gpuId must name a single GPU for the native navigation runtime")
+                raise ValueError("gpuId must name a single GPU for the native simulator")
             resources["gpuIds"] = [gpu]
     if "simGpuMemGB" in config:
         memory = float(config["simGpuMemGB"])
