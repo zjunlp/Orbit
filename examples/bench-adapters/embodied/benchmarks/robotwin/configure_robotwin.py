@@ -19,7 +19,8 @@ SEPTEMBER = {"repository": "https://github.com/RoboTwin-Platform/RoboTwin",
              "commit": "ea8b21121ebb3cd201ff5b3fe361944ac94eda3f"}
 SEPTEMBER_DOCKERFILE = Path(__file__).with_name("robotwin-september.Dockerfile")
 SEPTEMBER_CONFIG = "env_cfg/task_config"
-POLICY_RECIPES = ("fast-vla", "absolute-ee", "qpos-chunk-16")
+CHUNK_RECIPES = {"absolute-ee": 1, "qpos-chunk-8": 8, "qpos-chunk-16": 16}
+POLICY_RECIPES = ("fast-vla", *CHUNK_RECIPES)
 POSE_ORDER = [f"{arm}_{part}" for arm in ("left", "right")
               for part in ("x", "y", "z", "qw", "qx", "qy", "qz", "gripper")]
 
@@ -111,9 +112,9 @@ def configure_benchmark(args, reference):
                                               "format": f"RGB-native-t-minus-{steps}"}
             reference["observationMap"][name] = name
         suffix = "-full-fast-vla-native"
-    elif recipe in ("absolute-ee", "qpos-chunk-16"):
+    elif recipe in CHUNK_RECIPES:
         reference["id"] = reference["id"].rsplit("/", 1)[0] + f"-{recipe}/1"
-        reference["parameters"]["replanSteps"] = 1 if recipe == "absolute-ee" else 16
+        reference["parameters"]["replanSteps"] = CHUNK_RECIPES[recipe]
         environment["controller"] = recipe
         suffix = f"-full-{recipe}-native"
         if recipe == "absolute-ee":

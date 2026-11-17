@@ -89,6 +89,16 @@ class PolicyExpansionTests(unittest.TestCase):
         self.assert_action_policy_registration("motus/configure_motus.py", self.robotwin_recipe("qpos-chunk-16"),
                                                "head_camera", "camera", "left_camera")
 
+    def test_g05_registration_rejects_wrong_camera_and_action_order(self):
+        from adapter import solve_spec
+
+        reference = self.robotwin_recipe("qpos-chunk-8")
+        self.assert_action_policy_registration("galaxea-vla-g05/configure_g05.py", reference,
+                                               "right_camera", "camera", "left_camera")
+        solve = solve_spec({"options": {"gpuId": "0"}}, {"image": "test:sim", "simGpus": "1", "profileDigest": "test"},
+                           reference["environment"], ADAPTER)
+        self.assertEqual(solve["spec"]["resources"]["gpuIds"], ["0"])
+
     def test_robomme_pi05_registration_rejects_wrong_state_units_and_action_order(self):
         config = load("benchmarks/robomme/configure_robomme.py")
         with patch.object(config, "test_catalog", return_value={}):
