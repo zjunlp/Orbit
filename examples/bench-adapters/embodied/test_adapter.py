@@ -795,6 +795,30 @@ class AdapterPlanningTests(unittest.TestCase):
                 with self.subTest(key=key):
                     self.assertTrue(adapter.score(request)["invalid"])
 
+    def test_rescore_excludes_archived_robomme_simulator_errors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self.request(root)
+            config = request["benchmark"]["config"]
+            reference = json.loads(config["reference"])
+            reference["environment"] = {"kind": "robomme", "tasks": [request["trial"]["task"]]}
+            config.update(reference=json.dumps(reference), profileDigest=digest(reference))
+            with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                self.assertEqual(adapter.tasks(request)["official"]["errors"], "fail")
+            request["verify"] = {"output": str(root / "verify-output")}
+            expected = adapter.verification_expectation(request)
+            result = {"sampleRef": request["trial"]["sampleRef"], "episodeId": "synthetic-trial.attempt",
+                      "valid": True, "success": False, "issues": [], "native": {"nativeStatus": "error"}}
+            write_json(root / "solve-output/episode/native-result.json", result)
+            write_json(root / "verify-output/verified.json", result)
+            write_json(root / "verify-output/verification.json",
+                       {"sampleRef": result["sampleRef"], "episodeId": result["episodeId"],
+                        "solveRunId": expected["solveRunId"], "trialId": expected["executionTrialId"],
+                        "implementationDigest": expected["verifierDigest"], "expectationDigest": digest(expected)})
+            outcome = adapter.score(request)
+            self.assertTrue(outcome["invalid"])
+            self.assertEqual(outcome["failure"], "env_step")
+
     def test_calvin_reports_raw_completed_subtasks_as_its_primary_metric(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

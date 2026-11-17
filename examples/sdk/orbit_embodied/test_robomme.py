@@ -43,12 +43,15 @@ class RoboMMETests(unittest.TestCase):
                          "joint_state_list": [np.arange(7), np.arange(7) + 1],
                          "gripper_state_list": [np.array([0.01, 0.01]), np.array([0.04, 0.04])]}
             next_obs = {key: [values[-1]] for key, values in reset_obs.items()}
-            for status in ("success", "error", "timeout"):
+            for status in ("success", "fail", "timeout", "error"):
                 with self.subTest(status=status):
                     env = Mock()
                     env.reset.return_value = reset_obs, {"task_goal": ["Wait", "Alternative"]}
                     result_obs = None if status == "error" else next_obs
-                    env.step.return_value = result_obs, 3, status != "timeout", status == "timeout", {"status": status}
+                    info = {"status": status}
+                    if status == "error":
+                        info.update(exception_type="RuntimeError", error_message="synthetic simulator crash")
+                    env.step.return_value = result_obs, 3, status != "timeout", status == "timeout", info
                     builder = Mock()
                     builder.get_episode_num.return_value = 50
                     builder.resolve_episode.return_value = frozen["seed"], frozen["difficulty"]
@@ -69,8 +72,14 @@ class RoboMMETests(unittest.TestCase):
                     np.testing.assert_array_equal(policy.act.call_args.args[0]["wrist_rgb"], frame + 3)
                     self.assertEqual(policy.act.call_args.args[0]["instruction"], "Wait")
                     verified = verify_episode(episode, sample["sampleId"], status, reference=recipe)
-                    self.assertTrue(verified["valid"])
+                    self.assertEqual(verified["valid"], status != "error")
                     self.assertEqual(verified["success"], status == "success")
+                    if status == "error":
+                        self.assertEqual(verified["failure"], "env_step")
+                        self.assertEqual(verified["steps"], 0)
+                        self.assertEqual(verified["issues"],
+                                         ["RoboMME simulator error (RuntimeError): synthetic simulator crash"])
+                        continue
                     self.assertEqual(verified["steps"], 1)
                     self.assertEqual(verified["native"]["termination"], status)
                     self.assertEqual(verified["native"]["demonstrationFrames"], 1)

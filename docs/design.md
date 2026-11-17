@@ -886,6 +886,7 @@ daemon 不参与逐步控制，任务、控制器和成功判定仍由 benchmark
 默认一个 Trial 对应一个逻辑样本、一个 solve Run。原生具身 adapter 声明固定批次能力后，可通过 `--batch-size` 让多个
 Trial 顺序共享一个 solve Run；每个 Trial 仍独立 verify、score 和重评。`trial_runs` 按 Run、Trial、阶段关联，保存 episode
 及尝试身份；事件通过 `trialsByRun` 推进全部关联项。批次只有不可变计划，执行状态仍由既有 Run 和 Trial 管理。
+若没有该 episode 的证据，且与计划摘要匹配的最终批次摘要标记为 `not_started`，Trial 跳过 Verify 并以缺失样本报告。
 轨迹事件带 sample / attempt / source / step 身份；计划数、完成数、有效数注明计数单位。
 
 ### 9.2 Bench 家族与接入路径

@@ -30,10 +30,10 @@ export function realDirs(root: string, dir: string): void {
   }
 }
 
-/** A regular file's text; "" when missing or not a regular file (never follows a symlink). */
-export function readRegular(file: string): string {
+/** A regular file's text; "" when missing, not regular or over the optional size limit. */
+export function readRegular(file: string, maxBytes = Infinity): string {
   const st = lstatSync(file, { throwIfNoEntry: false });
-  return st?.isFile() ? readFileSync(file, "utf8") : "";
+  return st?.isFile() && st.size <= maxBytes ? readFileSync(file, "utf8") : "";
 }
 
 /** Replace `file` with a private (0600) file; a symlink at `file` is replaced, not written through. */

@@ -454,6 +454,10 @@ def score(req):
             raise ValueError("verification belongs to another frozen trial or solve Run")
         if not result["valid"]:
             return invalid(result.get("failure", "scorer_error"), *result["issues"])
+        if (reference.get("environment", {}).get("kind") == "robomme"
+                and result["native"]["nativeStatus"] == "error"):
+            # Archived Solve evidence used to mark this status valid.
+            return invalid("env_step", "RoboMME simulator error recorded by the archived Solve")
         files = [
             {"label": "Native episode", "phase": "solve", "path": prefix + "/native-result.json", "kind": "json"},
             {"label": "Resolved binding", "phase": "solve", "path": prefix + "/resolved-binding.json", "kind": "json"},

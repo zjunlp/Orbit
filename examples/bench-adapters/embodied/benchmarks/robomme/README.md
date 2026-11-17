@@ -7,8 +7,10 @@ per task. `initialStateId` selects the upstream episode index. The native metada
 seed and difficulty. The benchmark uses two native RGB cameras, the first task goal, the Panda
 joint state and eight-dimensional joint-angle commands. The official `pi05_baseline` configuration
 executes 16 controls per query and caps scored episodes at 1,300 controls. CPU verification
-checks the frozen initial state, controller inputs, stop status and score. Native step errors
-count as unsuccessful episodes. Trial review includes the two control videos and saves any
+checks the frozen initial state, controller inputs, stop status and score. Orbit records simulator
+errors as invalid episodes with native diagnostics. The official success rate counts them as
+failures. A simulator error stops the shared Solve batch. Episodes that have yet to start are
+reported as missing. Trial review includes the two control videos and saves any
 native reset demonstration as separate videos.
 
 The registration covers the joint-angle evaluation protocol. RoboMME-Plus, the other native

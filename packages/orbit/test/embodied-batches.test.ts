@@ -245,6 +245,72 @@ it.each(["cancelled", "failed"] as const)(
   },
 );
 
+it.each(["final", "progress", "other attempt"] as const)(
+  "uses only a matching final batch result to report an unstarted sample (%s)",
+  async (summary) => {
+    const f = fixture();
+    const output = f.runs.dirs(f.solve.id).output;
+    for (const member of f.plan.members.slice(0, 2)) {
+      const directory = join(output, "episodes", member.episodeId);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, "evidence-manifest.json"), "explicit synthetic verifier input");
+    }
+    writeFileSync(
+      join(output, "batch-result.json"),
+      JSON.stringify({
+        planDigest: summary === "other attempt" ? contentDigest("other batch") : f.plan.digest,
+        states: ["completed", "invalid", "not_started"],
+        ...(summary === "progress" ? {} : { cancelled: false }),
+      }),
+    );
+    f.store.putJob({
+      ...f.job,
+      official: { name: "Synthetic success rate", unit: "sample", errors: "fail", failValue: 0 },
+    });
+    f.store.putRun({
+      ...f.solve,
+      state: "failed",
+      startedAt: f.at,
+      endedAt: f.at,
+      cleanup: "done",
+    });
+    for (const trial of f.trials)
+      f.store.putTrial({ ...trial, solveRunId: f.solve.id, state: "solving" });
+    vi.mocked(AdapterClient.prototype.score).mockImplementation(async (trial) =>
+      trial.batch?.index === 1
+        ? { score: null, maxScore: 1, invalid: true, failure: "env_step", issues: [] }
+        : { score: 1, maxScore: 1, invalid: false, issues: [] },
+    );
+    f.bench.start();
+
+    for (const trial of f.trials.slice(0, 2)) {
+      await expect.poll(() => f.store.getTrial(trial.id)?.state).toBe("verifying");
+      f.finishVerify(f.store.getTrial(trial.id)?.verifyRunId ?? null);
+    }
+    await expect
+      .poll(() => f.store.trials(f.job.id).every((trial) => trial.state === "done"))
+      .toBe(true);
+    const final = summary === "final";
+    expect(f.verify.mock.calls.map(([trial]) => trial.batch?.index).sort()).toEqual(
+      final ? [0, 1] : [0, 1, 2],
+    );
+    const report = f.bench.reports(f.job.id).at(-1)?.methods[0];
+    expect(report?.entries.map((entry) => entry.evaluation)).toEqual([
+      "valid",
+      "invalid",
+      final ? "unknown" : "invalid",
+    ]);
+    expect(report?.entries[1]?.failure).toBe("env_step");
+    expect(report?.entries[2]?.verifyRunId).toBeNull();
+    expect(report?.official).toMatchObject({
+      samples: final ? 2 : 3,
+      missing: final ? 1 : 0,
+      partial: final,
+    });
+    expect(report?.official?.value).toBeCloseTo(final ? 50 : 100 / 3);
+  },
+);
+
 it("adopts a persisted batch Run after a crash before trial links were written", async () => {
   const f = fixture();
   f.store.putRun(f.solve);

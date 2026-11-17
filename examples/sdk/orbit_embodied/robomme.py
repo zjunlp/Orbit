@@ -94,17 +94,20 @@ class RoboMMEBenchmark:
     def step(self, action):
         import numpy as np
 
-        from .driver import StepResult
+        from .driver import EpisodeFailure, StepResult
 
         command = np.asarray(action, dtype=np.float32)
         raw, _, terminated, truncated, info = self.env.step(command)
+        if info["status"] == "error":
+            exception = info.get("exception_type", "unknown exception")
+            message = info.get("error_message", "no native details")
+            raise EpisodeFailure("env_step", f"RoboMME simulator error ({exception}): {message}")
         self.steps += 1
         self.status = info["status"]
         self.done = bool(terminated or truncated)
         if self.status not in NATIVE_STATUSES or (self.status == "ongoing") == self.done:
             raise ValueError("RoboMME native status contradicts its step result")
-        if self.status != "error":
-            self.observation = self.observations(raw)
+        self.observation = self.observations(raw)
         success = self.status == "success"
         return StepResult(self.observation, float(success), self.done or self.steps == self.horizon,
                           success, native_action=command.tolist(), native_done=self.done)

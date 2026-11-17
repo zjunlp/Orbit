@@ -26,6 +26,7 @@ import {
 } from "../contracts/index.ts";
 import { metricValue, resolveMetrics } from "../contracts/metrics.ts";
 import { nowIso } from "../lib/ids.ts";
+import { readRegular } from "../lib/safe-fs.ts";
 import { type RunService, UserError } from "../runs/service.ts";
 import { type AgentFailure, loadRunAgentTranscript, runAgentFailure } from "../sessions/index.ts";
 import type { Store } from "../store/index.ts";
@@ -505,6 +506,26 @@ export class TrialMachine {
     );
   }
 
+  private batchEpisodeNotStarted(t: Trial, solve: Run): boolean {
+    if (!t.batch) return false;
+    const { plan, index } = t.batch;
+    try {
+      const file = join(this.deps.runs.dirs(solve.id).output, "batch-result.json");
+      const receipt = JSON.parse(readRegular(file, 4096));
+      // Progress writes can still report not_started for the next episode when a Run is killed.
+      // Only the final write includes the cancellation flag.
+      return (
+        receipt?.planDigest === plan.digest &&
+        typeof receipt.cancelled === "boolean" &&
+        Array.isArray(receipt.states) &&
+        receipt.states.length === plan.members.length &&
+        receipt.states[index] === "not_started"
+      );
+    } catch {
+      return false;
+    }
+  }
+
   private async stepSolving(job: BenchJob, t: Trial, solve: Run): Promise<void> {
     if (!isTerminal(solve.state)) return this.cancelIfJobCancelled(job.id, t, solve.id);
     if (t.batch && solve.cleanup === "pending") return;
@@ -520,6 +541,8 @@ export class TrialMachine {
       return this.finish(t, outcome);
     }
     const batchEvidence = this.hasEpisodeEvidence(t, solve);
+    if (!batchEvidence && this.batchEpisodeNotStarted(t, solve))
+      return this.skipped(t, "unknown", "shared batch stopped before this episode started", solve);
     const sv = solveVerdict(solve);
     // An Agent that could not reach or use its model left nothing worth verifying; an explicit
     // rescore (history kept) verifies anyway, and an after phase has already verified.
