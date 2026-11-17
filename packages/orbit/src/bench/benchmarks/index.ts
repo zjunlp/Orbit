@@ -1,6 +1,8 @@
 // Product support facts, not a second registry or a record of this machine's experiments.
 // One file per benchmark family under this directory; add a family by adding a file and a line here.
 import { type CatalogEntry, SupportedBenchmark } from "../../contracts/index.ts";
+import { agentdojo } from "./agentdojo.ts";
+import { appworld } from "./appworld.ts";
 import { asiBench } from "./asi-bench.ts";
 import { automationbench } from "./automationbench.ts";
 import { behavior1k } from "./behavior-1k.ts";
@@ -16,18 +18,25 @@ import { ebNavigation } from "./eb-navigation.ts";
 import { embodiedClbench } from "./embodied-clbench.ts";
 import { embodiedFirstExam } from "./embodied-first-exam.ts";
 import { embodiedlab } from "./embodiedlab.ts";
+import { financebench } from "./financebench.ts";
 import { frontiersweV2 } from "./frontierswe-v2.ts";
+import { healthbench } from "./healthbench.ts";
 import { hle } from "./hle.ts";
 import { hssdOv } from "./hssd-ov.ts";
 import { humaneval } from "./humaneval.ts";
+import { lawbench } from "./lawbench.ts";
+import { legalbench } from "./legalbench.ts";
 import { libero } from "./libero.ts";
 import { liberoMem } from "./libero-mem.ts";
 import { liberoPlus } from "./libero-plus.ts";
 import { liberoPro } from "./libero-pro.ts";
 import { longds } from "./longds.ts";
+import { longmemeval } from "./longmemeval.ts";
 import { maniskill3 } from "./maniskill3.ts";
 import { metaworld } from "./metaworld.ts";
+import { minif2f } from "./minif2f.ts";
 import { miniwob } from "./miniwob.ts";
+import { mmau } from "./mmau.ts";
 import { mobileworld } from "./mobileworld.ts";
 import { molmospaces } from "./molmospaces.ts";
 import { onlineMind2web } from "./online-mind2web.ts";
@@ -44,6 +53,7 @@ import { robomimic } from "./robomimic.ts";
 import { robotagentbench } from "./robotagentbench.ts";
 import { robotwin } from "./robotwin.ts";
 import { simplerEnv } from "./simpler-env.ts";
+import { swebench } from "./swebench.ts";
 import { tau2Bench } from "./tau2-bench.ts";
 import { terminalBench4 } from "./terminal-bench-4.ts";
 import { terminalBenchScience } from "./terminal-bench-science.ts";
@@ -55,6 +65,10 @@ import { wandr } from "./wandr.ts";
 import { webvoyager } from "./webvoyager.ts";
 
 const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
+  minif2f,
+  swebench,
+  appworld,
+  agentdojo,
   automationbench,
   behavior1k,
   robotagentbench,
@@ -63,6 +77,12 @@ const definitions: Omit<SupportedBenchmark, "registrationNames">[] = [
   chartography,
   hle,
   humaneval,
+  financebench,
+  healthbench,
+  longmemeval,
+  legalbench,
+  lawbench,
+  mmau,
   asiBench,
   longds,
   researchclawbench,

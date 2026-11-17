@@ -99,6 +99,12 @@ plugin/        canonical skills/orbit and skills/orbit-bench; portable / Claude 
 examples/      bench-adapters/<benchmark>/: external bench adapters (not part of the package)
 ```
 
+`examples/sdk/orbit_bench/batch.py` shares file-submission Run planning and immutable-input checks
+for independent question batches (LegalBench, LawBench and MMAU). It does not implement an Agent
+loop or grader; each adapter retains its native scoring, task unit and private reference handling.
+CLI solve runs for the question adapters, SWE-bench and miniF2F enable networking for model access,
+like external methods. Empty/reference controls stay offline; each verifier retains its declared network policy.
+
 规则（由 `pnpm check:boundaries` 强制，定义在 `scripts/boundaries.ts`）：
 
 | 模块 | 可以依赖 |
@@ -1809,6 +1815,43 @@ worker 只产生资源与 benchmark 定义文件；daemon 在 Run 成功且 clea
 的 WebVoyager / Online-Mind2Web 入口保留原有 collection 身份与任务覆盖关联，避免重新标记其他套件。
 
 用法与仍需人工完成的原生前提见 [资源准备指南](guides/benchmark-resources.md)。
+
+### 9.20 Additional native question and utility adapters (2026-11-16)
+
+HealthBench and LongMemEval use the existing solve/verify/score protocol with original
+per-question conversations or timestamped histories. Grader inputs and API credentials stay
+in verify; source and installed dataset hashes bind saved-input rescores. Native judge prompts
+and decisions are retained. Alternative judge models/transports are explicit configuration
+conditions, not official-model parity. HealthBench exposes raw per-example scores, which may
+be negative; its official aggregate clips after averaging and is not the raw Orbit mean.
+
+FinanceBench retains public questions and original full PDFs, with the evidence-only condition
+identified separately. Published human judgments bind exact completion bytes and context; new
+answers require explicit answer/source-bound human reviews. Missing reviews are invalid
+`judge_unavailable`, not inferred labels. AgentDojo supports v1.2.2 clean utility: a private
+native tool service collects actions, and a fresh native environment replays them for utility.
+AgentDojo and AppWorld tool services use per-trial Unix HTTP sockets with service networking
+disabled. Only the socket directory is shared with the subject; grading inputs and collected
+evidence stay private to the service. This removes the additional internal Docker bridge.
+Reference/empty checks can execute native traces offline, which does not validate live services
+or prompt-injection defenses. See the [task record](tasks/20261116-remaining-benchmarks.md).
+
+SWE-bench uses the canonical family identity `swebench` in the adapter, catalog and resource preparation.
+SWE-bench Lite uses immutable official instance images, original eval scripts and native
+F2P/P2P resolved reports in fresh verifier containers. The Python harness environment is kept
+out of the repository test process. Tasks lacking installed images remain listed unsupported.
+AppWorld public train/dev uses a private native code-execution service with original safety
+guards; independent replay runs the original task-success evaluator, not a subject-reported score
+or the grouped scenario metric. Both adapters preserve native reference/empty controls.
+miniF2F keeps the original Lean 3 statements and libraries, exports the elaborated theorem with
+its dependencies, rejects nonstandard axioms and runs the native independent leanchecker.
+A successful Lean parse with admitted goals is insufficient for a valid proof.
+
+The ten additional families appear in the resource preparation catalog through guided native
+setup and the existing definition-import path. Missing setup remains pending; automatic
+acquisition and configuration are not implemented for these entries. Imported definitions
+retain their adapter, runtime, data-integrity, judge and toolchain settings and pass through
+the same daemon validation before registration.
 
 ## 10. 路线
 

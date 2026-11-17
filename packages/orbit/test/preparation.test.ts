@@ -71,6 +71,48 @@ describe("preparation recipes and input boundaries", () => {
     ).toBe(true);
   });
 
+  it("keeps native setup pending and preserves imported adapter configuration", async () => {
+    for (const family of [
+      "legalbench",
+      "lawbench",
+      "healthbench",
+      "longmemeval",
+      "financebench",
+      "agentdojo",
+      "swebench",
+      "appworld",
+      "minif2f",
+      "mmau",
+    ]) {
+      const directory = join(root, `native-${family}`);
+      const incomplete = await prepareResources({
+        family,
+        directory,
+        input: PreparationInput.parse({}),
+      });
+      expect(incomplete.definitions, family).toEqual([]);
+      expect(incomplete.pending.join(" "), family).toContain("native setup");
+      const fixture = {
+        name: `fixture-${family}`,
+        adapter: "harbor",
+        path: directory,
+        config: { variant: "fixture-condition", image: "fixture-image" },
+        passEnv: ["FIXTURE_JUDGE_KEY"],
+        labels: { identity: { id: family, name: family } },
+      };
+      const file = join(directory, "fixture.json");
+      writeFileSync(file, JSON.stringify(fixture));
+      const imported = await prepareResources({
+        family,
+        directory,
+        input: PreparationInput.parse({ values: { registration: file } }),
+      });
+      expect(imported.pending, family).toEqual([]);
+      expect(imported.definitions, family).toHaveLength(1);
+      expect(imported.definitions[0], family).toMatchObject(fixture);
+    }
+  });
+
   it("refuses altered existing source without changing it", async () => {
     const path = join(root, "source");
     mkdirSync(path);

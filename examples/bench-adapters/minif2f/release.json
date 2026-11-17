@@ -1,0 +1,11 @@
+{
+  "revision": "4e433ff5cadff23f9911a2bb5bbab2d351ce5554",
+  "mathlib": "cb2b02fff213ed6f65bebd64446baac64137dcda",
+  "lean": "3.42.1",
+  "files": {
+    "lean/src/valid.lean": "46a8162d75ca3350eaf7843c2af16eb90c15553c70df34e8d2f636547ca26028",
+    "lean/src/test.lean": "fe8830147623fffbb7f55f878de363fdb2f9738c269b68ab11b31f6e3d59c5fb",
+    "lean/src/minif2f_import.lean": "5ca445de1fa6b98132bd8f935f1c46129348aa95f6e88532a571e93c4efff1da",
+    "leanpkg.toml": "5f7636ef2fadce1703cc339cb8d6562d1525e0d6505c7ef54d972762185544ef"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "files": {
+    "healthbench_eval.py": "b763d8c1f53ecd165f0d170a32bc948216b3dfeadafe238b2083328e1af4b2df",
+    "common.py": "84616c52821a30ae3f55f153a763153fd833cb41b547b09f547b46e6337f8f35",
+    "types.py": "8c7161765cd2a6bd426db2ce493c337da3eafe50d2efacc02a318b16afacfadb",
+    "sampler/chat_completion_sampler.py": "d9d7568ad5b04379342b7f269a6028c6945c518bc8baa56969aad035afc8d435"
+  },
+  "revision": "652c89d0ca9df547706735883097e9537d40dc47"
+}

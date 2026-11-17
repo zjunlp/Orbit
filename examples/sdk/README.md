@@ -12,6 +12,13 @@ image, so a change here only reaches a run after the adapter's registration is r
 `orbit_embodied` imports no model or simulator at package import: drivers pull their simulator in
 when a task actually runs, so the adapter can plan a trial on a host with no GPU.
 
+`orbit_bench.batch` shares file-submission planning for LegalBench, LawBench and MMAU: build
+isolated solve/verify specifications, expose reference labels only to oracle/verify, and check
+collected solve inputs before rescoring. Benchmark-specific instructions, assets and native
+graders remain in each adapter; this helper supplies no Agent loop or scoring implementation.
+External entrypoints are command strings split with POSIX quoting into argv. They do not run
+through a shell; use an explicit shell executable when shell syntax is required.
+
 ## Running the tests
 
 ```bash

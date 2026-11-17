@@ -53,6 +53,18 @@ try {
     "bench-adapters/harbor-suites/adapter.mjs",
     "sdk/orbit_bench/__init__.py",
     "bench-adapters/embodied/benchmarks/behavior-1k/configure_behavior.py",
+    ...[
+      "legalbench",
+      "lawbench",
+      "healthbench",
+      "longmemeval",
+      "financebench",
+      "agentdojo",
+      "swebench",
+      "appworld",
+      "minif2f",
+      "mmau",
+    ].map((family) => `bench-adapters/${family}/adapter.py`),
   ])
     assert.ok(
       existsSync(join(pkg, "dist/bench-assets/examples", file)),
@@ -117,7 +129,7 @@ try {
   );
   assert.equal(typeof report.ok, "boolean");
   const resources = JSON.parse(run(cli, ["bench", "resources", "--json"]));
-  assert.equal(resources.recipes.length, 52);
+  assert.equal(resources.recipes.length, 62);
   assert.ok(
     resources.recipes.every(
       (recipe: { id: string; resources: unknown[] }) => recipe.id && recipe.resources.length,

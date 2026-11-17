@@ -1,7 +1,7 @@
 # Prepare benchmark resources
 
 Open **Benchmarks → Prepare resources**, select a benchmark, review its official sources and
-preparation steps, then choose **Download, prepare and register**. All 52 supported benchmark
+preparation steps, then choose **Download, prepare and register**. All 62 supported benchmark
 families appear here, including ones that require authorization or a specialized native environment.
 Orbit downloads from upstream; it does not host or redistribute benchmark datasets.
 
@@ -63,6 +63,12 @@ If an imported native definition references a named dataset, register its existi
 `orbit data add NAME /absolute/path` first. Native recipes register their prepared asset mappings
 automatically. Existing registrations with different settings are kept; use `--name` for a new
 single-suite setup, or a separate generated definition for a multi-suite setup.
+
+LegalBench, LawBench, HealthBench, LongMemEval, FinanceBench, AgentDojo, SWE-bench, AppWorld,
+miniF2F and MMAU currently provide setup guidance and definition import in this workflow.
+Complete the original adapter guide first, then pass `--registration-file` or set the
+`registration` input. These entries do not automate source downloads, image preparation,
+judge configuration or toolchain installation. Missing setup stays pending.
 
 ## Authorization and network access
 

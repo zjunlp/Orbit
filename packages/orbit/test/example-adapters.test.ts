@@ -2,14 +2,20 @@ import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
+import { supportedBenchmarks } from "../src/bench/benchmarks/index.ts";
+import { catalogEntry } from "../src/bench/catalog.ts";
+import { toRunSpec } from "../src/bench/protocol.ts";
 import {
   AdapterSpecResponse,
   AdapterTasksResponse,
+  Benchmark,
   GuiTrajectory,
+  Method,
   RunSpec,
   ScoreResult,
 } from "../src/contracts/index.ts";
 import { modelMatches } from "../src/resources/allocate.ts";
+import { requireAgent } from "../test-support/agents.ts";
 
 const adapterDirsRoot = fileURLToPath(
   new URL("../../../examples/bench-adapters/", import.meta.url),
@@ -41,6 +47,160 @@ it.each(pythonAdapters)(
   // Let the child process report its own timeout and stderr.
   adapterTimeoutMs + 1_000,
 );
+
+it.each([
+  "legalbench",
+  "lawbench",
+  "healthbench",
+  "longmemeval",
+  "financebench",
+  "swebench",
+  "minif2f",
+])("keeps %s CLI networking and family identity through the real contracts", (name) => {
+  const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
+  const result = execFileSync(
+    "python3",
+    [
+      "-B",
+      "-c",
+      `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from test_adapter import AdapterTest
+import adapter
+fixture = AdapterTest()
+fixture.setUp()
+try:
+    listing = adapter.tasks(fixture.req)
+    plans = []
+    for agent in ("codex", "claude-code", "empty", "oracle"):
+        if agent == "oracle" and agent not in listing["capabilities"]["methods"]:
+            continue
+        method = {"name": agent, "agent": agent}
+        if agent in ("codex", "claude-code"):
+            method["auth"] = "synthetic-profile"
+        fixture.req["trial"]["method"] = method
+        plans.append({"method": method, "response": adapter.solve(fixture.req)})
+    print(json.dumps({"listing": listing, "plans": plans}))
+finally:
+    fixture.doCleanups()
+`,
+      dir,
+    ],
+    { encoding: "utf8" },
+  );
+  const saved = JSON.parse(result);
+  const benchmark = Benchmark.parse({
+    name: `fixture-${name}`,
+    adapter: `${dir}adapter.py`,
+    path: "/fixture",
+    createdAt: "",
+    updatedAt: "",
+  });
+  for (const plan of saved.plans) {
+    const method = Method.parse(plan.method);
+    const { spec } = AdapterSpecResponse.parse(plan.response);
+    const run = toRunSpec(spec, method, benchmark, "solve", () => requireAgent(method.agent));
+    expect(run.network, method.agent).toBe(["codex", "claude-code"].includes(method.agent));
+  }
+  const entry = catalogEntry(
+    benchmark,
+    {
+      at: "2026-11-17T00:00:00Z",
+      data: AdapterTasksResponse.parse(saved.listing),
+      error: null,
+      refreshing: false,
+    },
+    [],
+    [],
+  );
+  expect(entry.identitySource).toBe("adapter");
+  expect(supportedBenchmarks([entry]).find((row) => row.id === name)?.registrationNames).toEqual([
+    benchmark.name,
+  ]);
+});
+
+it.each([
+  "legalbench",
+  "lawbench",
+  "mmau",
+  "healthbench",
+  "longmemeval",
+  "financebench",
+  "swebench",
+  "minif2f",
+])("plans the %s external method using the real Method and Run contracts", (name) => {
+  const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
+  const method = Method.parse({
+    name: "scripted",
+    agent: "external",
+    entrypoint: `python -c 'print("external path")'`,
+  });
+  const result = execFileSync(
+    "python3",
+    [
+      "-B",
+      "-c",
+      `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from test_adapter import AdapterTest
+import adapter
+fixture = AdapterTest()
+fixture.setUp()
+try:
+    fixture.req["trial"]["method"] = json.loads(sys.argv[2])
+    print(json.dumps(adapter.solve(fixture.req)))
+finally:
+    fixture.doCleanups()
+`,
+      dir,
+      JSON.stringify(method),
+    ],
+    { encoding: "utf8" },
+  );
+  const { spec } = AdapterSpecResponse.parse(JSON.parse(result));
+  const run = RunSpec.parse(spec);
+  expect(run.command).toEqual(["python", "-c", 'print("external path")']);
+  expect(run.network).toBe(true);
+  expect(run.env?.ORBIT_TASK_FILE).toBe("/input/task.json");
+});
+
+it.each(["agentdojo", "appworld"])("plans %s tools with the real Run contract", (name) => {
+  const dir = fileURLToPath(new URL(`../../../examples/bench-adapters/${name}/`, import.meta.url));
+  const result = execFileSync(
+    "python3",
+    [
+      "-B",
+      "-c",
+      `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from test_adapter import AdapterTest
+import adapter
+fixture = AdapterTest()
+fixture.setUp()
+try:
+    fixture.req["trial"]["method"] = {"agent": "external", "entrypoint": "python /adapter/tool.py info"}
+    print(json.dumps(adapter.solve(fixture.req)))
+finally:
+    fixture.doCleanups()
+`,
+      dir,
+    ],
+    { encoding: "utf8" },
+  );
+  const { spec } = AdapterSpecResponse.parse(JSON.parse(result));
+  const run = RunSpec.parse(spec);
+  expect(run.services[0]?.networks).toEqual([]);
+  expect(run.services[0]?.noNetwork).toBe(true);
+  expect(run.services[0]?.collect).toEqual(["/evidence/trace.json"]);
+  expect(run.mounts.map((m) => m.target)).toEqual([
+    "/adapter/tool.py",
+    "/adapter/tool_socket.py",
+    "/ipc",
+  ]);
+});
 
 it("plans a Cua desktop service with the real Run contract", () => {
   const dir = fileURLToPath(

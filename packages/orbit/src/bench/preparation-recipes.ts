@@ -125,8 +125,80 @@ const direct = (
   guide: `examples/bench-adapters/${name}/README.md`,
 });
 
+const preparedImport = (name: string, url: string, prerequisites: string): RecipeDefinition => ({
+  resources: [
+    manual(
+      "setup",
+      "Original benchmark resources and native setup",
+      url,
+      `${prerequisites} Follow the linked adapter guide, then import a complete benchmark JSON definition with labels.identity.id set to ${name}.`,
+    ),
+  ],
+  fields: [
+    field(
+      "registration",
+      "Prepared benchmark JSON definition",
+      "path",
+      "Import the complete definition after native setup; automatic download and configuration are not implemented for this family.",
+    ),
+  ],
+  adapter: adapter(name),
+  guide: `examples/bench-adapters/${name}/README.md`,
+  instructions: `${prerequisites} This entry supports importing an existing definition; native setup must be completed using the adapter guide.`,
+});
+
 // Revisions and preparation protocols come from the corresponding adapter guides and reference profiles.
 const definitions: Record<string, RecipeDefinition> = {
+  legalbench: preparedImport(
+    "legalbench",
+    "https://github.com/HazyResearch/legalbench",
+    "Prepare the pinned source and official Hugging Face test TSVs under each original task directory.",
+  ),
+  lawbench: preparedImport(
+    "lawbench",
+    "https://github.com/open-compass/LawBench",
+    "Prepare the pinned zero-shot task data and original evaluation sources; ChERRANT remains unsupported.",
+  ),
+  healthbench: preparedImport(
+    "healthbench",
+    "https://github.com/openai/simple-evals",
+    "Prepare the pinned grader, official data with SHA-256 and explicit judge configuration; keep credentials in the daemon environment.",
+  ),
+  longmemeval: preparedImport(
+    "longmemeval",
+    "https://github.com/xiaowu0162/LongMemEval",
+    "Prepare the pinned grader, original histories with SHA-256, retrieval variant and explicit judge configuration.",
+  ),
+  financebench: preparedImport(
+    "financebench",
+    "https://github.com/patronus-ai/financebench",
+    "Prepare the pinned public questions, original PDFs and published human labels; new answers require answer-bound human review.",
+  ),
+  agentdojo: preparedImport(
+    "agentdojo",
+    "https://github.com/ethz-spylab/agentdojo",
+    "Prepare the pinned v1.2.2 source and native service/verifier runtime for clean utility tasks.",
+  ),
+  swebench: preparedImport(
+    "swebench",
+    "https://github.com/SWE-bench/SWE-bench",
+    "Prepare the pinned 3.0.15 harness, hash-bound Lite data, harness dependencies and immutable official instance image map.",
+  ),
+  appworld: preparedImport(
+    "appworld",
+    "https://github.com/StonyBrookNLP/appworld",
+    "Install 0.1.3.post1 with original train/dev data, a hash-bound data manifest and an immutable native runtime image.",
+  ),
+  minif2f: preparedImport(
+    "minif2f",
+    "https://github.com/openai/miniF2F/tree/v1",
+    "Prepare the pinned Lean 3 statements, Lean 3.42.1, matching mathlib/olean cache and a hash-bound tool manifest.",
+  ),
+  mmau: preparedImport(
+    "mmau",
+    "https://github.com/Sakshi113/MMAU",
+    "Prepare the pinned test-mini annotations, evaluator and original WAVs; evaluation requires an audio-capable external method.",
+  ),
   humaneval: {
     ...direct("openai/human-eval", "312c5e5532f0e0470bf47f77a6243e02a61da530", "humaneval"),
     path: "{source}/data",

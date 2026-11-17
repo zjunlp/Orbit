@@ -61,6 +61,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261117](20261117-reference-evolver.md) V1: host-driven reference evolver and safe evolve evidence
 
 - [20261117](20261117-evolution-pilot.md) V0: task-level repeat noise, solve cost and conditional gate sizing
+- [20261117](20261117-remaining-benchmarks-main-merge.md) Reconcile expanded benchmark catalog with main and resource preparation
 
 - [20261116](20261116-gate-workflow.md) E4: read-only evaluation plans and bundle preflight
 
@@ -93,6 +94,10 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Harbor and code / research benchmarks
 
+- [20261117](20261117-native-adapter-review-fixes.md) Native adapter CLI networking and SWE-bench identity
+
+- [20261116](20261116-batch-external-entrypoint.md) Fix batch adapter external entrypoint contract and regression coverage
+- [20261116](20261116-benchmark-expansion.md) Sequential plan and validation for twelve additional benchmarks
 - [20261009](20261009-asi-runner-timeouts.md) ASI runner compatibility and execution status
 - [20261009](20261009-asi-verify-budgets.md) ASI native verification budgets
 - [20261010](20261010-harbor-collect-hooks.md) Harbor collect hooks and Terminal-Bench 4.0 coverage
@@ -210,3 +215,5 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261112](20261112-positioning-self-improving-lab.md) Positioning: the lab for self-improving agents
 - [20261112](20261112-evolution-plan.md) Implementation plan: trajectories, export, fork and the evolution gate
 - [20261113](20261113-integrate-branches.md) Integrate embodied expansion, ATIF converters and trial evidence views
+- [Remaining benchmark integrations](20261116-remaining-benchmarks.md)
+- [Native tool-service startup](20261117-tool-service-sockets.md)
