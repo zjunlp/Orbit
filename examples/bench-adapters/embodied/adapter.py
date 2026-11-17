@@ -2,13 +2,16 @@
 """Orbit protocol 1 adapter: native environments, independent policy, one planned episode."""
 
 import ast
+from itertools import islice, takewhile
 import json
 import math
 from pathlib import Path
+from pickletools import genops
 import shutil
 import subprocess
 import sys
 import uuid
+from zipfile import BadZipFile, ZipFile
 
 HERE = Path(__file__).resolve().parent
 SDK = HERE.parents[1] / "sdk"
@@ -77,6 +80,27 @@ def settings(req):
     return root, config, reference
 
 
+def libero_initial_state_count(asset):
+    """Read the shape header of the upstream Torch archive's NumPy matrix."""
+    try:
+        with ZipFile(asset) as archive:
+            metadata, = (name for name in archive.namelist() if name.endswith("/data.pkl"))
+            with archive.open(metadata) as stream:
+                operations = ((op.name, arg) for op, arg, _ in genops(stream.read(256)))
+                # Parse only the shape header. Loading the pickle would execute its instructions.
+                constructor = [arg for op, arg in takewhile(lambda item: item[0] != "MARK", operations)
+                               if op == "GLOBAL"]
+                version, count, width, shape = islice(operations, 4)
+        if (len(constructor) >= 2 and constructor[0] in
+                ("numpy.core.multiarray _reconstruct", "numpy._core.multiarray _reconstruct")
+                and constructor[1] == "numpy ndarray" and version[1] == 1 and shape[0] == "TUPLE2"
+                and all(type(value) is int and value > 0 for value in (count[1], width[1]))):
+            return count[1]
+    except (BadZipFile, ValueError) as exc:
+        raise ValueError(f"invalid LIBERO initial-state metadata in {asset.name}") from exc
+    raise ValueError(f"unsupported LIBERO initial-state matrix in {asset.name}")
+
+
 def catalog(root, suite):
     source = root / "third_party/libero/libero/libero"
     tree = ast.parse((source / "benchmark/libero_suite_task_map.py").read_text())
@@ -89,7 +113,8 @@ def catalog(root, suite):
         result.append({"id": suite + ":" + name, "title": name.replace("_", " "),
                        "supported": True, "reason": None,
                        "tags": {"suite": suite, "taskIndex": str(index),
-                                "initialStateDigest": file_digest(asset)}})
+                                "initialStateDigest": file_digest(asset),
+                                "initialStateCount": str(libero_initial_state_count(asset))}})
     return result
 
 

@@ -38,6 +38,37 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_libero_planner_expands_the_count_in_each_initial_state_asset(self):
+        import pickle
+        from zipfile import ZipFile
+
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            suite = "libero_spatial"
+            source = root / "third_party/libero/libero/libero"
+            (source / "benchmark").mkdir(parents=True)
+            (source / "benchmark/libero_suite_task_map.py").write_text(
+                "libero_task_map = {'libero_spatial': ['first', 'second']}\n")
+            states = source / "init_files" / suite
+            states.mkdir(parents=True)
+            for name, count in (("first", 2), ("second", 3)):
+                with ZipFile(states / (name + ".pruned_init"), "w") as asset:
+                    asset.writestr("archive/data.pkl", pickle.dumps(np.zeros((count, 79)), protocol=2))
+            tasks = adapter.catalog(root, suite)
+            self.assertEqual([task["tags"]["initialStateCount"] for task in tasks], ["2", "3"])
+            command = [sys.executable, "-S", "-B", str(ADAPTER.with_name("plan.py")),
+                       "--reference-source", str(root), "--all-tasks"]
+            plan = json.loads(subprocess.check_output([*command, "--all-initial-states"], text=True))
+            expected = [(task["id"], str(index), task["tags"]["initialStateDigest"])
+                        for task in tasks for index in range(int(task["tags"]["initialStateCount"]))]
+            self.assertEqual([(row["taskId"], row["initialStateId"], row["initialStateDigest"])
+                              for row in plan["items"]], expected)
+            explicit = subprocess.run([*command, "--initial-state", "2"], capture_output=True, text=True)
+            self.assertNotEqual(explicit.returncode, 0)
+            self.assertIn("initial-state index exceeds the selected reset recipe", explicit.stderr)
+
     def test_hssd_configurator_help_works_without_site_packages(self):
         path = ADAPTER.parent / "benchmarks/hssd-ov/configure_hssd_ov.py"
         output = subprocess.check_output([sys.executable, "-B", "-E", "-S", str(path), "--help"], text=True)
