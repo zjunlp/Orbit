@@ -435,7 +435,7 @@ daemon 是 Orbit 状态的唯一写者；CLI、Web 和 Agent 都通过它的本�
 | **具身实验环境** | 愿景方向：把执行与资源抽象扩展到仿真、机器人和实验设备；设备后端尚未实现。 |
 | **进化门与统一轨迹** | 已实现 ATIF 轨迹、token 统计与导出、配置血缘、冻结证据准入判定、CLI/Web 复盘、试点估算、参考进化器、no-change/notes/ACE 基线、隔离编辑器、跨环境研究工具与[迁移证据矩阵](docs/guides/transfer-matrix.md)。跨 benchmark 改进和跨 Agent 迁移效果仍需前瞻实验验证。 |
 
-Orbit 目前处于早期开发阶段（0.1.1）。已验证范围、限制和近期工作以[项目状态](docs/status.md)为准，架构见[设计文档](docs/design.md)。
+Orbit 目前处于早期开发阶段（0.2.0）。已验证范围、限制和近期工作以[项目状态](docs/status.md)为准，架构见[设计文档](docs/design.md)。
 
 <a id="documentation"></a>
 

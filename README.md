@@ -474,7 +474,7 @@ space. Folders organize runs and bench jobs without moving files: `orbit run --f
 | **Embodied environments** | Native simulation, independent policies, evidence verification and Trial review are implemented. Physical device backends are a future direction. |
 | **Evolution gate and unified trajectories** | ATIF trajectories, token accounting/export, configuration lineage, frozen-evidence gate decisions, CLI/Web review, pilot sizing, a host-driven reference evolver, no-change/notes/ACE baselines, an isolated editor, prospective study helpers and a [transfer evidence matrix](docs/guides/transfer-matrix.md) are implemented. Cross-benchmark improvement and cross-agent transfer still need prospective studies. |
 
-Orbit is in early development (0.1.1). See [project status](docs/status.md) for validation limits and near-term work, and [design](docs/design.md) for the architecture.
+Orbit is in early development (0.2.0). See [project status](docs/status.md) for validation limits and near-term work, and [design](docs/design.md) for the architecture.
 
 <a id="documentation"></a>
 
