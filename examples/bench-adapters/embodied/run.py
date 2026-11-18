@@ -294,6 +294,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         controller = reference["environment"].get("controller")
         native = {"ee": RoboTwinCartesianBenchmark, "lingbot-va-ee": RoboTwinLingBotBenchmark,
                   "absolute-ee": RoboTwinAbsolutePoseBenchmark,
+                  "qpos-chunk-8": RoboTwinJointChunkBenchmark,
                   "qpos-chunk-16": RoboTwinJointChunkBenchmark}.get(controller, RoboTwinBenchmark)
         batch_index = request["batch"]["index"] if request.get("batch") else None
         benchmark = native(reference, sample["taskId"], batch_index=batch_index)
