@@ -53,6 +53,8 @@ import type {
   RunSessions,
   TrajectoryExportInput,
   TrajectoryExportResult,
+  TransferMatrix,
+  TransferQuery,
 } from "@zjunlp/orbit/contracts";
 
 export type {
@@ -250,6 +252,12 @@ export const api = {
     req<BenchJobDetail>(`/bench/jobs/${enc(id)}`, { signal }),
   benchReports: (id: string) =>
     req<{ reports: BenchReport[] }>(`/bench/jobs/${enc(id)}/reports`).then((r) => r.reports),
+  benchTransfer: (query: TransferQuery = {}, signal?: AbortSignal) => {
+    const search = new URLSearchParams();
+    if (query.parentBundle) search.set("parentBundle", query.parentBundle);
+    if (query.childBundle) search.set("childBundle", query.childBundle);
+    return req<TransferMatrix>(`/bench/transfer${search.size ? `?${search}` : ""}`, { signal });
+  },
   benchGatePlan: (body: GateSubmissionInput) =>
     req<GatePlan>("/bench/gates/plan", { method: "POST", body: JSON.stringify(body) }),
   benchGateBundleCheck: (body: GateBundleInput) =>

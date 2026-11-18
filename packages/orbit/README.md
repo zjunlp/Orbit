@@ -8,7 +8,8 @@ Orbit is the lab for agents that work and improve on their own: a place to run e
 evidence to check them, and independent verification of the result. Today, Orbit runs experiments in
 Docker with GPU / CPU / memory leases, keeps code snapshots, logs, metrics, outputs and agent sessions
 for review in the bundled local Web UI, and evaluates agents on benchmarks with paired comparison.
-A gate that accepts or rejects an agent's changes to itself is in design, not yet implemented.
+Orbit records unified ATIF trajectories and can use frozen benchmark evidence to decide
+whether a candidate configuration meets its acceptance criteria.
 
 Requires Linux, Node.js 24.18+ (24.x), Git and Docker usable without sudo. GPU runs also need NVIDIA
 drivers and the NVIDIA Container Toolkit or CDI. No source checkout is needed; pnpm is only required for dsh plugin installation.
@@ -20,7 +21,7 @@ npx -y @zjunlp/orbit doctor
 Install the CLI permanently with `npm install -g @zjunlp/orbit`, then use `orbit` instead of
 `npx -y @zjunlp/orbit`. The daemon starts automatically on the first command that needs it.
 
-Install both skills for your existing agent (choose one):
+Choose the installer for your agent:
 
 ```bash
 npx -y @zjunlp/orbit plugin install claude
@@ -29,10 +30,10 @@ npx -y @zjunlp/orbit plugin install dsh --profile headless
 npx -y @zjunlp/orbit plugin install pi
 ```
 
-Restart the agent to load `orbit` and `orbit-bench`. The skills use `npx` when no global `orbit`
+Restart the agent to load `orbit`, `orbit-bench` and `orbit-evolve`. The skills use `npx` when no global `orbit`
 command is available. dsh needs pnpm and a profile with its skills service; pi means pi coding
 agent. [Plugin guide](https://github.com/zjunlp/Orbit/blob/main/plugin/README.md) covers versions,
-updates and removal. Session capture and in-container agents currently support Codex/Claude only.
+updates and removal. Orbit converts native Codex and Claude Code sessions to ATIF.
 
 ```bash
 npx -y @zjunlp/orbit run --image python:3.12-slim -- python -c 'print("hello")'

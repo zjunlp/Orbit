@@ -44,7 +44,7 @@ local package for dsh and pi. From this repository:
 pnpm orbit plugin install claude --source .
 pnpm orbit plugin install codex --source .
 pnpm pack:release
-pnpm orbit plugin install dsh --profile headless --source ./dist/zjunlp-orbit-0.1.1.tgz
+pnpm orbit plugin install dsh --profile headless --source ./dist/zjunlp-orbit-0.2.0.tgz
 pnpm orbit plugin install pi --source ./packages/orbit
 ```
 
@@ -71,8 +71,8 @@ claude plugin marketplace add zjunlp/Orbit
 claude plugin install orbit@orbit --scope user
 codex plugin marketplace add zjunlp/Orbit
 codex plugin add orbit@orbit
-dsh plugin --profile headless add @zjunlp/orbit@0.1.1
-pi install npm:@zjunlp/orbit@0.1.1
+dsh plugin --profile headless add @zjunlp/orbit@0.2.0
+pi install npm:@zjunlp/orbit@0.2.0
 ```
 
 For updates, use `claude plugin marketplace update orbit` then `claude plugin update orbit@orbit`;
@@ -85,7 +85,7 @@ Uninstall through the host that owns the registration:
 claude plugin uninstall orbit@orbit
 codex plugin remove orbit@orbit
 dsh plugin --profile headless remove @zjunlp/orbit
-pi remove npm:@zjunlp/orbit@0.1.1
+pi remove npm:@zjunlp/orbit@0.2.0
 ```
 
 For pi local installs, pass the same local directory to `pi remove`. Marketplace removal is

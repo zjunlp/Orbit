@@ -39,6 +39,7 @@ import { registerGate } from "./gate.ts";
 import { kv, numericOption } from "./options.ts";
 import { registerPreparation } from "./preparation.ts";
 import { readTaskFile } from "./task-file.ts";
+import { registerTransfer } from "./transfer.ts";
 
 type Job = BenchJobList["jobs"][number];
 
@@ -387,6 +388,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .description("benchmarks: planned samples or task × method × seed as solve + verify runs");
 
   registerGate(bench, client, print);
+  registerTransfer(bench, client, print);
   registerPreparation(bench, client, print);
   bench
     .command("add-file <file>")

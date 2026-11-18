@@ -18,6 +18,7 @@ describe("page table", () => {
     for (const p of PAGES) expect(matchRoute(p.path)?.name).toBe(p.name);
     expect(matchRoute("/bench/")).toEqual({ name: "bench", params: [] });
     expect(matchRoute("/runs/r%2F1/")).toEqual({ name: "run", params: ["r%2F1"] });
+    expect(matchRoute("/configurations/transfer")?.name).toBe("transfer");
     expect(matchRoute("/bench/new")?.name).toBe("benchNew");
     expect(matchRoute("/bench/compare")?.name).toBe("benchCompare");
     expect(matchRoute("/bench/j1")).toEqual({ name: "benchJob", params: ["j1"] });
@@ -36,6 +37,7 @@ describe("page table", () => {
 
   it("highlights the rail entry that covers a detail page", () => {
     const page = (name: string) => PAGES.find((p) => p.name === name) as (typeof PAGES)[number];
+    expect(railActive(page("configurations"), "/configurations/transfer")).toBe(true);
     expect(railActive(page("runs"), "/runs/abc")).toBe(true);
     expect(railActive(page("runs"), "/compare")).toBe(true);
     expect(railActive(page("bench"), "/bench/j1/trials/t1")).toBe(true);

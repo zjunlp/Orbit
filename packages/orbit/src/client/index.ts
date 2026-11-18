@@ -82,6 +82,8 @@ import {
   type RunState,
   type TrajectoryExportInput,
   TrajectoryExportResult,
+  TransferMatrix,
+  TransferQuery,
 } from "../contracts/index.ts";
 
 const Ok = z.object({ ok: z.boolean() });
@@ -318,6 +320,13 @@ export class OrbitClient {
     this.call(z.object({ reports: z.array(BenchReport) }), `/bench/jobs/${enc(id)}/reports`).then(
       (r) => r.reports,
     );
+  benchTransfer = (query: TransferQuery = {}) => {
+    const q = TransferQuery.parse(query);
+    const search = q.parentBundle
+      ? `?parentBundle=${enc(q.parentBundle)}&childBundle=${enc(q.childBundle as string)}`
+      : "";
+    return this.call(TransferMatrix, `/bench/transfer${search}`);
+  };
   benchGatePlan = (body: GateSubmissionInput) =>
     this.call(GatePlan, "/bench/gates/plan", { method: "POST", body });
   benchGateBundleCheck = (body: GateBundleInput) =>

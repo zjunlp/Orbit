@@ -112,3 +112,20 @@ it("propagates aborted response-body reads without wrapping them as HTTP failure
   await expect(api.session("run")).rejects.toBe(aborted);
   await expect(readRunFile("run", "conversation.json", "the conversation")).rejects.toBe(aborted);
 });
+
+it("reads filtered transfer evidence with cancellation through the daemon API", async () => {
+  const fetch = vi
+    .fn()
+    .mockImplementation(
+      async () => new Response(JSON.stringify({ rows: [], columns: [], omitted: [] })),
+    );
+  vi.stubGlobal("fetch", fetch);
+  const signal = new AbortController().signal;
+  await api.benchTransfer({ parentBundle: "a".repeat(64), childBundle: "b".repeat(64) }, signal);
+  const [url, init] = fetch.mock.calls[0] ?? [];
+  expect(url).toBe(
+    `/api/v1/bench/transfer?parentBundle=${"a".repeat(64)}&childBundle=${"b".repeat(64)}`,
+  );
+  expect(init.signal).toBe(signal);
+  expect(init.method ?? "GET").toBe("GET");
+});

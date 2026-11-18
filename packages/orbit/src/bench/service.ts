@@ -61,6 +61,7 @@ import {
   type Run,
   type RunDeletion,
   sampleTasks,
+  TransferQuery,
   type Trial,
   trialRunIds,
 } from "../contracts/index.ts";
@@ -88,6 +89,7 @@ import {
 import { BenchmarkPreparation } from "./preparation.ts";
 import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
+import { transferMatrix } from "./transfer.ts";
 
 export { benchGroup } from "./consolidate.ts";
 export { compareJobs, summarize } from "./summary.ts";
@@ -1046,6 +1048,11 @@ export class BenchService {
       this.deps.log?.(`bench job ${jobId}: report: ${(e as Error).message}`);
       return null;
     }
+  }
+
+  transfer(input: unknown = {}) {
+    const query = TransferQuery.parse(input);
+    return transferMatrix(this.deps.store.gateRecords(), query);
   }
 
   gatePlan(input: unknown) {

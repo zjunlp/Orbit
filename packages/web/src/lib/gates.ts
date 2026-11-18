@@ -42,3 +42,24 @@ export function gatePairs(record: GateRecord, set: string, task: string) {
         : [];
     });
 }
+
+export function gateTransferPath(record: GateRecord): string | null {
+  if (record.mode !== "promotion") return null;
+  const revisions = record.evidence.jobs.flatMap((j) => Object.values(j.revisions));
+  const digest = (id: string) => {
+    const found = revisions.filter((r) => r.revision === id);
+    const values = new Set(found.map((r) => r.basis.bundleDigest));
+    return values.size === 1 && found.every((r) => !r.approximate)
+      ? found[0]?.basis.bundleDigest
+      : null;
+  };
+  const parent = digest(record.verdict.inputs.parent);
+  const child = digest(record.verdict.inputs.child);
+  return parent &&
+    child &&
+    parent !== child &&
+    /^[a-f0-9]{64}$/.test(parent) &&
+    /^[a-f0-9]{64}$/.test(child)
+    ? `/configurations/transfer?parentBundle=${parent}&childBundle=${child}`
+    : null;
+}
