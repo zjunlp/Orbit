@@ -132,6 +132,50 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'changed'):
                 verify.validate_seal(evidence)
 
+    def test_rescore_reads_signed_capture_without_copying_it(self):
+        spec = adapter.solve(self.req)['spec']
+        public = spec['services'][0]['env'][adapter.PUBLIC_KEY]
+        evidence = self.root / 'evidence'
+        process = evidence / 'captures/orbit-lab/process'
+        sealed = process.parent / 'sealed'
+        process.mkdir(parents=True)
+        sealed.mkdir()
+        plan = {'task': 'pendulum_g', 'seed': 0}
+        instance = {'exp_id': plan['task'], 'index': plan['seed'], 'instance_id': 'fixture'}
+        (evidence / 'plan.json').write_text(json.dumps(plan))
+        (process / 'episode.json').write_text(json.dumps({**instance, 'submitted': True}))
+        (sealed / 'manifest.json').write_text('{}')
+        record = {'schema': 1, 'plan': plan, 'close_reason': 'agent_stop',
+                  'sha256': {p.relative_to(evidence).as_posix(): verify.digest(p)
+                             for p in evidence.rglob('*') if p.is_file()}}
+        (evidence / 'result.json').write_text(json.dumps(record))
+        helpers.sign_result(evidence, self.root / 'staging/evidence-private.pem')
+        report = {'task_completed': True, 'reward': 1}
+        score = {'process_score': 0.8, 'level': 4}
+
+        def native_score(path, evaluation, task):
+            self.assertEqual(path, process)
+            self.assertEqual(evaluation, report)
+            self.assertEqual(task, plan['task'])
+            return score
+
+        upstream = {
+            'benchmark.instances': types.SimpleNamespace(
+                snapshot=types.SimpleNamespace(for_evaluation=lambda *_: instance)),
+            'benchmark.evaluation.evaluate': types.SimpleNamespace(evaluate=lambda *_: report),
+            'benchmark.evaluation.process': types.SimpleNamespace(
+                public_task=lambda *_: plan['task'], score_run=native_score),
+            'scripts.trial': types.SimpleNamespace(infrastructure_end=lambda *_: False, STATUS_BY_END_REASON={}),
+        }
+        output = self.root / 'verify'
+        output.mkdir()
+        with patch.dict(sys.modules, upstream), patch.dict(os.environ, {adapter.PUBLIC_KEY: public}):
+            result = verify.verify(evidence, output)
+            self.assertTrue(result['task_completed'])
+            self.assertEqual(result['process_score'], 0.8)
+            self.assertEqual(verify.validate_seal(evidence), record)
+        self.assertEqual({p.name for p in output.iterdir()}, {'evaluation.json', 'process_score.json'})
+
     def test_zero_is_valid_but_missing_verifier_is_invalid(self):
         out = self.root / 'verified'
         out.mkdir()

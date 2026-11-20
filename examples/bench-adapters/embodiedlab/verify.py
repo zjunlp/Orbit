@@ -3,7 +3,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import sys
 
 
@@ -33,21 +32,19 @@ def validate_seal(root):
 def verify(root, output):
     from benchmark.instances import snapshot
     from benchmark.evaluation.evaluate import evaluate
-    from benchmark.evaluation.process import score_trial
+    from benchmark.evaluation.process import public_task, score_run
     from scripts.trial import infrastructure_end, STATUS_BY_END_REASON
     seal = validate_seal(root)
     close_reason = seal['close_reason']
     if close_reason == 'not_started':
         raise ValueError('The Agent command never started the native trial')
-    trial = output / 'native-trial'
-    shutil.copytree(root, trial, dirs_exist_ok=True)
     plan = seal['plan']
-    if plan != json.loads((trial / 'plan.json').read_text()):
+    if plan != json.loads((root / 'plan.json').read_text()):
         raise ValueError('Evidence plan mismatch')
-    instance = snapshot.for_evaluation(trial, trial / 'unused-store', '')
+    instance = snapshot.for_evaluation(root, root / 'unused-store', '')
     if instance['exp_id'] != plan['task'] or instance['index'] != plan['seed']:
         raise ValueError('Native instance does not match the trial')
-    capture = trial / 'captures/orbit-lab'
+    capture = root / 'captures/orbit-lab'
     process = capture / 'process'
     if not (process / 'episode.json').is_file():
         raise ValueError('No native process record: environment did not finalize')
@@ -64,11 +61,10 @@ def verify(root, output):
     report = None
     if sealed:
         report = evaluate(capture / 'sealed', instance)
-        (trial / 'evaluation.json').write_text(json.dumps(report, indent=2))
-        shutil.copyfile(trial / 'evaluation.json', output / 'evaluation.json')
+        (output / 'evaluation.json').write_text(json.dumps(report, indent=2))
     elif end.get('submitted') or end.get('end_reason') == 'submitted':
         raise ValueError('Submitted trial lost its sealed evidence')
-    process_score = score_trial(trial)
+    process_score = score_run(process, report, public_task(root, instance['instance_id']))
     (output / 'process_score.json').write_text(json.dumps(process_score, indent=2))
     status = ('submitted' if report else STATUS_BY_END_REASON.get(end.get('end_reason'),
               'timeout' if close_reason == 'wall_limit' else 'not_submitted'))
