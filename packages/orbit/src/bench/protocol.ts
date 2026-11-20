@@ -8,6 +8,7 @@ import type { AgentDefinition } from "../contracts/index.ts";
 import {
   ADAPTER_PROTOCOL,
   type AdapterOp,
+  AdapterPlanResponse,
   type AdapterRequest,
   type AdapterRunRef,
   type AdapterRunSpec,
@@ -20,6 +21,7 @@ import {
   type Method,
   RunSpec,
   type RunSpecInput,
+  type SamplePlan,
   ScoreResult,
 } from "../contracts/index.ts";
 import { agentCommand } from "../harness/index.ts";
@@ -155,6 +157,10 @@ export class AdapterClient {
 
   async tasks(): Promise<AdapterTasksResponse> {
     return parse(AdapterTasksResponse, "tasks", await this.call("tasks"));
+  }
+
+  async validatePlan(samplePlan: SamplePlan): Promise<void> {
+    parse(AdapterPlanResponse, "validate-plan", await this.call("validate-plan", { samplePlan }));
   }
 
   async solve(trial: TrialInput, batch?: AdapterSolveBatch) {

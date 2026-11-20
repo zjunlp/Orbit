@@ -11,7 +11,7 @@ from traceback import walk_tb
 import numpy as np
 
 from .assets import tree_digest
-from .binding import reference_horizon, seed_asset
+from .binding import reference_horizon, robotwin_seed, seed_asset
 from .driver import SampleRejected, StepResult
 
 
@@ -138,9 +138,7 @@ class RoboTwinBenchmark:
         self.head_history.clear()
         if sample["taskId"] != self.task or sample["initialStateDigest"] != seed_asset(self.reference, self.task):
             raise ValueError("RoboTwin reset recipe differs from the frozen sample")
-        self.seed = sample["environmentSeed"] + int(sample["initialStateId"])
-        if not 0 <= self.seed < 2 ** 32:
-            raise ValueError("RoboTwin seed must fit in an unsigned 32-bit integer")
+        self.seed = robotwin_seed(sample["environmentSeed"], int(sample["initialStateId"]))
         config = self.reference["environment"]
         args = self._native_args()
         if self.batch_index is not None:

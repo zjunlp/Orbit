@@ -672,7 +672,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   `LANG`、`LC_ALL`、`TZ`、`TMPDIR` 与 `ORBIT_ADAPTER_PROTOCOL=1`，daemon 环境里的密钥不传给适配器。每次调用 120 s 超时。
   适配器独立进程组运行；超时立即拒绝调用并向整组发 SIGTERM，250 ms 后 SIGKILL，关闭管道并解除子进程引用，
   不等待后代持有的 stdout 关闭。正常完成仍读到 stdout 末尾。
-- 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, solve?, verify? }`；`trial` =
+- 可选计划校验：`tasks` 回复声明 `validateSamplePlan: true` 后，daemon 在写入作业前调用 `validate-plan`，请求包含整份 `samplePlan`，通过时回复 `{ ok: true }`。
+- 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, samplePlan?, solve?, verify? }`；`trial` =
   `{ id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork }`（`resources` 为 job 固定的任务 solve 资源覆盖值，供原生 runner 同步设置子容器限制；`staging` 是 trial 私有的宿主目录，用于要挂进
   Run 的副本，trial 结束时删除）；`solve` / `verify` = `{ run, output }`（Run 记录与其 `$ORBIT_OUTPUT` 的宿主路径）。
 - 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[], capabilities?: BenchCapabilities, official?: OfficialRule }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
@@ -983,7 +984,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   Binding、执行快照和校准判定独立于提示。
 - **样本身份**：`spec.samplePlan` 是带摘要的有序计划；sampleId 由任务、profile、初态资产摘要与索引、环境 seed、模型 seed 和重复
   编号生成。新分支用 sampleRef、禁止 seed，联合契约拒绝混用；旧 seed 作业、报告与 n→n−1 规则不变，新报告为 `orbit-report/2`，
-  报告与 Trial 导航按计划顺序列出样本。WidowX 的重置种子为 `environmentSeed + initialStateId`，计划和批次拒绝别名到同一重置的样本。
+  报告与 Trial 导航按计划顺序列出样本。原版 SimplerEnv 与 ManiSkill3 的重置种子为 `environmentSeed + initialStateId`，计划校验与
+  Solve 检查其 32 位无符号整数上限。计划和批次拒绝别名到同一重置的样本。
 - **比较条件**：计划摘要与配对共用冻结条件：适配器配置、非秘密环境值、源码、协议、options、逐任务生效资源/timeout，以及固定
   批次的划分。批次划分与条件使用同一生效预算规则（`splitBatches`），共享模型服务与分别启动不会被当作同条件。配对要求相同
   有效样本；Web 对比把后端未配对的任务列为 “No paired result”。新旧作业不直接归并，归并逐样本核对冻结预算。

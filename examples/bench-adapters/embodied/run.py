@@ -9,7 +9,7 @@ import time
 
 from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.assets import COLOSSEUM_ASSET_ROOT, tree_digest
-from orbit_embodied.binding import file_digest, reference_horizon
+from orbit_embodied.binding import fast_wam_seed, file_digest, libero_seed, reference_horizon
 from orbit_embodied.cliport import GOOGLE_ASSETS
 from orbit_embodied.evidence import read_episode_reference, write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
@@ -323,9 +323,8 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         suite, name = sample["taskId"].split(":", 1)
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
         options = {"settle_steps": reference["parameters"]["settleSteps"]}
-        if reference.get("environment", {}).get("protocol") == "fast-wam":
-            if sample["environmentSeed"] != reference["parameters"]["environmentSeed"]:
-                raise ValueError("Fast-WAM requires the frozen LIBERO environment seed")
+        libero_seed(sample["environmentSeed"], reference)
+        if fast_wam_seed(reference) is not None:
             options["horizon"] = reference["horizons"][suite]
         benchmark = native(suite, name, **options)
     expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)

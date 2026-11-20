@@ -159,9 +159,14 @@ stdin 是一个 JSON 请求，stdout 必须是一个 JSON 回复；出错时写 
 | op | 请求中有 | 回复 |
 | --- | --- | --- |
 | `tasks` | `benchmark: {name, path, config}` | `{"tasks": [{"id", "title", "supported", "reason", "tags"}], "metrics"?: [...]}`；不能跑的任务 `supported: false` 并写原因；`metrics` 见下文 |
+| `validate-plan`（可选） | + `samplePlan` | 声明 `validateSamplePlan: true` 的适配器在创建 Trial 前检查整份冻结计划。通过时返回 `{"ok": true}`，拒绝时以非 0 退出并将原因写入 stderr |
 | `solve` | + `trial: {id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork}` | `{"spec": <Run 描述>, "issues"?: []}` |
 | `verify` | + `solve: {run, output}`（`output` 是 solve 的 `$ORBIT_OUTPUT` 宿主路径） | `{"spec": <Run 描述>, "issues"?: []}` |
 | `score` | + `verify: {run, output}` | `{"score": 数或 null, "maxScore": 1, "invalid": false, "issues": [], "metrics"?: {"name": 数}}` |
+
+每次 `tasks` 回复中的任务 ID 必须唯一。固定初态数量可由任务的 `initialStates: {count}` 或
+`initialStates: {countsBySeed}` 声明。分区键使用无前导零的非负十进制安全整数。
+提交仍识别旧原生适配器的有效 `initialStateCount` 和 `initialStateCounts` 标签。
 
 Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`resources`、`mounts`、`env`、`network`、`workdir`、
 `collect`、`timeoutMin`、`backend: "process"`、`cwd`……），另有两条规则：

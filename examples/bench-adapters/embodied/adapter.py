@@ -18,7 +18,10 @@ SDK = HERE.parents[1] / "sdk"
 sys.path.insert(0, str(SDK))
 from orbit_bench import invalid, main, pinned, valid
 from orbit_embodied import digest, resolve_binding
-from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, check_sample, file_digest, reset_seed, seed_asset
+from orbit_embodied.binding import (
+    GENERATED_ENVIRONMENTS, check_distinct_resets, check_plan_resets, check_sample, fast_wam_seed,
+    file_digest, libero_seed, reset_seed, seed_asset,
+)
 from orbit_embodied.libero_plus import PERTURBATIONS, catalog as libero_plus_catalog, metric_name
 from orbit_embodied.simpler import initial_state_count, scene_at
 from orbit_embodied.vlabench import METRICS as VLABENCH_METRICS, initial_state_count as vlabench_state_count
@@ -110,12 +113,19 @@ def catalog(root, suite):
     result = []
     for index, name in enumerate(names):
         asset = source / "init_files" / suite / (name + ".pruned_init")
+        count = libero_initial_state_count(asset)
         result.append({"id": suite + ":" + name, "title": name.replace("_", " "),
                        "supported": True, "reason": None,
+                       "initialStates": {"count": count},
                        "tags": {"suite": suite, "taskIndex": str(index),
                                 "initialStateDigest": file_digest(asset),
-                                "initialStateCount": str(libero_initial_state_count(asset))}})
+                                "initialStateCount": str(count)}})
     return result
+
+
+def set_initial_state_count(task, count):
+    task["initialStates"] = {"count": count}
+    task["tags"]["initialStateCount"] = str(count)
 
 
 def tasks(req):
@@ -137,31 +147,38 @@ def tasks(req):
                 task["title"] = environment["taskTitles"].get(task["id"], task["title"])
             task["tags"] = {**environment.get("taskTags", {}).get(task["id"], {}), **task["tags"]}
             if "initialStateCounts" in environment:
-                task["tags"]["initialStateCount"] = str(environment["initialStateCounts"].get(task["id"], 0))
+                set_initial_state_count(task, environment["initialStateCounts"].get(task["id"], 0))
             if environment.get("kind") == "robodojo":
                 counts = {seed: len(rows) for seed, rows in environment["layouts"].get(task["id"], {}).items()}
                 task["tags"]["initialStateCounts"] = json.dumps(counts, sort_keys=True)
+                task["initialStates"] = {"countsBySeed": counts}
         if "simplerScenes" in environment:
             for task in listing:
-                task["tags"]["initialStateCount"] = str(initial_state_count(environment, task["id"]))
+                set_initial_state_count(task, initial_state_count(environment, task["id"]))
         if calvin:
-            listing[0]["tags"]["initialStateCount"] = str(len(environment["catalog"]["sequences"]))
+            set_initial_state_count(listing[0], len(environment["catalog"]["sequences"]))
         if kind == "vlabench":
             for task in listing:
                 count = vlabench_state_count(environment, task["id"])
                 if count is not None:
-                    task["tags"]["initialStateCount"] = str(count)
+                    set_initial_state_count(task, count)
         if kind in ("robocasa-v02", "rlbench") and "initialStateCount" in environment:
             for task in listing:
-                task["tags"]["initialStateCount"] = str(environment["initialStateCount"])
+                set_initial_state_count(task, environment["initialStateCount"])
     elif kind == "libero-plus":
         if suite != environment["suite"]:
             raise ValueError("LIBERO-Plus suite differs from the frozen registration")
         listing = libero_plus_catalog(root, suite)
+        for task in listing:
+            set_initial_state_count(task, 1)
     else:
         if suite not in reference["horizons"]:
             raise ValueError("unsupported LIBERO suite")
         listing = catalog(root, suite)
+        fixed_seed = fast_wam_seed(reference)
+        if fixed_seed is not None:
+            for task in listing:
+                task["initialStates"] = {"countsBySeed": {str(fixed_seed): task["initialStates"]["count"]}}
     source = reference["reference"].get("evaluation", reference["reference"].get("openpi"))
     metrics = []
     if calvin:
@@ -218,6 +235,7 @@ def tasks(req):
     variant = {"chores-small/1": "CHORES-S", "chores-large/1": "CHORES-L"}.get(reference["id"]) if kind == "chores" else None
     return {"tasks": listing,
             **({"metrics": metrics} if metrics else {}),
+            "validateSamplePlan": True,
             "capabilities": {"embodied": {
                                  "profile": reference["id"], "semanticProfile": reference["benchmarkProfile"],
                                  "observationMap": reference["observationMap"],
@@ -269,9 +287,13 @@ def solve_member(trial, reference, implementation, episode_id):
     check_sample(trial["sample"], trial["sampleRef"])
     environment = reference.get("environment", {})
     sample = trial["sample"]
+    if environment.get("kind") not in GENERATED_ENVIRONMENTS:
+        libero_seed(sample["environmentSeed"], reference)
+    if environment.get("kind") in ("registered-gym", "maniskill3", "maniskill3-tabletop"):
+        reset_seed(sample, reference)
     if "simplerScenes" in environment:
         scene_at(environment, sample["taskId"], int(sample["initialStateId"]))
-    if environment.get("kind") in ("robolab", "robodojo"):
+    if environment.get("kind") in ("robocasa365", "robolab", "robodojo"):
         if sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {}):
             raise ValueError("task is unavailable in the frozen native catalog")
         if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
@@ -283,10 +305,6 @@ def solve_member(trial, reference, implementation, episode_id):
         if (sample["taskId"] not in environment["tasks"] or sample["taskId"] in environment.get("unsupported", {})
                 or sample["initialStateDigest"] != seed_asset(reference, sample["taskId"])):
             raise ValueError("sample differs from the frozen native catalog")
-        reset_seed(sample, reference)
-    if environment.get("protocol") in ("xiaomi-robotics-1", "gigaworld-policy-01"):
-        if sample["initialStateDigest"] != seed_asset(reference, sample["taskId"]):
-            raise ValueError("sample differs from the frozen RoboCasa365 catalog")
         reset_seed(sample, reference)
     if environment.get("kind") == "libero-plus":
         if sample["taskId"].partition(":")[0] != environment["suite"] or sample["initialStateId"] != "0":
@@ -349,6 +367,12 @@ def solve_spec(trial, config, environment, destination):
                      "tags": {"embodied_evidence": "4" if environment.get("protocol") == "diffusion-policy" else "2",
                               "embodied_reference": config["profileDigest"]},
                      "mounts": mounts}}
+
+
+def validate_plan(req):
+    reference = reference_profile(req["benchmark"]["config"])
+    check_plan_resets(req["samplePlan"]["items"], reference)
+    return {"ok": True}
 
 
 def solve(req):
@@ -556,4 +580,4 @@ def score(req):
 
 
 if __name__ == "__main__":
-    sys.exit(main(tasks, solve, verify, score))
+    sys.exit(main(tasks, solve, verify, score, validate_plan=validate_plan))

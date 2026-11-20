@@ -70,15 +70,17 @@ def invalid(failure, *issues, review=None, score=None, max_score=1, episode=None
     return reply
 
 
-def main(tasks, solve, verify, score, argv=None, stdin=None, stdout=None, stderr=None):
+def main(tasks, solve, verify, score, argv=None, stdin=None, stdout=None, stderr=None, *, validate_plan=None):
     """Answer one request (`adapter.py <op>`, request on stdin); returns the exit code."""
     argv = sys.argv[1:] if argv is None else argv
     stdin, stdout, stderr = stdin or sys.stdin, stdout or sys.stdout, stderr or sys.stderr
     handlers = dict(zip(OPS, (tasks, solve, verify, score)))
+    if validate_plan is not None:
+        handlers["validate-plan"] = validate_plan
     try:
         op = argv[0] if argv else ""
         if op not in handlers:
-            raise ValueError(f"unknown operation {op!r}; expected one of {', '.join(OPS)}")
+            raise ValueError(f"unknown operation {op!r}; expected one of {', '.join(handlers)}")
         req = json.load(stdin)
         if req.get("protocol") != PROTOCOL or req.get("op") != op:
             raise ValueError(f"expected adapter protocol {PROTOCOL} and a matching operation")

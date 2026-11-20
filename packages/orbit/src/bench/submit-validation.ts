@@ -1,13 +1,42 @@
 // Pure submission checks. They take the parsed spec and the adapter's task listing and either
 // return the normalized selection or throw a UserError; they touch no service state.
-import type {
-  BenchCapabilities,
-  BenchJobSpec,
-  BenchTask,
-  SampleIdentity,
+import { z } from "zod";
+import {
+  type BenchCapabilities,
+  BenchInitialStates,
+  type BenchJobSpec,
+  type BenchTask,
+  type SampleIdentity,
+  SeedPartitionKey,
 } from "../contracts/index.ts";
 import { UserError } from "../runs/service.ts";
 import { checkSamplePlan } from "./samples.ts";
+
+const LegacySeedCounts = z.record(z.string().regex(/^\d+$/), z.number().int().nonnegative());
+
+export function initialStates(task: BenchTask): BenchTask["initialStates"] {
+  if (task.initialStates) return task.initialStates;
+  // Older native adapters reported these numbers in free-form task tags.
+  const { initialStateCounts, initialStateCount } = task.tags;
+  if (initialStateCounts !== undefined) {
+    try {
+      const result = LegacySeedCounts.safeParse(JSON.parse(initialStateCounts));
+      if (result.success)
+        return {
+          countsBySeed: Object.fromEntries(
+            Object.entries(result.data).filter(([key]) => SeedPartitionKey.safeParse(key).success),
+          ),
+        };
+    } catch {
+      // Treat free text as a tag.
+    }
+  }
+  if (initialStateCount !== undefined && /^\d+$/.test(initialStateCount)) {
+    const result = BenchInitialStates.safeParse({ count: Number(initialStateCount) });
+    if (result.success) return result.data;
+  }
+  return undefined;
+}
 
 /** The selected tasks: explicit, else the sample plan's, else every supported task. */
 export function resolveTaskSelection(spec: BenchJobSpec, tasks: BenchTask[]): { tasks: string[] } {
@@ -32,7 +61,7 @@ export function checkTasksExist(
   if (spec.tasks.length === 0) throw new UserError(`${benchmarkName} has no supported tasks`);
 }
 
-/** A frozen sample plan must agree with the benchmark's profile, tasks and initial-state assets. */
+/** A frozen sample plan must agree with the benchmark's profile, tasks and declared initial states. */
 export function checkPlanAgainstBenchmark(
   spec: BenchJobSpec,
   tasks: BenchTask[],
@@ -52,16 +81,39 @@ export function checkPlanAgainstBenchmark(
   }
   if (spec.methods.some((m) => m.agent !== "policy"))
     throw new UserError("planned C6 jobs currently require independent policy methods");
+  const selected = new Set(spec.tasks);
+  const byId = new Map(
+    tasks.map((task) => [task.id, { tags: task.tags, states: initialStates(task) }]),
+  );
+  const planned = new Set<string>();
   for (const sample of spec.samplePlan.items) {
+    const { taskId, initialStateId, environmentSeed } = sample;
     if (sample.benchmarkProfile !== capabilities?.embodied?.profile)
       throw new UserError("sample evaluation profile does not match the benchmark");
-    if (!spec.tasks.includes(sample.taskId))
-      throw new UserError(`sample task is not selected: ${sample.taskId}`);
-    const expectedAsset = tasks.find((task) => task.id === sample.taskId)?.tags.initialStateDigest;
-    if (expectedAsset && expectedAsset !== sample.initialStateDigest)
-      throw new UserError(`initial-state asset differs from the benchmark: ${sample.taskId}`);
+    if (!selected.has(taskId)) throw new UserError(`sample task is not selected: ${taskId}`);
+    if (initialStateId.length > 1 && initialStateId.startsWith("0"))
+      throw new UserError(
+        `initial-state index ${initialStateId} for ${taskId} must use digits without leading zeros`,
+      );
+    planned.add(taskId);
+    const { tags, states } = byId.get(taskId) ?? {};
+    if (tags?.initialStateDigest && tags.initialStateDigest !== sample.initialStateDigest)
+      throw new UserError(`initial-state asset differs from the benchmark: ${taskId}`);
+
+    let count: number | undefined;
+    if (states && "countsBySeed" in states) {
+      count = states.countsBySeed[String(environmentSeed)];
+      if (count === undefined)
+        throw new UserError(
+          `environment seed ${environmentSeed} has no declared initial states for ${taskId}`,
+        );
+    } else count = states?.count;
+    if (count !== undefined && Number(initialStateId) >= count)
+      throw new UserError(
+        `initial-state index ${initialStateId} is outside the declared range for ${taskId} (${count} states)`,
+      );
   }
-  if (spec.tasks.some((task) => !spec.samplePlan?.items.some((s) => s.taskId === task)))
+  if (spec.tasks.some((task) => !planned.has(task)))
     throw new UserError("every selected task needs at least one planned sample");
 }
 

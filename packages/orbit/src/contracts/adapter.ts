@@ -16,6 +16,7 @@ import {
   EpisodeSample,
   ResolvedBinding,
   SampleIdentity,
+  SamplePlan,
   SolveBatch,
 } from "./embodied.ts";
 import { Run } from "./runs.ts";
@@ -36,7 +37,7 @@ const MetricValues = z
   );
 
 export const ADAPTER_PROTOCOL = 1;
-export const AdapterOp = z.enum(["tasks", "solve", "verify", "score"]);
+export const AdapterOp = z.enum(["tasks", "validate-plan", "solve", "verify", "score"]);
 export type AdapterOp = z.infer<typeof AdapterOp>;
 
 /** RunSpec fields Orbit sets itself; an adapter's run spec may not contain them. */
@@ -146,6 +147,7 @@ export const AdapterRequest = z.object({
     config: z.record(z.string(), z.string()),
   }),
   trial: AdapterTrial.optional(),
+  samplePlan: SamplePlan.optional(),
   batch: AdapterSolveBatch.optional(),
   solve: AdapterRunRef.optional(),
   verify: AdapterRunRef.optional(),
@@ -153,14 +155,30 @@ export const AdapterRequest = z.object({
 export type AdapterRequest = z.infer<typeof AdapterRequest>;
 
 export const AdapterTasksResponse = z.object({
-  tasks: z.array(BenchTask),
+  tasks: z.array(BenchTask).superRefine((tasks, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, task] of tasks.entries()) {
+      if (seen.has(task.id)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [index, "id"],
+          message: `duplicate task ID: ${task.id}`,
+        });
+        return;
+      }
+      seen.add(task.id);
+    }
+  }),
   metrics: MetricSpecs.default([]),
   capabilities: BenchCapabilities.optional(),
+  /** The adapter checks the full SamplePlan against its native reset rules. */
+  validateSamplePlan: z.literal(true).optional(),
   /** The benchmark's own aggregation rule, reported next to Orbit's valid-only view. */
   official: OfficialRule.optional(),
 });
 export type AdapterTasksResponse = z.infer<typeof AdapterTasksResponse>;
 export type AdapterTasksResponseInput = z.input<typeof AdapterTasksResponse>;
+export const AdapterPlanResponse = z.object({ ok: z.literal(true) });
 export const AdapterSpecResponse = z.object({
   spec: AdapterRunSpec,
   /** Recorded on the trial (e.g. artifacts the solve run did not produce). */

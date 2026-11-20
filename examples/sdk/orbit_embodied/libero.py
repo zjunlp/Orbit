@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import numpy as np
 
+from .binding import libero_seed
 from .driver import StepResult
 from .evidence import file_digest
 from .libero_suites import HORIZONS
@@ -72,15 +73,16 @@ class LiberoBenchmark:
 
         if sample["taskId"] != self.suite_name + ":" + self.task.name:
             raise ValueError("sample task does not match the selected LIBERO task")
+        seed = libero_seed(sample["environmentSeed"])
         initial_file = self.initial_state_file(Path(get_libero_path("init_states")))
         if file_digest(initial_file) != sample["initialStateDigest"]:
             raise ValueError("initial-state asset differs from the frozen plan")
         initial_states = self.suite.get_task_init_states(self.task_index)
         initial_state = self.initial_state(sample, initial_states)
-        np.random.seed(sample["environmentSeed"])
+        np.random.seed(seed)
         bddl = Path(get_libero_path("bddl_files")) / self.task.problem_folder / self.task.bddl_file
         self.env = OffScreenRenderEnv(bddl_file_name=str(bddl), camera_heights=256, camera_widths=256)
-        self.env.seed(sample["environmentSeed"])
+        self.env.seed(seed)
         self.env.reset()
         raw = self.env.set_init_state(initial_state)
         return self.settle(raw)

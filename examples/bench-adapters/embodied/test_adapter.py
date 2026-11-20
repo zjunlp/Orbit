@@ -69,6 +69,85 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertNotEqual(explicit.returncode, 0)
             self.assertIn("initial-state index exceeds the selected reset recipe", explicit.stderr)
 
+            reference = json.loads(ADAPTER.with_name("reference.json").read_text())
+            self.assert_numpy_seed_boundary([*command, "--all-initial-states"], reference)
+            reference["environment"] = {"kind": "libero", "protocol": "fast-wam", "environmentSeed": 42}
+            reference["parameters"]["environmentSeed"] = 42
+            reference_file = root / "reference.json"
+            write_json(reference_file, reference)
+            with patch.object(adapter, "settings", return_value=(root, {"suite": suite, "image": "test"}, reference)):
+                listing = adapter.tasks({})
+            self.assertEqual([task["initialStates"] for task in listing["tasks"]],
+                             [{"countsBySeed": {"42": 2}}, {"countsBySeed": {"42": 3}}])
+            fast_wam = [*command, "--reference-file", str(reference_file), "--all-initial-states"]
+            valid = json.loads(subprocess.check_output(fast_wam, text=True))
+            self.assertEqual({item["environmentSeed"] for item in valid["items"]}, {42})
+            wrong_seed = subprocess.run([*fast_wam, "--environment-seed", "7"], capture_output=True, text=True)
+            self.assertNotEqual(wrong_seed.returncode, 0)
+            self.assertIn("Fast-WAM requires the frozen LIBERO environment seed 42", wrong_seed.stderr)
+
+    def assert_numpy_seed_boundary(self, command, reference):
+        config = {"reference": json.dumps(reference), "profileDigest": digest(reference)}
+        maximum = json.loads(subprocess.check_output(
+            [*command, "--environment-seed", str(2 ** 32 - 1)], text=True))
+        self.assertEqual(adapter.validate_plan({"samplePlan": maximum, "benchmark": {"config": config}}),
+                         {"ok": True})
+        overflow = subprocess.run([*command, "--environment-seed", str(2 ** 32)],
+                                  capture_output=True, text=True)
+        self.assertNotEqual(overflow.returncode, 0)
+        self.assertIn("unsigned 32-bit integer", overflow.stderr)
+        maximum["items"][0]["environmentSeed"] += 1
+        with self.assertRaisesRegex(ValueError, "unsigned 32-bit integer"):
+            adapter.validate_plan({"samplePlan": maximum, "benchmark": {"config": config}})
+
+    def test_simpler_fixed_grid_planner_and_preflight_use_the_same_rng_seed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = "simpler_env_widowx/widowx_spoon_on_towel"
+            reference = json.loads(ADAPTER.with_name("reference.json").read_text())
+            fixed = [0.0, 0.0, 1]
+            scene = {"robotX": fixed, "robotY": fixed, "rpy": fixed * 3, "objectEpisodes": [0, 2]}
+            reference["environment"] = {"kind": "registered-gym", "simplerRobot": "widowx",
+                                        "tasks": [task], "simplerScenes": {task: [scene]}}
+            reference_file = root / "reference.json"
+            write_json(reference_file, reference)
+            command = [sys.executable, "-S", "-B", str(ADAPTER.with_name("plan.py")),
+                       "--reference-source", str(root), "--reference-file", str(reference_file),
+                       "--all-tasks", "--all-initial-states"]
+            self.assert_numpy_seed_boundary(command, reference)
+
+    def test_native_seed_limits_include_the_initial_state_offset(self):
+        profiles = [json.loads((ADAPTER.parent / "profiles" / f"groot-{robot}.json").read_text())
+                    for robot in ("widowx", "google")]
+        for kind, task in (("maniskill3", "PutOnPlateInScene25Main-v3"), ("maniskill3-tabletop", "PickCube-v1")):
+            profiles.append({"id": kind + "/1", "environment": {"kind": kind, "tasks": [task]}})
+        for reference in profiles:
+            with self.subTest(profile=reference["id"]), tempfile.TemporaryDirectory() as temporary:
+                profile = Path(temporary) / "reference.json"
+                write_json(profile, reference)
+                task = reference["environment"]["tasks"][0]
+                command = [sys.executable, "-S", "-B", str(ADAPTER.with_name("plan.py")),
+                           "--reference-source", temporary, "--reference-file", str(profile),
+                           "--task", task, "--initial-state", "1", "--environment-seed"]
+                accepted = subprocess.check_output([*command, str(2 ** 32 - 2)], text=True)
+                plan = json.loads(accepted)
+                sample = plan["items"][0]
+                self.assertEqual(reset_seed(sample, reference), 2 ** 32 - 1)
+                config = {"reference": json.dumps(reference), "profileDigest": digest(reference)}
+                self.assertEqual(adapter.validate_plan({"samplePlan": plan, "benchmark": {"config": config}}),
+                                 {"ok": True})
+                overflow = subprocess.run([*command, str(2 ** 32 - 1)], capture_output=True, text=True)
+                self.assertNotEqual(overflow.returncode, 0)
+                self.assertIn("unsigned 32-bit integer", overflow.stderr)
+                sample["environmentSeed"] += 1
+                sample["sampleId"] = digest({key: value for key, value in sample.items() if key != "sampleId"})
+                plan["digest"] = digest(plan["items"])
+                with self.assertRaisesRegex(ValueError, "unsigned 32-bit integer"):
+                    adapter.validate_plan({"samplePlan": plan, "benchmark": {"config": config}})
+                with self.assertRaisesRegex(ValueError, "unsigned 32-bit integer"):
+                    adapter.solve_member({"sample": sample, "sampleRef": sample["sampleId"]},
+                                         reference, adapter.implementation_digest(), "episode")
+
     def test_hssd_configurator_help_works_without_site_packages(self):
         path = ADAPTER.parent / "benchmarks/hssd-ov/configure_hssd_ov.py"
         output = subprocess.check_output([sys.executable, "-B", "-E", "-S", str(path), "--help"], text=True)
@@ -803,6 +882,28 @@ class AdapterPlanningTests(unittest.TestCase):
                 reset_seed(invalid, reference)
         with self.assertRaisesRegex(ValueError, "same native reset"):
             check_distinct_resets([first, {**first, "sampleId": "aliased"}], reference)
+
+    def test_robocasa_preflight_and_reset_reject_the_same_overflow(self):
+        from orbit_embodied.robocasa import RoboCasaBenchmark
+
+        reference = json.loads((ADAPTER.parent / "profiles/robocasa365-atomic-seen.json").read_text())
+        reference["environment"]["assets"]["digest"] = "sha256:" + "b" * 64
+        task = "robocasa/OpenDrawer"
+        content = {"taskId": task, "initialStateId": "0", "environmentSeed": 2 ** 32 - 1,
+                   "policySeed": 0, "repetition": 0, "benchmarkProfile": reference["id"],
+                   "initialStateDigest": seed_asset(reference, task)}
+        request = {"benchmark": {"config": {"reference": json.dumps(reference), "profileDigest": digest(reference)}},
+                   "samplePlan": {"items": [{**content, "sampleId": digest(content)}]}}
+        self.assertEqual(adapter.validate_plan(request), {"ok": True})
+        content["initialStateId"] = "1"
+        sample = {**content, "sampleId": digest(content)}
+        request["samplePlan"]["items"] = [sample]
+        with self.assertRaisesRegex(ValueError, "RoboCasa365 scene seed must fit"):
+            adapter.validate_plan(request)
+        benchmark = RoboCasaBenchmark.__new__(RoboCasaBenchmark)
+        benchmark.reference, benchmark.task = reference, task
+        with self.assertRaisesRegex(ValueError, "RoboCasa365 scene seed must fit"):
+            benchmark.reset(sample)
 
     def test_robocasa_plans_task_horizons_and_mounts_assets_only_for_solve(self):
         reference = json.loads((ADAPTER.parent / "profiles/robocasa365-atomic-seen.json").read_text())

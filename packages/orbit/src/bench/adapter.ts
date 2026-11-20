@@ -10,6 +10,7 @@ import {
   type MetricSpecInput,
   type ORBIT_OWNED_SPEC_FIELDS,
   type RunSpecInput,
+  type SamplePlan,
   type ScoreResult,
 } from "../contracts/index.ts";
 
@@ -35,6 +36,7 @@ export interface AdapterHandlers {
   /** What the `tasks` reply declares besides the tasks, when it depends on the registration. */
   info?(req: AdapterRequest, tasks: BenchTask[]): Omit<AdapterTasksResponseInput, "tasks">;
   tasks(req: AdapterRequest): BenchTask[];
+  validatePlan?(req: AdapterRequest & { samplePlan: SamplePlan }): void | Promise<void>;
   solve(req: TrialRequest): SpecReply;
   verify(req: VerifyRequest): SpecReply;
   score(req: ScoreRequest): ScoreReply | Promise<ScoreReply>;
@@ -48,6 +50,13 @@ export function handle(h: AdapterHandlers, req: AdapterRequest): unknown {
   if (req.op === "tasks") {
     const tasks = h.tasks(req);
     return { tasks, metrics: h.metrics ?? [], ...h.info?.(req, tasks) };
+  }
+  if (req.op === "validate-plan") {
+    if (!h.validatePlan || !req.samplePlan)
+      throw new Error("validate-plan requires adapter support and a samplePlan");
+    return Promise.resolve(h.validatePlan({ ...req, samplePlan: req.samplePlan })).then(() => ({
+      ok: true,
+    }));
   }
   need("trial");
   if (req.op === "solve") return h.solve(req as TrialRequest);

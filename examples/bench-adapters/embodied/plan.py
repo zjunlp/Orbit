@@ -8,7 +8,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "sdk"))
 from orbit_embodied import digest
-from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, seed_asset
+from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_plan_resets, fast_wam_seed, seed_asset
 from orbit_embodied.libero_plus import catalog as libero_plus_catalog
 from orbit_embodied.simpler import initial_state_count
 from orbit_embodied.vlabench import initial_state_count as vlabench_state_count
@@ -34,13 +34,18 @@ def main():
     reference = json.loads(args.reference_file.read_text())
     environment = reference.get("environment", {})
     kind = environment.get("kind")
+    fixed_seed = fast_wam_seed(reference)
     environment_seed = args.environment_seed
+    if fixed_seed is not None:
+        if environment_seed is not None and environment_seed != fixed_seed:
+            parser.error(f"Fast-WAM requires the frozen LIBERO environment seed {fixed_seed}")
+        environment_seed = fixed_seed
     if environment_seed is None:
         defaults = {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0, "colosseum-v2": 0}
         environment_seed = environment.get("environmentSeed", 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7))
     generated = kind in GENERATED_ENVIRONMENTS
-    uint32_seed = (kind in ("robocasa365", "robotwin", "robolab", "robodojo", "robomimic", "vima-bench", "colosseum-v2")
-                   or "simplerRobot" in environment or "initialStateCounts" in environment)
+    uint32_seed = (kind in ("robolab", "robodojo", "robomimic", "vima-bench", "colosseum-v2")
+                   or "initialStateCounts" in environment)
     if environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
     if generated:
@@ -94,8 +99,7 @@ def main():
                            "initialStateId": str(initial_state), "initialStateDigest": task["tags"]["initialStateDigest"],
                            "environmentSeed": environment_seed, "policySeed": 0, "repetition": repetition}
                 items.append({"sampleId": digest(content), **content})
-    if generated:
-        check_distinct_resets(items, reference)
+    check_plan_resets(items, reference)
     result = {"version": 1, "items": items, "digest": digest(items)}
     print(json.dumps(result, indent=2))
 
