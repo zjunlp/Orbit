@@ -123,7 +123,7 @@ def validate_observation(observation, descriptions):
         array = np.asarray(value)
         if list(array.shape) != description["shape"] or str(array.dtype) != description["dtype"]:
             raise ValueError("observation shape or dtype mismatch: " + name)
-        if not np.isfinite(array).all():
+        if array.dtype.kind in "fc" and not np.isfinite(array).all():
             raise ValueError("non-finite observation: " + name)
 
 

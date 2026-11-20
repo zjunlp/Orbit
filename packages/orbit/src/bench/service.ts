@@ -324,6 +324,7 @@ export class BenchService {
         throw new UserError(`${b.name} does not support ${m.agent} methods`);
       this.checkMethod(m, info.capabilities?.requires ?? []);
       if (m.agent === "policy") {
+        if (m.effort) throw new UserError(`${m.name}: effort is a CLI Agent option`);
         const policy = this.policies.get(m.policyRef ?? "");
         if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
         if (spec.calibration?.mode === "policy" && policy.kind !== "model")

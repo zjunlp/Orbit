@@ -397,14 +397,25 @@ export function calibrationReport(
       add(
         "requested rescore completed",
         again.length > 0 &&
-          again.every(
-            (t) =>
-              t.history.at(-1)?.outcome.evaluation === "valid" &&
-              t.outcome?.evaluation === "valid" &&
-              t.history.at(-1)?.outcome.score === t.outcome.score &&
-              t.history.at(-1)?.outcome.maxScore === t.outcome.maxScore &&
-              t.history.at(-1)?.verifyRunId !== t.verifyRunId,
-          ),
+          again.every((t) => {
+            const previous = t.history.at(-1);
+            if (
+              previous?.outcome.evaluation !== "valid" ||
+              t.outcome?.evaluation !== "valid" ||
+              previous.outcome.score !== t.outcome.score ||
+              previous.outcome.maxScore !== t.outcome.maxScore ||
+              previous.verifyRunId === t.verifyRunId
+            )
+              return false;
+            const original = Object.entries(previous.outcome.metrics ?? {});
+            const rescored = t.outcome.metrics ?? {};
+            return (
+              original.length === Object.keys(rescored).length &&
+              original.every(
+                ([name, value]) => Object.hasOwn(rescored, name) && rescored[name] === value,
+              )
+            );
+          }),
         "selected episode rescored from the original solve; trusted verdict preserved",
       );
     }

@@ -51,6 +51,7 @@ class TestPolicyTransport(unittest.TestCase):
 
     def test_action_only_reply_clears_previous_fallback(self):
         client = PolicyClient.__new__(PolicyClient)
+        client.metadata = {}
         with patch.object(client, "infer", side_effect=[
             {"actions": [0], "fallback": "empty-plan"},
             {"actions": [1]},
@@ -62,3 +63,18 @@ class TestPolicyTransport(unittest.TestCase):
             self.assertIsNone(client.last_fallback)
             self.assertEqual(client.act({}), [2])
             self.assertIsNone(client.last_fallback)
+
+
+    def test_prompt_context_is_resent_on_reset_only_for_supporting_servers(self):
+        client = PolicyClient.__new__(PolicyClient)
+        observation = {"prompt_context": "encoded-image-assets", "ee": 0}
+        for cached in (False, True):
+            client.metadata = {"cachedPromptContext": cached}
+            client.reset({"policySeed": 0})
+            with patch.object(client, "infer", return_value={"actions": [0]}) as infer:
+                client.act(observation)
+                client.act(observation)
+                client.reset({"policySeed": 0})
+                client.act(observation)
+            self.assertEqual([call.args[0] for call in infer.call_args_list],
+                             [observation, {"ee": 0} if cached else observation, observation])
