@@ -10,7 +10,7 @@ from orbit_embodied.binding import digest, file_digest
 from orbit_embodied.eb_navigation import ACTION_NAMES
 
 RELEASE = Path(__file__).with_name("release.json")
-RANDOMNESS = {"backend": "stateless", "scope": "stateless"}
+RANDOMNESS = {"backend": "numpy", "scope": "episode", "initialSeed": 0}
 SKILLS = [
     "Move forward by 0.25", "Move backward by 0.25", "Move rightward by 0.25", "Move leftward by 0.25",
     "Rotate to the right by 90 degrees.", "Rotate to the left by 90 degrees.",
