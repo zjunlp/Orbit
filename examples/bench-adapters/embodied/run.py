@@ -106,9 +106,16 @@ def verify_simulator_assets(requests):
     if kind == "robolab":
         from orbit_embodied.robolab import check_runtime
         check_runtime(reference)
+    elif kind == "behavior1k":
+        from orbit_embodied.behavior1k import check_runtime_assets
+        check_runtime_assets(environment["assets"])
     elif kind == "maniskill3":
         from orbit_embodied.tabletop import check_plate25_runtime
         check_plate25_runtime(environment)
+    elif kind == "maniskill3-tabletop" and environment.get("assets"):
+        from orbit_embodied.tabletop import check_maniskill_assets
+        assets = environment["assets"]
+        check_maniskill_assets(assets["target"], assets["digest"])
     elif kind == "chores":
         from orbit_embodied.chores import read_asset_manifest, verify_asset_files
         assets = environment["assets"]

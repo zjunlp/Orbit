@@ -32,19 +32,29 @@ Prepare behavior-1k-assets, omnigibson-robot-assets, 2026-challenge-task-instanc
 and omnigibson.key through the official installation workflow. The user must accept
 its data license. This adapter does not accept terms or download keys automatically.
 
-Build the pinned upstream image outside this checkout, then wrap it:
+Verify the pinned checkout before building the upstream and wrapper images. The wrapper
+receives the verified revision explicitly because the upstream image excludes Git metadata.
+Registration also checks the image's tracked OmniGibson, BDDL and JoyLo file contents
+against the pinned checkout in a read-only CPU container. Registration and Solve
+use the wrapper image's Python launcher with the same pinned source paths and user
+site packages disabled.
 
 ~~~bash
+BEHAVIOR_SOURCE=/path/to/BEHAVIOR-1K
+BEHAVIOR_REVISION=$(git -C "$BEHAVIOR_SOURCE" rev-parse HEAD)
+test "$BEHAVIOR_REVISION" = b544acbbb76b461349bcba21f93b870b11da6608 &&
+test -z "$(git -C "$BEHAVIOR_SOURCE" status --porcelain -- OmniGibson bddl3 joylo)" &&
 docker build --label orbit.task=behavior-robotagent \
-  -f /path/to/BEHAVIOR-1K/docker/Dockerfile \
-  -t behavior-native:local /path/to/BEHAVIOR-1K
+  -f "$BEHAVIOR_SOURCE/docker/Dockerfile" \
+  -t behavior-native:local "$BEHAVIOR_SOURCE" &&
 docker build --label orbit.task=behavior-robotagent \
+  --build-arg BEHAVIOR_SOURCE="$BEHAVIOR_REVISION" \
   --build-arg BEHAVIOR_BASE=behavior-native:local \
   -f examples/bench-adapters/embodied/benchmarks/behavior-1k/behavior.Dockerfile \
   -t orbit-behavior:local .
 orbit data add behavior1k-licensed-data /path/to/prepared-data
 python3 examples/bench-adapters/embodied/benchmarks/behavior-1k/configure_behavior.py \
-  --source /path/to/BEHAVIOR-1K --data /path/to/prepared-data \
+  --source "$BEHAVIOR_SOURCE" --data /path/to/prepared-data \
   --benchmark-image orbit-behavior:local --output-dir /path/to/private-config
 orbit bench add-file /path/to/private-config/benchmark.json
 ~~~

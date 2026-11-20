@@ -37,6 +37,13 @@ def asset_digest(root):
     return "sha256:" + value.hexdigest()
 
 
+def check_runtime_assets(assets):
+    if asset_digest(assets["target"]) != assets["digest"]:
+        raise ValueError("BEHAVIOR assets differ from the frozen registration")
+    if not (Path(assets["target"]) / "omnigibson.key").is_file():
+        raise ValueError("Use the officially installed licensed dataset key")
+
+
 def profile():
     observations = {
         f"robot_r1::{link}:Camera:0::rgb":
@@ -78,6 +85,29 @@ def native_instance(reference, sample):
     return 301 + index
 
 
+def policy_observations(obs, schema):
+    # OmniGibson qualifies camera names with the robot prim name inside the flattened sensor key.
+    native_names = {f"robot_r1::{link}:Camera:0::rgb": f"robot_r1::robot_r1:{link}:Camera:0::rgb"
+                    for link in CAMERAS.values()}
+    fields = {key: native_names[key] if native_names.get(key) in obs else key for key in schema}
+    values = {key: obs[source].detach().cpu().numpy()[0]
+              for key, source in fields.items() if source in obs}
+    validate_observation(values, schema)
+    return values
+
+
+def native_float32_action(raw):
+    import numpy as np
+
+    if raw.shape != (1, 23) or raw.dtype.kind not in "fiu":
+        raise ValueError("Policy must return one numeric native 23D action")
+    with np.errstate(over="ignore", invalid="ignore"):
+        action = raw.astype(np.float32)
+    if not np.isfinite(action).all():
+        raise ValueError("Policy action must be finite in native float32")
+    return action
+
+
 def verify_behavior(reference, sample, controls, result, directory):
     import numpy as np
     directory = Path(directory)
@@ -94,12 +124,14 @@ def verify_behavior(reference, sample, controls, result, directory):
     q = report["q_score"]["final"]
     if type(q) not in (int, float) or not math.isfinite(q) or not 0 <= q <= 1:
         raise ValueError("BEHAVIOR Q-score must be a finite fraction")
+    if report["success"] and q != 1:
+        raise ValueError("A successful BEHAVIOR episode must have Q-score 1")
     if native["score"] != q or native["instanceId"] != instance:
         raise ValueError("BEHAVIOR score or reset identity changed")
     for i, row in enumerate(controls):
         raw = np.load(directory / ("chunks/" + str(row["chunk"]) + ".raw.npy"), allow_pickle=False)
         action = np.load(directory / ("chunks/" + str(row["chunk"]) + ".npy"), allow_pickle=False)
-        if raw.shape != (1, 23) or not np.isfinite(raw).all() or not np.array_equal(raw.astype(np.float32), action):
+        if not np.array_equal(native_float32_action(raw), action):
             raise ValueError("BEHAVIOR action differs from the native float32 cast")
         state = row["state"]
         if (state["instanceId"] != instance or state["nativeStep"] != i + 1
@@ -154,13 +186,10 @@ def run_native_episode(request, destination, policy, *, prepare=None, cancelled=
     controls, pending = [], {}
     trace = (directory / "actions.jsonl").open("w")
     try:
-        if prepare:
+        if prepare is not None:
             prepare()
-        assets = reference["environment"]["assets"]
-        if asset_digest(assets["target"]) != assets["digest"]:
-            raise ValueError("BEHAVIOR assets differ from the frozen registration")
-        if not (Path(assets["target"]) / "omnigibson.key").is_file():
-            raise ValueError("Use the officially installed licensed dataset key")
+        else:
+            check_runtime_assets(reference["environment"]["assets"])
         from omegaconf import OmegaConf
         import torch as th
         import omnigibson as og
@@ -195,9 +224,7 @@ def run_native_episode(request, destination, policy, *, prepare=None, cancelled=
                     if remaining <= 0:
                         raise PolicyTimeoutError("Native evaluation deadline expired")
                     policy.client.timeout = min(policy.definition["callTimeoutSec"], remaining, 600)
-                inputs = {key: value.detach().cpu().numpy()[0] for key, value in obs.items()
-                          if key in reference["benchmarkProfile"]["observations"]}
-                validate_observation(inputs, reference["benchmarkProfile"]["observations"])
+                inputs = policy_observations(obs, reference["benchmarkProfile"]["observations"])
                 mapped = {target: inputs[source] for target, source in binding["observationMap"].items()}
                 called = time.monotonic()
                 try:
@@ -209,9 +236,10 @@ def run_native_episode(request, destination, policy, *, prepare=None, cancelled=
                     if isinstance(exc, EpisodeFailure) and exc.kind == "call_watchdog":
                         raise PolicyTimeoutError(str(exc)) from exc
                     raise PolicyConnectionError(str(exc)) from exc
-                if raw.shape != (1, 23) or raw.dtype.kind not in "fiu" or not np.isfinite(raw).all():
-                    raise PolicyConnectionError("Policy must return one finite native 23D action")
-                action = raw.astype(np.float32)
+                try:
+                    action = native_float32_action(raw)
+                except ValueError as exc:
+                    raise PolicyConnectionError(str(exc)) from exc
                 chunk = len(controls)
                 folder = directory / "chunks"
                 folder.mkdir(exist_ok=True)

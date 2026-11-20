@@ -12,6 +12,7 @@ from adapter import HERE, check_source, digest, file_digest, implementation_dige
 from native_runtime import image_id
 from orbit_embodied.behavior1k import SOURCE, DATA_ROOT, asset_digest, profile
 
+BEHAVIOR_PYTHON = "/usr/local/bin/orbit-behavior-python"
 SOURCE_FILES = ("OmniGibson/omnigibson/eval/evaluator.py", "OmniGibson/omnigibson/eval/eval.py",
                 "OmniGibson/omnigibson/eval/r1pro.yaml", "OmniGibson/omnigibson/eval/policies.py",
                 "OmniGibson/omnigibson/eval/utils/eval_utils.py",
@@ -56,6 +57,68 @@ def reference(source, data, dataset):
         "scoreName": "BEHAVIOR native final Q-score", "scoreUnit": "task", "scoreErrors": "fail"}
 
 
+def check_image_source(image, source):
+    tracked = subprocess.check_output(
+        ["git", "-C", str(source), "ls-files", "-z", "--", "OmniGibson", "bddl3", "joylo"],
+        text=True,
+    ).split("\0")
+    paths = [name for name in tracked if name]
+    if not set(SOURCE_FILES).issubset(paths):
+        raise ValueError("BEHAVIOR checkout lacks the pinned evaluator sources")
+    expected = {name: file_digest(source / name) for name in paths}
+    probe = """
+import sys
+
+# Match script execution from Orbit's staged directory while receiving paths on stdin.
+if sys.path[:1] == ['']:
+    sys.path[0] = '/orbit-embodied'
+
+import hashlib
+from importlib.machinery import PathFinder
+from importlib.util import find_spec
+import json
+from pathlib import Path
+
+root = Path('/behavior-src')
+for package, source in (('omnigibson', 'OmniGibson'), ('bddl', 'bddl3'), ('gello', 'joylo')):
+    module = find_spec(package)
+    expected = root / source / package / '__init__.py'
+    if not (module and module.origin and Path(module.origin).resolve() == expected):
+        raise ValueError('BEHAVIOR image imports ' + package + ' outside the pinned checkout')
+
+# Resolve the evaluator and its scoring dependencies without importing simulator code.
+omnigibson = root / 'OmniGibson/omnigibson'
+for package, modules in (('eval', ('evaluator',)), ('metrics', ('agent_metric', 'task_metric', 'metric_base'))):
+    package_spec = PathFinder.find_spec(package, [str(omnigibson)])
+    package_root = omnigibson / package
+    if not (package_spec and package_spec.origin and package_spec.submodule_search_locations
+            and Path(package_spec.origin).resolve() == package_root / '__init__.py'):
+        raise ValueError('BEHAVIOR image imports omnigibson.' + package + ' outside the pinned checkout')
+    for module in modules:
+        found = PathFinder.find_spec(module, package_spec.submodule_search_locations)
+        if not (found and found.origin and Path(found.origin).resolve() == package_root / (module + '.py')):
+            raise ValueError('BEHAVIOR image imports omnigibson.' + package + '.' + module + ' outside the pinned module')
+actual = {}
+for name in json.load(sys.stdin):
+    sha = hashlib.sha256()
+    with (root / name).open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            sha.update(chunk)
+    actual[name] = 'sha256:' + sha.hexdigest()
+print(json.dumps(actual))
+"""
+    actual = json.loads(subprocess.check_output(
+        ["docker", "run", "--rm", "-i", "--network", "none", "--read-only",
+         "--env", "NVIDIA_VISIBLE_DEVICES=void",
+         "--label", "orbit.task=behavior-source-check", "--tmpfs", "/orbit", "--workdir", "/orbit",
+         "--tmpfs", "/orbit-embodied", "--entrypoint", BEHAVIOR_PYTHON, image, "-B", "-c", probe],
+        input=json.dumps(paths), text=True,
+    ))
+    for name, checksum in expected.items():
+        if actual.get(name) != checksum:
+            raise ValueError("BEHAVIOR image source differs from the pinned checkout: " + name)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
@@ -87,6 +150,7 @@ def main():
         '{{index .Config.Labels "org.orbit.behavior.source"}}', image], text=True).strip()
     if built != SOURCE["commit"]:
         raise ValueError("Use the supplied image recipe with the pinned source label")
+    check_image_source(image, source)
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
     resources = {"version": 1, "default": {"cpus": 8, "memGB": 32, "gpus": 1, "gpuMemGB": 16,
@@ -95,7 +159,7 @@ def main():
                 for task, horizon in ref["environment"]["horizons"].items()}}
     benchmark = {"name": "behavior1k-r1pro-public", "path": str(source), "adapter": str(HERE / "adapter.py"),
         "resources": str(output / "resources.json"), "labels": {"identity": {"id": "behavior-1k", "name": "BEHAVIOR-1K"}},
-        "config": {"image": image, "python": "/opt/conda/envs/behavior/bin/python",
+        "config": {"image": image, "python": BEHAVIOR_PYTHON,
             "simGpus": "1", "simGpuMemGB": "16", "renderer": "vulkan",
             "reference": json.dumps(ref, separators=(",", ":")), "profileDigest": digest(ref),
             "implementationDigest": implementation_digest()}}
