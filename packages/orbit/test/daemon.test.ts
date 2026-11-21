@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { tryConnect } from "../src/client/index.ts";
 import { readDaemonInfo } from "../src/config/daemon-info.ts";
 import { ensureHome, orbitPaths, privateStateCheck } from "../src/config/paths.ts";
-import { Run } from "../src/contracts/index.ts";
+import { LogChunk, Run } from "../src/contracts/index.ts";
 import { type StartedDaemon, startDaemon } from "../src/daemon/server.ts";
 import { Store } from "../src/store/index.ts";
 
@@ -98,7 +98,6 @@ describe("daemon", () => {
         "/runs?limit=",
         "/bench/jobs?limit=",
         "/runs/fixture/events?after=",
-        "/runs/fixture/logs?offset=",
         "/runs/fixture/logs?limit=",
         "/runs/fixture/wait?timeout=",
       ]) {
@@ -112,6 +111,40 @@ describe("daemon", () => {
       }
     },
   );
+
+  it.each(["1.5", "1e21", "9007199254740992", "NaN", "Infinity", "abc"])(
+    "rejects a non-integer log offset: %s",
+    async (number) => {
+      const res = await fetch(`${daemon.url}/api/v1/runs/fixture/logs?offset=${number}`, {
+        headers: { authorization: `Bearer ${daemon.token}` },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: expect.stringContaining("safe integer"),
+      });
+    },
+  );
+
+  it("reads the log tail from a negative offset", async () => {
+    writeFileSync(daemon.runs.dirs("fixture").log, "first\nsecond\nthird\n");
+    const get = async (offset: string) => {
+      const res = await fetch(
+        `${daemon.url}/api/v1/runs/fixture/logs?offset=${offset}&limit=4096`,
+        {
+          headers: { authorization: `Bearer ${daemon.token}` },
+        },
+      );
+      expect(res.status).toBe(200);
+      return LogChunk.parse(await res.json());
+    };
+    const tail = await get("-6");
+    expect(tail.text).toBe("third\n");
+    expect(tail.next).toBe(19);
+    const whole = await get("-4096");
+    expect(whole.text).toBe("first\nsecond\nthird\n");
+    const head = await get("0");
+    expect(head.text).toBe("first\nsecond\nthird\n");
+  });
 
   it.each(["", "0", "1", "1e3", "9007199254740991"])(
     "accepts safe integer limits and the empty default: %s",

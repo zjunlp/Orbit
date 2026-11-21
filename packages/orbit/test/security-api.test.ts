@@ -193,3 +193,35 @@ it("redacts running process logs across API pages and withholds incomplete secre
   const rest = await get(partial.next, 1024);
   expect(partial.text + rest.text).toBe(`${prefix}[redacted]\n`);
 });
+
+it("serves the log tail from a negative offset and rejects a fractional one", async () => {
+  const done = Run.parse({ ...run, id: "done", state: "succeeded", cleanup: "done" });
+  const doneDirs = runDirs(paths, done.id);
+  mkdirSync(doneDirs.output, { recursive: true });
+  writeFileSync(doneDirs.log, "first\nsecond\nthird\n");
+  const doneApp = createApp({
+    token,
+    runs: Object.assign(new EventEmitter(), {
+      get: (id: string) => (id === done.id ? done : null),
+      dirs: () => doneDirs,
+      redactor: () => new Redactor([secret]),
+    }) as unknown as RunService,
+    paths,
+    webDir: null,
+    startedAt: done.createdAt,
+  } as AppDeps);
+  const get = async (offset: string) => {
+    const res = await doneApp.request(`/api/v1/runs/done/logs?offset=${offset}&limit=4096`, {
+      headers,
+    });
+    return { status: res.status, body: await res.json() };
+  };
+  const tail = await get("-6");
+  expect(tail.status).toBe(200);
+  expect(LogChunk.parse(tail.body)).toMatchObject({ offset: 13, next: 19, text: "third\n" });
+  expect(LogChunk.parse((await get("-4096")).body).text).toBe("first\nsecond\nthird\n");
+  expect(LogChunk.parse((await get("0")).body).text).toBe("first\nsecond\nthird\n");
+  const bad = await get("1.5");
+  expect(bad.status).toBe(400);
+  expect(bad.body).toMatchObject({ error: expect.stringContaining("safe integer") });
+});
