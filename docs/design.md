@@ -1452,6 +1452,9 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
 所有方式都编译成现有 adapter 协议 1（§7）的四个操作，不新增执行路径；SDK 的签名与证据格式沿用 §7 已实现的规则，
 旧 trial 的 rescore 必须保持有效。
 
+声明式清单可用 `result.score.singleBinary` 要求恰好一个二值分数，用 `result.expectBeforeInvalid` 在归类上游错误前核对
+`result.expect`。每条期望可指定 JSON 字段类型。vla-eval 的 LIBERO Spatial 清单据此核对任务、初态、记录的配置种子和单集成功值。
+
 **接入的验收与盘点**：
 
 - `orbit bench calibrate <bench> [--sample N] [-t task…]`（已实现，`cli/calibrate.ts`）：抽样任务（按 suite 轮转）

@@ -3,7 +3,7 @@
 # `vla-eval run --no-docker` entry, the policy is the `policy` service, scoring is vla-eval's own
 # mean_success. Register with: orbit bench add libero <this directory> --adapter manifest
 version: 1
-image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
+image: ghcr.io/allenai/vla-evaluation-harness/libero@sha256:bc9930a7e42f970bdde7f3aaddaab0c223bd8e7e922e387cd9eb48aa89ccf2f1
 # A fixed policy closes the loop with the simulator; one trial is one episode, seed n runs
 # LIBERO's initial state n-1 (50 per task). A still policy can satisfy a goal that holds at the start.
 identity: { id: libero, name: LIBERO, variant: vla-eval }
@@ -84,6 +84,7 @@ solve:
   env: { PYTHONPATH: /orbit-config }
   # LIBERO keeps its configuration under /root/.libero in the image.
   root: true
+  dependsOn: [policy]
   network: true
   resources: { cpus: 4, memGB: 16, gpus: 0 }
   timeoutMin: 30
@@ -92,7 +93,7 @@ methods:
   empty:
     services:
       - name: policy
-        image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
+        image: ghcr.io/allenai/vla-evaluation-harness/libero@sha256:bc9930a7e42f970bdde7f3aaddaab0c223bd8e7e922e387cd9eb48aa89ccf2f1
         role: policy
         gpus: 0
         entrypoint: /opt/conda/bin/conda
@@ -115,14 +116,29 @@ methods:
 
 result:
   file: "*_aggregate.json"
-  score: { path: "tasks[*].episodes[*].metrics.success", reduce: mean }
+  score: { path: "tasks[*].episodes[*].metrics.success", reduce: mean, singleBinary: true }
   maxScore: 1
   metrics:
     success: { path: "tasks[*].episodes[*].metrics.success", reduce: mean, scale: 100 }
+  expectBeforeInvalid: true
   expect:
-    - { path: "config.params.orbit_episode", equals: "{{episode}}" }
-    - { path: "num_episodes_total", equals: "1" }
+    - { path: "tasks[*].task", equals: "{{task.tags.name}}", type: string }
+    - { path: "tasks[*].episodes[*].name", equals: "{{task.tags.name}}", type: string }
+    - { path: "tasks[*].episodes[*].suite", equals: "libero_spatial", type: string }
+    - { path: "tasks[*].episodes[*].task_id", equals: "{{task.tags.index}}", type: number }
+    - { path: "config.params.suite", equals: "libero_spatial", type: string }
+    - { path: "config.params.orbit_episode", equals: "{{episode}}", type: number }
+    - { path: "config.params.seed", equals: "7", type: number }
+    - { path: "num_episodes_total", equals: "1", type: number }
   invalid:
+    - { path: "tasks[1]", when: present, failure: scorer_error, issue: "expected one task in the vla-eval aggregate" }
+    - { path: "tasks[0].episodes[1]", when: present, failure: scorer_error, issue: "expected one episode in the vla-eval aggregate" }
+    - { path: "tasks[*].episodes[*].failure_reason", equals: model_start, failure: policy_start, issue: "vla-eval policy initialization failed" }
+    - { path: "tasks[*].episodes[*].failure_reason", equals: model_act, failure: policy_act, issue: "vla-eval policy action failed" }
+    - { path: "tasks[*].episodes[*].failure_reason", equals: timeout, failure: call_watchdog, issue: "vla-eval episode timed out" }
+    - { path: "tasks[*].episodes[*].failure_reason", equals: server_unreachable, failure: server_unreachable, issue: "vla-eval policy service was unreachable" }
+    - { path: "tasks[*].episodes[*].failure_reason", equals: connection_closed, failure: server_unreachable, issue: "vla-eval policy connection closed" }
+    - { path: "tasks[*].episodes[*].failure_reason", equals: env_start, failure: reset_failed, issue: "vla-eval native reset failed" }
     - path: "tasks[*].episodes[*].failure_reason"
       failure: env_step
       issue: an episode errored upstream (vla-eval counts it as a failure)

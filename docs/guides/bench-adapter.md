@@ -122,6 +122,8 @@ orbit bench calibrate libero --sample 2
 | `methods.empty / oracle / external` | 允许的执行类型，各自覆盖 `solve`（例如 empty 的零动作策略服务、external 的模型服务镜像） |
 | `result.file` | solve 输出里的结果 JSON（`*` 只匹配一段，按名字取最后一个） |
 | `result.score` / `metrics` | `{path, reduce, scale}`：路径如 `tasks[*].episodes[*].metrics.success`，`reduce` 为 mean/sum/min/max/first/last/count/all/any |
+| `result.score.singleBinary` | 可选。要求路径选中恰好一个布尔值或数值 0 / 1 |
+| `result.expect` / `result.expectBeforeInvalid` | 核对结果里的任务或初态等计划值。每条检查可加 `type: string` 或 `type: number`，要求 JSON 字段类型一致。`expectBeforeInvalid` 开启后先核对计划值，再归因上游故障 |
 | `result.invalid` | `{path, when: truthy\|present, failure, issue}`：命中即无效并记封闭的失败类型（如上游 episode 报错 → `env_step`） |
 
 模板写 `{{task.id}}`、`{{task.tags.X}}`、`{{seed}}`、`{{option.X}}`、`{{method.entrypoint}}`、`{{method.config.X}}`；
