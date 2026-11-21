@@ -60,6 +60,9 @@ def build(weights):
         if prediction.shape != (1, HORIZON, POLICY_ACTION_DIM):
             raise EpisodeFailure("policy_act", "G0.5 returned a malformed raw action prediction",
                                  rejected_actions=prediction.detach().cpu().float().numpy())
+        if not torch.isfinite(prediction).all().item():
+            raise EpisodeFailure("policy_act", "G0.5 returned non-finite raw actions",
+                                 rejected_actions=prediction.detach().cpu().float().numpy())
         # Unnormalize the full horizon so that the saved per-timestep statistics line up.
         actions = post(prediction).detach().cpu().float().numpy()
         if actions.shape != (1, HORIZON, JOINTS):

@@ -41,7 +41,10 @@ class G05InferenceTests(unittest.TestCase):
         self.load_processors = Mock(return_value=(self.pre, self.post))
         self.seed = Mock()
         modules = {
-            "torch": SimpleNamespace(inference_mode=lambda: lambda fn: fn, manual_seed=self.seed),
+            "torch": SimpleNamespace(
+                inference_mode=lambda: lambda fn: fn, manual_seed=self.seed,
+                isfinite=lambda tensor: np.isfinite(tensor.detach().cpu().float().numpy()),
+            ),
             "lerobot.policies.g05.configuration_g05": SimpleNamespace(
                 G05Config=SimpleNamespace(from_pretrained=self.load_config),
             ),
@@ -119,6 +122,20 @@ class G05InferenceTests(unittest.TestCase):
                 np.testing.assert_array_equal(caught.exception.rejected_actions, raw)
         self.post.assert_not_called()
 
+    def test_nonfinite_predictions_never_reach_postprocessing(self):
+        self.post.return_value = action_tensor(np.zeros((1, 32, 14), dtype=np.float32))
+        infer, _ = service.build(self.weights)
+        for index, value in (((0, 8, 0), np.nan), ((0, 0, 6), np.inf), ((0, 31, 6), -np.inf)):
+            with self.subTest(index=index, value=value):
+                raw = np.zeros((1, 32, 20), dtype=np.float32)
+                raw[index] = value
+                self.model.predict_action_chunk.return_value = action_tensor(raw)
+                with self.assertRaisesRegex(EpisodeFailure, "non-finite raw actions") as caught:
+                    infer(sentinel.observation)
+                self.assertEqual(caught.exception.kind, "policy_act")
+                np.testing.assert_array_equal(caught.exception.rejected_actions, raw)
+        self.post.assert_not_called()
+
     def test_malformed_postprocessed_actions_are_rejected_with_evidence(self):
         infer, _ = service.build(self.weights)
         for shape in ((2, 32, 14), (1, 8, 14), (1, 32, 20)):
@@ -183,16 +200,22 @@ class G05ReleasedProcessorTests(unittest.TestCase):
         queued = torch.stack([post(actions[:, step].clone()) for step in range(8)], dim=1)
         torch.testing.assert_close(full[:, :8], queued, rtol=0, atol=0)
 
-    def test_single_step_prediction_is_rejected_before_released_processor_broadcasts_it(self):
+    def test_invalid_predictions_are_rejected_before_released_postprocessing(self):
         import torch
         from lerobot.policies.g05 import processor_g05
         from lerobot.policies.g05.configuration_g05 import G05Config
         from lerobot.policies.g05.modeling_g05 import G05Policy
 
-        raw = torch.linspace(-0.4, 0.4, 20).reshape(1, 1, 20)
-        self.assertEqual(tuple(self.post(raw.clone()).shape), (1, 32, 14))
+        short = torch.linspace(-0.4, 0.4, 20).reshape(1, 1, 20)
+        self.assertEqual(tuple(self.post(short.clone()).shape), (1, 32, 14))
+        cases = [(short, "malformed raw action prediction")]
+        # The ninth step is sliced away and slot 6 is omitted by the RoboTwin projection.
+        for index in ((0, 8, 0), (0, 0, 6)):
+            raw = torch.zeros((1, 32, 20))
+            raw[index] = torch.nan
+            self.assertTrue(torch.isfinite(self.post(raw.clone())[:, :8]).all().item(), index)
+            cases.append((raw, "non-finite raw actions"))
         model = Mock()
-        model.predict_action_chunk.return_value = raw
         post = Mock(wraps=self.post)
         with patch.object(G05Config, "from_pretrained", return_value=self.config), \
                 patch.object(G05Policy, "from_pretrained", return_value=model), \
@@ -200,8 +223,11 @@ class G05ReleasedProcessorTests(unittest.TestCase):
                              return_value=(Mock(return_value=sentinel.prepared), post)), \
                 patch.object(service, "model_inputs", return_value=sentinel.inputs):
             infer, _ = service.build(self.weights)
-            with self.assertRaisesRegex(EpisodeFailure, "malformed raw action prediction") as caught:
-                infer(sentinel.observation)
-        self.assertEqual(caught.exception.kind, "policy_act")
-        np.testing.assert_array_equal(caught.exception.rejected_actions, raw.numpy())
+            for raw, issue in cases:
+                with self.subTest(issue=issue):
+                    model.predict_action_chunk.return_value = raw
+                    with self.assertRaisesRegex(EpisodeFailure, issue) as caught:
+                        infer(sentinel.observation)
+                    self.assertEqual(caught.exception.kind, "policy_act")
+                    np.testing.assert_array_equal(caught.exception.rejected_actions, raw.numpy())
         post.assert_not_called()
