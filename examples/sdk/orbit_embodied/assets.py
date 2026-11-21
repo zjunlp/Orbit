@@ -29,15 +29,35 @@ def tree_digest(directory):
     return _tree_digest(directory, exclude_download_metadata=False)
 
 
+def checkpoint_files(directory):
+    """List the regular files that contribute to a checkpoint's identity."""
+    return _asset_files(directory, exclude_download_metadata=True)
+
+
 def checkpoint_tree_digest(directory):
     """Fingerprint a local checkpoint without Hugging Face local-dir download bookkeeping."""
     return _tree_digest(directory, exclude_download_metadata=True)
 
 
-def _tree_digest(directory, *, exclude_download_metadata):
-    import hashlib
+HF_CACHE_TAG = ".cache/huggingface/CACHEDIR.TAG"
+
+
+def oft_checkpoint_files(root):
+    """The OFT inference projection is flat and excludes the Hub cache marker."""
+    return (path for path in checkpoint_files(root) if path.relative_to(root).as_posix() != HF_CACHE_TAG)
+
+
+def oft_checkpoint_digests(directory):
+    """Return the OFT content digest and its earlier identity, from one pass over the files."""
     root = Path(directory).resolve()
-    entries = []
+    entries = _tree_entries(root, checkpoint_files(root))
+    content = [entry for entry in entries if entry["path"] != HF_CACHE_TAG]
+    if not content:
+        raise ValueError("asset directory is empty or missing")
+    return digest(content), digest(entries)
+
+
+def _asset_files(root, *, exclude_download_metadata):
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root)
         if exclude_download_metadata and (
@@ -46,8 +66,20 @@ def _tree_digest(directory, *, exclude_download_metadata):
             continue
         if path.is_symlink():
             raise ValueError("asset trees must contain regular files, not symbolic links")
-        if not path.is_file():
-            continue
+        if path.is_file():
+            yield path
+
+
+def _tree_digest(directory, *, exclude_download_metadata):
+    root = Path(directory).resolve()
+    return digest(_tree_entries(root, _asset_files(root, exclude_download_metadata=exclude_download_metadata)))
+
+
+def _tree_entries(root, paths):
+    import hashlib
+    entries = []
+    for path in paths:
+        relative = path.relative_to(root)
         checksum = hashlib.sha256()
         with path.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -56,4 +88,4 @@ def _tree_digest(directory, *, exclude_download_metadata):
                         "digest": "sha256:" + checksum.hexdigest()})
     if not entries:
         raise ValueError("asset directory is empty or missing")
-    return digest(entries)
+    return entries

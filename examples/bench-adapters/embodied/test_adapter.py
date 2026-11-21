@@ -69,6 +69,13 @@ class AdapterPlanningTests(unittest.TestCase):
             self.assertNotEqual(explicit.returncode, 0)
             self.assertIn("initial-state index exceeds the selected reset recipe", explicit.stderr)
 
+            oft = [*command, "--reference-file", str(ADAPTER.parent / "profiles/openvla-libero.json"),
+                   "--all-initial-states"]
+            for args, seed in ((oft, 0), ([*oft, "--environment-seed", "7"], 7)):
+                generated = json.loads(subprocess.check_output(args, text=True))
+                self.assertEqual({item["environmentSeed"] for item in generated["items"]}, {seed})
+            self.assertEqual({item["environmentSeed"] for item in plan["items"]}, {7})
+
             reference = json.loads(ADAPTER.with_name("reference.json").read_text())
             self.assert_numpy_seed_boundary([*command, "--all-initial-states"], reference)
             reference["environment"] = {"kind": "libero", "protocol": "fast-wam", "environmentSeed": 42}

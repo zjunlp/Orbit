@@ -28,6 +28,31 @@ def load(relative):
     return module
 
 
+class OpenVlaCheckpointTests(unittest.TestCase):
+    def test_flat_projection_ignores_only_the_download_marker(self):
+        service = load("policies/openvla-oft/serve_openvla.py")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkpoint = root / "checkpoint"
+            checkpoint.mkdir()
+            marker = checkpoint / ".cache/huggingface/CACHEDIR.TAG"
+            marker.parent.mkdir(parents=True)
+            marker.write_text("cache metadata")
+            (checkpoint / "config.json").write_text("{}")
+            (checkpoint / "model.safetensors").write_bytes(b"weights")
+            view = root / "view"
+            view.mkdir()
+            service.prepare_checkpoint(checkpoint, view)
+            self.assertEqual({path.name for path in view.iterdir()}, {"config.json", "model.safetensors"})
+            self.assertTrue((view / "model.safetensors").is_symlink())
+
+            (marker.parent / "runtime-file").write_text("not cache metadata")
+            invalid = root / "invalid"
+            invalid.mkdir()
+            with self.assertRaisesRegex(ValueError, "expected a flat"):
+                service.prepare_checkpoint(checkpoint, invalid)
+
+
 def load_tests(loader, tests, pattern):
     for path in sorted((ADAPTER / "policies").glob("*/test_*.py")):
         if pattern is None or fnmatch(path.name, pattern):

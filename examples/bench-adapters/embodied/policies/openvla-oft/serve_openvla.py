@@ -11,8 +11,11 @@ from types import SimpleNamespace
 
 
 def prepare_checkpoint(checkpoint, destination):
-    for source in checkpoint.resolve().iterdir():
-        if source.is_dir():
+    from orbit_embodied.assets import oft_checkpoint_files
+
+    root = checkpoint.resolve()
+    for source in oft_checkpoint_files(root):
+        if source.parent != root:
             raise ValueError("expected a flat, merged OFT inference checkpoint")
         if source.suffix in (".safetensors", ".pt"):
             (destination / source.name).symlink_to(source)
@@ -39,10 +42,10 @@ def main():
         return
     if not all((args.checkpoint, args.checkpoint_digest, args.normalization_digest, args.unnorm_key)):
         parser.error("checkpoint, normalization key and both content digests are required")
-    from orbit_embodied.assets import checkpoint_tree_digest
+    from orbit_embodied.assets import oft_checkpoint_digests
     from orbit_embodied.evidence import file_digest
     from orbit_embodied.wire import serve_actions
-    if checkpoint_tree_digest(args.checkpoint) != args.checkpoint_digest:
+    if args.checkpoint_digest not in oft_checkpoint_digests(args.checkpoint):
         raise ValueError("OpenVLA checkpoint content digest mismatch")
     maniskill = args.decoding == "rlinf-maniskill"
     stats_file = "config.json" if maniskill else "dataset_statistics.json"

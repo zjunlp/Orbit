@@ -42,7 +42,10 @@ def main():
         environment_seed = fixed_seed
     if environment_seed is None:
         defaults = {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0, "colosseum-v2": 0}
-        environment_seed = environment.get("environmentSeed", 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7))
+        default_seed = 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7)
+        if reference["id"] == "openvla-oft-libero-reference/1":
+            default_seed = reference["parameters"]["environmentSeed"]
+        environment_seed = environment.get("environmentSeed", default_seed)
     generated = kind in GENERATED_ENVIRONMENTS
     uint32_seed = (kind in ("robolab", "robodojo", "robomimic", "vima-bench", "colosseum-v2")
                    or "initialStateCounts" in environment)
