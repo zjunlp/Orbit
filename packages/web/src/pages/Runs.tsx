@@ -72,11 +72,14 @@ export function Runs() {
     return c;
   }, [runs, folder, terms]);
 
+  // A state filter names runs the user is looking for, so groups open by default there too;
+  // a group the user collapsed by hand stays collapsed.
   const isExpanded = useCallback(
     (name: string, list: Run[]) =>
       open.has(name) ||
-      (!closed.has(name) && (list.some((r) => isActive(r.state)) || terms.length > 0)),
-    [open, closed, terms.length],
+      (!closed.has(name) &&
+        (list.some((r) => isActive(r.state)) || terms.length > 0 || stateFilter.length > 0)),
+    [open, closed, terms.length, stateFilter.length],
   );
 
   // Group runs by spec.group; a group sits where its newest run would be.
