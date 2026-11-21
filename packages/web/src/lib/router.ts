@@ -1,12 +1,17 @@
 // Minimal history router: all view state lives in the URL (path + query + hash) so every view is
 // shareable and survives reloads.
 import { useSyncExternalStore } from "react";
+import { rememberScroll } from "./scroll.ts";
 
 const listeners = new Set<() => void>();
 const notify = () => {
   for (const l of listeners) l();
 };
-window.addEventListener("popstate", notify);
+// The old view is still mounted when the popstate handler runs, so its offsets can be saved here.
+window.addEventListener("popstate", () => {
+  rememberScroll();
+  notify();
+});
 
 /** `decodeURIComponent` that returns the input unchanged for a malformed escape. */
 export function safeDecode(s: string): string {
@@ -20,6 +25,7 @@ export function safeDecode(s: string): string {
 export function navigate(to: string, opts: { replace?: boolean } = {}) {
   const cur = location.pathname + location.search + location.hash;
   if (to === cur) return;
+  rememberScroll();
   if (opts.replace) history.replaceState(null, "", to);
   else history.pushState(null, "", to);
   notify();
