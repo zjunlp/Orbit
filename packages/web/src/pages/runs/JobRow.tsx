@@ -66,7 +66,7 @@ export function JobRow(props: {
             </div>
           </div>
         </td>
-        <td style={{ maxWidth: 520 }}>
+        <td>
           <div className="row" style={{ gap: 6 }}>
             {props.expanded ? <IconChevronDown size={14} /> : <IconChevron size={14} />}
             <IconFlask size={14} style={{ color: "var(--accent)" }} />

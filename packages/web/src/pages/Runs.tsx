@@ -206,11 +206,23 @@ export function Runs() {
               title={folder ? `Nothing in ${folder} matches` : "No runs match these filters"}
             />
           ) : (
-            <table className="table">
+            <table className="table runs-table">
+              {/* Widths live in the stylesheet so container queries can shrink and drop columns. */}
+              <colgroup>
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+              </colgroup>
               <thead>
                 <tr>
-                  <th style={{ width: 34 }} />
-                  <th style={{ width: 120 }}>State</th>
+                  <th />
+                  <th>State</th>
                   <th>Run</th>
                   <th>Params</th>
                   <th>Resources</th>
