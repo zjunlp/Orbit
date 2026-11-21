@@ -354,6 +354,7 @@ export function LogsTab({ run }: { run: Run }) {
           <button
             type="button"
             className={regex ? "on" : ""}
+            aria-pressed={regex}
             onClick={() => setRegex(!regex)}
             title="Regular expression"
           >
@@ -362,6 +363,7 @@ export function LogsTab({ run }: { run: Run }) {
           <button
             type="button"
             className={caseSens ? "on" : ""}
+            aria-pressed={caseSens}
             onClick={() => setCaseSens(!caseSens)}
             title="Match case"
           >
@@ -389,6 +391,7 @@ export function LogsTab({ run }: { run: Run }) {
         <button
           type="button"
           className={`btn sm${filter ? " on" : ""}`}
+          aria-pressed={filter}
           onClick={() => setFilter(!filter)}
           title="Show only matching lines"
           disabled={!re}
@@ -412,6 +415,7 @@ export function LogsTab({ run }: { run: Run }) {
         <button
           type="button"
           className={`btn sm${hideSys ? "" : " on"}`}
+          aria-pressed={!hideSys}
           onClick={() => setHideSys(!hideSys)}
           title="Show Orbit system lines"
         >
@@ -420,6 +424,7 @@ export function LogsTab({ run }: { run: Run }) {
         <button
           type="button"
           className={`btn sm icon${wrap ? " on" : ""}`}
+          aria-pressed={wrap}
           onClick={() => setWrap(!wrap)}
           title="Wrap lines (w)"
         >
@@ -428,6 +433,7 @@ export function LogsTab({ run }: { run: Run }) {
         <button
           type="button"
           className={`btn sm${follow ? " on" : ""}`}
+          aria-pressed={follow}
           onClick={() => setFollow(!follow)}
           title="Follow output (f)"
         >

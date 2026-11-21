@@ -73,6 +73,18 @@ export function dateTime(iso: string | null | undefined): string {
   return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour12: false })}`;
 }
 
+/** The viewer's UTC offset, so a local timestamp stays unambiguous next to UTC log times. */
+export function utcOffset(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  // getTimezoneOffset counts minutes west of UTC, the opposite sign of the usual label.
+  const minutes = -new Date(iso).getTimezoneOffset();
+  const sign = minutes < 0 ? "-" : "+";
+  const abs = Math.abs(minutes);
+  const hours = Math.floor(abs / 60);
+  const rest = abs % 60;
+  return `UTC${sign}${hours}${rest ? `:${String(rest).padStart(2, "0")}` : ""}`;
+}
+
 export function bytes(n: number): string {
   if (n < 1024) return `${n} B`;
   const u = ["KB", "MB", "GB", "TB"];

@@ -316,6 +316,8 @@ function RunView({ run }: { run: Run }) {
             key={t}
             href={`?tab=${t}`}
             className={tab === t ? "on" : ""}
+            aria-label={counts[t] !== undefined ? `${TAB_LABEL[t]} (${counts[t]})` : TAB_LABEL[t]}
+            aria-current={tab === t ? "page" : undefined}
             onClick={(e) => {
               if (e.metaKey || e.ctrlKey) return;
               e.preventDefault();
@@ -323,14 +325,19 @@ function RunView({ run }: { run: Run }) {
             }}
           >
             {TAB_LABEL[t]}
-            {counts[t] !== undefined && <span className="count">{counts[t]}</span>}
+            {counts[t] !== undefined && (
+              <span className="count" aria-hidden="true">
+                {counts[t]}
+              </span>
+            )}
             {t === "logs" && active && (
               <span
                 className="dot pulse"
+                aria-hidden="true"
                 style={{ "--c": "var(--st-running)" } as React.CSSProperties}
               />
             )}
-            <span className="kbd">
+            <span className="kbd" aria-hidden="true">
               <Kbd>{i + 1}</Kbd>
             </span>
           </a>
