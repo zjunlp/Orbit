@@ -486,14 +486,14 @@ class AdapterPlanningTests(unittest.TestCase):
                         run.main(argv)
                     self.assertEqual(measure.call_count, 2)
 
-    def test_robolab_and_plate25_prepare_runtime_once_per_solve(self):
+    def test_robolab_and_maniskill_prepare_runtime_once_per_solve(self):
         from orbit_embodied import robolab, tabletop
 
         spec = importlib.util.spec_from_file_location("native_embodied_run", ADAPTER.with_name("run.py"))
         run = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(run)
 
-        for kind, batched in product(("robolab", "maniskill3"), (False, True)):
+        for kind, batched in product(("robolab", "maniskill3", "maniskill3-tabletop"), (False, True)):
             with self.subTest(kind=kind, batched=batched), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 assets = root / "assets"
@@ -511,8 +511,11 @@ class AdapterPlanningTests(unittest.TestCase):
                                "sourceRoot": str(root), "isaacLabPackageVersion": "0.44.8",
                                "isaacLabSource": {"root": str(lab), "digest": robolab.isaaclab_source_digest(lab)},
                                "isaacSimVersionFile": str(version_file), "isaacSim": "5.0.0"}
+                if kind == "maniskill3-tabletop":
+                    environment["assetSource"] = "fixture"
                 reference = {"id": "fixture", "environment": environment, "reference": {"files": {}},
-                             "benchmarkProfile": {"action": {"shape": [8]}},
+                             "benchmarkProfile": {"action": {"shape": [8], "controller": "fixture"},
+                                                  "observations": {"front_rgb": {"shape": [8, 8, 3]}}},
                              "parameters": {"settleSteps": 0, "replanSteps": 5}}
                 episodes = [{"sample": {"taskId": "fixture", "benchmarkProfile": "fixture", "sampleId": str(index)},
                              "trialId": str(index), "episodeId": str(index), "implementationDigest": "driver",
@@ -534,13 +537,19 @@ class AdapterPlanningTests(unittest.TestCase):
                         benchmark.make_env(0)
                     return {"valid": True}
 
+                fake_envs = SimpleNamespace()
+                fake_modules = {"gymnasium": SimpleNamespace(make=start), "orbit_maniskill_task": SimpleNamespace(),
+                                "mani_skill": SimpleNamespace(envs=fake_envs), "mani_skill.envs": fake_envs,
+                                "mani_skill.utils.assets": SimpleNamespace(DATA_GROUPS={},
+                                                                           is_data_source_downloaded=lambda _: True),
+                                "mani_skill.utils.registration": SimpleNamespace(REGISTERED_ENVS={}),
+                                "mani_skill.utils.wrappers.flatten": SimpleNamespace(FlattenActionSpaceWrapper=Mock())}
                 with patch.object(run, "archive_implementation", return_value="driver"), \
                         patch.object(run, "run_episode", side_effect=run_fixture), \
                         patch.object(module, "tree_digest", wraps=tree_digest) as measure, \
                         patch.object(module, "version", return_value="0.44.8" if kind == "robolab" else "3.0.1"), \
                         patch.object(robolab, "simulation_app", start), \
-                        patch.dict(sys.modules, {"gymnasium": SimpleNamespace(make=start),
-                                                 "orbit_maniskill_task": SimpleNamespace()}), \
+                        patch.dict(sys.modules, fake_modules), \
                         patch.dict("os.environ", {"ORBIT_RUN_ID": "fixture"}):
                     argv = ["batch" if batched else "solve", str(request), str(root / "output")]
                     run.main(argv)
@@ -553,6 +562,11 @@ class AdapterPlanningTests(unittest.TestCase):
                         run.main(argv)
                     self.assertEqual(measure.call_count, 2)
                     start.assert_not_called()
+                    if kind == "maniskill3-tabletop":
+                        direct = tabletop.ManiSkillTabletopBenchmark(reference, "fixture")
+                        with self.assertRaisesRegex(ValueError, "asset digest mismatch"):
+                            direct.make_env(0)
+                        start.assert_not_called()
 
     def test_versioned_evidence_cannot_skip_the_solve_archive(self):
         with tempfile.TemporaryDirectory() as temporary:

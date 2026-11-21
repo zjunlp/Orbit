@@ -312,7 +312,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         benchmark = MetaWorldBenchmark(reference, sample["taskId"])
     elif kind == "maniskill3-tabletop":
         from orbit_embodied.tabletop import ManiSkillTabletopBenchmark
-        benchmark = ManiSkillTabletopBenchmark(reference, sample["taskId"])
+        benchmark = ManiSkillTabletopBenchmark(reference, sample["taskId"], prepare_runtime=prepare)
     elif kind == "robolab":
         from orbit_embodied.robolab import RoboLabBenchmark
         benchmark = RoboLabBenchmark(reference, sample["taskId"], prepare_runtime=prepare)
