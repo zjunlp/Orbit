@@ -348,7 +348,8 @@ URL 解析后 pathname 以 `//` 开头的目标（含 `/.//x` 与同源绝对 UR
 仍位于输出根目录内，然后直接从该 fd 发送（完成或取消时关闭），daemon 与 worker 共用；拒绝最后一级符号链接。
 以 `Content-Security-Policy: sandbox`、
 `nosniff` 返回，避免产物中的 HTML 以 Web UI 的身份执行脚本。非法百分号编码返回 400；数字查询参数
-（`limit`、`offset`、`after`、`timeout`）必须是非负安全整数，否则返回 400，省略或空值仍取默认值。
+（`limit`、`offset`、`after`、`timeout`）必须是安全整数，否则返回 400，省略或空值仍取默认值。
+其中只有日志的 `offset` 允许负数，表示从文件末尾往前读该字节数的尾部；其余参数必须非负。
 `wait` 在 Run 终态且清理结束后返回；CLI `wait -g` 与 `rm -g` 使用相同的 10000 条组内 Run 查询上限。
 HTTP wait 按 Run ID 保存等待者，与全部 SSE 订阅共用一个 Run change 监听器；SSE 删除通知也共用一个监听器。
 完成、超时或断开后删除对应等待者、计时器与 abort 回调，不随请求数量增加 RunService 监听器。
