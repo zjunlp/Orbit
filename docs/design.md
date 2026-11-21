@@ -346,6 +346,8 @@ URL 解析后 pathname 以 `//` 开头的目标（含 `/.//x` 与同源绝对 UR
 （30 秒 code 不适合打印后长期使用）。两种方式都支持定位到 Run，Web 后续请求仍使用 cookie。
 `files/*` 以 `O_RDONLY | O_NOFOLLOW` 打开文件，校验同一 fd 为普通文件，且 `/proc/self/fd/<fd>` 的 realpath
 仍位于输出根目录内，然后直接从该 fd 发送（完成或取消时关闭），daemon 与 worker 共用；拒绝最后一级符号链接。
+`GET runs/:id/artifacts` 的 `path` 是与平台无关的 `/` 分隔相对路径（Windows 上同样如此），Web 据此折叠目录树，
+`files/*` 也接受同样形式，两者因此可以直接互相引用。
 以 `Content-Security-Policy: sandbox`、
 `nosniff` 返回，避免产物中的 HTML 以 Web UI 的身份执行脚本。非法百分号编码返回 400；数字查询参数
 （`limit`、`offset`、`after`、`timeout`）必须是非负安全整数，否则返回 400，省略或空值仍取默认值。

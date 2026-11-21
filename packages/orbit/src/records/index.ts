@@ -138,8 +138,13 @@ export async function listArtifacts(dir: string): Promise<Artifacts> {
       else if (e.isFile()) {
         // A running job may remove or rename a file between readdir and stat.
         const st = await stat(p).catch(() => null);
+        // Artifact paths are a portable contract: always POSIX separators, whatever the host.
         if (st)
-          files.push({ path: relative(dir, p), bytes: st.size, mtime: st.mtime.toISOString() });
+          files.push({
+            path: relative(dir, p).split(sep).join("/"),
+            bytes: st.size,
+            mtime: st.mtime.toISOString(),
+          });
       }
     }
   }

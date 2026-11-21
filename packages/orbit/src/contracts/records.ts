@@ -36,6 +36,7 @@ export const Metrics = z.object({
 });
 export type Metrics = z.infer<typeof Metrics>;
 
+/** `path` is relative to the output root and always uses `/`, whatever host listed it. */
 export const Artifact = z.object({ path: z.string(), bytes: z.number().int(), mtime: z.string() });
 export const Artifacts = z.object({ files: z.array(Artifact), truncated: z.boolean() });
 export type Artifacts = z.infer<typeof Artifacts>;
