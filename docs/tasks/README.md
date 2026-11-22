@@ -131,6 +131,11 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Embodied: policies and native benchmarks
 
+- [20261121](20261121-embodied-review-follow-up.md) Embodied review follow-up
+- [20261121](20261121-embodied-pending-review.md) vla-eval receipts and BEHAVIOR source registration
+- [20261122](20261122-embodied-evidence-follow-up.md) Embodied evidence follow-up
+- [20261122](20261122-embodied-audit-recovery.md) Embodied audit recovery and validation
+
 - [20261113](20261113-behavior-robotagent.md) BEHAVIOR-1K and RobotAgentBench: adapters implemented; native calibration deferred
 
 - [20261103](20261103-embodied-infra-research.md) 具身评测与调度基础设施源码调研
