@@ -564,6 +564,28 @@ it("does not replace a valid completed episode merely because its shared Run lat
   expect(pruned.adopted).toEqual([]);
   expect(pruned.removedRuns).toEqual(["retry-run"]);
   expect(pruned.trials).toEqual(validTarget);
+
+  const mixedDonor = donor.map((trial, index) => ({
+    ...trial,
+    outcome: index === 0 ? (invalidDonor[0]?.outcome ?? outcome) : outcome,
+  }));
+  expect(() =>
+    planConsolidation({
+      ...input,
+      target: { job: f.job, trials: target, summary: [] },
+      donors: [{ job, trials: mixedDonor, summary: [] }],
+      flags: { sources: ["retry"], pruneInvalid: true },
+    }),
+  ).toThrow(/prune only part of shared Solve/);
+
+  expect(() =>
+    planConsolidation({
+      ...input,
+      target: { job: f.job, trials: target, summary: [] },
+      donors: [],
+      flags: { sources: [], pruneInvalid: true },
+    }),
+  ).toThrow(/prune only part of shared Solve/);
 });
 
 it("retains previous shared solve evidence and ownership when batch retries are adopted", () => {

@@ -103,6 +103,7 @@ export function usageRow(
   const measured = runs.filter((r) => r.usage);
   const maxMinutes = max(runs.map(durationMinutes));
   const timeouts = runs.filter(timedOut);
+  const hasSharedSolve = runs.some((r) => sharedSolve(r) || sharedRunIds?.has(r.id));
   const row: BenchUsageRow = {
     task,
     runs: measured.length,
@@ -119,6 +120,10 @@ export function usageRow(
     notes: [],
     tokenUsage: tokenUsage(runs),
   };
+  if (hasSharedSolve)
+    row.notes.push(
+      "shared solve timings cover the entire batch; per-episode timeout advice unavailable",
+    );
   if (measured.length === 0) {
     row.notes.push("no measured runs");
     return row;
@@ -144,12 +149,7 @@ export function usageRow(
     const want = step(CPU_STEPS, row.peakCpus);
     if (want > requested.cpus) row.suggest.cpus = want;
   }
-  const hasSharedSolve = runs.some((r) => sharedSolve(r) || sharedRunIds?.has(r.id));
   const timeoutMin = requested.timeoutMin;
-  if (hasSharedSolve)
-    row.notes.push(
-      "shared solve timings cover the entire batch; per-episode timeout advice unavailable",
-    );
   if (row.timeouts) row.notes.push(`timed out in ${row.timeouts} run(s)`);
   if (!hasSharedSolve && maxMinutes !== null && timeoutMin !== undefined) {
     let want = roundHour((Math.round(maxMinutes * 10) / 10) * 1.5);

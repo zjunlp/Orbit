@@ -1272,6 +1272,12 @@ describe("resources file", () => {
       usageRow("t", req, [dedicated, sharedByPlan], new Set(["shared"])).suggest.timeoutMin,
     ).toBeUndefined();
     expect(usageRow("t", req, [run({})]).notes).toEqual(["no measured runs"]);
+    const unsampledBatch = usageRow("t", req, [{ ...shared, usage: null }]);
+    expect(unsampledBatch).toMatchObject({ runs: 0, maxMinutes: 80 });
+    expect(unsampledBatch.notes).toEqual([
+      "shared solve timings cover the entire batch; per-episode timeout advice unavailable",
+      "no measured runs",
+    ]);
   });
 });
 
