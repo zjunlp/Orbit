@@ -35,6 +35,7 @@ from orbit_bench import main as protocol_main  # noqa: E402
 CONFIG = {"image", "benchmark", "episodes", "timeoutMin", "params", "policyImage"}
 LIBERO_BENCHMARK = "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark"
 LIBERO_PLUS_BENCHMARK = "vla_eval.benchmarks.libero_plus.benchmark:LIBEROPlusBenchmark"
+ROBOTWIN_BENCHMARK = "vla_eval.benchmarks.robotwin.benchmark:RoboTwinBenchmark"
 # One trial is one episode; its seed picks the initial state (seed 1 → episode 0). This module, staged
 # per trial, makes the upstream benchmark start that episode; everything else stays upstream.
 EPISODE_MODULE = """import importlib
@@ -72,6 +73,7 @@ VERIFY_COMMAND = ("/orbit-adapter/check.py", "/solve")
 POLICY_PORT = 8000
 # The images run `conda run -n libero` from their ENTRYPOINT; a replaced entrypoint needs the path.
 CONDA = "/opt/conda/bin/conda"
+CONDA_ENVIRONMENTS = {ROBOTWIN_BENCHMARK: "robotwin"}
 HERE = Path(__file__).resolve().parent
 
 # Runs inside the benchmark image: the task list without running an episode.
@@ -79,11 +81,17 @@ TASKS_SCRIPT = """
 import json, sys
 
 module, cls, params = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+fields = json.loads(sys.argv[4]) if len(sys.argv) > 4 else []
 mod = __import__(module, fromlist=[cls])
 bench = getattr(mod, cls)(**params)
 tasks = bench.get_tasks()
-print(json.dumps([{"id": str(t.get("task_id", i)), "name": t.get("name", ""),
-                   "suite": t.get("suite", "")} for i, t in enumerate(tasks)]))
+rows = []
+for i, task in enumerate(tasks):
+    row = {"id": str(task.get("task_id", i)), "name": task.get("name", ""), "suite": task.get("suite", "")}
+    if fields:
+        row["identity"] = {key: task.get(key) if type(task.get(key)) in (str, int) else None for key in fields}
+    rows.append(row)
+print(json.dumps(rows))
 """
 
 
@@ -135,7 +143,7 @@ def params_of(c):
     return json.loads(c.get("params") or "{}")
 
 
-def benchmark_in_image(image, spec, params):
+def benchmark_in_image(image, spec, params, fields=()):
     module, cls = spec.split(":")
     # Include the resolved image identity so a user-provided mutable tag cannot reuse stale tasks.
     image_id = subprocess.check_output(["docker", "image", "inspect", "--format", "{{.Id}}", image],
@@ -145,7 +153,10 @@ def benchmark_in_image(image, spec, params):
     info = cache_dir.lstat()
     if cache_dir.is_symlink() or not cache_dir.is_dir() or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise ValueError("vla-eval task cache must be a private directory owned by the current user")
-    digest = hashlib.sha256(json.dumps([image_id, spec, params], sort_keys=True).encode()).hexdigest()
+    cache_key = [image_id, spec, params]
+    if fields:
+        cache_key.append(fields)
+    digest = hashlib.sha256(json.dumps(cache_key, sort_keys=True).encode()).hexdigest()
     cache = cache_dir / (digest + ".json")
     if cache.is_file() and not cache.is_symlink():
         return json.loads(cache.read_text())
@@ -154,9 +165,10 @@ def benchmark_in_image(image, spec, params):
         r = subprocess.run(
             ["docker", "run", "--rm", "--name", name, "--label", "orbit.task=vla-eval-tasks",
              "--pull=never", "--network=none", "--cpus=2", "--memory=4g",
-             "--entrypoint", "bash", image, "-lc",
-             'conda run --no-capture-output -n libero python -c "$0" "$@"',
-             TASKS_SCRIPT, module, cls, json.dumps(params)],
+             "--entrypoint", "bash", image_id if fields else image, "-lc",
+             'conda run --no-capture-output -n "$0" python -c "$@"',
+             CONDA_ENVIRONMENTS.get(spec, "libero"), TASKS_SCRIPT, module, cls, json.dumps(params),
+             *([json.dumps(fields)] if fields else [])],
             capture_output=True, text=True, timeout=75,
         )
     except subprocess.TimeoutExpired as exc:
@@ -191,11 +203,49 @@ def planned_task(task, benchmark):
     return suite, indexed[2] if indexed else name, int(indexed[1]) if indexed else None
 
 
+def benchmark_identity_fields(config, spec):
+    return ("seed",) if spec == ROBOTWIN_BENCHMARK else ()
+
+
+def robotwin_scenes(rows, fields):
+    groups = {}
+    for row in rows:
+        seed = row.get("identity", {}).get("seed")
+        task = f"{row['suite']}:{row['name']}"
+        scenes = groups.setdefault(task, {})
+        if type(seed) is not int or seed < 0:
+            raise ValueError(f"RoboTwin task {task!r} requires a nonnegative native scene seed")
+        if seed in scenes:
+            raise ValueError(f"duplicate RoboTwin scene seed {seed} for {task!r}")
+        scenes[seed] = row["identity"]
+    return groups
+
+
+def robotwin_scene_seeds(task, scenes, raw):
+    candidates = scenes.get(task)
+    if not candidates:
+        raise ValueError(f"RoboTwin task {task!r} is absent from the current catalog")
+    if raw is None:
+        return sorted(candidates)
+    try:
+        seeds = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("sceneSeeds must be a JSON array of native RoboTwin scene seeds") from exc
+    if (
+        not isinstance(seeds, list) or not seeds
+        or any(type(seed) is not int or seed not in candidates for seed in seeds)
+        or len(set(seeds)) != len(seeds)
+    ):
+        raise ValueError(f"sceneSeeds must list distinct native scene seeds from RoboTwin task {task!r}")
+    return seeds
+
+
 def tasks(req):
     _, c, spec, _ = settings(req)
     benchmark_timeout(c)
     params = params_of(c)
-    rows = benchmark_in_image(image_of(c), spec, params)
+    fields = benchmark_identity_fields(c, spec)
+    rows = benchmark_in_image(image_of(c), spec, params, fields)
     names = Counter((row["suite"], row["name"]) for row in rows)
     listing = []
     for row in rows:
@@ -209,6 +259,7 @@ def tasks(req):
                         "tags": {"suite": suite, "taskIndex": row["id"]}})
     return {
         "tasks": listing,
+        "validateSeedSubmission": True,
         "capabilities": {
             # A fixed policy closes the loop with the simulator, one episode per trial; a still
             # policy can satisfy a goal that holds at the start.
@@ -439,5 +490,25 @@ def score(req):
         }
 
 
+def validate_seed_submission(req):
+    _, config, spec, episodes = settings(req)
+    submission = req["seedSubmission"]
+    count = submission["seeds"]
+    episode_of({"seed": count}, episodes)
+    if spec == ROBOTWIN_BENCHMARK:
+        fields = benchmark_identity_fields(config, spec)
+        rows = benchmark_in_image(image_of(config), spec, params_of(config), fields)
+        scenes = robotwin_scenes(rows, fields)
+        raw = submission["options"].get("sceneSeeds")
+        for task in submission["tasks"]:
+            seeds = robotwin_scene_seeds(task, scenes, raw)
+            if raw is not None and len(seeds) != count:
+                raise ValueError(f"sceneSeeds length must match --seeds {count}; got {len(seeds)}")
+            if len(seeds) < count:
+                raise ValueError(f"requested {count} trials for RoboTwin task {task!r}, but only "
+                                 f"{len(seeds)} scenes are available")
+    return {"ok": True}
+
+
 if __name__ == "__main__":
-    sys.exit(protocol_main(tasks, solve, verify, score))
+    sys.exit(protocol_main(tasks, solve, verify, score, validate_seed_submission=validate_seed_submission))

@@ -382,12 +382,18 @@ export class BenchService {
         "submitted task-set digest does not match the task file or selected tasks",
       );
     checkPlanAgainstBenchmark(spec, all, info.capabilities);
-    if (spec.samplePlan && info.validateSamplePlan) {
-      try {
+    try {
+      if (spec.samplePlan && info.validateSamplePlan) {
         await this.adapter(b).validatePlan(spec.samplePlan);
-      } catch (e) {
-        throw new UserError((e as Error).message);
+      } else if (!spec.samplePlan && info.validateSeedSubmission) {
+        await this.adapter(b).validateSeedSubmission({
+          tasks: spec.tasks,
+          seeds: spec.seeds ?? 1,
+          options: spec.options,
+        });
       }
+    } catch (e) {
+      throw new UserError((e as Error).message);
     }
     this.checkLineage(spec);
     const revisions = await this.revisions(spec.methods);

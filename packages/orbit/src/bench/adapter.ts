@@ -5,6 +5,7 @@ import {
   AdapterOp,
   AdapterRequest,
   type AdapterRunSpec,
+  type AdapterSeedSubmission,
   type AdapterTasksResponseInput,
   type BenchTask,
   type MetricSpecInput,
@@ -37,6 +38,9 @@ export interface AdapterHandlers {
   info?(req: AdapterRequest, tasks: BenchTask[]): Omit<AdapterTasksResponseInput, "tasks">;
   tasks(req: AdapterRequest): BenchTask[];
   validatePlan?(req: AdapterRequest & { samplePlan: SamplePlan }): void | Promise<void>;
+  validateSeedSubmission?(
+    req: AdapterRequest & { seedSubmission: AdapterSeedSubmission },
+  ): void | Promise<void>;
   solve(req: TrialRequest): SpecReply;
   verify(req: VerifyRequest): SpecReply;
   score(req: ScoreRequest): ScoreReply | Promise<ScoreReply>;
@@ -57,6 +61,13 @@ export function handle(h: AdapterHandlers, req: AdapterRequest): unknown {
     return Promise.resolve(h.validatePlan({ ...req, samplePlan: req.samplePlan })).then(() => ({
       ok: true,
     }));
+  }
+  if (req.op === "validate-seed-submission") {
+    if (!h.validateSeedSubmission || !req.seedSubmission)
+      throw new Error("validate-seed-submission requires adapter support and a seedSubmission");
+    return Promise.resolve(
+      h.validateSeedSubmission({ ...req, seedSubmission: req.seedSubmission }),
+    ).then(() => ({ ok: true }));
   }
   need("trial");
   if (req.op === "solve") return h.solve(req as TrialRequest);

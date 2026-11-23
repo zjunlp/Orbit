@@ -675,7 +675,8 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   适配器独立进程组运行；超时立即拒绝调用并向整组发 SIGTERM，250 ms 后 SIGKILL，关闭管道并解除子进程引用，
   不等待后代持有的 stdout 关闭。正常完成仍读到 stdout 末尾。
 - 可选计划校验：`tasks` 回复声明 `validateSamplePlan: true` 后，daemon 在写入作业前调用 `validate-plan`，请求包含整份 `samplePlan`，通过时回复 `{ ok: true }`。
-- 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, samplePlan?, solve?, verify? }`；`trial` =
+- 可选试验次数校验：`tasks` 回复声明 `validateSeedSubmission: true` 后，daemon 在写入作业前调用 `validate-seed-submission`，传入已解析的任务、试验次数和作业选项。共享 vla-eval 由此检查 `episodes` 上限，RoboTwin 另按目录校验场景和显式 seed。
+- 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, samplePlan?, seedSubmission?, solve?, verify? }`；`trial` =
   `{ id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork }`（`resources` 为 job 固定的任务 solve 资源覆盖值，供原生 runner 同步设置子容器限制；`staging` 是 trial 私有的宿主目录，用于要挂进
   Run 的副本，trial 结束时删除）；`solve` / `verify` = `{ run, output }`（Run 记录与其 `$ORBIT_OUTPUT` 的宿主路径）。
 - 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[], capabilities?: BenchCapabilities, official?: OfficialRule }`；`solve` / `verify` → `{ spec, issues? }`；`score` →

@@ -37,7 +37,14 @@ const MetricValues = z
   );
 
 export const ADAPTER_PROTOCOL = 1;
-export const AdapterOp = z.enum(["tasks", "validate-plan", "solve", "verify", "score"]);
+export const AdapterOp = z.enum([
+  "tasks",
+  "validate-plan",
+  "validate-seed-submission",
+  "solve",
+  "verify",
+  "score",
+]);
 export type AdapterOp = z.infer<typeof AdapterOp>;
 
 /** RunSpec fields Orbit sets itself; an adapter's run spec may not contain them. */
@@ -138,6 +145,12 @@ export const AdapterSolveBatch = z.object({
   trials: z.array(AdapterTrial).min(1).max(256),
 });
 export type AdapterSolveBatch = z.infer<typeof AdapterSolveBatch>;
+export const AdapterSeedSubmission = z.object({
+  tasks: z.array(z.string()).min(1),
+  seeds: z.number().int().positive(),
+  options: z.record(z.string(), z.string()),
+});
+export type AdapterSeedSubmission = z.infer<typeof AdapterSeedSubmission>;
 export const AdapterRequest = z.object({
   protocol: z.literal(ADAPTER_PROTOCOL),
   op: AdapterOp,
@@ -148,6 +161,7 @@ export const AdapterRequest = z.object({
   }),
   trial: AdapterTrial.optional(),
   samplePlan: SamplePlan.optional(),
+  seedSubmission: AdapterSeedSubmission.optional(),
   batch: AdapterSolveBatch.optional(),
   solve: AdapterRunRef.optional(),
   verify: AdapterRunRef.optional(),
@@ -173,6 +187,8 @@ export const AdapterTasksResponse = z.object({
   capabilities: BenchCapabilities.optional(),
   /** The adapter checks the full SamplePlan against its native reset rules. */
   validateSamplePlan: z.literal(true).optional(),
+  /** The adapter checks a seed-based job before any trials are created. */
+  validateSeedSubmission: z.literal(true).optional(),
   /** The benchmark's own aggregation rule, reported next to Orbit's valid-only view. */
   official: OfficialRule.optional(),
 });

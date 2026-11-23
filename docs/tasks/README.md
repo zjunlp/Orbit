@@ -59,6 +59,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261123](20261123-bench-seed-preflight.md) Validate seed-based benchmark submissions
 - [20261117](20261117-transfer-matrix.md) V5: read-only transfer evidence matrix in CLI, API and Web
 
 - [20261117](20261117-evolution-cross-environment.md) V4: prospective cross-environment studies and bounded Codex preview
