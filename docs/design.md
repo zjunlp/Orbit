@@ -199,6 +199,8 @@ unknown。纯粹用于展示：准入只看显存占用。
   hooks[{ service?, command, timeoutSec }] }
 ```
 
+Run 的展示名长度上限为 512。自动生成的名称在上限内原样保留。超长的 benchmark Run 名称保留方法名、样本编号和运行阶段，并缩短展示的任务部分。完整任务 ID 保存在 `params.task`。
+
 **Run**：`{ id, spec, state, exitCode?, node, remote, origin?, leaseId?, containerId?, code{commit, dirty, diffRef},
 createdAt/startedAt/endedAt, cleanup: pending|done|failed, usage?, trajectory, tokens }`
 

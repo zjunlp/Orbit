@@ -125,6 +125,31 @@ it("serves the supported benchmark library before any local registration or run"
   expect(f.submit).not.toHaveBeenCalled();
 });
 
+it("creates a Run with a bounded display name and the full task ID", async () => {
+  const f = fixture();
+  const taskId = `task:${"place the selected item in the designated compartment ".repeat(12).trim()}`;
+  vi.spyOn(AdapterClient.prototype, "tasks").mockResolvedValue(
+    AdapterTasksResponse.parse({
+      tasks: [{ id: taskId, title: null, supported: true, reason: null }],
+    }),
+  );
+  const solve = vi.spyOn(AdapterClient.prototype, "solve").mockResolvedValue({
+    spec: { backend: "process", command: ["true"] },
+    issues: [],
+  });
+  const job = await f.bench.submit({
+    benchmark: "fixture",
+    methods: [{ name: "empty", agent: "empty" }],
+  });
+  await expect.poll(() => f.store.trials(job.id)[0]?.state).toBe("solving");
+  expect(solve.mock.calls[0]?.[0].task).toBe(taskId);
+  expect(f.store.trials(job.id)[0]?.task).toBe(taskId);
+  const spec = f.store.getRun("submitted")?.spec;
+  expect(spec?.name).toHaveLength(512);
+  expect(spec?.name).toMatch(/… · empty · solve$/);
+  expect(spec?.params.task).toBe(taskId);
+});
+
 it("adopts a live solve submitted before a restart instead of solving the trial twice", async () => {
   const f = fixture();
   f.store.putJob(f.job);

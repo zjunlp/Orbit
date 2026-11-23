@@ -2,7 +2,8 @@
 // the CLI and the Web UI. The stored run keeps its name empty and its full command. No imports, so
 // the Web bundle can use it at runtime (`@zjunlp/orbit/naming`).
 
-const MAX = 60;
+const COMMAND_NAME_MAX_LENGTH = 60;
+export const RUN_NAME_MAX_LENGTH = 512;
 
 const base = (p: string) => p.slice(p.lastIndexOf("/") + 1);
 const isPython = (t: string) => /^python[\d.]*$/.test(base(t));
@@ -133,8 +134,16 @@ function argWords(rest: string[]): string[] {
   return out;
 }
 
-function clip(s: string): string {
-  return s.length <= MAX ? s : `${s.slice(0, MAX - 1)}…`;
+function clip(s: string, limit = COMMAND_NAME_MAX_LENGTH): string {
+  if (s.length <= limit) return s;
+  const prefix = s.slice(0, limit - 1).replace(/[\uD800-\uDBFF]$/u, "");
+  return `${prefix}…`;
+}
+
+/** Fit a generated Run name while preserving its suffix when it fits. */
+export function fitRunName(label: string, suffix = ""): string {
+  if (suffix.length >= RUN_NAME_MAX_LENGTH) return clip(suffix, RUN_NAME_MAX_LENGTH);
+  return clip(label, RUN_NAME_MAX_LENGTH - suffix.length) + suffix;
 }
 
 /**

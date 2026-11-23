@@ -7,6 +7,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Core platform: daemon, runs, resources, state
 
+- [20261123](20261123-long-run-names.md) Long Run display names
 - [20261117](20261117-benchmark-resource-preparation.md) Unified official-source benchmark resource preparation
 
 - [20260929](20260929-ts-rewrite-r0.md) R0: TypeScript rewrite skeleton (Orbit)

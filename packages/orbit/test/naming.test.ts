@@ -1,6 +1,6 @@
-// The display-name rule for runs submitted without a name.
 import { describe, expect, it } from "vitest";
-import { autoRunName, runDisplayName, shellWords } from "../src/contracts/naming.ts";
+import { autoRunName, fitRunName, runDisplayName, shellWords } from "../src/contracts/naming.ts";
+import { RunSpec } from "../src/contracts/runs.ts";
 
 describe("run names from commands", () => {
   it("drops launchers and interpreters, keeps the program and key=value arguments", () => {
@@ -57,5 +57,33 @@ describe("run names from commands", () => {
     expect(runDisplayName({ name: "lr sweep", command: ["python", "t.py"] })).toBe("lr sweep");
     expect(runDisplayName({ command: ["python", "t.py"] })).toBe("t.py");
     expect(shellWords(`a 'b c' "d \\"e\\"" f\\ g ''`)).toEqual(["a", "b c", 'd "e"', "f g", ""]);
+  });
+});
+
+describe("generated Run names", () => {
+  const suffix = " · openpi-pi05 #2 · verify";
+  const runSpec = { backend: "process" as const, command: ["true"] };
+
+  it.each([42, 252, 308, 511, 512])("keeps a generated name of %i characters intact", (length) => {
+    const label = "x".repeat(length - suffix.length);
+    const name = fitRunName(label, suffix);
+    expect(name).toBe(label + suffix);
+    expect(RunSpec.parse({ ...runSpec, name }).name).toBe(name);
+  });
+
+  it("shortens a 513-character name and preserves the suffix", () => {
+    const label = "x".repeat(513 - suffix.length);
+    expect(RunSpec.safeParse({ ...runSpec, name: label + suffix }).success).toBe(false);
+    const name = fitRunName(label, suffix);
+    expect(name).toBe(`${label.slice(0, -2)}…${suffix}`);
+    expect(name).toHaveLength(512);
+    expect(RunSpec.parse({ ...runSpec, name }).name).toBe(name);
+  });
+
+  it("keeps Unicode well formed at the cutoff", () => {
+    const label = `${"x".repeat(512 - suffix.length - 2)}🧪 more`;
+    const name = fitRunName(label, suffix);
+    expect(name).toBe(`${label.split("🧪")[0]}…${suffix}`);
+    expect(name.isWellFormed()).toBe(true);
   });
 });
