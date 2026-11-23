@@ -18,24 +18,24 @@ export function initialStates(task: BenchTask): BenchTask["initialStates"] {
   if (task.initialStates) return task.initialStates;
   // Older native adapters reported these numbers in free-form task tags.
   const { initialStateCounts, initialStateCount } = task.tags;
+  const total =
+    initialStateCount !== undefined && /^\d+$/.test(initialStateCount)
+      ? BenchInitialStates.safeParse({ count: Number(initialStateCount) })
+      : undefined;
   if (initialStateCounts !== undefined) {
     try {
       const result = LegacySeedCounts.safeParse(JSON.parse(initialStateCounts));
-      if (result.success)
-        return {
-          countsBySeed: Object.fromEntries(
-            Object.entries(result.data).filter(([key]) => SeedPartitionKey.safeParse(key).success),
-          ),
-        };
+      if (result.success) {
+        const entries = Object.entries(result.data);
+        const valid = entries.filter(([key]) => SeedPartitionKey.safeParse(key).success);
+        if (valid.length || !entries.length || !total?.success)
+          return { countsBySeed: Object.fromEntries(valid) };
+      }
     } catch {
       // Treat free text as a tag.
     }
   }
-  if (initialStateCount !== undefined && /^\d+$/.test(initialStateCount)) {
-    const result = BenchInitialStates.safeParse({ count: Number(initialStateCount) });
-    if (result.success) return result.data;
-  }
-  return undefined;
+  return total?.success ? total.data : undefined;
 }
 
 /** The selected tasks: explicit, else the sample plan's, else every supported task. */

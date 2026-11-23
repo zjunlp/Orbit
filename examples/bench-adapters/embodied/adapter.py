@@ -150,7 +150,6 @@ def tasks(req):
                 set_initial_state_count(task, environment["initialStateCounts"].get(task["id"], 0))
             if environment.get("kind") == "robodojo":
                 counts = {seed: len(rows) for seed, rows in environment["layouts"].get(task["id"], {}).items()}
-                task["tags"]["initialStateCounts"] = json.dumps(counts, sort_keys=True)
                 task["initialStates"] = {"countsBySeed": counts}
         if "simplerScenes" in environment:
             for task in listing:

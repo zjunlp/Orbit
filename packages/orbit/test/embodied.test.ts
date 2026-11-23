@@ -570,6 +570,18 @@ it("preserves free-form task tags and enforces structured initial-state counts",
   expect(() => checkPlanAgainstBenchmark(spec, legacy, info.capabilities)).toThrow(
     /outside the declared range/,
   );
+  const fallback = info.tasks.map((task) => ({
+    ...task,
+    tags: { initialStateCounts: '{"0007":5}', initialStateCount: "5" },
+  }));
+  expect(() => checkPlanAgainstBenchmark(spec, fallback, info.capabilities)).not.toThrow();
+  const empty = fallback.map((task) => ({
+    ...task,
+    tags: { ...task.tags, initialStateCounts: "{}" },
+  }));
+  expect(() => checkPlanAgainstBenchmark(spec, empty, info.capabilities)).toThrow(
+    /has no declared initial states/,
+  );
   for (const seed of ["007", "9007199254740992"])
     expect(BenchInitialStates.safeParse({ countsBySeed: { [seed]: 1 } }).success).toBe(false);
   expect(

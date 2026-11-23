@@ -38,6 +38,43 @@ SPEC.loader.exec_module(adapter)
 
 
 class AdapterPlanningTests(unittest.TestCase):
+    def test_robodojo_lists_initial_state_counts_in_the_typed_field(self):
+        reference = json.loads((ADAPTER.parent / "profiles/robodojo-native.json").read_text())
+        environment = reference["environment"]
+        environment["assets"]["digest"] = "sha256:" + "a" * 64
+        environment["tasks"] = ["push_T"]
+        environment["layouts"] = {"push_T": {"0": [{}], "1": [], "2": [{}, {}]}}
+        with patch.object(adapter, "settings", return_value=(ADAPTER.parent, {"image": "fixture"}, reference)):
+            [task] = adapter.tasks({})["tasks"]
+        self.assertEqual(task["initialStates"], {"countsBySeed": {"0": 1, "1": 0, "2": 2}})
+        self.assertNotIn("initialStateCounts", task["tags"])
+
+    def test_plan_rejects_nonpositive_repetition_counts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for count in ("0", "-1"):
+                reply = subprocess.run(
+                    [sys.executable, "-S", "-B", str(ADAPTER.with_name("plan.py")),
+                     "--reference-source", temporary, "--task", "test", "--initial-state", "0",
+                     "--repetitions", count], capture_output=True, text=True)
+                self.assertEqual(reply.returncode, 2)
+                self.assertEqual(reply.stdout, "")
+                self.assertIn("--repetitions must be positive", reply.stderr)
+
+    def test_robocasa365_diffusion_plan_defaults_to_the_reference_environment_seed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reference = {"id": "robocasa365-diffusion/2", "parameters": {"environmentSeed": 1111111},
+                         "environment": {"kind": "robocasa365", "protocol": "diffusion-policy",
+                                         "tasks": ["OpenDrawer"]}}
+            recipe = root / "reference.json"
+            write_json(recipe, reference)
+            command = [sys.executable, "-S", "-B", str(ADAPTER.with_name("plan.py")),
+                       "--reference-source", str(root), "--reference-file", str(recipe),
+                       "--task", "OpenDrawer", "--initial-state", "0"]
+            for args, seed in ((command, 1111111), ([*command, "--environment-seed", "9"], 9)):
+                planned = json.loads(subprocess.check_output(args, text=True))
+                self.assertEqual(planned["items"][0]["environmentSeed"], seed)
+
     def test_libero_planner_expands_the_count_in_each_initial_state_asset(self):
         import pickle
         from zipfile import ZipFile

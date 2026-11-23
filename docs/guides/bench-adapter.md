@@ -169,7 +169,7 @@ stdin 是一个 JSON 请求，stdout 必须是一个 JSON 回复；出错时写 
 
 每次 `tasks` 回复中的任务 ID 必须唯一。固定初态数量可由任务的 `initialStates: {count}` 或
 `initialStates: {countsBySeed}` 声明。分区键使用无前导零的非负十进制安全整数。
-提交仍识别旧原生适配器的有效 `initialStateCount` 和 `initialStateCounts` 标签。
+`tags.initialStateCounts` 已废弃写入。提交仍识别旧适配器的有效 `tags.initialStateCount` 和 `tags.initialStateCounts`。
 
 Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`resources`、`mounts`、`env`、`network`、`workdir`、
 `collect`、`timeoutMin`、`backend: "process"`、`cwd`……），另有两条规则：

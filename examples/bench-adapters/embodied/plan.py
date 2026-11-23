@@ -31,6 +31,8 @@ def main():
     parser.add_argument("--environment-seed", type=int)
     parser.add_argument("--repetitions", type=int, default=1)
     args = parser.parse_args()
+    if args.repetitions < 1:
+        parser.error("--repetitions must be positive")
     reference = json.loads(args.reference_file.read_text())
     environment = reference.get("environment", {})
     kind = environment.get("kind")
@@ -43,7 +45,8 @@ def main():
     if environment_seed is None:
         defaults = {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0, "colosseum-v2": 0}
         default_seed = 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7)
-        if reference["id"] == "openvla-oft-libero-reference/1":
+        if (reference["id"] == "openvla-oft-libero-reference/1"
+                or (kind == "robocasa365" and environment.get("protocol") == "diffusion-policy")):
             default_seed = reference["parameters"]["environmentSeed"]
         environment_seed = environment.get("environmentSeed", default_seed)
     generated = kind in GENERATED_ENVIRONMENTS
