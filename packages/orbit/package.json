@@ -44,6 +44,9 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",
+    "executableFiles": [
+      "dist/bench-assets/examples/bench-adapters/embodied/adapter.py"
+    ],
     "exports": {
       "./contracts": {
         "types": "./dist/contracts.d.mts",
