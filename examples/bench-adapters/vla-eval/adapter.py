@@ -20,21 +20,25 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
 
-from check import STRUCTURED_RECEIPT_ARG, summarize
+from check import BINARY_SCORE_ARG, RESOLVED_SUITE_ARG, ROBOTWIN_SCENE_ARG, STRUCTURED_RECEIPT_ARG, TASK_IDENTITY_ARG, summarize
+from task_identity import catalog_identity, identity_fields, parse_task_id, task_id as identified_task_id
 
 # The shared adapter SDK (examples/sdk/orbit_bench): protocol entry point and score replies.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 from orbit_bench import main as protocol_main  # noqa: E402
 
 # Older registrations may have policyImage. The policy runs from the method entrypoint.
-CONFIG = {"image", "benchmark", "episodes", "timeoutMin", "params", "policyImage"}
+CONFIG = {"image", "benchmark", "episodes", "timeoutMin", "params", "policyImage", "taskIdentityFields"}
 LIBERO_BENCHMARK = "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark"
 LIBERO_PLUS_BENCHMARK = "vla_eval.benchmarks.libero_plus.benchmark:LIBEROPlusBenchmark"
+LIBERO_PRO_BENCHMARK = "vla_eval.benchmarks.libero_pro.benchmark:LIBEROProBenchmark"
+INDEXED_LIBERO_BENCHMARKS = (LIBERO_BENCHMARK, LIBERO_PLUS_BENCHMARK, LIBERO_PRO_BENCHMARK)
 ROBOTWIN_BENCHMARK = "vla_eval.benchmarks.robotwin.benchmark:RoboTwinBenchmark"
 # One trial is one episode; its seed picks the initial state (seed 1 → episode 0). This module, staged
 # per trial, makes the upstream benchmark start that episode; everything else stays upstream.
@@ -46,15 +50,30 @@ _base = getattr(importlib.import_module({module!r}), {cls!r})
 class OrbitEpisode(_base):
 {setup}
     async def start_episode(self, task, recorder=None):
-        return await super().start_episode({{**task, "episode_idx": self.orbit_episode}}, recorder)
+        return await super().start_episode({episode_task}, recorder)
 """
 EPISODE_SETUP = """    def __init__(self, orbit_episode: int = 0, **kw):
         super().__init__(**kw)
         self.orbit_episode = int(orbit_episode)
 """
-LIBERO_EPISODE_SETUP = """    def __init__(self, orbit_episode: int = 0, orbit_task_name=None, orbit_task_id=None, **kw):
+IDENTIFIED_EPISODE_SETUP = """    def __init__(self, orbit_task_identity, orbit_episode: int = 0, **kw):
+        self.orbit_task_identity = orbit_task_identity
+        super().__init__(**kw)
+        self.orbit_episode = int(orbit_episode)
+
+    def get_tasks(self):
+        from task_identity import matches_task
+
+        matches = [task for task in super().get_tasks() if matches_task(task, self.orbit_task_identity)]
+        if len(matches) != 1:
+            raise ValueError("planned task identity is missing or ambiguous; use the current task catalog")
+        return matches
+"""
+LIBERO_EPISODE_SETUP = """    def __init__(self, orbit_episode: int = 0, orbit_task_name=None, orbit_task_id=None,
+                 orbit_task_suite=None, **kw):
         self.orbit_task_name = orbit_task_name
         self.orbit_task_id = orbit_task_id
+        self.orbit_task_suite = orbit_task_suite
         super().__init__(**kw)
         self.orbit_episode = int(orbit_episode)
 
@@ -63,17 +82,22 @@ LIBERO_EPISODE_SETUP = """    def __init__(self, orbit_episode: int = 0, orbit_t
         if self.orbit_task_name is None:
             return tasks
         matches = [task for task in tasks if task.get("name") == self.orbit_task_name
-                   and (self.orbit_task_id is None or task.get("task_id") == self.orbit_task_id)]
+                   and (self.orbit_task_id is None or task.get("task_id") == self.orbit_task_id)
+                   and (self.orbit_task_suite is None or task.get("suite") == self.orbit_task_suite)]
         if len(matches) != 1:
             raise ValueError("LIBERO task identity is missing or ambiguous; use the current task catalog")
         return matches
 """
 CONTAINER_CONFIG = "/orbit-config/vla-eval.yaml"
 VERIFY_COMMAND = ("/orbit-adapter/check.py", "/solve")
+ROBOTWIN_SCENE_ENV = "ORBIT_VLA_ROBOTWIN_SCENE"
 POLICY_PORT = 8000
-# The images run `conda run -n libero` from their ENTRYPOINT; a replaced entrypoint needs the path.
+# The upstream images run conda from their ENTRYPOINT.
 CONDA = "/opt/conda/bin/conda"
-CONDA_ENVIRONMENTS = {ROBOTWIN_BENCHMARK: "robotwin"}
+CONDA_ENVIRONMENTS = {
+    "vla_eval.benchmarks.libero_mem.benchmark:LIBEROMemBenchmark": "libero_mem",
+    ROBOTWIN_BENCHMARK: "robotwin",
+}
 HERE = Path(__file__).resolve().parent
 
 # Runs inside the benchmark image: the task list without running an episode.
@@ -121,7 +145,7 @@ def settings(req):
         raise ValueError("config `benchmark` is module:Class, e.g. "
                          "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark")
     # Initial states per task the benchmark provides (LIBERO: 50).
-    episodes = int(c.get("episodes", "50"))
+    episodes = int(c.get("episodes", "1000" if spec == ROBOTWIN_BENCHMARK else "50"))
     if not 1 <= episodes <= 1000:
         raise ValueError("episodes must be between 1 and 1000")
     return root, c, spec, episodes
@@ -140,7 +164,11 @@ def image_of(c):
 
 
 def params_of(c):
-    return json.loads(c.get("params") or "{}")
+    params = json.loads(c.get("params") or "{}")
+    if c.get("benchmark") == ROBOTWIN_BENCHMARK:
+        params.setdefault("task_config", "demo_clean")
+        params.setdefault("seed", 0)
+    return params
 
 
 def benchmark_in_image(image, spec, params, fields=()):
@@ -153,7 +181,8 @@ def benchmark_in_image(image, spec, params, fields=()):
     info = cache_dir.lstat()
     if cache_dir.is_symlink() or not cache_dir.is_dir() or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise ValueError("vla-eval task cache must be a private directory owned by the current user")
-    cache_key = [image_id, spec, params]
+    # Do not reuse entries written before discovery ran the inspected image itself.
+    cache_key = [2, image_id, spec, params]
     if fields:
         cache_key.append(fields)
     digest = hashlib.sha256(json.dumps(cache_key, sort_keys=True).encode()).hexdigest()
@@ -165,7 +194,7 @@ def benchmark_in_image(image, spec, params, fields=()):
         r = subprocess.run(
             ["docker", "run", "--rm", "--name", name, "--label", "orbit.task=vla-eval-tasks",
              "--pull=never", "--network=none", "--cpus=2", "--memory=4g",
-             "--entrypoint", "bash", image_id if fields else image, "-lc",
+             "--entrypoint", "bash", image_id, "-lc",
              'conda run --no-capture-output -n "$0" python -c "$@"',
              CONDA_ENVIRONMENTS.get(spec, "libero"), TASKS_SCRIPT, module, cls, json.dumps(params),
              *([json.dumps(fields)] if fields else [])],
@@ -199,25 +228,29 @@ def benchmark_identity(spec):
 
 def planned_task(task, benchmark):
     suite, _, name = task.partition(":")
-    indexed = re.fullmatch(r"@([0-9]+):(.+)", name) if benchmark in (LIBERO_BENCHMARK, LIBERO_PLUS_BENCHMARK) else None
+    indexed = re.fullmatch(r"@([0-9]+):(.+)", name) if benchmark in INDEXED_LIBERO_BENCHMARKS else None
     return suite, indexed[2] if indexed else name, int(indexed[1]) if indexed else None
 
 
 def benchmark_identity_fields(config, spec):
-    return ("seed",) if spec == ROBOTWIN_BENCHMARK else ()
+    fields = identity_fields(config, ("seed",) if spec == ROBOTWIN_BENCHMARK else ())
+    if spec == ROBOTWIN_BENCHMARK and "seed" not in fields:
+        raise ValueError("RoboTwin taskIdentityFields must include the native scene seed")
+    return fields
 
 
 def robotwin_scenes(rows, fields):
     groups = {}
     for row in rows:
-        seed = row.get("identity", {}).get("seed")
-        task = f"{row['suite']}:{row['name']}"
+        identity = catalog_identity(row, fields)
+        seed = identity["seed"]
+        task = f"{identity['suite']}:{identity['name']}"
         scenes = groups.setdefault(task, {})
         if type(seed) is not int or seed < 0:
             raise ValueError(f"RoboTwin task {task!r} requires a nonnegative native scene seed")
         if seed in scenes:
             raise ValueError(f"duplicate RoboTwin scene seed {seed} for {task!r}")
-        scenes[seed] = row["identity"]
+        scenes[seed] = identity
     return groups
 
 
@@ -240,23 +273,64 @@ def robotwin_scene_seeds(task, scenes, raw):
     return seeds
 
 
+def select_robotwin_scene(trial, scenes, task_config, episode):
+    task = trial["task"]
+    seeds = robotwin_scene_seeds(task, scenes, trial.get("options", {}).get("sceneSeeds"))
+    if episode >= len(seeds):
+        raise ValueError(f"trial {episode + 1} has no RoboTwin scene: {len(seeds)} available")
+    return {"taskIdentity": scenes[task][seeds[episode]], "taskConfig": task_config, "episode": episode}
+
+
+def saved_robotwin_scene(req):
+    env = req["solve"].get("run", {}).get("spec", {}).get("env") or {}
+    raw = env.get(ROBOTWIN_SCENE_ENV)
+    if raw is None:
+        raise ValueError("RoboTwin Solve has no recorded scene selection")
+    scene = json.loads(raw)
+    identity = scene["taskIdentity"]
+    trial = req["trial"]
+    if (f"{identity['suite']}:{identity['name']}" != trial["task"]
+            or scene["episode"] != int(trial["seed"]) - 1
+            or scene["taskConfig"] != params_of(req["benchmark"]["config"])["task_config"]):
+        raise ValueError("RoboTwin Solve scene selection differs from the planned trial")
+    return scene
+
+
+def list_tasks(rows, spec, fields, episodes):
+    if spec == ROBOTWIN_BENCHMARK:
+        return [
+            {"id": task, "title": task.partition(":")[2], "supported": True, "reason": None,
+             "tags": {"suite": task.partition(":")[0]}, "initialStates": {"count": min(len(scenes), episodes)}}
+            for task, scenes in sorted(robotwin_scenes(rows, fields).items())
+        ]
+    names = Counter((row["suite"], row["name"]) for row in rows)
+    listing = []
+    identifiers = set()
+    for row in rows:
+        suite, name = row["suite"], row["name"]
+        if fields:
+            identifier = identified_task_id(catalog_identity(row, fields), fields)
+        elif spec in INDEXED_LIBERO_BENCHMARKS and names[suite, name] > 1:
+            identifier = f"{suite}:@{row['id']}:{name}"
+        else:
+            identifier = f"{suite or 'task'}:{name}"
+        if identifier in identifiers:
+            hint = "choose unique taskIdentityFields" if fields else "configure taskIdentityFields"
+            raise ValueError(f"duplicate task ID {identifier!r}; {hint}")
+        identifiers.add(identifier)
+        listing.append({"id": identifier, "title": name or None,
+                        "supported": True, "reason": None,
+                        "tags": {"suite": suite, "taskIndex": row["id"]}})
+    return listing
+
+
 def tasks(req):
-    _, c, spec, _ = settings(req)
+    _, c, spec, episodes = settings(req)
     benchmark_timeout(c)
     params = params_of(c)
     fields = benchmark_identity_fields(c, spec)
     rows = benchmark_in_image(image_of(c), spec, params, fields)
-    names = Counter((row["suite"], row["name"]) for row in rows)
-    listing = []
-    for row in rows:
-        suite, name = row["suite"], row["name"]
-        if spec in (LIBERO_BENCHMARK, LIBERO_PLUS_BENCHMARK) and names[suite, name] > 1:
-            identifier = f"{suite}:@{row['id']}:{name}"
-        else:
-            identifier = f"{suite or 'task'}:{name}"
-        listing.append({"id": identifier, "title": name or None,
-                        "supported": True, "reason": None,
-                        "tags": {"suite": suite, "taskIndex": row["id"]}})
+    listing = list_tasks(rows, spec, fields, episodes)
     return {
         "tasks": listing,
         "validateSeedSubmission": True,
@@ -265,7 +339,8 @@ def tasks(req):
             # policy can satisfy a goal that holds at the start.
             "identity": benchmark_identity(spec),
             "taxonomy": {"domains": ["robotics"]},
-            "calibration": {"empty": "any", "oracle": "none", "seedsVary": True},
+            "calibration": {"empty": "any", "oracle": "none", "seedsVary": spec != ROBOTWIN_BENCHMARK
+                            or all(task["initialStates"]["count"] > 1 for task in listing)},
             "methods": ["external", "empty"],
             "scoreKind": "scalar",
             "rescore": "evidence",
@@ -273,8 +348,10 @@ def tasks(req):
                 "Environment": image_of(c),
                 "Benchmark": spec,
                 "Benchmark params": json.dumps(params, sort_keys=True),
-                "Episode": "one per trial; seed n runs the benchmark's initial state n-1 "
-                           f"(1..{int(c.get('episodes', '50'))})",
+                "Episode": ("one per trial; select a native scene by ascending seed or explicit sceneSeeds"
+                            if spec == ROBOTWIN_BENCHMARK else
+                            "one per trial; seed n runs the benchmark's initial state n-1 "
+                            f"(1..{episodes})"),
                 "Entry": "vla-eval run --no-docker (the command the benchmark image itself uses)",
                 "Policy": "external: the model-server image as service `policy`, its own GPU; "
                           "empty: a zero-action server from the benchmark image",
@@ -287,12 +364,12 @@ def tasks(req):
     }
 
 
-def policy_service(method, image, port):
+def policy_service(method, image, port, conda_env):
     if method["agent"] == "empty":
         return {
             "name": "policy", "image": image, "role": "policy", "gpus": 0,
             "entrypoint": CONDA,
-            "command": ["run", "--no-capture-output", "-n", "libero", "python",
+            "command": ["run", "--no-capture-output", "-n", conda_env, "python",
                         "/orbit-adapter/zero_policy.py", "--port", str(port)],
             "cpus": 1, "memGB": 2,
             "healthcheck": {"command": ["bash", "-c", f"exec 3<>/dev/tcp/127.0.0.1/{port}"],
@@ -329,6 +406,7 @@ def solve(req):
         timeout_min = benchmark_timeout(c)
     params = params_of(c)
     image = image_of(c)
+    conda_env = CONDA_ENVIRONMENTS.get(spec, "libero")
     staging = Path(t["staging"])
     staging.mkdir(parents=True, exist_ok=True)
     method_config = method.get("config") or {}
@@ -338,15 +416,36 @@ def solve(req):
     server_url = f"ws://policy:{port}"
     module, cls = spec.split(":")
     suite, name, task_id = planned_task(t["task"], spec)
-    select_libero_task = spec == LIBERO_BENCHMARK or task_id is not None
-    setup = LIBERO_EPISODE_SETUP if select_libero_task else EPISODE_SETUP
-    (staging / "orbit_episode.py").write_text(
-        EPISODE_MODULE.format(module=module, cls=cls, setup=setup), encoding="utf-8")
+    fields = benchmark_identity_fields(c, spec)
+    env = {"ORBIT_VLA_CONFIG": CONTAINER_CONFIG, "PYTHONPATH": "/orbit-config"}
+    episode_task = '{**task, "episode_idx": self.orbit_episode}'
+    if spec == ROBOTWIN_BENCHMARK:
+        rows = benchmark_in_image(image, spec, params, fields)
+        scene = select_robotwin_scene(t, robotwin_scenes(rows, fields), params["task_config"], episode)
+        env[ROBOTWIN_SCENE_ENV] = json.dumps(scene)
+        identity = scene["taskIdentity"]
+        episode_task = "task"
+    else:
+        identity = parse_task_id(t["task"], fields)
+    if fields and identity is None:
+        raise ValueError("task identity is required; select a task from the current catalog")
     params = {**params, "orbit_episode": episode}
-    if select_libero_task:
-        if params.get("suite", "libero_spatial") != suite:
+    setup = EPISODE_SETUP
+    if identity is not None:
+        setup = IDENTIFIED_EPISODE_SETUP
+        name = identity["name"]
+        params["orbit_task_identity"] = identity
+        shutil.copyfile(HERE / "task_identity.py", staging / "task_identity.py")
+    elif spec == LIBERO_BENCHMARK or task_id is not None:
+        setup = LIBERO_EPISODE_SETUP
+        if spec == LIBERO_PRO_BENCHMARK:
+            # The upstream constructor resolves base suites and perturbation aliases.
+            params["orbit_task_suite"] = suite
+        elif params.get("suite", "libero_spatial") != suite:
             raise ValueError("planned task suite differs from the configured LIBERO suite")
         params.update(orbit_task_name=name, orbit_task_id=task_id)
+    (staging / "orbit_episode.py").write_text(
+        EPISODE_MODULE.format(module=module, cls=cls, setup=setup, episode_task=episode_task), encoding="utf-8")
     config = (
         f"server:\n  url: {json.dumps(server_url)}\n"
         "logging:\n  level: INFO\n"
@@ -364,7 +463,7 @@ def solve(req):
         "--benchmark-field", f"max_tasks=1",
         "--benchmark-field", f"tasks={json.dumps([name])}",
     ]
-    policy = policy_service(method, image, port)
+    policy = policy_service(method, image, port, conda_env)
     mounts = [{"source": str(staging), "target": "/orbit-config", "mode": "ro"}]
     services = [policy]
     if method["agent"] == "empty":
@@ -373,12 +472,11 @@ def solve(req):
     return {
         "spec": {
             "image": image,
-            # The image's entrypoint is `conda run -n libero vla-eval`; replace it with bash so the
-            # benchmark runs through conda explicitly (the same environment as upstream).
+            # Use the same conda environment as the upstream image's entrypoint.
             "entrypoint": CONDA,
-            "command": ["run", "--no-capture-output", "-n", "libero", "vla-eval", *argv],
+            "command": ["run", "--no-capture-output", "-n", conda_env, "vla-eval", *argv],
             "mounts": mounts,
-            "env": {"ORBIT_VLA_CONFIG": "/orbit-config/vla-eval.yaml", "PYTHONPATH": "/orbit-config"},
+            "env": env,
             # The benchmark image keeps its LIBERO config under /root/.libero; run as root like
             # Harbor does for task containers, so the image's own configuration is visible.
             "root": True,
@@ -395,17 +493,34 @@ def verify(req):
     """Scoring is part of the episode; revalidate the aggregate vla-eval wrote."""
     config = req["benchmark"]["config"]
     spec = config.get("benchmark")
-    suite, _, task_id = planned_task(req["trial"]["task"], spec)
-    identity = [suite] if spec == LIBERO_BENCHMARK or task_id is not None else [STRUCTURED_RECEIPT_ARG]
-    if task_id is not None:
-        identity.append(str(task_id))
+    task = req["trial"]["task"]
+    suite, _, task_id = planned_task(task, spec)
+    expected = None if spec == ROBOTWIN_BENCHMARK else parse_task_id(task, benchmark_identity_fields(config, spec))
+    mounts = [{"source": str(HERE / "check.py"), "target": "/orbit-adapter/check.py", "mode": "ro"},
+              {"source": req["solve"]["output"], "target": "/solve", "mode": "ro"}]
+    if spec == ROBOTWIN_BENCHMARK:
+        args = [ROBOTWIN_SCENE_ARG, json.dumps(saved_robotwin_scene(req))]
+    elif expected is not None:
+        args = [TASK_IDENTITY_ARG, json.dumps(expected)]
+        if spec in INDEXED_LIBERO_BENCHMARKS:
+            args.append(BINARY_SCORE_ARG)
+    elif spec == LIBERO_BENCHMARK or task_id is not None:
+        args = [suite]
+        if task_id is not None:
+            args.append(str(task_id))
+            if spec == LIBERO_PRO_BENCHMARK:
+                args.insert(0, RESOLVED_SUITE_ARG)
+    else:
+        args = [BINARY_SCORE_ARG if spec in INDEXED_LIBERO_BENCHMARKS else STRUCTURED_RECEIPT_ARG]
+    if spec == ROBOTWIN_BENCHMARK or expected is not None:
+        mounts.append({"source": str(HERE / "task_identity.py"),
+                       "target": "/orbit-adapter/task_identity.py", "mode": "ro"})
     return {"spec": {
         "image": image_of(req["benchmark"]["config"]),
         # The benchmark image's ENTRYPOINT is `conda run vla-eval`; the check runs plain Python.
         "entrypoint": "python3",
-        "command": [*VERIFY_COMMAND, *identity],
-        "mounts": [{"source": str(HERE / "check.py"), "target": "/orbit-adapter/check.py", "mode": "ro"},
-                   {"source": req["solve"]["output"], "target": "/solve", "mode": "ro"}],
+        "command": [*VERIFY_COMMAND, *args],
+        "mounts": mounts,
         "network": False, "resources": {"cpus": 1, "memGB": 1, "gpus": 0}, "timeoutMin": 5,
         "root": True,
     }}
@@ -431,14 +546,30 @@ def score(req):
         "details": {},
     }
     try:
-        _, _, spec, episodes = settings(req)
-        suite, name, task_id = planned_task(req["trial"]["task"], spec)
-        body = summarize(out, suite=suite if spec == LIBERO_BENCHMARK or task_id is not None else None, task_id=task_id)
+        _, config, spec, episodes = settings(req)
+        task = req["trial"]["task"]
+        suite, name, task_id = planned_task(task, spec)
+        identity = None if spec == ROBOTWIN_BENCHMARK else parse_task_id(task, benchmark_identity_fields(config, spec))
+        binary_score = spec in INDEXED_LIBERO_BENCHMARKS
+        scene = None
+        if spec == ROBOTWIN_BENCHMARK:
+            scene = saved_robotwin_scene(req)
+            body = summarize(out, robotwin_scene=scene)
+        elif identity is not None:
+            name = identity["name"]
+            body = summarize(out, task_identity=identity, binary_score=binary_score)
+        else:
+            body = summarize(
+                out, suite=suite if spec == LIBERO_BENCHMARK or task_id is not None else None,
+                task_id=task_id, resolved_suite=spec == LIBERO_PRO_BENCHMARK and task_id is not None,
+                episode_suite=suite if spec == LIBERO_PLUS_BENCHMARK and task_id is None else None,
+                binary_score=binary_score,
+            )
         verification = req["verify"]
         verdict = json.loads((Path(verification["output"]) / "check.json").read_text())
         verifier_spec = verification.get("run", {}).get("spec", {})
         expected = body
-        if task_id is None and verifier_spec.get("command") == list(VERIFY_COMMAND):
+        if scene is None and identity is None and task_id is None and verifier_spec.get("command") == list(VERIFY_COMMAND):
             trial = req["trial"]
             params = verifier_spec.get("params", {})
             solve_mounts = [mount for mount in verifier_spec.get("mounts", []) if mount.get("target") == "/solve"]
@@ -468,6 +599,10 @@ def score(req):
                 "issues": body["issues"],
                 "review": review,
             }
+        details = {"benchmark": body["benchmark"], "initial state": str(body["episode"]), "steps": str(body["steps"])}
+        if scene is not None:
+            details.update({"initial state": str(scene["taskIdentity"]["seed"]), "trial number": str(body["episode"] + 1),
+                            "scene config": scene["taskConfig"]})
         return {
             "score": float(body["success"]),
             "maxScore": 1,
@@ -475,9 +610,7 @@ def score(req):
             "issues": [],
             "metrics": {"success": 100.0 * float(body["success"])},
             "episode": episode,
-            "review": {**review, "details": {"benchmark": body["benchmark"],
-                                             "initial state": str(body["episode"]),
-                                             "steps": str(body["steps"])}},
+            "review": {**review, "details": details},
         }
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return {

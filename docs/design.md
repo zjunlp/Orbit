@@ -974,7 +974,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 
 - **入口**：`orbit policy add / ls / rm`、`bench add-file`、`bench run --sample-plan [--batch-size]`、`bench calibrate --policy`
   都走现有 HTTP 控制面。原生路径为 `examples/bench-adapters/embodied` 加容器内 `examples/sdk/orbit_embodied`，不依赖 vla-eval；
-  旧 vla-eval 登记保持原行为。
+  SDK 版 RoboTwin 重评使用 Solve 保存的场景记录。
 - **源码布局**：原生登记使用公共 `adapter.py`。benchmark 的准备工具和镜像配方按家族放在 `embodied/benchmarks/`，
   模型服务、镜像配方与权重工具放在 `embodied/policies/`。[具身适配器索引](../examples/bench-adapters/embodied/README.md)。
 - **语义绑定**：`BenchCapabilities.embodied` 声明评测 profile、观测与动作语义、显式映射及可选的重规划步数。提交时核对
@@ -1457,6 +1457,8 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
 
 声明式清单可用 `result.score.singleBinary` 要求恰好一个二值分数，用 `result.expectBeforeInvalid` 在归类上游错误前核对
 `result.expect`。每条期望可指定 JSON 字段类型。vla-eval 的 LIBERO Spatial 清单据此核对任务、初态、记录的配置种子和单集成功值。
+
+SDK 版 vla-eval 可声明 `taskIdentityFields`，用上游任务名、套件和指定字段区分独立任务。RoboTwin 以套件和任务名生成任务 ID，试验根据有序场景 seed 清单选取描述符。Solve 保存预期场景和场景配置，Verify 核对实际回合并绑定结果摘要。[配置说明](../examples/bench-adapters/vla-eval/README.md)
 
 **接入的验收与盘点**：
 

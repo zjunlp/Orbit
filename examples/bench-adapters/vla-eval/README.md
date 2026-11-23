@@ -31,6 +31,24 @@ the original instruction for every task. Select an indexed ID from the current c
 running one of the same-name tasks in LIBERO-90. New LIBERO Verify receipts bind to the exact
 aggregate checked for the planned task.
 
+For RoboTwin, select a task such as `robotwin:adjust_bottle`. Trials select
+scenes in ascending order of the native scene seed. For example, in Clean,
+`--seeds 2` runs scenes `100001` and `100002` for that task. To select explicit
+scenes, use an ordered list and set `--seeds` to its length. For one scene, pass
+`--seeds 1 --option 'sceneSeeds=[100002]'`. Verify checks the native seed and
+the configured scenario variant. The result details show the native seed and
+the Orbit trial number. For a one-scene registration, calibrate with
+`orbit bench calibrate <benchmark> --seeds 1`.
+
+Other benchmarks can supply `config.taskIdentityFields` as a JSON array stored
+in a string, for example `'["task_type","case_name"]'`. List stable integer or
+string fields from the upstream task descriptor that are also saved on the
+episode in its aggregate. The scheme includes the name and suite automatically.
+Discovery rejects missing or duplicate identities. Solve selects exactly one
+descriptor and Verify checks the episode fields and binds its receipt to the
+aggregate. This works with catalogs whose order can change between discovery
+and execution.
+
 ## Methods
 
 - `external`: `entrypoint` is the model-server **image** (`image` or `image@digest`). `config` carries

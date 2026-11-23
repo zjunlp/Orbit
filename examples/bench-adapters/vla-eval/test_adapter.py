@@ -1,5 +1,9 @@
 """Explicit fixtures; these tests do not start Docker, a benchmark or a model server."""
 
+import asyncio
+from contextlib import redirect_stdout
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -55,7 +59,7 @@ class AdapterTests(unittest.TestCase):
             check = adapter.summarize(out, suite=suite if spec == adapter.LIBERO_BENCHMARK or task_id is not None else None,
                                       task_id=task_id)
         (verify / "check.json").write_text(json.dumps(check))
-        self.req.update(solve={"output": str(out)}, verify={"output": str(verify)})
+        self.req.update(solve={**self.req.get("solve", {}), "output": str(out)}, verify={"output": str(verify)})
         return adapter.score(self.req)
 
     def test_a_trial_is_one_episode_whose_seed_picks_the_initial_state(self):
@@ -157,6 +161,217 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(wrapper(orbit_episode=2, orbit_task_id=3).summary,
                          [{"name": "custom task", "task_id": 3}])
 
+    def test_task_discovery_uses_the_inspected_image_and_ignores_old_cache_entries(self):
+        spec = "custom:Native"
+        image_id = "sha256:" + "a" * 64
+        cache = self.root / f"orbit-vla-eval-tasks-{os.getuid()}"
+        cache.mkdir(mode=0o700)
+        old_key = hashlib.sha256(json.dumps([image_id, spec, {}], sort_keys=True).encode()).hexdigest()
+        (cache / (old_key + ".json")).write_text('[{"name": "stale catalog"}]')
+        rows = [{"name": "catalog from the inspected image"}]
+        response = SimpleNamespace(returncode=0, stdout=json.dumps(rows), stderr="")
+        with unittest.mock.patch.object(adapter.tempfile, "gettempdir", return_value=str(self.root)), \
+                unittest.mock.patch.object(adapter.subprocess, "check_output", return_value=image_id), \
+                unittest.mock.patch.object(adapter.subprocess, "run", return_value=response) as run:
+            self.assertEqual(adapter.benchmark_in_image("fixture:moving", spec, {}), rows)
+            command = run.call_args.args[0]
+            self.assertEqual(command[command.index("--entrypoint") + 2], image_id)
+            self.assertEqual(adapter.benchmark_in_image(image_id, spec, {}), rows)
+            self.assertEqual(run.call_count, 1)
+            identified = [{"name": "catalog with native identity", "identity": {"seed": 17}}]
+            run.return_value = SimpleNamespace(returncode=0, stdout=json.dumps(identified), stderr="")
+            self.assertEqual(adapter.benchmark_in_image(image_id, spec, {}, ("seed",)), identified)
+            self.assertEqual(json.loads(run.call_args.args[0][-1]), ["seed"])
+            self.assertEqual(adapter.benchmark_in_image(image_id, spec, {}, ("seed",)), identified)
+            self.assertEqual(run.call_count, 2)
+
+    def test_official_image_environment_is_used_for_discovery_solve_and_empty_policy(self):
+        config = self.req["benchmark"]["config"]
+        for spec, env in (
+            ("vla_eval.benchmarks.libero_mem.benchmark:LIBEROMemBenchmark", "libero_mem"),
+            ("vla_eval.benchmarks.robotwin.benchmark:RoboTwinBenchmark", "robotwin"),
+            ("custom:Native", "libero"),
+        ):
+            with self.subTest(spec=spec):
+                config["benchmark"] = spec
+                robotwin = spec == adapter.ROBOTWIN_BENCHMARK
+                self.req["trial"].update(task="robotwin:adjust_bottle" if robotwin else
+                                         "libero_spatial:pick up the bowl", seed=1)
+                rows = [{"id": "0", "name": "adjust_bottle", "suite": "robotwin", "identity": {"seed": 100002}}]
+                with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows):
+                    solve = self.solve()
+                self.assertEqual(solve["command"][3], env)
+                self.assertEqual(solve["services"][0]["command"][3], env)
+                with unittest.mock.patch.object(adapter.tempfile, "gettempdir", return_value=str(self.root)), \
+                        unittest.mock.patch.object(adapter.subprocess, "check_output", return_value="fixture-id"), \
+                        unittest.mock.patch.object(adapter.subprocess, "run",
+                                                   return_value=SimpleNamespace(returncode=0, stdout="[]", stderr="")) as run:
+                    self.assertEqual(adapter.benchmark_in_image("fixture", spec, {}), [])
+                    argv = run.call_args.args[0]
+                    self.assertEqual(argv[argv.index("-lc") + 2], env)
+
+    def test_robotwin_selects_and_verifies_same_name_scenes_by_native_seed(self):
+        spec = adapter.ROBOTWIN_BENCHMARK
+        self.req["benchmark"]["config"].update(benchmark=spec, params='{"seed": 0}')
+        module = spec.split(":")[0]
+        scenes = [{"suite": "robotwin", "name": "adjust_bottle", "seed": seed, "episode_idx": index}
+                  for index, seed in enumerate((100001, 100002))]
+
+        class Native:
+            def __init__(self, seed, task_config):
+                self.task_config = task_config
+
+            def get_tasks(self):
+                return list(reversed(scenes))
+
+            async def start_episode(self, task, recorder=None):
+                return task
+
+        stdout = io.StringIO()
+        with unittest.mock.patch.dict(sys.modules, {module: SimpleNamespace(RoboTwinBenchmark=Native)}), \
+                unittest.mock.patch.object(sys, "argv", ["discovery", module, "RoboTwinBenchmark",
+                                                         '{"seed": 0, "task_config": "demo_clean"}', '["seed"]']), \
+                redirect_stdout(stdout):
+            exec(adapter.TASKS_SCRIPT, {})
+        rows = json.loads(stdout.getvalue())
+        self.req["trial"].update(task="robotwin:adjust_bottle", seed=1)
+        with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows) as discover:
+            listing = adapter.tasks(self.req)
+            first = self.solve()
+            self.req["trial"]["seed"] = 2
+            solve = self.solve()
+            for call in discover.call_args_list:
+                self.assertEqual(call.args[2]["task_config"], "demo_clean")
+        [task] = listing["tasks"]
+        self.assertEqual(task["id"], "robotwin:adjust_bottle")
+        self.assertEqual(task["initialStates"], {"count": 2})
+        self.assertTrue(listing["capabilities"]["calibration"]["seedsVary"])
+        self.assertEqual(json.loads(first["env"][adapter.ROBOTWIN_SCENE_ENV])["taskIdentity"]["seed"], 100001)
+        self.req["solve"] = {"run": {"spec": solve}}
+        self.assertIn('tasks=["adjust_bottle"]', solve["command"])
+        staging = self.root / "staging"
+        self.assertTrue((staging / "task_identity.py").is_file())
+        yaml = (staging / "vla-eval.yaml").read_text()
+        identity = json.loads(next(line.split(":", 1)[1] for line in yaml.splitlines()
+                                   if line.strip().startswith("orbit_task_identity:")))
+        namespace = {}
+        with unittest.mock.patch.dict(sys.modules, {module: SimpleNamespace(RoboTwinBenchmark=Native)}):
+            exec((staging / "orbit_episode.py").read_text(), namespace)
+        wrapper = namespace["OrbitEpisode"](orbit_task_identity=identity, orbit_episode=1, seed=0,
+                                            task_config="demo_clean")
+        for ordered in (scenes, list(reversed(scenes))):
+            with unittest.mock.patch.object(Native, "get_tasks", return_value=ordered):
+                [selected] = wrapper.get_tasks()
+            self.assertEqual(asyncio.run(wrapper.start_episode(selected)), scenes[1])
+        for ambiguous in ([scenes[0]], [scenes[1], scenes[1]]):
+            with unittest.mock.patch.object(Native, "get_tasks", return_value=ambiguous):
+                with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+                    wrapper.get_tasks()
+
+        result = aggregate(True, episode=1, name="adjust_bottle")
+        params = result["config"]["params"]
+        params.update(seed=0, task_config="demo_clean", orbit_task_identity=identity)
+        ep = result["tasks"][0]["episodes"][0]
+        ep.update(scenes[1])
+        self.scored(result, check={})
+        verify = adapter.verify(self.req)["spec"]
+        self.req["verify"]["run"] = {"spec": verify}
+        self.assertIn("/orbit-adapter/task_identity.py", [m["target"] for m in verify["mounts"]])
+        output = Path(self.req["verify"]["output"])
+        command = [sys.executable, "-B", str(adapter.HERE / "check.py"),
+                   self.req["solve"]["output"], *verify["command"][2:]]
+        check_env = {**os.environ, "ORBIT_OUTPUT": str(output)}
+        subprocess.run(command, env=check_env, check=True)
+        receipt = json.loads((output / "check.json").read_text())
+        self.assertEqual(receipt["taskIdentity"]["seed"], 100002)
+        score = adapter.score(self.req)
+        self.assertFalse(score["invalid"])
+        self.assertEqual(score["review"]["details"]["initial state"], "100002")
+        self.assertEqual(score["review"]["details"]["trial number"], "2")
+
+        for target, key, value, message in (
+            (result, "harness_version", "another snapshot", "Verifier output disagrees"),
+            (ep, "seed", 100001, "scene identity"),
+            (params, "task_config", "demo_randomized", "scene config"),
+            (params, "orbit_episode", 0, "trial number"),
+        ):
+            with self.subTest(key=key), unittest.mock.patch.dict(target, {key: value}):
+                self.assertIn(message, self.scored(result, check=receipt)["issues"][0])
+                if key != "harness_version":
+                    rejected = subprocess.run(command, env=check_env, capture_output=True, text=True, check=False)
+                    self.assertEqual(rejected.returncode, 1)
+                    self.assertIn(message, rejected.stderr)
+
+    def test_robotwin_can_run_a_single_explicit_scene(self):
+        self.req["benchmark"]["config"].update(benchmark=adapter.ROBOTWIN_BENCHMARK, params="{}")
+        self.req["trial"].update(task="robotwin:adjust_bottle", seed=1, options={"sceneSeeds": "[100002]"})
+        rows = [{"id": str(index), "name": "adjust_bottle", "suite": "robotwin", "identity": {"seed": seed}}
+                for index, seed in enumerate((100001, 100002))]
+        with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows):
+            scene = json.loads(self.solve()["env"][adapter.ROBOTWIN_SCENE_ENV])
+            self.assertEqual((scene["episode"], scene["taskIdentity"]["seed"]), (0, 100002))
+            for seeds in ("[100000]", "[100002,100002]", '["100002"]'):
+                with self.subTest(seeds=seeds), self.assertRaisesRegex(ValueError, "sceneSeeds"):
+                    self.req["trial"]["options"]["sceneSeeds"] = seeds
+                    self.solve()
+            self.req["trial"].update(seed=3, options={})
+            with self.assertRaisesRegex(ValueError, "trial 3 has no RoboTwin scene"):
+                self.solve()
+
+    def test_configured_identity_uses_multiple_fields_for_custom_benchmarks(self):
+        self.req["benchmark"]["config"].update(
+            benchmark="custom:Native", params="{}", taskIdentityFields='["kind", "case_name"]')
+        native = [{"name": "move: block", "kind": kind, "case_name": "case,1"}
+                  for kind in ("base", "扰动")]
+        rows = [{"id": str(index), "suite": "", "name": item["name"],
+                 "identity": {field: item[field] for field in ("kind", "case_name")}}
+                for index, item in enumerate(native)]
+        with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows):
+            tasks = adapter.tasks(self.req)["tasks"]
+        self.assertEqual(len({task["id"] for task in tasks}), 2)
+        self.req["trial"]["task"] = tasks[1]["id"]
+        self.solve()
+        yaml = (self.root / "staging" / "vla-eval.yaml").read_text()
+        expected = json.loads(next(line.split(":", 1)[1] for line in yaml.splitlines()
+                                   if line.strip().startswith("orbit_task_identity:")))
+        self.assertEqual(expected, {**native[1], "suite": "task"})
+
+        class Native:
+            def __init__(self):
+                self.selected = self.get_tasks()
+
+            def get_tasks(self):
+                return native
+
+        namespace = {}
+        with unittest.mock.patch.dict(sys.modules, {"custom": SimpleNamespace(Native=Native)}):
+            exec((self.root / "staging/orbit_episode.py").read_text(), namespace)
+        instance = namespace["OrbitEpisode"](orbit_task_identity=expected)
+        self.assertEqual(instance.selected, [native[1]])
+
+        result = aggregate(0.5, episode=2, name=native[1]["name"])
+        ep = result["tasks"][0]["episodes"][0]
+        ep.pop("suite")
+        ep.update(native[1])
+        self.scored(result, check={})
+        verify = adapter.verify(self.req)["spec"]
+        subprocess.run([sys.executable, "-B", str(adapter.HERE / "check.py"),
+                        self.req["solve"]["output"], *verify["command"][2:]],
+                       env={**os.environ, "ORBIT_OUTPUT": self.req["verify"]["output"]}, check=True)
+        self.req["verify"]["run"] = {"spec": verify}
+        self.assertEqual(adapter.score(self.req)["score"], 0.5)
+        ep.update(native[0])
+        self.assertIn("scene identity", self.scored(result, check={})["issues"][0])
+
+    def test_missing_or_duplicate_scene_identity_is_rejected_at_discovery(self):
+        self.req["benchmark"]["config"]["benchmark"] = adapter.ROBOTWIN_BENCHMARK
+        incomplete = {"id": "0", "suite": "robotwin", "name": "adjust_bottle", "identity": {}}
+        complete = {**incomplete, "identity": {"seed": 100002}}
+        for rows, message in (([incomplete], "lacks a stable value"), ([complete, complete], "duplicate RoboTwin scene")):
+            with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows):
+                with self.assertRaisesRegex(ValueError, message):
+                    adapter.tasks(self.req)
+
     def test_same_name_libero_tasks_keep_distinct_native_ids(self):
         config = self.req["benchmark"]["config"]
         config["params"] = '{"suite": "libero_90"}'
@@ -247,6 +462,17 @@ class AdapterTests(unittest.TestCase):
         episode["task_id"] = 7
         self.assertIn("differs from the planned LIBERO task", self.scored(result, check={})["issues"][0])
 
+    def test_unique_libero_plus_score_checks_suite_without_changing_generic_receipts(self):
+        self.req["benchmark"]["config"]["benchmark"] = adapter.LIBERO_PLUS_BENCHMARK
+        result = aggregate(True, episode=2)
+        self.assertFalse(self.scored(result)["invalid"])
+        receipt = json.loads((Path(self.req["verify"]["output"]) / "check.json").read_text())
+        self.assertNotIn("aggregateDigest", receipt)
+        wrong = "libero_90"
+        result["config"]["params"]["suite"] = wrong
+        result["tasks"][0]["episodes"][0]["suite"] = wrong
+        self.assertEqual(self.scored(result, check=receipt)["failure"], "scorer_error")
+
     def test_legacy_libero_receipt_requires_a_legacy_verify_run(self):
         agg = aggregate(True, episode=2)
         self.assertFalse(self.scored(agg)["invalid"])
@@ -260,6 +486,52 @@ class AdapterTests(unittest.TestCase):
         self.assertTrue(adapter.score(self.req)["invalid"])
         self.req["verify"]["run"]["spec"]["params"]["task"] = self.req["trial"]["task"]
         self.assertFalse(adapter.score(self.req)["invalid"])
+
+    def test_libero_pro_choices_use_the_native_id_and_resolved_suite(self):
+        spec = adapter.LIBERO_PRO_BENCHMARK
+        config = self.req["benchmark"]["config"]
+        config["benchmark"] = spec
+        name = "open drawer"
+        for params, suite in (({"suite": "libero_90"}, "libero_90"),
+                              ({"suite": "libero_spatial", "perturbation": "position"}, "libero_spatial_swap"),
+                              ({}, "libero_spatial_with_mug")):
+            with self.subTest(suite=suite):
+                config["params"] = json.dumps(params)
+                rows = [{"id": str(i), "name": name, "suite": suite} for i in (0, 1)]
+                with unittest.mock.patch.object(adapter, "benchmark_in_image", return_value=rows):
+                    listed = adapter.tasks(self.req)["tasks"]
+                self.assertEqual([row["id"] for row in listed], [f"{suite}:@0:{name}", f"{suite}:@1:{name}"])
+                self.req["trial"]["task"] = listed[1]["id"]
+                self.solve()
+                staged = self.root / "staging"
+                yaml = (staged / "vla-eval.yaml").read_text()
+                self.assertIn(f'orbit_task_suite: "{suite}"', yaml)
+
+                class Native:
+                    def __init__(self, **kw):
+                        pass
+
+                    def get_tasks(self):
+                        return [{"name": name, "task_id": i, "suite": task_suite}
+                                for i, task_suite in ((0, suite), (1, suite), (1, "wrong_suite"))]
+
+                namespace = {}
+                with unittest.mock.patch.dict(sys.modules, {spec.split(":")[0]: SimpleNamespace(LIBEROProBenchmark=Native)}):
+                    exec((staged / "orbit_episode.py").read_text(), namespace)
+                instance = namespace["OrbitEpisode"](orbit_task_name=name, orbit_task_id=1, orbit_task_suite=suite, **params)
+                self.assertEqual(instance.get_tasks(), [{"name": name, "task_id": 1, "suite": suite}])
+                agg = aggregate(True, episode=2, name=name)
+                agg["config"]["params"] = {**params, "orbit_episode": 2, "orbit_task_id": 1, "orbit_task_suite": suite}
+                ep = agg["tasks"][0]["episodes"][0]
+                ep.update(suite=suite, task_id=1)
+                self.scored(agg, check={})
+                env = {**os.environ, "ORBIT_OUTPUT": self.req["verify"]["output"]}
+                command = adapter.verify(self.req)["spec"]["command"]
+                subprocess.run([sys.executable, "-B", str(adapter.HERE / "check.py"),
+                                self.req["solve"]["output"], *command[2:]], env=env, check=True)
+                self.assertFalse(adapter.score(self.req)["invalid"])
+                ep["suite"] = "wrong_suite"
+                self.assertEqual(self.scored(agg, check={})["failure"], "scorer_error")
 
     def test_legacy_failure_receipt_keeps_the_upstream_failure_kind(self):
         for benchmark in (adapter.LIBERO_BENCHMARK, "custom:Native"):
@@ -327,11 +599,68 @@ class AdapterTests(unittest.TestCase):
                 self.assertEqual(self.scored(agg, check={})["failure"], "scorer_error")
                 row[field] = value
 
+    def test_generic_checker_and_score_require_the_episode_task_name(self):
+        for spec in ("custom:Native", adapter.LIBERO_PLUS_BENCHMARK):
+            self.req["benchmark"]["config"]["benchmark"] = spec
+            agg = aggregate(True, episode=2)
+            self.assertFalse(self.scored(agg)["invalid"])
+            receipt = json.loads((Path(self.req["verify"]["output"]) / "check.json").read_text())
+            command = adapter.verify(self.req)["spec"]["command"]
+            for other_name in ("another task", None):
+                with self.subTest(spec=spec, other_name=other_name):
+                    agg["tasks"][0]["episodes"][0]["name"] = other_name
+                    self.assertEqual(self.scored(agg, check=receipt)["failure"], "scorer_error")
+                    run = subprocess.run(
+                        [sys.executable, "-B", str(adapter.HERE / "check.py"),
+                         self.req["solve"]["output"], *command[2:]],
+                        env={**os.environ, "ORBIT_OUTPUT": str(self.root / "recheck")},
+                        capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(run.returncode, 1)
+                    self.assertIn("episode", run.stderr)
+
     def test_scores_the_planned_episode(self):
         r = self.scored(aggregate(True, episode=2))
         self.assertEqual((r["score"], r["invalid"]), (1.0, False))
         self.assertEqual(r["episode"]["endedBy"], "success")
         self.assertEqual(r["review"]["details"]["initial state"], "2")
+
+    def test_custom_scalar_score_survives_verify_and_legacy_receipts(self):
+        self.req["benchmark"]["config"]["benchmark"] = "custom:Native"
+        agg = aggregate(0.5, episode=2)
+        agg["benchmark"] = "Native"
+        self.scored(agg, check={})
+        legacy = {"benchmark": "Native", "task": "pick up the bowl", "episode": 2,
+                  "steps": 220, "success": 0.5, "errors": 0, "issues": []}
+        out = Path(self.req["solve"]["output"])
+        verify = Path(self.req["verify"]["output"])
+        (verify / "check.json").write_text(json.dumps(legacy))
+        self.req["verify"]["run"] = {"spec": self.legacy_verify_spec()}
+        self.assertEqual(adapter.score(self.req)["score"], 0.5)
+
+        spec = adapter.verify(self.req)["spec"]
+        subprocess.run([sys.executable, "-B", str(adapter.HERE / "check.py"),
+                        str(out), *spec["command"][2:]],
+                       env={**os.environ, "ORBIT_OUTPUT": str(verify)}, check=True)
+        self.req["verify"]["run"] = {"spec": spec}
+        result = adapter.score(self.req)
+        self.assertEqual((result["invalid"], result["score"], result["metrics"]["success"]),
+                         (False, 0.5, 50.0))
+
+    def test_libero_routes_require_a_binary_success_metric(self):
+        for benchmark in adapter.INDEXED_LIBERO_BENCHMARKS:
+            with self.subTest(benchmark=benchmark):
+                self.req["benchmark"]["config"]["benchmark"] = benchmark
+                result = self.scored(aggregate(0.5, episode=2), check={})
+                self.assertIn("binary", result["issues"][0])
+                command = adapter.verify(self.req)["spec"]["command"]
+                run = subprocess.run(
+                    [sys.executable, "-B", str(adapter.HERE / "check.py"),
+                     self.req["solve"]["output"], *command[2:]],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(run.returncode, 1)
+                self.assertIn("binary", run.stderr)
 
     def test_another_episode_or_several_are_invalid(self):
         self.assertEqual(self.scored(aggregate(True, episode=0))["failure"], "scorer_error")
