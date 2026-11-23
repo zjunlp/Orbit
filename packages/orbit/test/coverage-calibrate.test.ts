@@ -9,6 +9,7 @@ import {
   expectations,
   judgeCalibration,
   normalizeReason,
+  type Run,
   sampleTasks,
   type Trial,
 } from "../src/contracts/index.ts";
@@ -215,4 +216,60 @@ it("reports a calibration job by phase and only calls a finished one calibrated"
   expect(
     calibrationReport({ ...job, spec: { ...job.spec, calibration: undefined } }, trials),
   ).toBeNull();
+});
+
+it("compares both the automatic and latest policy rescore with the original metrics", () => {
+  const at = "2026-01-01T00:00:00.000Z";
+  const job = {
+    id: "j",
+    spec: {
+      benchmark: "b",
+      tasks: ["t"],
+      methods: [{ name: "policy" }],
+      calibration: { mode: "policy", budgetMin: 20, noOracle: [], rescore: true },
+    },
+    state: "done",
+    rescore: { state: "done" },
+    createdAt: at,
+    endedAt: at,
+    calibrationExecutionEndedAt: at,
+  } as unknown as BenchJob;
+  const [selected] = detail([trial("t", "policy", 1, 1)]);
+  const score = selected?.outcome;
+  if (!score) throw new Error("missing fixture outcome");
+  const runs = new Map(
+    [selected.solveRunId, selected.verifyRunId, "original", "first-rescore"]
+      .filter((id): id is string => id !== null)
+      .map((id) => [
+        id,
+        {
+          id,
+          state: "succeeded",
+          cleanup: "done",
+          spec: { resources: { gpus: 0 }, services: [] },
+        } as unknown as Run,
+      ]),
+  );
+  const result = (automatic: number, latest: number) =>
+    calibrationReport(
+      job,
+      [
+        {
+          ...selected,
+          history: [
+            { verifyRunId: "original", outcome: { ...score, metrics: { aux: 7 } }, endedAt: at },
+            {
+              verifyRunId: "first-rescore",
+              outcome: { ...score, metrics: { aux: automatic } },
+              endedAt: at,
+            },
+          ],
+          outcome: { ...score, metrics: { aux: latest } },
+        },
+      ],
+      runs,
+    )?.checks.find((check) => check.name === "requested rescore completed")?.result;
+  expect(result(7, 7)).toBe("passed");
+  expect(result(4, 7)).toBe("failed");
+  expect(result(7, 4)).toBe("failed");
 });

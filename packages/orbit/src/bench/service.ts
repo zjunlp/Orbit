@@ -99,7 +99,7 @@ import { CalibrationLifecycle } from "./calibration.ts";
 import { checkGateBundle } from "./gate-bundle.ts";
 import { planGate } from "./gate-plan.ts";
 import { evaluateGate } from "./gates.ts";
-import { PolicyRegistry } from "./policies.ts";
+import { connectorIssues, PolicyRegistry } from "./policies.ts";
 import { AdapterClient } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { loadResources, resolveResources, usageRows } from "./resources.ts";
@@ -327,6 +327,8 @@ export class BenchService {
         if (m.effort) throw new UserError(`${m.name}: effort is a CLI Agent option`);
         const policy = this.policies.get(m.policyRef ?? "");
         if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
+        const issues = connectorIssues(policy);
+        if (issues.length) throw new UserError(`${m.name}: ${issues.join("; ")}`);
         if (spec.calibration?.mode === "policy" && policy.kind !== "model")
           throw new UserError(
             "policy integration checks require a real model registration, not a calibration fixture",
