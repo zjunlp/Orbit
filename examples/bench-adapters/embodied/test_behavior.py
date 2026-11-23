@@ -1,12 +1,11 @@
 """Synthetic CPU evidence and metadata fixtures, not native simulation."""
 import copy
-import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from orbit_embodied.behavior1k import asset_digest, native_instance, profile, run_native_episode, verify_behavior
+from orbit_embodied.behavior1k import asset_digest, evidence_report, native_instance, profile, run_native_episode, verify_behavior
 from orbit_embodied.binding import digest, resolve_binding
 from orbit_embodied.evidence import verify_episode, write_json
 
@@ -91,8 +90,12 @@ class BehaviorTest(unittest.TestCase):
         np.save(chunks / "0.npy", action)
         np.save(chunks / "0.raw.npy", raw)
         report = {"task": "activity", "instance_id": 301, "rollout_id": 0, "steps": 1,
-                  "success": False, "q_score": {"final": 0.5}}
-        (self.root / "behavior-report.json").write_text(json.dumps(report))
+                  "success": False, "q_score": {"final": 0.5},
+                  "agent_distance": {"base": 0, "left": 1, "right": 0},
+                  "normalized_agent_distance": {"base": float("inf"), "left": 2, "right": float("inf")}}
+        report = evidence_report(report)
+        self.assertEqual(report["normalized_agent_distance"], {"base": None, "left": 2, "right": None})
+        write_json(self.root / "behavior-report.json", report)
         controls = [{"chunk": 0, "nativeSuccess": False, "terminated": True, "nativeDone": True,
                      "action": action[0].tolist(), "nativeAction": action[0].tolist(),
                      "state": {"instanceId": 301, "nativeStep": 1, "success": False}}]

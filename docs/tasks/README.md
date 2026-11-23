@@ -137,6 +137,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261121](20261121-embodied-pending-review.md) vla-eval receipts and BEHAVIOR source registration
 - [20261122](20261122-embodied-evidence-follow-up.md) Embodied evidence follow-up
 - [20261122](20261122-embodied-audit-recovery.md) Embodied audit recovery and validation
+- [20261122](20261122-embodied-branch-review-fixes.md) Embodied branch review fixes
 - [20261122](20261122-vla-eval-task-identity.md) Stable vla-eval task identities
 
 - [20261113](20261113-behavior-robotagent.md) BEHAVIOR-1K and RobotAgentBench: adapters implemented; native calibration deferred

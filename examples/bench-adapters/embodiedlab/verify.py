@@ -51,6 +51,8 @@ def verify(root, output):
     end = json.loads((process / 'episode.json').read_text())
     if end.get('instance_id') != instance['instance_id'] or end.get('exp_id') != plan['task']:
         raise ValueError('Native process record belongs to another instance')
+    if not (process / 'manifest.json').is_file():
+        raise ValueError('Native process evidence is missing its manifest')
     logs = json.loads((process / 'bench_logs.json').read_text()) if (process / 'bench_logs.json').is_file() else {}
     sealed = (capture / 'sealed/manifest.json').is_file()
     if not sealed and infrastructure_end(end, logs):
@@ -61,10 +63,15 @@ def verify(root, output):
     report = None
     if sealed:
         report = evaluate(capture / 'sealed', instance)
+        gates = report.get('gates', {})
+        if any(gates.get(name) is False for name in ('sealed_record_intact', 'sealed_integrity')):
+            raise ValueError('Native submitted evidence failed its integrity check')
         (output / 'evaluation.json').write_text(json.dumps(report, indent=2))
     elif end.get('submitted') or end.get('end_reason') == 'submitted':
         raise ValueError('Submitted trial lost its sealed evidence')
     process_score = score_run(process, report, public_task(root, instance['instance_id']))
+    if any(flag.startswith('process_manifest_problems:') for flag in process_score.get('flags', [])):
+        raise ValueError('Native process evidence failed its manifest check')
     (output / 'process_score.json').write_text(json.dumps(process_score, indent=2))
     status = ('submitted' if report else STATUS_BY_END_REASON.get(end.get('end_reason'),
               'timeout' if close_reason == 'wall_limit' else 'not_submitted'))

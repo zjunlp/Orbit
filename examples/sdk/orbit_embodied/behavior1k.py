@@ -108,6 +108,18 @@ def native_float32_action(raw):
     return action
 
 
+def evidence_report(report):
+    normalized = report.get("normalized_agent_distance")
+    if not isinstance(normalized, dict):
+        return report
+    distance = report.get("agent_distance", {})
+    # Upstream uses infinity for a ratio whose denominator is zero.
+    return {**report, "normalized_agent_distance": {
+        part: None if value == math.inf and distance.get(part) == 0 else value
+        for part, value in normalized.items()
+    }}
+
+
 def verify_behavior(reference, sample, controls, result, directory):
     import numpy as np
     directory = Path(directory)
@@ -299,7 +311,7 @@ def run_native_episode(request, destination, policy, *, prepare=None, cancelled=
             if evaluator.max_steps != horizon:
                 raise ValueError("Native human-demo budget differs from the frozen reference")
             rows = evaluator.run([instance], metrics_dir=str(directory), rollout_id=0)
-            report = rows[instance]
+            report = evidence_report(rows[instance])
             write_json(directory / "behavior-report.json", report)
             result["native"] = {"report": report, "score": report.get("q_score", {}).get("final", 0),
                                 "instanceId": instance}

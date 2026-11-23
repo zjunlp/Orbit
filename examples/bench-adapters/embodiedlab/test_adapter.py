@@ -144,12 +144,15 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
         instance = {'exp_id': plan['task'], 'index': plan['seed'], 'instance_id': 'fixture'}
         (evidence / 'plan.json').write_text(json.dumps(plan))
         (process / 'episode.json').write_text(json.dumps({**instance, 'submitted': True}))
+        manifest = process / 'manifest.json'
+        manifest.write_text('{}')
         (sealed / 'manifest.json').write_text('{}')
         record = {'schema': 1, 'plan': plan, 'close_reason': 'agent_stop',
                   'sha256': {p.relative_to(evidence).as_posix(): verify.digest(p)
                              for p in evidence.rglob('*') if p.is_file()}}
         (evidence / 'result.json').write_text(json.dumps(record))
-        helpers.sign_result(evidence, self.root / 'staging/evidence-private.pem')
+        private_key = self.root / 'staging/evidence-private.pem'
+        helpers.sign_result(evidence, private_key)
         report = {'task_completed': True, 'reward': 1}
         score = {'process_score': 0.8, 'level': 4}
 
@@ -174,6 +177,22 @@ class EmbodiedLabAdapterTests(unittest.TestCase):
             self.assertTrue(result['task_completed'])
             self.assertEqual(result['process_score'], 0.8)
             self.assertEqual(verify.validate_seal(evidence), record)
+            score['flags'] = ['process_manifest_problems:fixture']
+            with self.assertRaisesRegex(ValueError, 'failed its manifest check'):
+                verify.verify(evidence, output)
+            del score['flags']
+            for gate in ('sealed_record_intact', 'sealed_integrity'):
+                report['gates'] = {gate: False}
+                with self.assertRaisesRegex(ValueError, 'failed its integrity check'):
+                    verify.verify(evidence, output)
+            del report['gates']
+            manifest.unlink()
+            del record['sha256']['captures/orbit-lab/process/manifest.json']
+            (evidence / 'result.json').write_text(json.dumps(record))
+            helpers.sign_result(evidence, private_key)
+            self.assertEqual(verify.validate_seal(evidence), record)
+            with self.assertRaisesRegex(ValueError, 'missing its manifest'):
+                verify.verify(evidence, output)
         self.assertEqual({p.name for p in output.iterdir()}, {'evaluation.json', 'process_score.json'})
 
     def test_zero_is_valid_but_missing_verifier_is_invalid(self):
