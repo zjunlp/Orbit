@@ -41,8 +41,7 @@ def extract(archive, expected, prefix, output, extra=()):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--archives", type=Path, required=True)
-    parser.add_argument("--suite", choices=("demo_clean", "demo_randomized"),
-                        help="prepare all assets for this suite; omit for the legacy adjust_bottle recipe")
+    parser.add_argument("--suite", choices=("demo_clean", "demo_randomized"), default="demo_clean")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     reference = json.loads((HERE / "profiles/robotwin-demo-clean.json").read_text())
@@ -56,9 +55,8 @@ def main():
     with tempfile.TemporaryDirectory(dir=output.parent) as stage:
         assets = Path(stage) / "assets"
         extract(args.archives / "embodiments.zip", archives["embodiments.zip"], embodiment, assets)
-        # The pinned simulator loads these indices at import even in the single-task recipe.
         extract(args.archives / "objects.zip", archives["objects.zip"],
-                "objects" if args.suite else "objects/001_bottle", assets,
+                "objects", assets,
                 extra=("objects/objaverse/list.json", "objects/same.json"))
         if args.suite == "demo_randomized":
             suites = json.loads((HERE / "profiles/robotwin-suites.json").read_text())

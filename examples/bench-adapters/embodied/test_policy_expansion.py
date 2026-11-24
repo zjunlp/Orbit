@@ -107,10 +107,22 @@ class PolicyExpansionTests(unittest.TestCase):
     def robotwin_recipe(self, recipe):
         config = load("benchmarks/robotwin/configure_robotwin.py")
         profile = json.loads((ADAPTER / "profiles/robotwin-demo-clean.json").read_text())
-        args = Namespace(suite=None, recipe=recipe, robotwin_source=ADAPTER, assets=ADAPTER, benchmark_image="test:sim")
-        with patch.object(config, "check_source"), patch.object(config, "tree_digest", return_value="test-assets"), \
-                patch.object(config, "image_id", return_value="test:sim"), patch.object(config, "implementation_digest"):
-            return json.loads(config.configure_benchmark(args, profile)["config"]["reference"])
+        suites = json.loads((ADAPTER / "profiles/robotwin-suites.json").read_text())
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)
+            configs = source / "env_cfg/task_config"
+            configs.mkdir(parents=True)
+            (configs / "demo_clean.yml").write_text("eval_instruction: seen\n")
+            (configs / "_eval_step_limit.yml").write_text(
+                "adjust_bottle: 400\n" + "".join(f"task_{i}: 400\n" for i in range(49)))
+            args = Namespace(suite="demo_clean", recipe=recipe, robotwin_source=source, assets=source,
+                             benchmark_image="test:sim")
+            with patch.object(config, "check_source"), patch.object(config.subprocess, "run"), \
+                    patch.object(config, "tree_digest", return_value=suites["assetDigests"]["demo_clean"]), \
+                    patch.object(config, "file_digest", return_value="test"), \
+                    patch.object(config, "require_image", return_value="test:sim"), \
+                    patch.object(config, "implementation_digest"):
+                return json.loads(config.configure_benchmark(args, profile)["config"]["reference"])
 
     def test_hy_vla_registration_rejects_wrong_quaternion_and_action_order(self):
         self.assert_action_policy_registration("hy-embodied-vla/configure_hy_vla.py",

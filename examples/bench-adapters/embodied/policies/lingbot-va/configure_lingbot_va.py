@@ -51,9 +51,9 @@ def reference_for_policy(reference):
     reference["policyProfile"] = {**profile, "id": "lingbot-va-robotwin-input/1", "observations": policy_observations}
     reference["observationMap"] = {name: name for name in policy_observations}
     reference["environment"].update(controller="lingbot-va-ee", instructionSplit="seen")
-    reference["environment"]["reset"] = "environmentSeed+initialStateId; native expert precheck; frozen seen instructions"
+    reference["environment"]["reset"] = "environmentSeed+initialStateId; native expert precheck and seen instructions"
     reference["parameters"].update(firstReplanSteps=benchmark.initial_controls, replanSteps=REPLAN)
-    reference["id"] = "robotwin-2.0-demo-clean-lingbot-va/1"
+    reference["id"] = "robotwin-2.0-demo-clean-lingbot-va/2"
     reference["reference"]["policyRecipe"] = SOURCE
     reference["randomness"] = {
         "referenceEnvironment": "Native Clean with expert-accepted scene seeds and frozen seen instructions.",

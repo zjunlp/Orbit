@@ -86,6 +86,19 @@ describe("preparation recipes and input boundaries", () => {
     expect(argv).toContain("--benchmark-only");
   });
 
+  it("passes the selected full native RoboTwin suite to the pinned configurator", () => {
+    const recipe = preparationDefinition("robotwin");
+    expect(recipe.resources[0]).toMatchObject({
+      revision: "ea8b21121ebb3cd201ff5b3fe361944ac94eda3f",
+      submodules: false,
+    });
+    expect(recipe.fields?.find((field) => field.id === "suite")?.default).toBe("demo_clean");
+    const argv = recipe.actions?.[0]?.argv ?? [];
+    expect(argv[3]).toBe("benchmark");
+    const suiteFlag = argv.indexOf("--suite");
+    expect(argv.slice(suiteFlag, suiteFlag + 2)).toEqual(["--suite", "{suite}"]);
+  });
+
   it("keeps native setup pending and preserves imported adapter configuration", async () => {
     for (const family of [
       "legalbench",

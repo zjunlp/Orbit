@@ -59,7 +59,7 @@ def main():
     observations = {name: field for name, field in profile["observations"].items() if name != "joint_state"}
     reference["policyProfile"] = {**profile, "id": "xvla-robotwin-input/1", "observations": observations}
     reference["observationMap"] = {name: name for name in observations}
-    reference["id"] = f"robotwin-2.0-{suite}-cartesian/2"
+    reference["id"] = f"robotwin-2.0-{suite}-cartesian/3"
     reference["parameters"]["replanSteps"] = CHUNK_SIZE
     scenario = "Clean" if args.suite == "demo_clean" else "Randomized"
     reference["randomness"] = {

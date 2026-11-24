@@ -1048,7 +1048,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **RLBench**：MT100 的种子场景与 RVT-18 的测试初态独立登记。RVT 保留四路相机、世界坐标点云、原生位姿规划和碰撞标志。
   CoppeliaSim 使用 Xvfb 和 Mesa GLX，每个 episode 启动独立进程以保持相机输出一致。RVT 规划失败保留原生异常类型，计为有效失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/rlbench/README.md)
   原版 RoboCasa 和 RLBench 从固定提交导出构建输入，登记时校验构建清单及入口。
-- **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
+- **RoboTwin 2.0**：原生登记统一使用 `ea8b211`，通过 SAPIEN 运行 Aloha-AgileX。Clean 与 Randomized 各有 50 个任务。
+  Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/benchmarks/robotwin/README.md)
   固定批次按原生套件的 `clear_cache_freq` 在 episode 之间清理 SAPIEN 渲染缓存，周期以批次内的样本序号计算。

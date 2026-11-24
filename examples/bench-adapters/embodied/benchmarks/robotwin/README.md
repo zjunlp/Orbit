@@ -2,8 +2,8 @@
 
 The `robotwin-demo-clean-full-native` and `robotwin-demo-randomized-full-native` registrations
 each expose the 50 upstream tasks on Aloha-AgileX. RoboTwin owns scene setup, expert feasibility,
-joint control, task-specific horizons and `eval_success`. The two registrations freeze separate
-native configuration and asset identities.
+joint control, task-specific horizons and `eval_success`. Both suites use the pinned RoboTwin
+commit `ea8b211`. Clean draws from seen instructions and Randomized draws from unseen instructions.
 [Benchmark](https://github.com/RoboTwin-Platform/RoboTwin) · [Official protocol](https://robotwin-platform.github.io/leaderboard)
 
 ## Prepare the runtimes and assets
@@ -23,18 +23,17 @@ hf download TianxingChen/RoboTwin2.0 embodiments.zip objects.zip background_text
 python3 -B examples/bench-adapters/embodied/benchmarks/robotwin/prepare_robotwin_assets.py \
   --suite "$ROBOTWIN_SUITE" --archives "$ROBOTWIN_ARCHIVES" --output "$ROBOTWIN_ASSETS"
 
-docker build --label orbit.task=robotwin --target simulator \
-  --build-arg CUDA_ARCH="${CUDA_ARCH:-8.0}" \
-  --build-context robotwin="$ROBOTWIN_SOURCE" --build-context curobo="$CUROBO_SOURCE" \
-  --build-context openpi="$ROBOTWIN_OPENPI" -f examples/bench-adapters/embodied/benchmarks/robotwin/robotwin.Dockerfile \
-  -t orbit/robotwin-simulator:reference .
+python3 -B examples/bench-adapters/embodied/benchmarks/robotwin/configure_robotwin.py build-simulator \
+  --robotwin-source "$ROBOTWIN_SOURCE" --curobo-source "$CUROBO_SOURCE" \
+  --openpi-source "$ROBOTWIN_OPENPI" --cuda-arch "${CUDA_ARCH:-8.0}" \
+  --tag orbit/robotwin-simulator:reference
 ```
 
-For a machine with an existing CUDA 12.4 toolkit, add
-`--build-context cuda-toolkit="$CUDA_124_TOOLKIT" --build-arg CUDA_TOOLKIT_SOURCE=/` to the
-simulator build. The toolkit directory must contain `bin`, `include`, and `lib64`.
-A local wheel cache for Torch 2.4.1+cu124 can be passed with
-`--build-context torch-wheels="$ROBOTWIN_TORCH_WHEELS"`.
+For a local CUDA 12.4 toolkit, add `--cuda-toolkit "$CUDA_124_TOOLKIT"`. The toolkit directory
+must contain `bin`, `include`, and `lib64`. A local wheel cache for Torch 2.4.1+cu124 can be
+passed with `--torch-wheels "$ROBOTWIN_TORCH_WHEELS"`. To reuse the installed dependencies in
+an existing compatible simulator image, pass it with `--base-image` along with the pinned
+RoboTwin source and the output tag.
 
 Asset preparation verifies the published archive hashes and extracts Aloha-AgileX and the complete
 object tree. Randomized adds the native unseen backgrounds for evaluation, so Clean installations
@@ -56,37 +55,20 @@ orbit bench add-file "$ROBOTWIN_CONFIG/benchmark.json"
 orbit bench tasks "$ROBOTWIN_NAME" --json
 ```
 
-Omit `--suite` in both asset preparation and registration to reproduce the legacy
-`robotwin-demo-clean-native` and its single `adjust_bottle` task. Register those legacy
-assets under `robotwin-demo-clean-assets`.
-
-### September 2026 revision
-
-Use `--revision september-2026` to register the [updated upstream evaluator](https://github.com/RoboTwin-Platform/RoboTwin/tree/ea8b21121ebb3cd201ff5b3fe361944ac94eda3f)
-with all 50 tasks per suite. The simulator revision changes scene and instruction
-generation. Its native defaults select seen instructions in Clean and unseen
-instructions in Randomized. Generate new plans for the updated registrations.
+Asset preparation and registration default to the full Clean suite. The same suite assets and
+manifested simulator image work with Orbit's built-in preparation command. Use a separate
+preparation directory for each suite.
 
 ```bash
-recipe=examples/bench-adapters/embodied/benchmarks/robotwin
-git clone https://github.com/RoboTwin-Platform/RoboTwin.git "$ROBOTWIN_SEPTEMBER_SOURCE"
-git -C "$ROBOTWIN_SEPTEMBER_SOURCE" checkout ea8b21121ebb3cd201ff5b3fe361944ac94eda3f
-python3 -B "$recipe/configure_robotwin.py" build-september \
-  --robotwin-source "$ROBOTWIN_SEPTEMBER_SOURCE" --base-image orbit/robotwin-simulator:reference \
-  --tag orbit/robotwin-simulator:ea8b211
-python3 -B "$recipe/configure_robotwin.py" benchmark --revision september-2026 \
-  --suite "$ROBOTWIN_SUITE" --robotwin-source "$ROBOTWIN_SEPTEMBER_SOURCE" --assets "$ROBOTWIN_ASSETS" \
-  --benchmark-image orbit/robotwin-simulator:ea8b211 --output-dir "$ROBOTWIN_CONFIG"
-orbit bench add-file "$ROBOTWIN_CONFIG/benchmark.json"
+orbit bench prepare robotwin --set "suite=$ROBOTWIN_SUITE" --set "assets=$ROBOTWIN_ASSETS" \
+  --set image=orbit/robotwin-simulator:reference
 ```
-
-Use the matching suite's existing asset bundle and the planner below with the
-September image. The registration name ends in `-september-2026-native`.
 
 The native planner uses the evaluator's candidate stream starting at `100000 * (1 + seed)`.
 It runs the upstream expert in order for each task and freezes only the first accepted scenes.
 By default it selects all 50 tasks and 100 accepted scenes per task. Use an explicit small task
 and trial selection for integration checks. Set `ROBOTWIN_GPU` to the Docker GPU index or UUID.
+Generate a new plan from the current registration when upgrading an existing setup.
 
 ```bash
 docker run --rm --label orbit.task=robotwin --network none --gpus "device=$ROBOTWIN_GPU" \
@@ -99,8 +81,8 @@ docker run --rm --label orbit.task=robotwin --network none --gpus "device=$ROBOT
 ```
 
 The plan stores each seed as `environmentSeed + initialStateId`. Use [plan.py](../../plan.py)
-to freeze known scene seeds directly. The native development comparison for Clean accepted
-100001 and 100002. Accepted seeds and plan digests are specific to the suite.
+to freeze known scene seeds directly. Accepted seeds and plan digests are specific to the suite
+and generated reference.
 
 ## Register an independent policy
 
