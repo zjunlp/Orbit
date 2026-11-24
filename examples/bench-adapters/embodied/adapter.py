@@ -29,6 +29,7 @@ from orbit_embodied.vlabench import METRICS as VLABENCH_METRICS, initial_state_c
 
 CALVIN_COMPLETED_SUBTASKS = "completed_subtasks"
 MEM_SUBGOAL_RATE = "subgoal_completion_rate"
+LIBERO_TASK_MAP = "libero/libero/benchmark/libero_suite_task_map.py"
 
 
 def reports_arena_safety_cost(environment):
@@ -104,15 +105,16 @@ def libero_initial_state_count(asset):
     raise ValueError(f"unsupported LIBERO initial-state matrix in {asset.name}")
 
 
-def catalog(root, suite):
-    source = root / "third_party/libero/libero/libero"
-    tree = ast.parse((source / "benchmark/libero_suite_task_map.py").read_text())
+def catalog(root, suite, *, standalone=False):
+    checkout = root if standalone else root / "third_party/libero"
+    task_map = checkout / LIBERO_TASK_MAP
+    tree = ast.parse(task_map.read_text())
     assignment = next(node for node in tree.body if isinstance(node, ast.Assign)
                       and any(isinstance(t, ast.Name) and t.id == "libero_task_map" for t in node.targets))
     names = ast.literal_eval(assignment.value)[suite]
     result = []
     for index, name in enumerate(names):
-        asset = source / "init_files" / suite / (name + ".pruned_init")
+        asset = task_map.parents[1] / "init_files" / suite / (name + ".pruned_init")
         count = libero_initial_state_count(asset)
         result.append({"id": suite + ":" + name, "title": name.replace("_", " "),
                        "supported": True, "reason": None,
@@ -173,7 +175,7 @@ def tasks(req):
     else:
         if suite not in reference["horizons"]:
             raise ValueError("unsupported LIBERO suite")
-        listing = catalog(root, suite)
+        listing = catalog(root, suite, standalone=LIBERO_TASK_MAP in reference["reference"]["files"])
         fixed_seed = fast_wam_seed(reference)
         if fixed_seed is not None:
             for task in listing:

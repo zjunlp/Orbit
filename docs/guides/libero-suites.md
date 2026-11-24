@@ -51,29 +51,30 @@ local variables used below to the corresponding locations. Follow the image and 
 [GR00T setup](../../examples/bench-adapters/embodied/policies/groot/README.md) and
 [OpenVLA-OFT setup](../../examples/bench-adapters/embodied/policies/openvla-oft/README.md).
 
-Register LIBERO-90 using the pinned OpenPI simulator image:
+Register LIBERO-90 using the pinned official LIBERO checkout and its prepared simulator image.
 
 ```bash
 mkdir -p "$LOCAL_CONFIG"
 python3 examples/bench-adapters/embodied/benchmarks/libero/audit.py \
-  --reference-source "$OPENPI_SOURCE" --benchmark-image "$LIBERO_SIM_IMAGE" \
+  --reference-source "$OPENPI_SOURCE" --libero-source "$LIBERO_SOURCE" --benchmark-image "$LIBERO_SIM_IMAGE" \
   > "$LOCAL_CONFIG/libero-90-audit.json"
 python3 examples/bench-adapters/embodied/benchmarks/libero/configure.py --benchmark-only \
-  --audit "$LOCAL_CONFIG/libero-90-audit.json" --reference-source "$OPENPI_SOURCE" \
+  --audit "$LOCAL_CONFIG/libero-90-audit.json" --libero-source "$LIBERO_SOURCE" \
   --suite libero_90 --output-dir "$LOCAL_CONFIG/libero-90"
 orbit bench add-file "$LOCAL_CONFIG/libero-90/benchmark.json"
 orbit bench tasks libero-90-native --json
 ```
 
-Use `plan.py --suite libero_90` with task IDs from this registration. Its 400-step horizon
+Use `plan.py --libero-source "$LIBERO_SOURCE" --suite libero_90` with task IDs from this registration. Its 400-step horizon
 comes from the pinned OpenPI evaluator. The native policy evaluation uses frozen initial states
 and the LIBERO success signal.
 
-Use `SUITE=libero_object`, `libero_goal` or `libero_10` in these model setup examples:
+Use `SUITE=libero_object`, `libero_goal` or `libero_10` in these model setup examples.
+The GR00T and OFT preparation scripts shown here use an OpenPI checkout with its pinned LIBERO submodule.
 
 ```bash
 PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/benchmarks/libero/configure.py \
-  --audit "$PI05_AUDIT" --reference-source "$OPENPI_SOURCE" --suite "$SUITE" \
+  --audit "$PI05_AUDIT" --libero-source "$LIBERO_SOURCE" --suite "$SUITE" \
   --share-gpu --output-dir "$LOCAL_CONFIG/pi05/$SUITE"
 
 python3 examples/bench-adapters/embodied/policies/groot/fetch_groot.py \
@@ -95,9 +96,9 @@ PYTHONPATH=examples/sdk python3 examples/bench-adapters/embodied/policies/openvl
 ```
 
 The pi05 audit must cover its checkpoint and both runtime images. Its shared-GPU policy uses a
-separate name, preserving the default policy for CPU-rendered registrations. pi05 and GR00T
-produce the same native benchmark registration when source, suite, image and rendering options
-are equal. Register one such benchmark definition and the desired independent policies. Their
+separate name, preserving the default policy for CPU-rendered registrations. π₀.₅ and GR00T
+can use the same native registered benchmark when its simulator image, rendering, and
+connector match the desired evaluation condition. Register the desired independent policies. Their
 named weight datasets are `pi05-libero` and `groot-n17`; the joint OFT checkpoint uses
 `openvla-oft-libero-combined`.
 

@@ -71,6 +71,21 @@ describe("preparation recipes and input boundaries", () => {
     ).toBe(true);
   });
 
+  it("prepares native LIBERO from its pinned official source", () => {
+    const recipe = preparationDefinition("libero");
+    expect(recipe.resources).toMatchObject([
+      {
+        id: "source",
+        url: "https://github.com/Lifelong-Robot-Learning/LIBERO",
+        revision: "f78abd68ee283de9f9be3c8f7e2a9ad60246e95c",
+      },
+    ]);
+    const argv = recipe.actions?.[0]?.argv ?? [];
+    const sourceFlag = argv.indexOf("--libero-source");
+    expect(argv.slice(sourceFlag, sourceFlag + 2)).toEqual(["--libero-source", "{source}"]);
+    expect(argv).toContain("--benchmark-only");
+  });
+
   it("keeps native setup pending and preserves imported adapter configuration", async () => {
     for (const family of [
       "legalbench",

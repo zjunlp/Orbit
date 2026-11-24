@@ -1029,7 +1029,9 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   场景准备和登记均核对固定的发布资产清单摘要，覆盖原始文件与派生场景。
   策略登记冻结投影版本并校验单步 HSSD-OV 动作契约，每个动作块封存归一化速度和解码状态，CPU 重评根据原始动作块复算离散动作。
   [评测协议](../examples/bench-adapters/embodied/benchmarks/hssd-ov/README.md)
-- **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
+- **LIBERO 套件**：Spatial、Object、Goal、Long、90 共用原生 driver，并各自登记评测配置。原生 LIBERO
+  准备流程从官方仓库的固定版本读取任务和初态，并与 OpenPI 的依赖配方、客户端及参考评测脚本分开审计。
+  π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
   Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。
 - **RoboCasa365**：Atomic-Seen 使用原生 PandaOmron Gymnasium 环境。每个样本以 `environmentSeed + initialStateId` 创建首个

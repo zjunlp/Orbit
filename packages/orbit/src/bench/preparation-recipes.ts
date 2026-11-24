@@ -656,8 +656,8 @@ const renamedSource = (d: RecipeDefinition, flag: string) => {
 };
 definitions.libero = renamedSource(
   native(
-    "moojink/openvla-oft",
-    "e4287e94541f459edc4feabc4e181f537cd569a8",
+    "Lifelong-Robot-Learning/LIBERO",
+    "f78abd68ee283de9f9be3c8f7e2a9ad60246e95c",
     "libero",
     "configure.py",
     ["--benchmark-only", "--audit", "{audit}"],
@@ -670,7 +670,7 @@ definitions.libero = renamedSource(
       ),
     ],
   ),
-  "--reference-source",
+  "--libero-source",
 );
 preparationDefinition("libero").fields = preparationDefinition("libero").fields?.filter(
   (f) => f.id !== "image",

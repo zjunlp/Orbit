@@ -17,7 +17,9 @@ from adapter import catalog
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--reference-source", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--reference-source", type=Path)
+    source.add_argument("--libero-source", type=Path, help="Standalone official LIBERO checkout")
     parser.add_argument("--reference-file", type=Path, default=HERE / "reference.json")
     parser.add_argument("--suite", default="libero_spatial")
     selection = parser.add_mutually_exclusive_group(required=True)
@@ -50,6 +52,8 @@ def main():
             default_seed = reference["parameters"]["environmentSeed"]
         environment_seed = environment.get("environmentSeed", default_seed)
     generated = kind in GENERATED_ENVIRONMENTS
+    if args.libero_source and (generated or kind == "libero-plus"):
+        parser.error("--libero-source requires a base LIBERO evaluation profile")
     uint32_seed = (kind in ("robolab", "robodojo", "robomimic", "vima-bench", "colosseum-v2")
                    or "initialStateCounts" in environment)
     if environment_seed < 0:
@@ -63,7 +67,8 @@ def main():
                 parser.error("--suite must match the registered LIBERO-Plus suite")
             listing = libero_plus_catalog(args.reference_source, args.suite)
         else:
-            listing = catalog(args.reference_source, args.suite)
+            listing = catalog(args.libero_source or args.reference_source, args.suite,
+                              standalone=args.libero_source is not None)
         tasks = {task["id"]: task for task in listing if task["supported"]}
     items = []
     unsupported = environment.get("unsupported", {})

@@ -102,6 +102,10 @@ class AdapterPlanningTests(unittest.TestCase):
                         for task in tasks for index in range(int(task["tags"]["initialStateCount"]))]
             self.assertEqual([(row["taskId"], row["initialStateId"], row["initialStateDigest"])
                               for row in plan["items"]], expected)
+            direct = root / "third_party/libero"
+            self.assertEqual(adapter.catalog(direct, suite, standalone=True), tasks)
+            direct_command = [*command[:4], "--libero-source", str(direct), "--all-tasks", "--all-initial-states"]
+            self.assertEqual(json.loads(subprocess.check_output(direct_command, text=True)), plan)
             explicit = subprocess.run([*command, "--initial-state", "2"], capture_output=True, text=True)
             self.assertNotEqual(explicit.returncode, 0)
             self.assertIn("initial-state index exceeds the selected reset recipe", explicit.stderr)

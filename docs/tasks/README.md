@@ -133,6 +133,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Embodied: policies and native benchmarks
 
+- [20261124](20261124-libero-official-source.md) Prepare native LIBERO from its official repository
 - [20261121](20261121-embodied-review-follow-up.md) Embodied review follow-up
 - [20261121](20261121-embodied-pending-review.md) vla-eval receipts and BEHAVIOR source registration
 - [20261122](20261122-embodied-evidence-follow-up.md) Embodied evidence follow-up
