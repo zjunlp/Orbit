@@ -181,7 +181,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
   const evidence = job.capabilities?.rescore === "evidence";
   const replay = review?.files.some(isReplay) ?? false;
   const binary = binaryResult(o, job.capabilities?.scoreKind === "binary");
-  const nav = neighbours(d.data.trials, trial, job.spec.samplePlan);
+  const nav = neighbours(d.data.trials, trial, job.spec.samplePlan, job.capabilities?.scoreKind);
   const rescoreLabel = evidence ? "Recheck evidence" : "Rescore";
   const rescore = async () => {
     if (
@@ -668,15 +668,29 @@ function OutputsView({ solve, verify }: { solve: Run | undefined; verify: Run | 
   );
 }
 
-/** Whether a finished trial did not succeed: invalid, unknown, or below full marks. */
-export const failedTrial = (t: Trial) =>
-  t.state === "done" &&
-  (t.outcome?.evaluation !== "valid" ||
-    t.outcome.score === null ||
-    t.outcome.score < t.outcome.maxScore);
+/**
+ * Whether a finished trial actually failed, as opposed to merely scoring below full marks: its
+ * evaluation was invalid or unknown, its solve run did not complete, it has no score, or a binary
+ * task scored zero. A partial score on a continuous metric is a weak result, not a failure.
+ */
+export const failedTrial = (t: Trial, scoreKind?: string) => {
+  if (t.state !== "done") return false;
+  const o = t.outcome;
+  if (!o) return true;
+  if (o.evaluation !== "valid") return true;
+  if (o.execution === "failed" || o.execution === "cancelled" || o.execution === "skipped")
+    return true;
+  if (o.score === null) return true;
+  return scoreKind === "binary" && o.score <= 0;
+};
 
 /** The previous and next trial of the job (by task, method, seed) and the next failed one. */
-export function neighbours(trials: Trial[], t: Trial, plan?: { items: { sampleId: string }[] }) {
+export function neighbours(
+  trials: Trial[],
+  t: Trial,
+  plan?: { items: { sampleId: string }[] },
+  scoreKind?: string,
+) {
   const rank = planRank(plan);
   const order = [...trials].sort(
     (a, b) =>
@@ -687,7 +701,7 @@ export function neighbours(trials: Trial[], t: Trial, plan?: { items: { sampleId
   return {
     prev: i > 0 ? order[i - 1] : undefined,
     next: i >= 0 && i < order.length - 1 ? order[i + 1] : undefined,
-    nextFailure: after.find(failedTrial),
+    nextFailure: after.find((x) => failedTrial(x, scoreKind)),
   };
 }
 
