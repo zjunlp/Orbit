@@ -188,12 +188,16 @@ class ChoresBenchmark:
         )
         self.sampler.set_seed(seed)
         self.task = self.sampler.next_task()
+        # Orbit records its own evidence and the native task does not use this logging hook for scoring.
+        self.task.record_observations = lambda: None
         self.success = False
         return self.observation(None)
 
-    def observation(self, evidence):
+    def observation(self, evidence, native=None):
         pose = self.task.controller.get_current_agent_full_pose()
-        observation = {**self.task.get_observations(), "instruction": self.row["natural_language_spec"],
+        if native is None:
+            native = self.task.get_observations()
+        observation = {**native, "instruction": self.row["natural_language_spec"],
                        "navigation_pose": [pose["position"]["x"], pose["position"]["z"], pose["rotation"]["y"],
                                            pose["cameraHorizon"]], "goalEvidence": evidence}
         if self.row["task_type"] == "SimpleExploreHouse":
@@ -216,7 +220,7 @@ class ChoresBenchmark:
         done = bool(self.task.is_done())
         evidence = goal_evidence(self.task, self.row) if done and name == "end" else None
         self.success = bool(self.task.is_successful()) if evidence is not None else False
-        return StepResult(self.observation(evidence), float(result.reward), done, self.success,
+        return StepResult(self.observation(evidence, result.observation), float(result.reward), done, self.success,
                           native_action=[index], native_done=done)
 
     def result(self):

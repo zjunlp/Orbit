@@ -8,6 +8,7 @@ import { isActive, runPath } from "../lib/format.ts";
 import { overlayOpen, useHotkeys } from "../lib/hotkeys.ts";
 import { navigate, setQuery, useLocation } from "../lib/router.ts";
 import { useRuns, useRunsState } from "../lib/runs-store.ts";
+import { useScrollRestore } from "../lib/scroll.ts";
 import { useAsync } from "../lib/use.ts";
 import { CancelSelected, DeleteSelected } from "./runs/BulkActions.tsx";
 import { type Entry, type Job, KINDS, type Kind, matches, matchesJob } from "./runs/filters.tsx";
@@ -51,6 +52,7 @@ export function Runs() {
   const search = useRef<HTMLInputElement>(null);
   const anyActive = runs.some((r) => isActive(r.state));
   const now = useNow(1000, anyActive);
+  const list = useScrollRestore<HTMLDivElement>("runs", loaded && runs.length > 0);
 
   const terms = useMemo(() => q.toLowerCase().split(/\s+/).filter(Boolean), [q]);
   const visible = useMemo(
@@ -72,11 +74,14 @@ export function Runs() {
     return c;
   }, [runs, folder, terms]);
 
+  // A state filter names runs the user is looking for, so groups open by default there too;
+  // a group the user collapsed by hand stays collapsed.
   const isExpanded = useCallback(
     (name: string, list: Run[]) =>
       open.has(name) ||
-      (!closed.has(name) && (list.some((r) => isActive(r.state)) || terms.length > 0)),
-    [open, closed, terms.length],
+      (!closed.has(name) &&
+        (list.some((r) => isActive(r.state)) || terms.length > 0 || stateFilter.length > 0)),
+    [open, closed, terms.length, stateFilter.length],
   );
 
   // Group runs by spec.group; a group sits where its newest run would be.
@@ -139,8 +144,15 @@ export function Runs() {
     if (cursor >= entries.length) setCursor(Math.max(0, entries.length - 1));
   }, [entries.length, cursor]);
 
+  // Scroll the keyboard cursor into view on every move except the first: on mount the saved
+  // position from the last visit decides where the list sits.
+  const cursorSettled = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll whenever the cursor moves
   useEffect(() => {
+    if (!cursorSettled.current) {
+      cursorSettled.current = true;
+      return;
+    }
     document.querySelector("tr.cursor")?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
 
@@ -189,7 +201,7 @@ export function Runs() {
           value={folder}
           onChange={(f) => setQuery({ folder: f || null })}
         />
-        <div className="page">
+        <div className="page" ref={list} data-scroll-key="runs">
           {!loaded ? (
             <Loading what="Loading runs" />
           ) : error ? (
@@ -206,11 +218,23 @@ export function Runs() {
               title={folder ? `Nothing in ${folder} matches` : "No runs match these filters"}
             />
           ) : (
-            <table className="table">
+            <table className="table runs-table">
+              {/* Widths live in the stylesheet so container queries can shrink and drop columns. */}
+              <colgroup>
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+              </colgroup>
               <thead>
                 <tr>
-                  <th style={{ width: 34 }} />
-                  <th style={{ width: 120 }}>State</th>
+                  <th />
+                  <th>State</th>
                   <th>Run</th>
                   <th>Params</th>
                   <th>Resources</th>

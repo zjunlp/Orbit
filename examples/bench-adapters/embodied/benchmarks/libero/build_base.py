@@ -1,4 +1,4 @@
-"""Build an audited upstream dependency image using an existing standalone Python runtime."""
+"""Build an audited upstream dependency image."""
 
 import argparse
 import hashlib
@@ -8,35 +8,52 @@ import re
 import subprocess
 import tempfile
 
+from libero_source import require_libero_checkout
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference-source", type=Path, required=True)
     parser.add_argument("--component", choices=("benchmark", "policy"), required=True)
-    parser.add_argument("--python", type=Path, required=True)
+    parser.add_argument("--libero-source", type=Path, help="Standalone official LIBERO checkout for the benchmark")
+    parser.add_argument("--python", type=Path, help="Existing standalone Python runtime")
     parser.add_argument("--tag", required=True)
     parser.add_argument("--lerobot-source", type=Path)
     args = parser.parse_args()
+    if args.libero_source and args.component != "benchmark":
+        parser.error("--libero-source applies to the benchmark dependency image")
     reference = json.loads((Path(__file__).resolve().parents[2] / "reference.json").read_text())
     relative = "examples/libero/Dockerfile" if args.component == "benchmark" else "scripts/docker/serve_policy.Dockerfile"
     source = (args.reference_source / relative).read_text()
     checksum = "sha256:" + hashlib.sha256(source.encode()).hexdigest()
     if checksum != reference["reference"]["files"][relative]:
         raise ValueError("upstream Dockerfile differs from the audited reference")
-    executable = args.python.resolve()
-    version = subprocess.check_output([str(executable), "--version"], text=True).strip()
     expected = "3.8.20" if args.component == "benchmark" else "3.11.9"
-    if version != "Python " + expected:
-        raise ValueError("expected the reference runtime Python " + expected)
-    runtime = executable.parent.parent
-    if not (runtime / "lib").is_dir():
-        raise ValueError("provide a standalone Python distribution, not a virtual environment copy")
     selector = "3.8" if args.component == "benchmark" else "3.11.9"
     original = "RUN uv venv --python " + selector + " $UV_PROJECT_ENVIRONMENT"
-    replacement = "COPY --from=orbit-python / /opt/orbit-python/\nRUN uv venv --python /opt/orbit-python/bin/python" + selector.split(".")[0] + "." + selector.split(".")[1] + " $UV_PROJECT_ENVIRONMENT"
     if source.count(original) != 1:
         raise ValueError("upstream Python provisioning step changed")
+    contexts = []
+    replacement = "RUN uv venv --python " + expected + " $UV_PROJECT_ENVIRONMENT"
+    if args.python:
+        executable = args.python.resolve()
+        version = subprocess.check_output([str(executable), "--version"], text=True).strip()
+        if version != "Python " + expected:
+            raise ValueError("expected the reference runtime Python " + expected)
+        runtime = executable.parent.parent
+        if not (runtime / "lib").is_dir():
+            raise ValueError("provide a standalone Python distribution, not a virtual environment copy")
+        replacement = ("COPY --from=orbit-python / /opt/orbit-python/\nRUN uv venv --python /opt/orbit-python/bin/python"
+                       + expected.rsplit(".", 1)[0] + " $UV_PROJECT_ENVIRONMENT")
+        contexts += ["--build-context", "orbit-python=" + str(runtime)]
     recipe = source.replace(original, replacement)
+    if args.libero_source:
+        require_libero_checkout(args.libero_source, reference)
+        original = "COPY ./third_party/libero/requirements.txt /tmp/requirements-libero.txt"
+        if recipe.count(original) != 1:
+            raise ValueError("upstream LIBERO requirements step changed")
+        recipe = recipe.replace(original, "COPY --from=libero /requirements.txt /tmp/requirements-libero.txt")
+        contexts += ["--build-context", "libero=" + str(args.libero_source.resolve())]
     if args.component == "benchmark":
         # The runtime lock already fixes setuptools 75.3.0. Use that version for sdist builds too:
         # unconstrained isolated builds can select a backend that no longer supports Python 3.8.
@@ -45,7 +62,6 @@ def main():
             raise ValueError("upstream dependency installation step changed")
         recipe = recipe.replace(command, "RUN uv pip install setuptools==75.3.0 wheel==0.45.1 packaging==24.2\nRUN uv pip sync --no-build-isolation ")
     with tempfile.TemporaryDirectory(prefix="orbit-embodied-build-") as temporary:
-        contexts = ["--build-context", "orbit-python=" + str(runtime)]
         if args.component == "policy" and args.lerobot_source:
             pyproject = (args.reference_source / "pyproject.toml").read_text()
             if "sha256:" + hashlib.sha256(pyproject.encode()).hexdigest() != reference["reference"]["files"]["pyproject.toml"]:
@@ -69,6 +85,8 @@ def main():
             contexts += ["--build-context", "orbit-git=" + str(bare)]
         recipe_digest = "sha256:" + hashlib.sha256(recipe.encode()).hexdigest()
         recipe += "\nLABEL orbit.reference.openpi=" + reference["reference"]["openpi"]["commit"]
+        if args.libero_source:
+            recipe += "\nLABEL orbit.reference.libero=" + reference["reference"]["libero"]["commit"]
         recipe += "\nLABEL orbit.reference.python=" + expected
         recipe += "\nLABEL orbit.reference.source-dockerfile=" + checksum
         recipe += "\nLABEL orbit.reference.build-recipe=" + recipe_digest + "\n"

@@ -122,6 +122,8 @@ orbit bench calibrate libero --sample 2
 | `methods.empty / oracle / external` | 允许的执行类型，各自覆盖 `solve`（例如 empty 的零动作策略服务、external 的模型服务镜像） |
 | `result.file` | solve 输出里的结果 JSON（`*` 只匹配一段，按名字取最后一个） |
 | `result.score` / `metrics` | `{path, reduce, scale}`：路径如 `tasks[*].episodes[*].metrics.success`，`reduce` 为 mean/sum/min/max/first/last/count/all/any |
+| `result.score.singleBinary` | 可选。要求路径选中恰好一个布尔值或数值 0 / 1 |
+| `result.expect` / `result.expectBeforeInvalid` | 核对结果里的任务或初态等计划值。每条检查可加 `type: string` 或 `type: number`，要求 JSON 字段类型一致。`expectBeforeInvalid` 开启后先核对计划值，再归因上游故障 |
 | `result.invalid` | `{path, when: truthy\|present, failure, issue}`：命中即无效并记封闭的失败类型（如上游 episode 报错 → `env_step`） |
 
 模板写 `{{task.id}}`、`{{task.tags.X}}`、`{{seed}}`、`{{option.X}}`、`{{method.entrypoint}}`、`{{method.config.X}}`；
@@ -159,9 +161,15 @@ stdin 是一个 JSON 请求，stdout 必须是一个 JSON 回复；出错时写 
 | op | 请求中有 | 回复 |
 | --- | --- | --- |
 | `tasks` | `benchmark: {name, path, config}` | `{"tasks": [{"id", "title", "supported", "reason", "tags"}], "metrics"?: [...]}`；不能跑的任务 `supported: false` 并写原因；`metrics` 见下文 |
+| `validate-plan`（可选） | + `samplePlan` | 声明 `validateSamplePlan: true` 的适配器在创建 Trial 前检查整份冻结计划。通过时返回 `{"ok": true}`，拒绝时以非 0 退出并将原因写入 stderr |
+| `validate-seed-submission`（可选） | + `seedSubmission: {tasks, seeds, options}` | 在 `tasks` 回复声明 `validateSeedSubmission: true` 后，检查用 `--seeds` 提交的任务及选项。通过时返回 `{"ok": true}`，拒绝时以非 0 退出并将原因写入 stderr |
 | `solve` | + `trial: {id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork}` | `{"spec": <Run 描述>, "issues"?: []}` |
 | `verify` | + `solve: {run, output}`（`output` 是 solve 的 `$ORBIT_OUTPUT` 宿主路径） | `{"spec": <Run 描述>, "issues"?: []}` |
 | `score` | + `verify: {run, output}` | `{"score": 数或 null, "maxScore": 1, "invalid": false, "issues": [], "metrics"?: {"name": 数}}` |
+
+每次 `tasks` 回复中的任务 ID 必须唯一。固定初态数量可由任务的 `initialStates: {count}` 或
+`initialStates: {countsBySeed}` 声明。分区键使用无前导零的非负十进制安全整数。
+`tags.initialStateCounts` 已废弃写入。提交仍识别旧适配器的有效 `tags.initialStateCount` 和 `tags.initialStateCounts`。
 
 Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`resources`、`mounts`、`env`、`network`、`workdir`、
 `collect`、`timeoutMin`、`backend: "process"`、`cwd`……），另有两条规则：

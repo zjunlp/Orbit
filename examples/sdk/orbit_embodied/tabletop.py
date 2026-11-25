@@ -126,6 +126,10 @@ class MetaWorldBenchmark(TabletopBenchmark):
 
 
 class ManiSkillTabletopBenchmark(TabletopBenchmark):
+    def __init__(self, reference, task, *, prepare_runtime=None):
+        super().__init__(reference, task)
+        self.prepare_runtime = prepare_runtime
+
     def make_env(self, _seed):
         import gymnasium as gym
         import mani_skill.envs  # noqa: F401
@@ -137,7 +141,10 @@ class ManiSkillTabletopBenchmark(TabletopBenchmark):
             raise ValueError("ManiSkill package differs from the frozen tabletop recipe")
         assets = self.config.get("assets")
         if assets:
-            check_maniskill_assets(assets["target"], assets["digest"])
+            if self.prepare_runtime is None:
+                check_maniskill_assets(assets["target"], assets["digest"])
+            else:
+                self.prepare_runtime()
             asset_source = self.config["assetSource"]
             if not all(is_data_source_downloaded(key) for key in DATA_GROUPS.get(asset_source, (asset_source,))):
                 raise ValueError("ManiSkill asset source is incomplete: " + asset_source)

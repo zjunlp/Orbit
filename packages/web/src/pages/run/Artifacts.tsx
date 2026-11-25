@@ -8,6 +8,7 @@ import {
 } from "../../components/icons.tsx";
 import { Empty, Loading } from "../../components/ui.tsx";
 import { type Artifacts, fileUrl, type Run } from "../../lib/api.ts";
+import { parseDelimited } from "../../lib/csv.ts";
 import { ago, bytes, isActive } from "../../lib/format.ts";
 import { safeDecode, setHash, useLocation } from "../../lib/router.ts";
 
@@ -29,7 +30,9 @@ export function ArtifactsTab({ run, artifacts }: { run: Run; artifacts: Artifact
     const rows: { path: string; depth: number; dir: boolean; name: string }[] = [];
     const seen = new Set<string>();
     for (const f of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
-      const parts = f.path.split("/");
+      // An older Windows daemon may still send backslash paths; split on either separator so the
+      // tree renders, while the untouched path keeps working as the preview URL.
+      const parts = f.path.split(/[\\/]/);
       for (let i = 0; i < parts.length - 1; i++) {
         const d = parts.slice(0, i + 1).join("/");
         if (!seen.has(d)) {
@@ -73,6 +76,7 @@ export function ArtifactsTab({ run, artifacts }: { run: Run; artifacts: Artifact
             <div
               key={`d:${r.path}`}
               className="f"
+              title={r.path}
               style={{ paddingLeft: 8 + r.depth * 14, cursor: "default" }}
             >
               <IconFolder size={13} /> {r.name}
@@ -81,6 +85,7 @@ export function ArtifactsTab({ run, artifacts }: { run: Run; artifacts: Artifact
             <div
               key={r.path}
               className={`f${r.path === sel ? " on" : ""}`}
+              title={r.path}
               style={{ paddingLeft: 8 + r.depth * 14 }}
               onClick={() => setHash(encodeURIComponent(r.path))}
             >
@@ -185,24 +190,23 @@ function Preview({
 }
 
 export function Csv({ text, sep }: { text: string; sep: string }) {
-  const rows = text
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .slice(0, 1001)
-    .map((l) => l.split(sep));
-  const [head, ...body] = rows;
+  const [head = [], ...body] = parseDelimited(text, sep);
+  // Ragged rows are common in generated reports; padding keeps the columns under their headers.
+  const rows = body.map((r) =>
+    r.length < head.length ? [...r, ...head.slice(r.length).fill("")] : r,
+  );
   return (
     <div style={{ overflow: "auto" }}>
       <table className="table compact csv">
         <thead>
           <tr>
-            {head?.map((h, i) => (
+            {head.map((h, i) => (
               <th key={String(i)}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {body.map((r, i) => (
+          {rows.map((r, i) => (
             <tr key={String(i)}>
               {r.map((c, j) => (
                 <td key={String(j)}>{c}</td>

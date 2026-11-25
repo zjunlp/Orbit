@@ -134,15 +134,27 @@ it("finds neighbouring and failed trials in task, method, seed order", () => {
       method: "m",
       seed: 1,
       state: "done",
-      outcome: { evaluation, score, maxScore: 1 },
+      outcome: { execution: "succeeded", evaluation, score, maxScore: 1 },
     }) as never;
   const trials = [t("c", "c", 1), t("a", "a", 1), t("b", "b", 0), t("d", "d", null, "invalid")];
   const n = neighbours(trials, trials[1] as never);
+  // A partial score on a continuous metric is a weak result, not a failure, so "d" is next.
   expect(
     [n.prev, n.next, n.nextFailure].map((x) => (x as { id?: string } | undefined)?.id),
-  ).toEqual([undefined, "b", "b"]);
+  ).toEqual([undefined, "b", "d"]);
   expect(failedTrial(trials[3] as never)).toBe(true);
-  expect(neighbours(trials, trials[2] as never).nextFailure).toMatchObject({ id: "d" });
+  expect(failedTrial(trials[2] as never)).toBe(false);
+  // A pass / fail benchmark counts its zero score as a failure.
+  expect(failedTrial(trials[2] as never, "binary")).toBe(true);
+  const broken = {
+    id: "e",
+    task: "e",
+    method: "m",
+    seed: 1,
+    state: "done",
+    outcome: { execution: "failed", evaluation: "valid", score: 1, maxScore: 1 },
+  };
+  expect(failedTrial(broken as never)).toBe(true);
 });
 
 it("orders planned samples by their plan position, not by digest", () => {

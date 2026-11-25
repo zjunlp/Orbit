@@ -2,6 +2,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, expect, it } from "vitest";
 import { handle } from "../src/bench/adapter.ts";
 import {
@@ -127,6 +128,74 @@ it("reads the score and marks upstream errors invalid", () => {
     JSON.stringify({ episodes: [{ success: 0, error: "sim crashed" }] }),
   );
   expect(readResult(m, out)).toMatchObject({ score: null, invalid: true, failure: "env_step" });
+});
+
+it("binds the vla-eval aggregate to the planned task and preserves model errors", () => {
+  const path = fileURLToPath(
+    new URL("../../../examples/bench-manifests/vla-eval-libero", import.meta.url),
+  );
+  const { m } = loadManifest({ name: "libero", path, config: {} });
+  const out = join(dir, "vla-eval");
+  mkdirSync(out);
+  const file = join(out, "reference_aggregate.json");
+  const context = { task: { tags: { name: "planned", index: "3" } }, episode: 0 };
+  const episode = { name: "planned", suite: "libero_spatial", task_id: 3, metrics: { success: 1 } };
+  const aggregate = (task: unknown, row: object, params: Record<string, unknown> = {}) => ({
+    config: { params: { orbit_episode: 0, suite: "libero_spatial", seed: 7, ...params } },
+    num_episodes_total: 1,
+    tasks: [{ task, episodes: [row] }],
+  });
+
+  writeFileSync(file, JSON.stringify(aggregate("another-task", episode)));
+  expect(readResult(m, out, context)).toMatchObject({ invalid: true, failure: "scorer_error" });
+  writeFileSync(file, JSON.stringify(aggregate("planned", episode)));
+  expect(readResult(m, out, context)).toMatchObject({ invalid: false, score: 1 });
+  writeFileSync(
+    file,
+    JSON.stringify(aggregate("planned", { ...episode, metrics: { success: false } })),
+  );
+  expect(readResult(m, out, context)).toMatchObject({ invalid: false, score: 0 });
+  for (const value of [4.2, -1, 0.5, "1"]) {
+    writeFileSync(
+      file,
+      JSON.stringify(aggregate("planned", { ...episode, metrics: { success: value } })),
+    );
+    expect(readResult(m, out, context)).toMatchObject({ invalid: true, failure: "scorer_error" });
+  }
+  const two = aggregate("planned", episode);
+  two.tasks[0]?.episodes.push({});
+  writeFileSync(file, JSON.stringify(two));
+  expect(readResult(m, out, context)).toMatchObject({ invalid: true, failure: "scorer_error" });
+  writeFileSync(
+    file,
+    JSON.stringify(aggregate("planned", { ...episode, failure_reason: "model_act" })),
+  );
+  expect(readResult(m, out, context)).toMatchObject({ invalid: true, failure: "policy_act" });
+  writeFileSync(
+    file,
+    JSON.stringify(aggregate("planned", { ...episode, failure_reason: "model_start" })),
+  );
+  expect(readResult(m, out, context)).toMatchObject({ invalid: true, failure: "policy_start" });
+  for (const mismatch of [{ name: "other" }, { suite: "libero_90" }, { task_id: 4 }]) {
+    writeFileSync(
+      file,
+      JSON.stringify(
+        aggregate("planned", { ...episode, ...mismatch, failure_reason: "model_act" }),
+      ),
+    );
+    expect(readResult(m, out, context)).toMatchObject({ invalid: true, failure: "scorer_error" });
+  }
+  for (const result of [
+    aggregate(["planned"], episode),
+    aggregate("planned", { ...episode, name: ["planned"] }),
+    aggregate("planned", { ...episode, task_id: "3" }),
+    aggregate("planned", episode, { orbit_episode: [0] }),
+    aggregate("planned", episode, { seed: 400 }),
+    aggregate("planned", { ...episode, failure_reason: "model_act" }, { seed: [7] }),
+  ]) {
+    writeFileSync(file, JSON.stringify(result));
+    expect(readResult(m, out, context)).toMatchObject({ invalid: true, failure: "scorer_error" });
+  }
 });
 
 it("refuses paths leaving the manifest directory and unknown config", () => {

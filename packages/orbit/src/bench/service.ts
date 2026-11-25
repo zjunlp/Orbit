@@ -99,7 +99,7 @@ import { CalibrationLifecycle } from "./calibration.ts";
 import { checkGateBundle } from "./gate-bundle.ts";
 import { planGate } from "./gate-plan.ts";
 import { evaluateGate } from "./gates.ts";
-import { PolicyRegistry } from "./policies.ts";
+import { connectorIssues, PolicyRegistry } from "./policies.ts";
 import { AdapterClient } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { loadResources, resolveResources, usageRows } from "./resources.ts";
@@ -324,8 +324,11 @@ export class BenchService {
         throw new UserError(`${b.name} does not support ${m.agent} methods`);
       this.checkMethod(m, info.capabilities?.requires ?? []);
       if (m.agent === "policy") {
+        if (m.effort) throw new UserError(`${m.name}: effort is a CLI Agent option`);
         const policy = this.policies.get(m.policyRef ?? "");
         if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
+        const issues = connectorIssues(policy);
+        if (issues.length) throw new UserError(`${m.name}: ${issues.join("; ")}`);
         if (spec.calibration?.mode === "policy" && policy.kind !== "model")
           throw new UserError(
             "policy integration checks require a real model registration, not a calibration fixture",
@@ -381,6 +384,19 @@ export class BenchService {
         "submitted task-set digest does not match the task file or selected tasks",
       );
     checkPlanAgainstBenchmark(spec, all, info.capabilities);
+    try {
+      if (spec.samplePlan && info.validateSamplePlan) {
+        await this.adapter(b).validatePlan(spec.samplePlan);
+      } else if (!spec.samplePlan && info.validateSeedSubmission) {
+        await this.adapter(b).validateSeedSubmission({
+          tasks: spec.tasks,
+          seeds: spec.seeds ?? 1,
+          options: spec.options,
+        });
+      }
+    } catch (e) {
+      throw new UserError((e as Error).message);
+    }
     this.checkLineage(spec);
     const revisions = await this.revisions(spec.methods);
     for (const [name, expected] of Object.entries(expectedRevisions ?? {}))

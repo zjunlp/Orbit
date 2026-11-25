@@ -85,6 +85,18 @@ export type BenchmarkInput = z.input<typeof BenchmarkInput>;
 export const Benchmark = BenchmarkInput.extend({ createdAt: z.string(), updatedAt: z.string() });
 export type Benchmark = z.infer<typeof Benchmark>;
 
+export const SeedPartitionKey = z
+  .string()
+  .regex(/^(0|[1-9]\d*)$/)
+  .refine((key) => Number.isSafeInteger(Number(key)), "seed partition key must be a safe integer");
+
+export const BenchInitialStates = z.union([
+  z.strictObject({ count: z.number().int().nonnegative() }),
+  z.strictObject({
+    countsBySeed: z.record(SeedPartitionKey, z.number().int().nonnegative()),
+  }),
+]);
+
 export const BenchTask = z.object({
   id: z.string(),
   title: z.string().nullable(),
@@ -93,6 +105,7 @@ export const BenchTask = z.object({
   /** Unsupported tasks are listed but never run (e.g. docker-compose environments). */
   supported: z.boolean(),
   reason: z.string().nullable(),
+  initialStates: BenchInitialStates.optional(),
   tags: z.record(z.string(), z.string()).default({}),
 });
 export type BenchTask = z.infer<typeof BenchTask>;

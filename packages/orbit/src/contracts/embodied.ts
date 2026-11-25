@@ -100,6 +100,11 @@ export const PolicyDefinition = z.strictObject({
       }),
       z.object({ backend: z.literal("stateless"), scope: z.literal("stateless") }),
       z.object({
+        backend: z.literal("numpy"),
+        scope: z.literal("episode"),
+        initialSeed: z.number().int().nonnegative(),
+      }),
+      z.object({
         backend: z.literal("torch"),
         initialSeed: z.number().int().nonnegative(),
         scope: z.literal("service"),

@@ -6,17 +6,20 @@ import math
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path[:0] = [str(Path(__file__).resolve().parents[2]), str(Path(__file__).resolve().parent)]
 
 from adapter import HERE, digest, implementation_digest
 from orbit_embodied.libero_suites import HORIZONS, benchmark_name
+from libero_source import require_libero_checkout, standalone_profile
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--benchmark-only", action="store_true")
-    parser.add_argument("--reference-source", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--libero-source", type=Path, help="Standalone official LIBERO checkout")
+    source.add_argument("--reference-source", type=Path, help="OpenPI checkout with its pinned LIBERO submodule")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--suite", choices=tuple(HORIZONS), default="libero_spatial")
     parser.add_argument("--share-gpu", action="store_true")
@@ -30,6 +33,9 @@ def main():
     if audit["images"]["benchmark"]["result"] != "passed":
         raise ValueError("the benchmark image must be audited")
     reference = json.loads((HERE / "reference.json").read_text())
+    if args.libero_source:
+        require_libero_checkout(args.libero_source, reference)
+        reference = standalone_profile(reference)
     if digest(reference) != audit["profileDigest"]:
         raise ValueError("audit is for another reference profile")
     if not args.benchmark_only and (
@@ -38,7 +44,7 @@ def main():
 
     benchmark = {
         "name": benchmark_name(args.suite), "adapter": str(HERE / "adapter.py"),
-        "path": str(args.reference_source.resolve()), "config": {
+        "path": str((args.libero_source or args.reference_source).resolve()), "config": {
             "image": audit["images"]["benchmark"]["id"], "profileDigest": audit["profileDigest"],
             "reference": json.dumps(reference), "implementationDigest": implementation_digest(),
             "suite": args.suite, "python": "/.venv/bin/python",

@@ -157,7 +157,8 @@ def build_policy_image(args, context_name, source, dockerfile, manifest, *, sour
 
 
 def configure_action_policy(name, source, paths, server, benchmark_profile, replan_steps, gpu_memory,
-                            *, interpreter="python", normalization_source=None, flash_attention=False):
+                            *, interpreter="python", normalization_source=None, flash_attention=False,
+                            release_assets=None):
     from orbit_embodied.assets import policy_asset_digests
     from orbit_embodied.binding import resolve_binding
 
@@ -208,6 +209,10 @@ def configure_action_policy(name, source, paths, server, benchmark_profile, repl
     identities = policy_asset_digests(args.weights, server.ASSETS)
     if normalization_source:
         identities["normalizationDigest"] = file_digest(args.source / normalization_source)
+    if release_assets is not None and identities != release_assets:
+        mismatched = sorted(key for key in identities.keys() | release_assets.keys()
+                            if identities.get(key) != release_assets.get(key))
+        raise ValueError(f"{name} requires the pinned release assets: {', '.join(mismatched)}")
     registration = {
         "name": name, "version": "1", "connector": "policy-ws", "replanSteps": replan_steps,
         "profile": profile, **identities, "randomness": server.RANDOMNESS,

@@ -125,6 +125,83 @@ it("serves the supported benchmark library before any local registration or run"
   expect(f.submit).not.toHaveBeenCalled();
 });
 
+it("creates a Run with a bounded display name and the full task ID", async () => {
+  const f = fixture();
+  const taskId = `task:${"place the selected item in the designated compartment ".repeat(12).trim()}`;
+  vi.spyOn(AdapterClient.prototype, "tasks").mockResolvedValue(
+    AdapterTasksResponse.parse({
+      tasks: [{ id: taskId, title: null, supported: true, reason: null }],
+    }),
+  );
+  const solve = vi.spyOn(AdapterClient.prototype, "solve").mockResolvedValue({
+    spec: { backend: "process", command: ["true"] },
+    issues: [],
+  });
+  const job = await f.bench.submit({
+    benchmark: "fixture",
+    methods: [{ name: "empty", agent: "empty" }],
+  });
+  await expect.poll(() => f.store.trials(job.id)[0]?.state).toBe("solving");
+  expect(solve.mock.calls[0]?.[0].task).toBe(taskId);
+  expect(f.store.trials(job.id)[0]?.task).toBe(taskId);
+  const spec = f.store.getRun("submitted")?.spec;
+  expect(spec?.name).toHaveLength(512);
+  expect(spec?.name).toMatch(/… · empty · solve$/);
+  expect(spec?.params.task).toBe(taskId);
+});
+
+it("checks opted-in seed submissions before creating jobs or trials", async () => {
+  const f = fixture();
+  const executable = join(f.home, "preflight.cjs");
+  const requests = join(f.home, "preflight.jsonl");
+  write(
+    executable,
+    `#!${process.execPath}
+const fs = require("node:fs");
+const req = JSON.parse(fs.readFileSync(0, "utf8"));
+fs.appendFileSync(${JSON.stringify(requests)}, JSON.stringify(req) + "\\n");
+if (req.op === "tasks") {
+  console.log(JSON.stringify({
+    tasks: [{ id: ${JSON.stringify(task)}, title: null, supported: true, reason: null }],
+    validateSeedSubmission: true
+  }));
+} else if (req.op === "validate-seed-submission") {
+  if (req.seedSubmission.seeds > 1) {
+    console.error("only one scene is available");
+    process.exit(1);
+  }
+  console.log(JSON.stringify({ ok: true }));
+} else {
+  console.log(JSON.stringify({ spec: { backend: "process", command: ["true"] } }));
+}
+`,
+  );
+  chmodSync(executable, 0o755);
+  f.registry.put({ name: "fixture", path: f.source, adapter: executable });
+  const spec = {
+    benchmark: "fixture",
+    methods: [{ name: "empty", agent: "empty" }],
+    options: { sceneSeeds: "[100001]" },
+  };
+
+  await expect(f.bench.submit({ ...spec, seeds: 2 })).rejects.toThrow(
+    "only one scene is available",
+  );
+  expect(f.store.listJobs()).toEqual([]);
+  expect(f.store.openTrials()).toEqual([]);
+  expect(f.submit).not.toHaveBeenCalled();
+  const rejected = readFileSync(requests, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  expect(rejected.map((r) => r.op)).toEqual(["tasks", "validate-seed-submission"]);
+  expect(rejected[1]?.seedSubmission).toEqual({ tasks: [task], seeds: 2, options: spec.options });
+
+  const job = await f.bench.submit(spec);
+  await expect.poll(() => f.store.trials(job.id)[0]?.state).toBe("solving");
+  expect(f.store.trials(job.id)).toHaveLength(1);
+});
+
 it("adopts a live solve submitted before a restart instead of solving the trial twice", async () => {
   const f = fixture();
   f.store.putJob(f.job);

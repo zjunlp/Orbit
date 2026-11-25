@@ -123,7 +123,7 @@ def validate_observation(observation, descriptions):
         array = np.asarray(value)
         if list(array.shape) != description["shape"] or str(array.dtype) != description["dtype"]:
             raise ValueError("observation shape or dtype mismatch: " + name)
-        if not np.isfinite(array).all():
+        if array.dtype.kind in "fc" and not np.isfinite(array).all():
             raise ValueError("non-finite observation: " + name)
 
 
@@ -140,9 +140,43 @@ def robodojo_layout(reference, task, eval_seed, index):
     return layout
 
 
+def robotwin_seed(environment_seed, initial_state):
+    seed = environment_seed + initial_state
+    if environment_seed < 0 or initial_state < 0 or seed >= 2 ** 32:
+        raise ValueError("RoboTwin seed must fit in an unsigned 32-bit integer")
+    return seed
+
+
+def robocasa365_seed(seed):
+    if not 0 <= seed < 2 ** 32:
+        raise ValueError("RoboCasa365 scene seed must fit in an unsigned 32-bit integer")
+    return seed
+
+
+def fast_wam_seed(reference):
+    if reference.get("environment", {}).get("protocol") == "fast-wam":
+        return reference["parameters"]["environmentSeed"]
+    return None
+
+
+def numpy_seed(seed):
+    if not 0 <= seed < 2 ** 32:
+        raise ValueError("environment seed must fit in an unsigned 32-bit integer")
+    return seed
+
+
+def libero_seed(seed, reference=None):
+    fixed = fast_wam_seed(reference or {})
+    if fixed is not None and seed != fixed:
+        raise ValueError(f"Fast-WAM requires the frozen LIBERO environment seed {fixed}")
+    return numpy_seed(seed)
+
+
 def reset_seed(sample, reference=None):
     """Use a separate scene index and RNG seed for a fixed scene grid."""
     environment = reference["environment"] if reference else {}
+    if environment.get("kind") == "robotwin":
+        return robotwin_seed(sample["environmentSeed"], int(sample["initialStateId"]))
     if environment.get("kind") == "robodojo":
         robodojo_layout(reference, sample["taskId"], sample["environmentSeed"], int(sample["initialStateId"]))
         return sample["environmentSeed"]
@@ -152,19 +186,21 @@ def reset_seed(sample, reference=None):
             raise ValueError("CALVIN samples require environment seed 0 and a frozen sequence index")
         return index
     if "simplerScenes" in environment:
-        return sample["environmentSeed"]
+        return numpy_seed(sample["environmentSeed"])
     index = int(sample["initialStateId"])
     if environment.get("protocol") == "xiaomi-robotics-1":
         task_index = environment["taskIndexes"].get(sample["taskId"])
         if sample["environmentSeed"] != environment["environmentSeed"] or task_index is None or not 0 <= index < 50:
             raise ValueError("Xiaomi RoboCasa365 requires the frozen task set index, seed and trial")
-        return sample["environmentSeed"] + task_index * 50 + index
+        return robocasa365_seed(sample["environmentSeed"] + task_index * 50 + index)
     if "initialStateCounts" in environment:
         seed = sample["environmentSeed"]
         count = environment["initialStateCounts"].get(sample["taskId"], 0)
         if not 0 <= index < count or not 0 <= seed < 2 ** 32 or seed != environment.get("environmentSeed", seed):
             raise ValueError("sample is outside the frozen initial-state catalog or seed recipe")
-        if environment.get("kind") == "bigym2" or environment.get("protocol") == "gigaworld-policy-01":
+        if environment.get("protocol") == "gigaworld-policy-01":
+            return robocasa365_seed(seed + index)
+        if environment.get("kind") == "bigym2":
             return seed + index
         if environment.get("kind") == "cliport":
             return cliport_episode(environment, sample)["seed"]
@@ -176,6 +212,12 @@ def reset_seed(sample, reference=None):
                 raise ValueError("DM0.5 Arena episode seed must fit in an unsigned 32-bit integer")
         return seed
     seed = sample["environmentSeed"] + index
+    if ("simplerRobot" in environment
+            or environment.get("kind") in ("maniskill3", "maniskill3-tabletop")
+            or environment.get("registration") == "gr00t.eval.sim.SimplerEnv.simpler_env"):
+        return numpy_seed(seed)
+    if environment.get("kind") == "robocasa365":
+        return robocasa365_seed(seed)
     if environment.get("kind") in ("robocasa-v02", "rlbench", "robomimic", "vima-bench", "colosseum-v2"):
         count = environment.get("initialStateCount")
         if (sample["environmentSeed"] < 0 or index < 0 or not 0 <= seed < 2 ** 32
@@ -202,3 +244,11 @@ def check_distinct_resets(samples, reference=None):
         key = (sample["taskId"], scene, reset_seed(sample, reference), sample["policySeed"], sample["repetition"])
         if seen.setdefault(key, sample["sampleId"]) != sample["sampleId"]:
             raise ValueError("two planned samples resolve to the same native reset seed")
+
+
+def check_plan_resets(samples, reference):
+    if reference.get("environment", {}).get("kind") in GENERATED_ENVIRONMENTS:
+        check_distinct_resets(samples, reference)
+    else:
+        for sample in samples:
+            libero_seed(sample["environmentSeed"], reference)

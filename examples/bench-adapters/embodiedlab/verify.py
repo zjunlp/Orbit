@@ -3,7 +3,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import sys
 
 
@@ -33,27 +32,27 @@ def validate_seal(root):
 def verify(root, output):
     from benchmark.instances import snapshot
     from benchmark.evaluation.evaluate import evaluate
-    from benchmark.evaluation.process import score_trial
+    from benchmark.evaluation.process import public_task, score_run
     from scripts.trial import infrastructure_end, STATUS_BY_END_REASON
     seal = validate_seal(root)
     close_reason = seal['close_reason']
     if close_reason == 'not_started':
         raise ValueError('The Agent command never started the native trial')
-    trial = output / 'native-trial'
-    shutil.copytree(root, trial, dirs_exist_ok=True)
     plan = seal['plan']
-    if plan != json.loads((trial / 'plan.json').read_text()):
+    if plan != json.loads((root / 'plan.json').read_text()):
         raise ValueError('Evidence plan mismatch')
-    instance = snapshot.for_evaluation(trial, trial / 'unused-store', '')
+    instance = snapshot.for_evaluation(root, root / 'unused-store', '')
     if instance['exp_id'] != plan['task'] or instance['index'] != plan['seed']:
         raise ValueError('Native instance does not match the trial')
-    capture = trial / 'captures/orbit-lab'
+    capture = root / 'captures/orbit-lab'
     process = capture / 'process'
     if not (process / 'episode.json').is_file():
         raise ValueError('No native process record: environment did not finalize')
     end = json.loads((process / 'episode.json').read_text())
     if end.get('instance_id') != instance['instance_id'] or end.get('exp_id') != plan['task']:
         raise ValueError('Native process record belongs to another instance')
+    if not (process / 'manifest.json').is_file():
+        raise ValueError('Native process evidence is missing its manifest')
     logs = json.loads((process / 'bench_logs.json').read_text()) if (process / 'bench_logs.json').is_file() else {}
     sealed = (capture / 'sealed/manifest.json').is_file()
     if not sealed and infrastructure_end(end, logs):
@@ -64,11 +63,15 @@ def verify(root, output):
     report = None
     if sealed:
         report = evaluate(capture / 'sealed', instance)
-        (trial / 'evaluation.json').write_text(json.dumps(report, indent=2))
-        shutil.copyfile(trial / 'evaluation.json', output / 'evaluation.json')
+        gates = report.get('gates', {})
+        if any(gates.get(name) is False for name in ('sealed_record_intact', 'sealed_integrity')):
+            raise ValueError('Native submitted evidence failed its integrity check')
+        (output / 'evaluation.json').write_text(json.dumps(report, indent=2))
     elif end.get('submitted') or end.get('end_reason') == 'submitted':
         raise ValueError('Submitted trial lost its sealed evidence')
-    process_score = score_trial(trial)
+    process_score = score_run(process, report, public_task(root, instance['instance_id']))
+    if any(flag.startswith('process_manifest_problems:') for flag in process_score.get('flags', [])):
+        raise ValueError('Native process evidence failed its manifest check')
     (output / 'process_score.json').write_text(json.dumps(process_score, indent=2))
     status = ('submitted' if report else STATUS_BY_END_REASON.get(end.get('end_reason'),
               'timeout' if close_reason == 'wall_limit' else 'not_submitted'))

@@ -90,12 +90,13 @@ export function RunRow(props: {
       <td>
         <StateBadge state={run.state} />
       </td>
-      <td style={{ maxWidth: 440 }}>
+      <td>
         <div className="row" style={{ gap: 8, paddingLeft: inGroup ? 18 : 0 }}>
           <Link
             href={runPath(run.id)}
             className="ellipsis"
             style={{ color: "var(--text)", fontWeight: 500 }}
+            title={runTitle(run)}
             onClick={(e) => {
               e.stopPropagation();
               onLinkClick(e);

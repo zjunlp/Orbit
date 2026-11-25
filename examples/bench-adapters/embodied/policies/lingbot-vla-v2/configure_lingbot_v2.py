@@ -14,22 +14,22 @@ from serve_lingbot_v2 import CHUNK, RANDOMNESS, asset_digests
 
 
 NAME = "lingbot-vla-v2-robotwin"
-ROBOTWIN_REVISION = "13c3c47ff4312dd62484bcd51be034af55c062d1"
 CHECKPOINT = "54f79a4b6e9166bda91b5010088097ff3191bca2"
 LEROBOT = "410c095eacc0011d998a73383eb94abed2715af0"
 DOCKERFILE = Path(__file__).with_name("policy.Dockerfile")
 
 
-def native_profile(reference, *, allow_other_revision=False):
+def native_profile(reference):
     profile = reference["benchmarkProfile"]
-    native = json.loads((HERE / "profiles/robotwin-demo-clean.json").read_text())["benchmarkProfile"]
+    benchmark = json.loads((HERE / "profiles/robotwin-demo-clean.json").read_text())
+    native = benchmark["benchmarkProfile"]
     if (reference["environment"]["kind"] != "robotwin" or profile != native
             or reference["observationMap"] != {name: name for name in native["observations"]}
             or reference["parameters"]["replanSteps"] != CHUNK):
         raise ValueError("expected the native RoboTwin fifty-step joint-control recipe")
-    if not allow_other_revision and reference["reference"]["evaluation"]["commit"] != ROBOTWIN_REVISION:
-        raise ValueError("official reproduction requires RoboTwin " + ROBOTWIN_REVISION
-                         + "; use --allow-other-revision for a cross-revision experiment")
+    current_revision = benchmark["reference"]["evaluation"]["commit"]
+    if reference["reference"]["evaluation"]["commit"] != current_revision:
+        raise ValueError("expected the current native RoboTwin revision " + current_revision)
     return {**profile, "id": NAME + "-joint-input/1"}
 
 
@@ -42,8 +42,6 @@ def main():
     parser.add_argument("--reference-file", type=Path)
     parser.add_argument("--weights", type=Path)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--allow-other-revision", action="store_true",
-                        help="generate a policy from a semantically compatible RoboTwin revision")
     args = parser.parse_args()
     if args.build_tag and not args.policy_base:
         parser.error("--build-tag requires --policy-base (the LeRobot 0.7.0 runtime)")
@@ -58,8 +56,7 @@ def main():
                         "-f", str(DOCKERFILE), "-t", args.build_tag, str(HERE.parents[2])], check=True)
         return
     image = require_image(args.policy_image, manifest)
-    profile = native_profile(json.loads(args.reference_file.read_text()),
-                             allow_other_revision=args.allow_other_revision)
+    profile = native_profile(json.loads(args.reference_file.read_text()))
     checkpoint, normalization = asset_digests(args.weights)
     registration = {
         "name": NAME, "version": "2.0", "connector": "policy-ws", "replanSteps": CHUNK, "callTimeoutSec": 300,

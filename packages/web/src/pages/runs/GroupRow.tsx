@@ -71,14 +71,16 @@ export function GroupRow(props: {
         <div className="row" style={{ gap: 6 }}>
           {props.expanded ? <IconChevronDown size={14} /> : <IconChevron size={14} />}
           <IconLayers size={14} style={{ color: "var(--text-3)" }} />
-          <span>{props.name}</span>
+          <span className="ellipsis" title={props.name}>
+            {props.name}
+          </span>
           <span className="chip">{runs.length} runs</span>
           {byState
             .filter(([s]) => s === "failed" || s === "running" || s === "queued")
             .map(([s, n]) => (
               <span
                 key={s}
-                className="faint"
+                className="faint state-count"
                 style={{ color: stateColor(s), fontWeight: 400, fontSize: 12 }}
               >
                 {n} {STATE_LABEL[s].toLowerCase()}
@@ -108,13 +110,15 @@ export function GroupRow(props: {
         <Link
           href={`/compare?group=${encodeURIComponent(props.name)}`}
           className="btn sm"
+          title="Compare this group"
           onClick={(e) => {
             e.stopPropagation();
             onLinkClick(e);
           }}
           style={{ marginRight: 8 }}
         >
-          <IconCompare size={12} /> Compare
+          <IconCompare size={12} />
+          <span className="compare-label"> Compare</span>
         </Link>
         {duration(span)}
       </td>

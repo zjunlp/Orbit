@@ -1192,6 +1192,18 @@ textarea.input {
   font-style: normal;
   color: var(--text-3);
 }
+/* Inside a fixed-width column the chips clip at the cell edge instead of widening it. */
+.runs-table td .params {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.runs-table td .param {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ---- run header ---- */
 .run-head {
@@ -2095,6 +2107,125 @@ a.score:hover {
   height: 8px;
   border-radius: 50%;
   flex: none;
+}
+
+/* ---- run list table ----
+   The run list never overflows its container: columns have fixed widths, and as the container
+   narrows the low-value columns shrink and then drop out, so the run name keeps the space it
+   needs. Widths live here (not in the colgroup) so a container query can override them. */
+.runs-body .page {
+  container-type: inline-size;
+}
+.runs-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+.runs-table col:nth-child(1) {
+  width: 34px;
+}
+.runs-table col:nth-child(2) {
+  width: 112px;
+}
+.runs-table col:nth-child(4) {
+  width: 104px;
+}
+.runs-table col:nth-child(5) {
+  width: 128px;
+}
+.runs-table col:nth-child(6) {
+  width: 58px;
+}
+.runs-table col:nth-child(7) {
+  width: 96px;
+}
+.runs-table col:nth-child(8) {
+  width: 72px;
+}
+.runs-table col:nth-child(9) {
+  width: 170px;
+}
+.runs-table th,
+.runs-table td {
+  max-width: none;
+  overflow: hidden;
+  padding-inline: 8px;
+}
+.runs-table th {
+  text-overflow: ellipsis;
+}
+.runs-table td .row > .ellipsis {
+  min-width: 0;
+}
+/* Narrowing containers: first trim the secondary columns and the compare label, then drop the
+   least useful columns. A dropped column keeps its cells in the layout at zero width, so rows
+   that span columns still line up with the header. Job and trial rows span columns 4–6, so their
+   trailing cells have different DOM indices. */
+@container (max-width: 999px) {
+  .runs-table .compare-label {
+    display: none;
+  }
+  .runs-table col:nth-child(2) {
+    width: 96px;
+  }
+  .runs-table col:nth-child(4) {
+    width: 88px;
+  }
+  .runs-table col:nth-child(5) {
+    width: 96px;
+  }
+  .runs-table col:nth-child(6) {
+    width: 52px;
+  }
+  .runs-table col:nth-child(7) {
+    width: 96px;
+  }
+  .runs-table col:nth-child(8) {
+    width: 60px;
+  }
+  .runs-table col:nth-child(9) {
+    width: 112px;
+  }
+}
+@container (max-width: 939px) {
+  .runs-table .state-count {
+    display: none;
+  }
+  .runs-table :is(col, th):is(:nth-child(6), :nth-child(8)),
+  .runs-table tr:not(.job-row, .trial-row) > td:is(:nth-child(6), :nth-child(8)),
+  .runs-table :is(.job-row, .trial-row) > td:nth-child(6) {
+    width: 0;
+    padding: 0;
+    border: 0;
+    visibility: hidden;
+  }
+}
+@container (max-width: 779px) {
+  .runs-table :is(col, th):nth-child(7),
+  .runs-table tr:not(.job-row, .trial-row) > td:nth-child(7),
+  .runs-table :is(.job-row, .trial-row) > td:nth-child(5) {
+    width: 0;
+    padding: 0;
+    border: 0;
+    visibility: hidden;
+  }
+}
+@container (max-width: 659px) {
+  .runs-table :is(col, th):nth-child(5),
+  .runs-table tr:not(.job-row, .trial-row) > td:nth-child(5) {
+    width: 0;
+    padding: 0;
+    border: 0;
+    visibility: hidden;
+  }
+}
+@container (max-width: 539px) {
+  .runs-table :is(col, th, td):nth-child(4) {
+    width: 0;
+    padding: 0;
+    border: 0;
+    visibility: hidden;
+  }
 }
 
 /* ---- folders ---- */

@@ -51,12 +51,15 @@ def fetch(job, *, direct=False):
         for attempt in range(4):
             try:
                 offset = partial.stat().st_size if partial.exists() else 0
-                if offset == size:
-                    verify(partial)
-                    partial.replace(destination)
-                    break
-                if offset > size:
-                    raise ValueError("partial asset exceeds expected size: " + file["rfilename"])
+                if partial.exists() and offset >= size:
+                    try:
+                        verify(partial)
+                    except ValueError:
+                        partial.unlink()
+                        offset = 0
+                    else:
+                        partial.replace(destination)
+                        break
                 headers = {"Range": "bytes=" + str(offset) + "-"} if offset else {}
                 if url.startswith("https://huggingface.co/") and os.environ.get("HF_TOKEN"):
                     headers["Authorization"] = "Bearer " + os.environ["HF_TOKEN"]
@@ -75,6 +78,7 @@ def fetch(job, *, direct=False):
                 if attempt == 3:
                     raise
                 time.sleep(2)
+    # A concurrent resumer can still be writing to the file as it is published.
     checksum = verify(destination)
     print("Verified " + repository + "/" + file["rfilename"], flush=True)
     return {"repository": repository, "revision": revision, "path": file["rfilename"],

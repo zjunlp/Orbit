@@ -11,15 +11,14 @@ from configure_lingbot_v2 import HERE, native_profile
 
 
 class LingBotV2RegistrationTests(unittest.TestCase):
-    def test_cross_revision_registration_preserves_joint_semantics(self):
+    def test_registration_requires_the_current_revision_and_preserves_joint_semantics(self):
         source = HERE / "profiles/robotwin-demo-clean.json"
         reference = json.loads(source.read_text())
-        original = native_profile(reference)
-        self.assertEqual(original["id"], "lingbot-vla-v2-robotwin-joint-input/1")
-        reference["reference"]["evaluation"]["commit"] = "ea8b21121ebb3cd201ff5b3fe361944ac94eda3f"
-        with self.assertRaisesRegex(ValueError, "official reproduction requires RoboTwin"):
+        self.assertEqual(native_profile(reference)["id"], "lingbot-vla-v2-robotwin-joint-input/1")
+        reference["reference"]["evaluation"]["commit"] = "13c3c47ff4312dd62484bcd51be034af55c062d1"
+        with self.assertRaisesRegex(ValueError, "expected the current native RoboTwin revision"):
             native_profile(reference)
-        self.assertEqual(native_profile(reference, allow_other_revision=True), original)
+        reference = json.loads(source.read_text())
         reference["benchmarkProfile"]["observations"]["joint_state"]["order"].reverse()
         with self.assertRaisesRegex(ValueError, "fifty-step joint-control recipe"):
-            native_profile(reference, allow_other_revision=True)
+            native_profile(reference)

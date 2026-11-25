@@ -12,6 +12,7 @@ class PolicyClient(WebSocketPolicy):
         self.action_size = action_size
         self.conversion = conversion
         self.last_fallback = None
+        self._first_observation = True
         self.connect(url, timeout, pack, unpack)
 
     def check_metadata(self, metadata):
@@ -25,8 +26,13 @@ class PolicyClient(WebSocketPolicy):
         if sample["policySeed"] != 0:
             raise ValueError("the policy service uses a seed-0 stream")
 
+        self._first_observation = True
+
     def act(self, observation):
+        if self.metadata.get("cachedPromptContext") is True and not self._first_observation:
+            observation = {key: value for key, value in observation.items() if key != "prompt_context"}
         reply = self.infer(observation)
+        self._first_observation = False
         if "rejection" in reply:
             from .driver import EpisodeFailure
 

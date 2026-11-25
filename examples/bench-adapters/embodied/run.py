@@ -9,7 +9,7 @@ import time
 
 from orbit_embodied import digest, run_episode, verify_episode
 from orbit_embodied.assets import COLOSSEUM_ASSET_ROOT, tree_digest
-from orbit_embodied.binding import file_digest, reference_horizon
+from orbit_embodied.binding import fast_wam_seed, file_digest, libero_seed, reference_horizon
 from orbit_embodied.cliport import GOOGLE_ASSETS
 from orbit_embodied.evidence import read_episode_reference, write_json
 from orbit_embodied.implementation import archive_implementation, verify_implementation
@@ -106,9 +106,16 @@ def verify_simulator_assets(requests):
     if kind == "robolab":
         from orbit_embodied.robolab import check_runtime
         check_runtime(reference)
+    elif kind == "behavior1k":
+        from orbit_embodied.behavior1k import check_runtime_assets
+        check_runtime_assets(environment["assets"])
     elif kind == "maniskill3":
         from orbit_embodied.tabletop import check_plate25_runtime
         check_plate25_runtime(environment)
+    elif kind == "maniskill3-tabletop" and environment.get("assets"):
+        from orbit_embodied.tabletop import check_maniskill_assets
+        assets = environment["assets"]
+        check_maniskill_assets(assets["target"], assets["digest"])
     elif kind == "chores":
         from orbit_embodied.chores import read_asset_manifest, verify_asset_files
         assets = environment["assets"]
@@ -305,7 +312,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         benchmark = MetaWorldBenchmark(reference, sample["taskId"])
     elif kind == "maniskill3-tabletop":
         from orbit_embodied.tabletop import ManiSkillTabletopBenchmark
-        benchmark = ManiSkillTabletopBenchmark(reference, sample["taskId"])
+        benchmark = ManiSkillTabletopBenchmark(reference, sample["taskId"], prepare_runtime=prepare)
     elif kind == "robolab":
         from orbit_embodied.robolab import RoboLabBenchmark
         benchmark = RoboLabBenchmark(reference, sample["taskId"], prepare_runtime=prepare)
@@ -323,9 +330,8 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
         suite, name = sample["taskId"].split(":", 1)
         native = LiberoPlusBenchmark if kind == "libero-plus" else LiberoBenchmark
         options = {"settle_steps": reference["parameters"]["settleSteps"]}
-        if reference.get("environment", {}).get("protocol") == "fast-wam":
-            if sample["environmentSeed"] != reference["parameters"]["environmentSeed"]:
-                raise ValueError("Fast-WAM requires the frozen LIBERO environment seed")
+        libero_seed(sample["environmentSeed"], reference)
+        if fast_wam_seed(reference) is not None:
             options["horizon"] = reference["horizons"][suite]
         benchmark = native(suite, name, **options)
     expected_horizon = reference_horizon(reference, sample["taskId"], sample=sample)
@@ -340,7 +346,7 @@ def execute_episode(request, destination, cancelled=None, *, prepare=None):
             or (kind not in ("robotwin", "maniskill3", "maniskill3-tabletop", "metaworld", "calvin", "robolab", "robodojo",
                             "robomimic", "vima-bench", "molmospaces", "colosseum-v2")
                 and parameters["renderSize"] != expected_render_size)
-            or (request["policy"]["connector"] == "openpi-ws" and parameters["resizeSize"] != 224)):
+            or (request["policy"]["connector"] == "openpi-ws" and parameters.get("resizeSize", 224) != 224)):
         raise ValueError("driver settings differ from the frozen reference profile")
     return run_episode(benchmark, policy, sample, request["binding"], destination, request["episodeId"],
                 {"referenceDigest": request["referenceDigest"], "policy": request["policy"],

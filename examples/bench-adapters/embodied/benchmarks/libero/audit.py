@@ -11,26 +11,29 @@ sys.path[:0] = [str(HERE), str(HERE.parents[1] / "sdk")]
 from orbit_embodied import digest
 from orbit_embodied.assets import checkpoint_tree_digest
 from adapter import file_digest
+from libero_source import audit_file, checkout_status, standalone_profile
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference-source", type=Path, required=True)
+    parser.add_argument("--libero-source", type=Path, help="Standalone official LIBERO checkout")
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--benchmark-image")
     parser.add_argument("--policy-image")
     args = parser.parse_args()
     reference = json.loads((HERE / "reference.json").read_text())
+    libero = args.libero_source or args.reference_source / "third_party/libero"
     checks = []
-    for name, path in (("openpi", args.reference_source), ("libero", args.reference_source / "third_party/libero")):
-        revision = subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
-        dirty = subprocess.check_output(["git", "-C", str(path), "status", "--porcelain", "--untracked-files=no"], text=True).strip()
+    for name, path in (("openpi", args.reference_source), ("libero", libero)):
+        revision, dirty = checkout_status(path)
         expected = reference["reference"][name]["commit"]
         checks.append({"check": name + " source", "result": "passed" if revision == expected and not dirty else "failed", "revision": revision})
     for relative, expected in reference["reference"]["files"].items():
-        actual = file_digest(args.reference_source / relative)
+        actual = file_digest(audit_file(args.reference_source, libero, relative))
         checks.append({"check": relative, "result": "passed" if actual == expected else "failed"})
-    result = {"reference": reference["id"], "profileDigest": digest(reference), "checks": checks,
+    profile = standalone_profile(reference) if args.libero_source else reference
+    result = {"reference": profile["id"], "profileDigest": digest(profile), "checks": checks,
               "checkpoint": {"result": "not_run"}, "images": {},
               "nativeParity": "not_run", "positiveCalibration": "not_run"}
     if args.checkpoint:

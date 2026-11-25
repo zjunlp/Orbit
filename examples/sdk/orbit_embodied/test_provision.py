@@ -156,6 +156,35 @@ class ProvisionTests(unittest.TestCase):
             request.assert_not_called()
             self.assertEqual(path.read_bytes(), b"abcdef")
 
+    def test_reports_no_success_if_another_resumer_changes_the_published_asset(self):
+        replace = Path.replace
+
+        def append_before_publish(partial, destination):
+            with partial.open("ab") as stream:
+                stream.write(b"def")
+            return replace(partial, destination)
+
+        for content in (b"abc", b"abcdef"):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "model"
+                path.with_name("model.partial").write_bytes(content)
+                with patch.object(urllib.request.OpenerDirector, "open", return_value=Response(b"def")), \
+                        patch.object(Path, "replace", append_before_publish), contextlib.redirect_stdout(io.StringIO()) as output:
+                    with self.assertRaisesRegex(ValueError, "size mismatch"):
+                        fetcher.fetch(self.job(path))
+                self.assertEqual(output.getvalue(), "")
+                self.assertEqual(path.stat().st_size, 9)
+
+    def test_invalid_complete_partials_are_replaced_without_resuming(self):
+        for corrupt in (b"ABCDEF", b"oversized"):
+            with self.subTest(corrupt=corrupt), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "model"
+                path.with_name("model.partial").write_bytes(corrupt)
+                with patch.object(urllib.request.OpenerDirector, "open", return_value=Response(b"abcdef")) as request:
+                    fetcher.fetch(self.job(path))
+                self.assertIsNone(request.call_args[0][0].get_header("Range"))
+                self.assertEqual(path.read_bytes(), b"abcdef")
+
     def test_wrong_same_size_content_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "model"

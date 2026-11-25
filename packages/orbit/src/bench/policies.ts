@@ -17,7 +17,10 @@ const LIGHTNAV_HSSD_ACTION = {
 
 /** What each model connector needs declared explicitly; a new connector adds one entry. */
 const CONNECTOR_RULES: Record<PolicyDefinition["connector"], (d: PolicyDefinition) => string[]> = {
-  "openpi-ws": () => [],
+  "openpi-ws": (d) =>
+    d.ioAdapter === "gr00t-flat"
+      ? ["OpenPI requires its native LIBERO, RoboCasa or RoboTwin observation adapter"]
+      : [],
   "policy-ws": (d) => [
     ...(!d.replanSteps ? ["WebSocket policies require an explicit execution horizon"] : []),
     ...(d.ioAdapter ? ["WebSocket policies use the bound observation fields directly"] : []),

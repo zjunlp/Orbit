@@ -77,23 +77,33 @@ const MARGIN = 1.2;
 const step = (steps: number[], v: number) => steps.find((s) => s >= v) ?? Math.ceil(v);
 const roundHour = (min: number) => Math.ceil(min / 60) * 60;
 const max = (xs: (number | null | undefined)[]) => {
-  const v = xs.filter((x): x is number => typeof x === "number");
-  return v.length ? Math.max(...v) : null;
+  let largest: number | null = null;
+  for (const x of xs)
+    if (typeof x === "number") largest = largest === null ? x : Math.max(largest, x);
+  return largest;
 };
+
+const sharedSolve = (r: Run) => Number(r.spec.tags?.batch_size ?? 1) > 1;
+const durationMinutes = (r: Run) =>
+  r.startedAt && r.endedAt ? (Date.parse(r.endedAt) - Date.parse(r.startedAt)) / 60_000 : null;
 
 /**
  * Measured solve use of one task over its runs, and the resource fields worth changing: memory and
  * GPU memory from peak × 1.2 rounded up to a step (raised after an OOM), CPUs from the peak, the
- * timeout from the longest run × 1.5 rounded to hours (raised after a timeout); memory is lowered
+ * timeout from the longest standalone episode × 1.5 rounded to hours (raised after a timeout); memory is lowered
  * only from two or more runs. GPUs are never suggested: whether a task needs one is a decision
  * about the task, not a measurement.
  */
-export function usageRow(task: string, requested: ResourceOverride, runs: Run[]): BenchUsageRow {
+export function usageRow(
+  task: string,
+  requested: ResourceOverride,
+  runs: Run[],
+  sharedRunIds?: ReadonlySet<string>,
+): BenchUsageRow {
   const measured = runs.filter((r) => r.usage);
-  const minutes = runs
-    .filter((r) => r.startedAt && r.endedAt)
-    .map((r) => (Date.parse(r.endedAt as string) - Date.parse(r.startedAt as string)) / 60_000);
+  const maxMinutes = max(runs.map(durationMinutes));
   const timeouts = runs.filter(timedOut);
+  const hasSharedSolve = runs.some((r) => sharedSolve(r) || sharedRunIds?.has(r.id));
   const row: BenchUsageRow = {
     task,
     runs: measured.length,
@@ -102,7 +112,7 @@ export function usageRow(task: string, requested: ResourceOverride, runs: Run[])
     peakGpuMemGB: max(measured.map((r) => r.usage?.peakGpuMemGB)),
     peakCpus: max(measured.map((r) => r.usage?.peakCpus)),
     meanCpus: max(measured.map((r) => r.usage?.meanCpus)),
-    maxMinutes: max(minutes) === null ? null : Math.round((max(minutes) as number) * 10) / 10,
+    maxMinutes: maxMinutes === null ? null : Math.round(maxMinutes * 10) / 10,
     oomKilled: measured.filter((r) => r.usage?.oomKilled).length,
     oomKills: measured.filter((r) => (r.usage?.oomKills ?? 0) > 0).length,
     timeouts: timeouts.length,
@@ -110,6 +120,10 @@ export function usageRow(task: string, requested: ResourceOverride, runs: Run[])
     notes: [],
     tokenUsage: tokenUsage(runs),
   };
+  if (hasSharedSolve)
+    row.notes.push(
+      "shared solve timings cover the entire batch; per-episode timeout advice unavailable",
+    );
   if (measured.length === 0) {
     row.notes.push("no measured runs");
     return row;
@@ -135,13 +149,12 @@ export function usageRow(task: string, requested: ResourceOverride, runs: Run[])
     const want = step(CPU_STEPS, row.peakCpus);
     if (want > requested.cpus) row.suggest.cpus = want;
   }
-  if (row.maxMinutes !== null && requested.timeoutMin !== undefined) {
-    let want = roundHour(row.maxMinutes * 1.5);
-    if (row.timeouts) {
-      want = Math.max(want, roundHour(requested.timeoutMin * 1.5));
-      row.notes.push(`timed out in ${row.timeouts} run(s)`);
-    }
-    if (want > requested.timeoutMin) row.suggest.timeoutMin = want;
+  const timeoutMin = requested.timeoutMin;
+  if (row.timeouts) row.notes.push(`timed out in ${row.timeouts} run(s)`);
+  if (!hasSharedSolve && maxMinutes !== null && timeoutMin !== undefined) {
+    let want = roundHour((Math.round(maxMinutes * 10) / 10) * 1.5);
+    if (row.timeouts) want = Math.max(want, roundHour(timeoutMin * 1.5));
+    if (want > timeoutMin) row.suggest.timeoutMin = want;
   }
   if (measured.length < 3) row.notes.push(`only ${measured.length} run(s) measured`);
   return row;
@@ -153,17 +166,16 @@ export function usageRows(
 ): BenchUsageRow[] {
   const runs = new Map<string, Run[]>();
   const requested = new Map<string, Run["spec"]>();
+  const sharedRunIds = new Set<string>();
   for (const d of jobs) {
     // Only Agent methods show what a task needs; oracle and empty runs say nothing about it.
     const agents = new Set(d.job.spec.methods.filter(isAgentMethod).map((m) => m.name));
     for (const t of d.trials) {
       if (!agents.has(t.method)) continue;
-      for (const id of [
-        ...(t.priorAttempts ?? []).map((attempt) => attempt.solveRunId),
-        t.solveRunId,
-      ]) {
+      for (const { solveRunId: id, batch } of [...(t.priorAttempts ?? []), t]) {
         const r = id ? getRun(id) : null;
         if (!r || !isTerminal(r.state)) continue;
+        if (batch && batch.plan.members.length > 1) sharedRunIds.add(r.id);
         const own = runs.get(t.task) ?? [];
         if (!own.some((run) => run.id === r.id)) runs.set(t.task, [...own, r]);
         // The latest job's current request is what a suggestion is compared against.
@@ -178,9 +190,8 @@ export function usageRows(
       task,
       { cpus, memGB, gpus, ...(gpuMemGB ? { gpuMemGB } : {}), timeoutMin: s.timeoutMin },
       runs.get(task) ?? [],
+      sharedRunIds,
     );
-    if ((runs.get(task) ?? []).some((run) => Number(run.spec.tags.batch_size ?? 1) > 1))
-      row.notes.push("shared solve measurements cover the entire batch, not individual episodes");
     return row;
   });
 }

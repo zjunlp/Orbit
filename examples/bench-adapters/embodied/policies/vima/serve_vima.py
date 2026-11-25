@@ -101,7 +101,7 @@ def main():
             or file_digest(args.weights / TOKENIZER) != args.normalization_digest):
         raise ValueError("VIMA checkpoint or tokenizer differs from the frozen registration")
     policy = VIMAPolicy(args.weights)
-    metadata = {"replanSteps": 1, "actionSize": 12, "orbit": {
+    metadata = {"replanSteps": 1, "actionSize": 12, "cachedPromptContext": True, "orbit": {
         "checkpointDigest": args.checkpoint_digest, "normalizationDigest": args.normalization_digest,
         "randomness": RANDOMNESS,
     }}

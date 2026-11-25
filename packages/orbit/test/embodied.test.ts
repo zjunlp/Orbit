@@ -5,16 +5,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { type AdapterHandlers, handle } from "../src/bench/adapter.ts";
 import { connectorIssues, PolicyRegistry } from "../src/bench/policies.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { checkSamplePlan, contentDigest, resolveBinding } from "../src/bench/samples.ts";
 import { BenchService } from "../src/bench/service.ts";
+import { checkPlanAgainstBenchmark } from "../src/bench/submit-validation.ts";
 import { buildReport, compareJobs, planDigest } from "../src/bench/summary.ts";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
 import {
   AdapterRequest,
   AdapterTasksResponse,
+  BenchInitialStates,
   BenchJob,
   BenchJobSpec,
   EpisodeSample,
@@ -47,13 +50,17 @@ afterEach(() => {
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
 });
 
-function sample(initialStateId = "0", initialStateDigest = `sha256:${"a".repeat(64)}`) {
+function sample(
+  initialStateId = "0",
+  initialStateDigest = `sha256:${"a".repeat(64)}`,
+  environmentSeed = 7,
+) {
   const content = {
     taskId: "synthetic:task",
     benchmarkProfile: reference.id,
     initialStateId,
     initialStateDigest,
-    environmentSeed: 7,
+    environmentSeed,
     policySeed: 0,
     repetition: 0,
   };
@@ -63,6 +70,32 @@ function sample(initialStateId = "0", initialStateDigest = `sha256:${"a".repeat(
 function plan() {
   const items = [sample("0"), sample("1")];
   return checkSamplePlan({ version: 1, items, digest: contentDigest(items) });
+}
+
+function recordQueuedRuns(runs: RunService, store: Store) {
+  let ordinal = 0;
+  return vi.spyOn(runs, "submit").mockImplementation(async (spec) => {
+    const run = Run.parse({
+      id: `synthetic-${++ordinal}`,
+      spec,
+      state: "queued",
+      node: "synthetic",
+      reason: null,
+      exitCode: null,
+      image: null,
+      containerId: null,
+      lease: null,
+      code: null,
+      cleanup: "pending",
+      note: "",
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      endedAt: null,
+    });
+    store.putRun(run);
+    mkdirSync(runs.dirs(run.id).output, { recursive: true });
+    return run;
+  });
 }
 
 /** Registrable: the shared shape parses and the connector's requirements hold. */
@@ -496,6 +529,85 @@ it("checks connector requirements when a policy is registered", () => {
   expect(registry.put(base).connector).toBe("openpi-ws");
 });
 
+it("preserves free-form task tags and enforces structured initial-state counts", () => {
+  const spec = BenchJobSpec.parse({
+    benchmark: "synthetic",
+    tasks: ["synthetic:task"],
+    methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
+    samplePlan: plan(),
+  });
+  const info = AdapterTasksResponse.parse({
+    tasks: [
+      {
+        id: "synthetic:task",
+        title: null,
+        supported: true,
+        reason: null,
+        tags: { initialStateCount: "procedural", initialStateCounts: "generated" },
+      },
+    ],
+    capabilities: {
+      methods: ["policy"],
+      conditions: {},
+      scoreKind: "binary",
+      rescore: "evidence",
+      embodied: {
+        profile: reference.id,
+        semanticProfile: benchmarkProfile,
+        observationMap: reference.observationMap,
+      },
+    },
+  });
+  expect(() => checkPlanAgainstBenchmark(spec, info.tasks, info.capabilities)).not.toThrow();
+  const typed = info.tasks.map((task) => ({ ...task, initialStates: { count: 1 } }));
+  expect(() => checkPlanAgainstBenchmark(spec, typed, info.capabilities)).toThrow(
+    /outside the declared range/,
+  );
+  const legacy = info.tasks.map((task) => ({
+    ...task,
+    tags: { initialStateCounts: '{"007":100,"7":1}' },
+  }));
+  expect(() => checkPlanAgainstBenchmark(spec, legacy, info.capabilities)).toThrow(
+    /outside the declared range/,
+  );
+  const fallback = info.tasks.map((task) => ({
+    ...task,
+    tags: { initialStateCounts: '{"0007":5}', initialStateCount: "5" },
+  }));
+  expect(() => checkPlanAgainstBenchmark(spec, fallback, info.capabilities)).not.toThrow();
+  const empty = fallback.map((task) => ({
+    ...task,
+    tags: { ...task.tags, initialStateCounts: "{}" },
+  }));
+  expect(() => checkPlanAgainstBenchmark(spec, empty, info.capabilities)).toThrow(
+    /has no declared initial states/,
+  );
+  for (const seed of ["007", "9007199254740992"])
+    expect(BenchInitialStates.safeParse({ countsBySeed: { [seed]: 1 } }).success).toBe(false);
+  expect(
+    BenchInitialStates.safeParse({ countsBySeed: { "0": 1, "9007199254740991": 2 } }).success,
+  ).toBe(true);
+});
+
+it("waits for asynchronous TypeScript plan validators and propagates their errors", async () => {
+  const request = AdapterRequest.parse({
+    protocol: 1,
+    op: "validate-plan",
+    benchmark: { name: "fixture", path: "/fixture", config: {} },
+    samplePlan: plan(),
+  });
+  const handlers: AdapterHandlers = {
+    tasks: vi.fn(),
+    solve: vi.fn(),
+    verify: vi.fn(),
+    score: vi.fn(),
+    validatePlan: vi.fn().mockRejectedValue(new Error("native reset rejected")),
+  };
+  await expect(handle(handlers, request)).rejects.toThrow("native reset rejected");
+  vi.mocked(handlers.validatePlan)?.mockResolvedValue(undefined);
+  await expect(handle(handlers, request)).resolves.toEqual({ ok: true });
+});
+
 it.each([false, true, "batch-separate", "batch-shared"])(
   "freezes independent policies and bindings per job (execution mode: %s)",
   async (mode) => {
@@ -524,7 +636,10 @@ it.each([false, true, "batch-separate", "batch-shared"])(
             title: "Synthetic task",
             supported: true,
             reason: null,
-            tags: { initialStateDigest: `sha256:${"a".repeat(64)}` },
+            tags: {
+              initialStateDigest: `sha256:${"a".repeat(64)}`,
+              ...(batch ? { initialStateCounts: '{"7":2,"8":1}' } : { initialStateCount: "2" }),
+            },
           },
         ],
         capabilities: {
@@ -560,29 +675,7 @@ it.each([false, true, "batch-separate", "batch-shared"])(
       invalid: false,
       issues: [],
     });
-    let ordinal = 0;
-    const submit = vi.spyOn(runs, "submit").mockImplementation(async (spec) => {
-      const run = Run.parse({
-        id: `synthetic-${++ordinal}`,
-        spec,
-        state: "queued",
-        node: "synthetic",
-        reason: null,
-        exitCode: null,
-        image: null,
-        containerId: null,
-        lease: null,
-        code: null,
-        cleanup: "pending",
-        note: "",
-        createdAt: new Date().toISOString(),
-        startedAt: null,
-        endedAt: null,
-      });
-      store.putRun(run);
-      mkdirSync(runs.dirs(run.id).output, { recursive: true });
-      return run;
-    });
+    const submit = recordQueuedRuns(runs, store);
     const mismatched = [sample("0", `sha256:${"f".repeat(64)}`)];
     await expect(
       bench.submit({
@@ -595,6 +688,29 @@ it.each([false, true, "batch-separate", "batch-shared"])(
         methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
       }),
     ).rejects.toThrow("initial-state asset");
+    const invalidPlans: [EpisodeSample[], string][] = [
+      [[sample("2")], "initial-state index 2 is outside the declared range"],
+      [
+        [sample("0"), sample("00")],
+        "initial-state index 00 for synthetic:task must use digits without leading zeros",
+      ],
+    ];
+    if (batch) {
+      invalidPlans.push(
+        [[sample("1", undefined, 8)], "initial-state index 1 is outside the declared range"],
+        [[sample("0", undefined, 9)], "environment seed 9 has no declared initial states"],
+      );
+    }
+    for (const [items, error] of invalidPlans) {
+      await expect(
+        bench.submit({
+          benchmark: "synthetic",
+          samplePlan: { version: 1, items, digest: contentDigest(items) },
+          ...(batch ? { batchSize: 2 } : {}),
+          methods: [{ name: "p", agent: "policy", policyRef: "synthetic-policy" }],
+        }),
+      ).rejects.toThrow(error);
+    }
     const wrongReplan = bench.policies.put({ ...definition, name: "wrong-replan", replanSteps: 4 });
     await expect(
       bench.submit({

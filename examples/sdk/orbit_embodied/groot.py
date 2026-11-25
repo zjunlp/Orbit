@@ -73,7 +73,8 @@ class GrootClient:
                 raise ValueError("GR00T action ordering differs from the frozen profile")
             if list(action["delta_indices"]) != list(range(len(action["delta_indices"]))):
                 raise ValueError("GR00T action times must be contiguous and start at zero")
-            if len(action["delta_indices"]) < replan_steps:
+            self.action_horizon = len(action["delta_indices"])
+            if self.action_horizon < replan_steps:
                 raise ValueError("GR00T action horizon is shorter than the execution horizon")
         except Exception:
             self.close()
@@ -104,6 +105,8 @@ class GrootClient:
         self.call("reset", {"options": None})
 
     def act(self, observation):
+        from .driver import EpisodeFailure
+
         if self.io_adapter == "libero-native":
             observation = libero_inputs(observation)
         inputs = {}
@@ -115,13 +118,18 @@ class GrootClient:
         for name in self.order:
             value = np.asarray(actions["action." + name])
             if value.ndim != 3 or value.shape[0] != 1:
-                raise ValueError("GR00T action field requires shape (1, horizon, dimension)")
-            if self.io_adapter == "robocasa-native" and value.shape[2] != ROBOCASA_ACTIONS[name]:
-                raise ValueError("RoboCasa GR00T action field has the wrong width: " + name)
+                raise EpisodeFailure("policy_act", "GR00T action field " + name
+                                     + " requires shape (1, horizon, dimension)", rejected_actions=value)
+            width = ROBOCASA_ACTIONS[name] if self.io_adapter == "robocasa-native" else 1
+            if value.shape[2] != width:
+                raise EpisodeFailure("policy_act", "GR00T action field has the wrong width: " + name,
+                                     rejected_actions=value[0])
+            if value.shape[1] != self.action_horizon:
+                raise EpisodeFailure("policy_act", f"GR00T action field {name} returned {value.shape[1]} steps, "
+                                     f"expected {self.action_horizon} from the handshake", rejected_actions=value[0])
             fields.append(value[0])
         chunk = np.concatenate(fields, axis=-1)
         if chunk.dtype.kind not in "buif" or not np.isfinite(chunk).all():
-            from .driver import EpisodeFailure
             raise EpisodeFailure("policy_act", "GR00T returned non-numeric or non-finite raw actions",
                                  rejected_actions=chunk)
         return chunk

@@ -59,6 +59,7 @@ const ManifestRun = z
     network: z.boolean(),
     root: z.boolean(),
     timeoutMin: z.number().positive(),
+    dependsOn: z.array(z.string().min(1)),
     mounts: z.array(ManifestMount),
     /** Service containers (Orbit `ServiceSpec`s); `binds` sources are manifest-relative. */
     services: z.array(z.looseObject({ name: z.string() })),
@@ -116,7 +117,7 @@ const Manifest = z.object({
   result: z.object({
     /** File in the solve output, `*` matching within one path segment; the last match by name wins. */
     file: z.string().min(1),
-    score: Selection,
+    score: Selection.extend({ singleBinary: z.literal(true).optional() }),
     maxScore: z.number().positive().default(1),
     metrics: z.record(z.string(), Selection).default({}),
     /** Conditions that make a trial invalid (an environment fault, not the method's result). */
@@ -125,13 +126,24 @@ const Manifest = z.object({
         z.object({
           path: Path,
           when: z.enum(["truthy", "present"]).default("truthy"),
+          equals: z.string().max(200).optional(),
           failure: FailureKind,
           issue: z.string().max(200),
         }),
       )
       .default([]),
     /** Values the result must record for this trial (e.g. the planned episode); else invalid. */
-    expect: z.array(z.object({ path: Path, equals: z.string().max(200) })).default([]),
+    expect: z
+      .array(
+        z.object({
+          path: Path,
+          equals: z.string().max(200),
+          type: z.enum(["string", "number"]).optional(),
+        }),
+      )
+      .default([]),
+    /** Check planned values before attributing an upstream failure. */
+    expectBeforeInvalid: z.literal(true).optional(),
   }),
 });
 export type Manifest = z.infer<typeof Manifest>;
@@ -391,21 +403,46 @@ export function readResult(
   } catch {
     return fail("the result file is not valid JSON");
   }
-  for (const rule of m.result.invalid) {
-    const vs = select(doc, rule.path);
-    if (rule.when === "present" ? vs.length > 0 : reduce(vs, "any") === 1)
-      return fail(rule.issue, rule.failure);
+  const upstreamFailure = () => {
+    for (const rule of m.result.invalid) {
+      const vs = select(doc, rule.path);
+      const matched =
+        rule.equals !== undefined
+          ? vs.some((v) => String(v) === rule.equals)
+          : rule.when === "present"
+            ? vs.length > 0
+            : reduce(vs, "any") === 1;
+      if (matched) return fail(rule.issue, rule.failure);
+    }
+    return null;
+  };
+  if (!m.result.expectBeforeInvalid) {
+    const failure = upstreamFailure();
+    if (failure) return failure;
   }
   for (const e of m.result.expect) {
     const want = render(e.equals, ctx);
     const got = select(doc, e.path);
-    if (got.length !== 1 || String(got[0]) !== want)
+    if (
+      got.length !== 1 ||
+      (e.type !== undefined && typeof got[0] !== e.type) ||
+      String(got[0]) !== want
+    )
       return fail(
         `the result records ${e.path} = ${got.map(String).join(", ") || "nothing"}, planned ${want}`,
       );
   }
+  if (m.result.expectBeforeInvalid) {
+    const failure = upstreamFailure();
+    if (failure) return failure;
+  }
   // A missing score is the grader's problem, never a 0 (count/any would otherwise give 0).
   const picked = select(doc, m.result.score.path);
+  if (
+    m.result.score.singleBinary &&
+    (picked.length !== 1 || ![0, 1, false, true].some((value) => value === picked[0]))
+  )
+    return fail(`expected one binary score at ${m.result.score.path}`);
   const s = picked.length ? reduce(picked, m.result.score.reduce) : null;
   if (s === null) return fail(`no numeric score at ${m.result.score.path}`);
   const metrics: Record<string, number> = {};
@@ -501,6 +538,7 @@ export const manifestAdapter: AdapterHandlers = {
       ...(run.root ? { root: true } : {}),
       timeoutMin: trial.timeoutMin ?? run.timeoutMin ?? 30,
       mounts,
+      ...(run.dependsOn ? { dependsOn: run.dependsOn } : {}),
       ...(services.length ? { services: services as RunDescription["services"] } : {}),
     };
     return {
