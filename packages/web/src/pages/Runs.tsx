@@ -8,6 +8,7 @@ import { isActive, runPath } from "../lib/format.ts";
 import { overlayOpen, useHotkeys } from "../lib/hotkeys.ts";
 import { navigate, setQuery, useLocation } from "../lib/router.ts";
 import { useRuns, useRunsState } from "../lib/runs-store.ts";
+import { useScrollRestore } from "../lib/scroll.ts";
 import { useAsync } from "../lib/use.ts";
 import { CancelSelected, DeleteSelected } from "./runs/BulkActions.tsx";
 import { type Entry, type Job, KINDS, type Kind, matches, matchesJob } from "./runs/filters.tsx";
@@ -51,6 +52,7 @@ export function Runs() {
   const search = useRef<HTMLInputElement>(null);
   const anyActive = runs.some((r) => isActive(r.state));
   const now = useNow(1000, anyActive);
+  const list = useScrollRestore<HTMLDivElement>("runs", loaded && runs.length > 0);
 
   const terms = useMemo(() => q.toLowerCase().split(/\s+/).filter(Boolean), [q]);
   const visible = useMemo(
@@ -142,8 +144,15 @@ export function Runs() {
     if (cursor >= entries.length) setCursor(Math.max(0, entries.length - 1));
   }, [entries.length, cursor]);
 
+  // Scroll the keyboard cursor into view on every move except the first: on mount the saved
+  // position from the last visit decides where the list sits.
+  const cursorSettled = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll whenever the cursor moves
   useEffect(() => {
+    if (!cursorSettled.current) {
+      cursorSettled.current = true;
+      return;
+    }
     document.querySelector("tr.cursor")?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
 
@@ -192,7 +201,7 @@ export function Runs() {
           value={folder}
           onChange={(f) => setQuery({ folder: f || null })}
         />
-        <div className="page">
+        <div className="page" ref={list} data-scroll-key="runs">
           {!loaded ? (
             <Loading what="Loading runs" />
           ) : error ? (
