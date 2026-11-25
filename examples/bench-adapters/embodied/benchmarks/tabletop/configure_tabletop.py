@@ -11,7 +11,7 @@ sys.path[:0] = [str(EMBODIED), str(EMBODIED / "policies/openpi")]
 
 from adapter import HERE, digest, file_digest, implementation_digest
 from native_runtime import RLINF_REVISION, image_id
-from orbit_embodied.assets import checkpoint_tree_digest, tree_digest
+from orbit_embodied.assets import checkpoint_tree_digest, oft_checkpoint_digests, tree_digest
 from orbit_embodied.tabletop import MANISKILL_VERSION, METAWORLD_MUJOCO_VERSION, METAWORLD_VERSION
 from serve_metaworld import NORMALIZATION_DIR
 
@@ -75,7 +75,7 @@ def reference_for(model, source, assets):
 
 def policy_for(model, reference, weights, image):
     mani = model == "maniskill3"
-    checkpoint = checkpoint_tree_digest(weights)
+    checkpoint = oft_checkpoint_digests(weights)[0] if mani else checkpoint_tree_digest(weights)
     norm = file_digest(weights / ("config.json" if mani else NORMALIZATION_DIR + "/norm_stats.json"))
     command = ["--checkpoint", "/weights", "--checkpoint-digest", checkpoint, "--normalization-digest", norm]
     healthcheck = ["/.venv/bin/python", "/opt/orbit/serve_metaworld.py", "--healthcheck"]

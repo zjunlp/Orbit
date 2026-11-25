@@ -12,11 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, SDK, digest, file_digest, implementation_digest
 from orbit_embodied.evidence import read_episode_reference
+from libero_source import audit_file, standalone_profile
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference-source", type=Path, required=True)
+    parser.add_argument("--libero-source", type=Path, help="Standalone official LIBERO checkout")
     parser.add_argument("--orbit-run", type=Path, required=True)
     parser.add_argument("--orbit-output", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -25,14 +27,16 @@ def main():
     parser.add_argument("--baseline-plan", type=Path, help="record the unchanged comparison criteria of a preceding plan")
     args = parser.parse_args()
     reference = json.loads((HERE / "reference.json").read_text())
-    for name, relative in (("openpi", "."), ("libero", "third_party/libero")):
-        source = args.reference_source / relative
+    libero = args.libero_source or args.reference_source / "third_party/libero"
+    for name, source in (("openpi", args.reference_source), ("libero", libero)):
         revision = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
         if revision != reference["reference"][name]["commit"]:
             raise ValueError("reference source revision differs: " + name)
     for relative, expected in reference["reference"]["files"].items():
-        if file_digest(args.reference_source / relative) != expected:
+        if file_digest(audit_file(args.reference_source, libero, relative)) != expected:
             raise ValueError("reference source content differs: " + relative)
+    if args.libero_source:
+        reference = standalone_profile(reference)
     episode = args.orbit_output / "episode"
     contract = json.loads((episode / "contract.json").read_text())
     result = json.loads((episode / "native-result.json").read_text())
@@ -99,7 +103,7 @@ def main():
                     ignore=shutil.ignore_patterns("test_*.py", "__pycache__"))
     shutil.copy2(args.reference_source / "examples/libero/main.py", staging / "reference_main.py")
     tools = Path(__file__).resolve().parent
-    for path in (tools / "parity.py", tools / "parity_plan.py", tools / "parity_policy.py",
+    for path in (tools / "parity.py", tools / "parity_plan.py", tools / "parity_policy.py", tools / "libero_source.py",
                  HERE / "adapter.py", HERE / "run.py"):
         shutil.copy2(path, staging / path.name)
     plan["files"] = {p.relative_to(staging).as_posix(): file_digest(p)

@@ -1,8 +1,7 @@
 # LingBot-VLA 2.0 on RoboTwin 2.0
 
 This policy serves the [RoboTwin step-50000 checkpoint in LeRobot format](https://huggingface.co/lerobot/lingbot_vla_v2_robotwin/tree/54f79a4b6e9166bda91b5010088097ff3191bca2).
-To reproduce the authors' evaluation, use the full Clean or Randomized
-joint-control registration at RoboTwin `13c3c47` from the
+Use the current full Clean or Randomized joint-control registration from the
 [RoboTwin guide](../../benchmarks/robotwin/README.md). The three RGB views and
 14 native joint positions pass through the published LeRobot processors. The
 postprocessor maps the 55 model action slots back to 14 RoboTwin joint targets.
@@ -14,12 +13,9 @@ Set `LINGBOT_V2_WEIGHTS` to an external asset directory and
 and torchvision, such as `ghcr.io/pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime`.
 The same policy registration works with both suites.
 
-For a cross-revision experiment, select a compatible benchmark registration such
-as the September suite when submitting the job. Orbit records that benchmark's
-own protocol and frozen sample plan. You can reuse the registered Policy, or pass
-`--allow-other-revision` to generate it from the other suite's reference. Both
-paths require matching observation, action and replanning semantics. The real
-model checks described here cover the authors' `13c3c47` revision.
+Orbit records the current benchmark protocol and frozen sample plan. The earlier model execution
+checks used the authors' evaluator revision and are documented in the
+[integration record](../../../../../docs/tasks/20261113-lingbot-vla-v2.md).
 
 ```bash
 hf download lerobot/lingbot_vla_v2_robotwin \

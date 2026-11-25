@@ -93,8 +93,10 @@ class GrootTests(unittest.TestCase):
             self.assertEqual(server.inputs["video.robot0_eye_in_hand"].shape, (1, 1, 256, 256, 3))
             self.assertEqual(server.inputs["annotation.human.task_description"], ["open the drawer"])
             server.actions["action.control_mode"] = np.zeros((1, 16, 2), dtype=np.float32)
-            with self.assertRaisesRegex(ValueError, "wrong width"):
+            with self.assertRaisesRegex(EpisodeFailure, "wrong width: control_mode") as caught:
                 client.act(observation)
+            self.assertEqual(caught.exception.kind, "policy_act")
+            np.testing.assert_array_equal(caught.exception.rejected_actions, server.actions["action.control_mode"][0])
         finally:
             if client is not None:
                 client.close()
@@ -197,6 +199,24 @@ class GrootTests(unittest.TestCase):
                 client.close()
             server.close()
 
+    def test_rejects_a_uniform_chunk_that_disagrees_with_the_handshake(self):
+        for count in (6, 17):
+            with self.subTest(count=count):
+                value = np.arange(count, dtype=np.float32).reshape(1, count, 1)
+                actions = {"action." + field: value for field in REFERENCE["policyProfile"]["action"]["order"]}
+                server = Endpoint(actions=actions)
+                try:
+                    client = GrootClient(server.url, REFERENCE["policyProfile"], timeout=1, replan_steps=4)
+                    try:
+                        with self.assertRaisesRegex(EpisodeFailure, f"returned {count} steps, expected 16") as caught:
+                            client.act(self.observation())
+                        self.assertEqual(caught.exception.kind, "policy_act")
+                        np.testing.assert_array_equal(caught.exception.rejected_actions, value[0])
+                    finally:
+                        client.close()
+                finally:
+                    server.close()
+
     def test_invalid_raw_actions_are_archived_and_never_executed(self):
         libero = json.loads((Path(__file__).resolve().parents[2] / "bench-adapters/embodied/reference.json").read_text())
 
@@ -223,10 +243,15 @@ class GrootTests(unittest.TestCase):
         for reference, io_adapter in ((libero, "libero-native"), (REFERENCE, "gr00t-flat")):
             for field in ("x", "gripper"):
                 cases = [(value, index) for value in (np.inf, -np.inf, np.nan) for index in (0, 15)] + [("invalid", 0)]
+                cases.append((None, 0))  # A finite field with two components instead of one.
                 for number, position in cases:
                     with self.subTest(adapter=io_adapter, field=field, value=number, position=position):
-                        values = np.zeros((1, 16, 1), dtype=np.float32) if not isinstance(number, str) else np.full((1, 16, 1), "0", dtype="<U7")
-                        values[0, position, 0] = number
+                        if number is None:
+                            values = np.arange(32, dtype=np.float32).reshape(1, 16, 2)
+                        else:
+                            values = (np.full((1, 16, 1), "0", dtype="<U7") if isinstance(number, str)
+                                      else np.zeros((1, 16, 1), dtype=np.float32))
+                            values[0, position, 0] = number
                         server = Endpoint(libero=io_adapter == "libero-native", actions={"action." + field: values})
                         client = None
                         try:
@@ -250,8 +275,12 @@ class GrootTests(unittest.TestCase):
                                 self.assertEqual(rejection["encoding"], "raw-policy-actions")
                                 if not isinstance(number, str):
                                     raw = np.load(output / "chunks/0.rejected.npy", allow_pickle=False)
-                                    index = client.order.index(field)
-                                    np.testing.assert_array_equal(raw[:, index], values[0, :, 0])
+                                    if number is None:
+                                        self.assertIn("wrong width: " + field, rejection["reason"])
+                                        np.testing.assert_array_equal(raw, values[0])
+                                    else:
+                                        index = client.order.index(field)
+                                        np.testing.assert_array_equal(raw[:, index], values[0, :, 0])
                                     self.assertIn("chunks/0.rejected.npy", json.loads((output / "evidence-manifest.json").read_text())["files"])
                                 else:
                                     self.assertIn("invalid", rejection["preview"])
@@ -262,6 +291,28 @@ class GrootTests(unittest.TestCase):
                             if client is not None:
                                 client.close()
                             server.close()
+
+    def test_shape_and_horizon_errors_preserve_the_rejected_field(self):
+        cases = (
+            ("x", np.zeros((16, 1), dtype=np.float32), "requires shape"),
+            ("x", np.zeros((2, 16, 1), dtype=np.float32), "requires shape"),
+            ("y", np.zeros((1, 6, 1), dtype=np.float32), "expected 16"),
+        )
+        for field, value, issue in cases:
+            with self.subTest(field=field, shape=value.shape):
+                server = Endpoint(actions={"action." + field: value})
+                try:
+                    client = GrootClient(server.url, REFERENCE["policyProfile"], timeout=1, replan_steps=4)
+                    try:
+                        with self.assertRaisesRegex(EpisodeFailure, field + " .*" + issue) as rejected:
+                            client.act(self.observation())
+                        self.assertEqual(rejected.exception.kind, "policy_act")
+                        expected = value[0] if value.shape[0] == 1 else value
+                        np.testing.assert_array_equal(rejected.exception.rejected_actions, expected)
+                    finally:
+                        client.close()
+                finally:
+                    server.close()
 
     def test_codec_refuses_pickle_bearing_arrays(self):
         with self.assertRaises(ValueError):

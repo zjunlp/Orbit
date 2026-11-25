@@ -26,8 +26,6 @@ class RoboCasaBenchmark(GymBenchmark):
 
     def reset(self, sample):
         seed = self.reset_seed(sample)
-        if not 0 <= seed < 2 ** 32:
-            raise ValueError("RoboCasa365 scene seed must fit in an unsigned 32-bit integer")
         config = self.reference["environment"]
         assets = config["assets"]
         prepare_assets(assets["target"], assets["view"], assets["digest"])

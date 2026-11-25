@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentDefinition, Run, RunCheckpoint, RunSpecInput } from "../contracts/index.ts";
+import {
+  type AgentDefinition,
+  fitRunName,
+  type Run,
+  type RunCheckpoint,
+  type RunSpecInput,
+} from "../contracts/index.ts";
 import * as docker from "../executor/docker.ts";
 import { finishHarness, resumeAgentCommand } from "../harness/index.ts";
 import { builtinRegistry } from "../harness/registry.ts";
@@ -177,7 +183,7 @@ export function resumeSpec(
     agentBundle: undefined,
     command: nextCommand,
     parentId: run.id,
-    name: `Resume ${run.spec.name ?? run.id}`.slice(0, 200),
+    name: fitRunName(`Resume ${run.spec.name ?? run.id}`),
     group: undefined,
     tags: { resumedFrom: run.id },
     params: {},

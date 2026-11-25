@@ -5,6 +5,7 @@ import type { OrbitPaths } from "../config/paths.ts";
 import {
   type Benchmark,
   BenchmarkInput,
+  fitRunName,
   type PreparationCatalog,
   PreparationInput,
   type PreparationStatus,
@@ -154,7 +155,7 @@ export class BenchmarkPreparation {
         command: [...this.deps.self, "__prepare", plan],
         snapshot: false,
         cwd: canonical,
-        name: `Prepare ${recipe.name}`,
+        name: fitRunName(`Prepare ${recipe.name}`),
         group: GROUP,
         resources: { cpus: 2, memGB: 4, gpus: 0, node: this.deps.runs.nodeName },
         timeoutMin: 1440,

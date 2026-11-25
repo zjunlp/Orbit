@@ -7,6 +7,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Core platform: daemon, runs, resources, state
 
+- [20261123](20261123-long-run-names.md) Long Run display names
 - [20261117](20261117-benchmark-resource-preparation.md) Unified official-source benchmark resource preparation
 
 - [20260929](20260929-ts-rewrite-r0.md) R0: TypeScript rewrite skeleton (Orbit)
@@ -58,6 +59,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Bench core: protocol, validity, metrics, reports
 
+- [20261123](20261123-bench-seed-preflight.md) Validate seed-based benchmark submissions
 - [20261117](20261117-transfer-matrix.md) V5: read-only transfer evidence matrix in CLI, API and Web
 
 - [20261117](20261117-evolution-cross-environment.md) V4: prospective cross-environment studies and bounded Codex preview
@@ -131,6 +133,15 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Embodied: policies and native benchmarks
 
+- [20261124](20261124-robotwin-current-source.md) Unify native RoboTwin on the current upstream revision
+- [20261124](20261124-libero-official-source.md) Prepare native LIBERO from its official repository
+- [20261121](20261121-embodied-review-follow-up.md) Embodied review follow-up
+- [20261121](20261121-embodied-pending-review.md) vla-eval receipts and BEHAVIOR source registration
+- [20261122](20261122-embodied-evidence-follow-up.md) Embodied evidence follow-up
+- [20261122](20261122-embodied-audit-recovery.md) Embodied audit recovery and validation
+- [20261122](20261122-embodied-branch-review-fixes.md) Embodied branch review fixes
+- [20261122](20261122-vla-eval-task-identity.md) Stable vla-eval task identities
+
 - [20261113](20261113-behavior-robotagent.md) BEHAVIOR-1K and RobotAgentBench: adapters implemented; native calibration deferred
 
 - [20261103](20261103-embodied-infra-research.md) 具身评测与调度基础设施源码调研
@@ -199,6 +210,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261116](20261116-embodied-catalog-checkpoints.md) Embodied product catalog and CHORES checkpoint scope
 - [20261116](20261116-embodied-agent-adapter-maintenance.md) Cadence and preparation fixes for embodied Agent adapters
 - [20261116](20261116-agent-setup-deadline.md) Agent installation deadline and EmbodiedLab native stop reason
+- [20261117](20261117-galaxea-vla-g05.md) GalaxeaVLA G0.5 on native RoboTwin 2.0
 - [20261114](20261114-xiaomi-robocasa365.md) Xiaomi-Robotics-1 on native RoboCasa365
 - [20261114](20261114-gigaworld-robocasa365.md) GigaWorld-Policy-0.1 on native RoboCasa365
 

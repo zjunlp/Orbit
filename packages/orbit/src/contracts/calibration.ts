@@ -9,6 +9,7 @@ import {
   type CalibrationCheck,
   type CalibrationReport,
   capabilityAllows,
+  type Scoring,
   type Trial,
   taskSuite,
   trialRunIds,
@@ -257,6 +258,26 @@ export function calibrationExecutionEnd(
   return new Date(Math.max(...ends.map((end) => Date.parse(end as string)))).toISOString();
 }
 
+function reproducesOriginalScore(
+  original: Scoring | undefined,
+  result: Pick<Trial, "outcome" | "verifyRunId">,
+): boolean {
+  if (
+    original?.outcome.evaluation !== "valid" ||
+    result.outcome?.evaluation !== "valid" ||
+    original.outcome.score !== result.outcome.score ||
+    original.outcome.maxScore !== result.outcome.maxScore ||
+    original.verifyRunId === result.verifyRunId
+  )
+    return false;
+  const expected = Object.entries(original.outcome.metrics ?? {});
+  const actual = result.outcome.metrics ?? {};
+  return (
+    expected.length === Object.keys(actual).length &&
+    expected.every(([name, value]) => Object.hasOwn(actual, name) && actual[name] === value)
+  );
+}
+
 /** The report of a calibration job (`spec.calibration`), or null for other jobs. */
 export function calibrationReport(
   job: BenchJob,
@@ -393,19 +414,22 @@ export function calibrationReport(
       "saved episode evidence verified without loading a model or simulator",
     );
     if (c.rescore) {
+      // The daemon rescores the first trial for acceptance. Manual rescores can move it into history.
+      const selected = trials[0];
+      const acceptanceEnd = executionEndedAt ? Date.parse(executionEndedAt) : Number.NaN;
+      const acceptanceRescores = selected?.history.length
+        ? [...selected.history.slice(1), selected].filter(
+            (scoring) => scoring.endedAt && Date.parse(scoring.endedAt) <= acceptanceEnd,
+          )
+        : [];
       const again = trials.filter((t) => t.history.length > 0);
       add(
         "requested rescore completed",
-        again.length > 0 &&
-          again.every(
-            (t) =>
-              t.history.at(-1)?.outcome.evaluation === "valid" &&
-              t.outcome?.evaluation === "valid" &&
-              t.history.at(-1)?.outcome.score === t.outcome.score &&
-              t.history.at(-1)?.outcome.maxScore === t.outcome.maxScore &&
-              t.history.at(-1)?.verifyRunId !== t.verifyRunId,
-          ),
-        "selected episode rescored from the original solve; trusted verdict preserved",
+        !job.rescore?.note &&
+          acceptanceRescores.length > 0 &&
+          acceptanceRescores.every((s) => reproducesOriginalScore(selected?.history[0], s)) &&
+          again.every((t) => reproducesOriginalScore(t.history[0], t)),
+        "acceptance and latest rescores agree with the original",
       );
     }
   }

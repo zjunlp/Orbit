@@ -9,7 +9,7 @@ the JAX stream at key 0, including when several episodes share a policy service.
 
 Set `ROBOMME_POLICY_SOURCE` to the pinned upstream policy checkout, `ROBOMME_WEIGHTS` to
 the weight directory, and `registration` to the generated [RoboMME benchmark](../../benchmarks/robomme/README.md) directory.
-The build uses the [OpenPI base image](../openpi/README.md).
+Build the OpenPI dependency image at the pinned revision using the [native LIBERO guide](../../benchmarks/libero/README.md).
 
 ```bash
 hf download Yinpei/pi05_baseline pi05_baseline/79999.zip \
@@ -21,7 +21,7 @@ curl -fLSs https://storage.googleapis.com/big_vision/paligemma_tokenizer.model \
 
 recipe=examples/bench-adapters/embodied/policies/robomme-pi05/configure_robomme_pi05.py
 python3 -B "$recipe" --source "$ROBOMME_POLICY_SOURCE" --build-tag orbit/robomme-pi05:native \
-  --policy-base orbit/embodied-openpi-base:215abfb
+  --policy-base orbit/openpi-deps:reference
 python3 -B "$recipe" --source "$ROBOMME_POLICY_SOURCE" --policy-image orbit/robomme-pi05:native \
   --reference-file "$registration/reference.json" --weights "$ROBOMME_WEIGHTS" --output "$registration/policy.json"
 orbit data add robomme-pi05-baseline "$ROBOMME_WEIGHTS"

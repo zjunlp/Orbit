@@ -259,13 +259,32 @@ export function planConsolidation(input: {
         !f.pruneInvalid ||
         newlyInvalid.has(t.id) ||
         t.outcome?.evaluation !== "invalid" ||
-        t.history.some((h) => h.outcome.evaluation === "valid")
+        t.history.some((h) => h.outcome.evaluation !== "invalid") ||
+        t.priorAttempts?.some(
+          (attempt) =>
+            attempt.outcome?.evaluation !== "invalid" ||
+            attempt.history.some((h) => h.outcome.evaluation !== "invalid"),
+        )
       ) {
         throw new UserError(`source trial ${t.id} has no valid result to adopt`);
       }
     }
   }
-  if (f.pruneInvalid)
+  if (f.pruneInvalid) {
+    const solveOwners = (rows: Iterable<Trial>) => {
+      const owners = new Map<string, Set<string>>();
+      for (const trial of rows) {
+        const member = key(trial);
+        for (const { solveRunId } of [trial, ...(trial.priorAttempts ?? [])]) {
+          if (!solveRunId) continue;
+          const members = owners.get(solveRunId) ?? new Set<string>();
+          members.add(member);
+          owners.set(solveRunId, members);
+        }
+      }
+      return owners;
+    };
+    const before = solveOwners(all.flatMap((detail) => detail.trials));
     for (const t of trials.values()) {
       if (newlyInvalid.has(t.id)) continue;
       t.history = t.history.filter((h) => h.outcome.evaluation !== "invalid");
@@ -274,6 +293,12 @@ export function planConsolidation(input: {
         if (!t.history.length) t.solveRunId = null;
       }
     }
+    for (const [run, members] of solveOwners(trials.values())) {
+      const original = before.get(run);
+      if (original && [...original].some((member) => !members.has(member)))
+        throw new UserError(`refusing to prune only part of shared Solve ${run}`);
+    }
+  }
   const retained = new Set([...trials.values()].flatMap(trialRunIds));
   const removedRuns = [...oldRuns.keys()].filter((rid) => !retained.has(rid));
   const digest = createHash("sha256")

@@ -2,6 +2,7 @@ import { posix } from "node:path";
 import { z } from "zod";
 import { EnvName, ProfileName } from "./common.ts";
 import { Folder } from "./folders.ts";
+import { RUN_NAME_MAX_LENGTH } from "./naming.ts";
 import { DeviceRequest, Lease, ResourceRequest } from "./resources.ts";
 
 const hasDotDot = (p: string) => p.split("/").includes("..");
@@ -290,7 +291,7 @@ export type RunCheckpoint = z.infer<typeof RunCheckpoint>;
 
 export const RunSpec = z
   .object({
-    name: z.string().max(200).optional(),
+    name: z.string().max(RUN_NAME_MAX_LENGTH).optional(),
     group: z.string().max(200).optional(),
     /** Absolute path of a git repository to snapshot into /workspace. */
     project: z.string().optional(),

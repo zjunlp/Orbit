@@ -122,7 +122,7 @@ function fixture(fixedBatch = true) {
     spec: { image: "synthetic", command: ["true"], resources: { gpus: 0 } },
     issues: [],
   });
-  vi.spyOn(AdapterClient.prototype, "score").mockResolvedValue({
+  const score = vi.spyOn(AdapterClient.prototype, "score").mockResolvedValue({
     score: 0,
     maxScore: 1,
     invalid: false,
@@ -189,6 +189,7 @@ function fixture(fixedBatch = true) {
     deps,
     bench,
     solve,
+    score,
     submit,
     cancel,
     finish,
@@ -342,6 +343,16 @@ it("does not accept a calibration fixture as evidence of a real model integratio
   expect(f.submit).not.toHaveBeenCalled();
 });
 
+it("applies connector validation to an existing policy before queuing work", async () => {
+  const f = fixture();
+  const policy = f.bench.policies.get("synthetic");
+  if (!policy) throw new Error("missing fixture");
+  const legacy = { ...policy, connector: "openpi-ws", ioAdapter: "gr00t-flat" };
+  writeFileSync(join(f.home, "policies.json"), JSON.stringify({ policies: [legacy] }));
+  await expect(f.bench.calibrate(f.request)).rejects.toThrow(/OpenPI requires its native/);
+  expect(f.submit).not.toHaveBeenCalled();
+});
+
 it.each(["queued", "starting"] as const)(
   "enforces the total budget while %s and never reports a cancelled check as calibrated",
   async (state) => {
@@ -406,6 +417,41 @@ it("allows explicit later CPU rescore without erasing a failed acceptance budget
   expect(f.solve).toHaveBeenCalledTimes(1);
   expect(f.bench.job(job.id).calibration?.calibrated).toBe(false);
   expect(f.store.getJob(job.id)?.calibrationExpiredAt).toBeTruthy();
+});
+
+it("keeps a mismatched automatic rescore failed after a matching manual rescore", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const f = fixture();
+  const success = { score: 1, maxScore: 1, invalid: false, issues: [] };
+  f.score.mockResolvedValue(success);
+  const job = await f.bench.calibrate(f.request);
+  await f.firstScores(job.id);
+  const selected = f.store.trials(job.id)[0];
+  if (!selected) throw new Error("missing trial");
+  f.score.mockResolvedValueOnce({ ...success, score: 0 });
+  f.finish(selected.verifyRunId);
+  await expect.poll(() => f.bench.job(job.id).calibration?.phase).toBe("done");
+  const before = f.bench.job(job.id).calibration;
+  expect(before?.calibrated).toBe(false);
+  expect(before?.checks.find((c) => c.name === "acceptance budget")?.result).toBe("passed");
+
+  vi.setSystemTime(Date.now() + 60 * 60_000);
+  f.bench.rescore(job.id, { trials: [selected.id] });
+  await expect.poll(() => f.store.getTrial(selected.id)?.state).toBe("verifying");
+  f.finish(f.store.getTrial(selected.id)?.verifyRunId ?? null);
+  await expect.poll(() => f.store.getTrial(selected.id)?.state).toBe("done");
+
+  const final = f.bench.job(job.id);
+  expect(final.trials[0]?.history.map((s) => s.outcome.score)).toEqual([1, 0]);
+  expect(final.trials[0]?.outcome?.score).toBe(1);
+  expect(final.calibration).toMatchObject({
+    phase: "done",
+    calibrated: false,
+    budget: before?.budget,
+  });
+  expect(
+    final.calibration?.checks.find((c) => c.name === "requested rescore completed")?.result,
+  ).toBe("failed");
 });
 
 it("cancels a Run linked after expiry and keeps cleanup pending until its stop is confirmed", async () => {

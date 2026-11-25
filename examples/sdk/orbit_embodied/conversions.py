@@ -11,7 +11,7 @@ def connector_action_conversion(connector, io_adapter=None):
 
 
 def libero_gripper(chunk):
-    """Model gripper in [0, 1] (1 closes) to LIBERO's -1 close / +1 open."""
+    """Model gripper in [0, 1] (1 opens) to LIBERO's -1 open / +1 close."""
     import numpy as np
 
     chunk = np.asarray(chunk)

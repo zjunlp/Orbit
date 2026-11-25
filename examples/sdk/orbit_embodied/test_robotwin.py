@@ -121,9 +121,8 @@ class RobotwinTests(unittest.TestCase):
             self.assertEqual(outcome.observation["joint_state"][0], step)
         self.assertEqual(joint.env.controllers, ["qpos"] * 16)
 
-    def test_september_instruction_uses_native_split_and_is_independent_of_global_rng(self):
+    def test_instruction_uses_native_split_and_is_independent_of_global_rng(self):
         profile = reference()
-        profile["environment"].update(instructionSeedMode="native-episode-seed", instructionSplit="seen")
         benchmark = RoboTwinBenchmark(profile, "adjust_bottle")
         benchmark.seed = 100000
         info = {"object": "bottle"}
@@ -195,7 +194,7 @@ class RobotwinTests(unittest.TestCase):
         benchmark = RoboTwinBenchmark(profile, "adjust_bottle")
         benchmark.seed = 1
         generator = ModuleType("generate_episode_instructions")
-        generator.generate_episode_descriptions = Mock(return_value=[{"unseen": ["Episode instruction"]}])
+        generator.generate_episode_descriptions = Mock(return_value=[{"seen": ["Episode instruction"]}])
         with patch.dict(sys.modules, {generator.__name__: generator}):
             profile["environment"]["instructionMode"] = "task-name"
             self.assertEqual(benchmark._instruction({}), "adjust bottle")
@@ -230,33 +229,33 @@ class RobotwinTests(unittest.TestCase):
         tasks = {"adjust_bottle": 400, **{"synthetic_" + str(i): 401 + i for i in range(49)}}
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "task_config").mkdir()
-            (root / "task_config/_eval_step_limit.yml").write_text(
+            config_dir = root / "env_cfg/task_config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "_eval_step_limit.yml").write_text(
                 "".join(f"{task}: {limit}\n" for task, limit in tasks.items()))
-            for suite in (None, "demo_clean", "demo_randomized"):
+            for suite, expected_split in (("demo_clean", "seen"), ("demo_randomized", "unseen")):
+                (config_dir / (suite + ".yml")).write_text(f"eval_instruction: {expected_split}\n")
                 with self.subTest(suite=suite), patch.object(configure_robotwin, "check_source"), \
-                        patch.object(configure_robotwin, "image_id", return_value="synthetic"), \
+                        patch.object(configure_robotwin, "require_image", return_value="synthetic") as image, \
                         patch.object(configure_robotwin, "implementation_digest", return_value="synthetic"), \
                         patch.object(configure_robotwin.subprocess, "run"), \
                         patch.object(configure_robotwin, "file_digest", return_value="synthetic"), \
                         patch.object(configure_robotwin, "tree_digest",
-                                     return_value=config["assetDigests"].get(suite, "synthetic")):
+                                     return_value=config["assetDigests"][suite]):
                     args = Namespace(suite=suite, recipe="joint", robotwin_source=root, assets=root,
                                      benchmark_image="synthetic")
                     registration = configure_robotwin.configure_benchmark(args, reference())
                     profile = json.loads(registration["config"]["reference"])
                     environment = profile["environment"]
-                    if suite is None:
-                        self.assertEqual(registration["name"], "robotwin-demo-clean-native")
-                        self.assertEqual(environment["tasks"], ["adjust_bottle"])
-                        self.assertEqual(profile["scoreUnit"], "sample")
-                        continue
                     self.assertEqual(registration["name"], "robotwin-" + suite.replace("_", "-") + "-full-native")
                     self.assertEqual(environment["tasks"], list(tasks))
                     self.assertEqual(environment["horizons"], tasks)
                     self.assertEqual(profile["scoreUnit"], "task")
-                    self.assertEqual("task_config/demo_randomized.yml" in profile["reference"]["files"],
-                                     suite == "demo_randomized")
+                    self.assertEqual(environment["instructionSplit"], expected_split)
+                    self.assertEqual(environment["taskConfigDir"], "env_cfg/task_config")
+                    commit = profile["reference"]["evaluation"]["commit"]
+                    self.assertEqual(commit, "ea8b21121ebb3cd201ff5b3fe361944ac94eda3f")
+                    self.assertEqual(image.call_args.args[1]["sources"], {"robotwin": commit})
                     self.assertEqual("background_texture.zip" in profile["reference"]["assets"]["archives"],
                                      suite == "demo_randomized")
 

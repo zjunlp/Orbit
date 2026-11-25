@@ -81,6 +81,26 @@ def read_catalog(root):
     return rows
 
 
+def load_episode_dataset(config, row, task_id):
+    """Parse the published shard for this scene and materialize only the requested episode."""
+    from habitat.datasets.object_nav.object_nav_dataset import ObjectNavDatasetV1
+    from stopwatch.eval.env import _dataset_config
+
+    scene = scene_name(row["scene"])
+    with gzip.open(ROOT / EPISODES / "content" / (scene + ".json.gz"), "rt", encoding="utf-8") as stream:
+        native = json.load(stream)
+    selected, = (ep for ep in native["episodes"] if episode_id(ep["scene_id"], ep["episode_id"]) == task_id)
+    native["episodes"] = [selected]
+    scenes_dir = _dataset_config(config).scenes_dir
+    dataset = ObjectNavDatasetV1()
+    dataset.from_json(json.dumps(native), scenes_dir=scenes_dir)
+    episode, = dataset.episodes
+    episode.episode_id = str(selected["episode_id"])
+    scene_config = config.dataset.scene_dataset_config
+    episode.scene_dataset_config = str(Path(scenes_dir) / scene_config) if scene_config is not None else "default"
+    return dataset, episode
+
+
 def action_index(action):
     from .driver import EpisodeFailure
 
@@ -133,20 +153,18 @@ class HssdOvBenchmark:
         import habitat
         import numpy as np
         from stopwatch.config import load_config
-        from stopwatch.eval.env import _habitat_config, _install_navmesh, _load_dataset
+        from stopwatch.eval.env import _habitat_config, _install_navmesh
         from stopwatch.eval.geometry import _load_goal_sets, destination_targets, load_scene_instances
 
         reset_seed(sample, self.reference)
         if sample["initialStateDigest"] != digest(self.row):
             raise ValueError("HSSD-OV sample differs from the frozen catalog")
         config = load_config(CONFIG, [f"paths.root={ROOT}"])
-        dataset = _load_dataset(config)
+        dataset, episode = load_episode_dataset(config, self.row, sample["taskId"])
         scene = self.row["scene"]
-        episode, = (ep for ep in dataset.episodes if episode_id(ep.scene_id, ep.episode_id) == sample["taskId"])
         if (episode.start_position != self.row["start"] or episode.start_rotation != self.row["rotation"]
                 or episode.object_category != self.row["category"]):
             raise ValueError("installed HSSD-OV episode differs from the frozen catalog")
-        dataset.episodes = [episode]
         # Docker exposes only the leased GPU. Let EGL select it directly;
         # its NVIDIA device index can differ from container-local CUDA index 0.
         self.env = habitat.Env(config=_habitat_config(config, -1), dataset=dataset)

@@ -1,7 +1,13 @@
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import type { OrbitClient } from "../client/index.ts";
-import { isTerminal, type Run, type RunSpecInput, runDisplayName } from "../contracts/index.ts";
+import {
+  fitRunName,
+  isTerminal,
+  type Run,
+  type RunSpecInput,
+  runDisplayName,
+} from "../contracts/index.ts";
 import { exec } from "../lib/exec.ts";
 import { detectAgent } from "./agent.ts";
 import { parseDataset } from "./cluster.ts";
@@ -143,7 +149,7 @@ export async function smokeRun(
   const run = await c.submit(
     {
       ...spec,
-      name: `${runDisplayName(spec)} (smoke)`,
+      name: fitRunName(runDisplayName(spec), " (smoke)"),
       group: undefined,
       params: {},
       tags: { ...spec.tags, smoke: "true" },

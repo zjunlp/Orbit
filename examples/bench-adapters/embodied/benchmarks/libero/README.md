@@ -1,6 +1,6 @@
 # LIBERO and OpenPI π₀.₅
 
-Build and register the pinned OpenPI simulator and checkpoint, then run a frozen LIBERO sample plan.
+Build and register the pinned LIBERO simulator and optionally the OpenPI checkpoint, then run a frozen sample plan.
 For other suites or checkpoints, see [LIBERO suite selection](../../../../../docs/guides/libero-suites.md).
 
 ## Reference and assets
@@ -10,20 +10,43 @@ settle steps and action replanning. The public checkpoint and normalization cont
 does not attest that the local images or calibration passed. `audit.py` prints a machine-independent report;
 store that report, registrations, weights and experiment outputs outside the repository.
 
-Set `OPENPI_SOURCE`, `CHECKPOINT_DIR`, `LOCAL_CONFIG` and `AUDIT_FILE` in your local environment.
-The source must match the pinned OpenPI checkout, including its own LIBERO submodule. The
-standalone LIBERO checkout can have a different revision and is not substituted automatically.
+Set `LIBERO_SOURCE`, `OPENPI_SOURCE`, `CHECKPOINT_DIR`, `LOCAL_CONFIG` and `AUDIT_FILE` in your local environment.
+LIBERO supplies the simulator, task catalog and initial states. OpenPI supplies the pinned
+dependency recipe, client and reference evaluator. Check out the references separately. The
+OpenPI checkout can leave its submodules uninitialized.
 
-Build the upstream dependency bases from the audited source, then bake in the source packages
-that upstream's development images normally expect as bind mounts:
+Build the dependency base, then add the source packages to the runtime image. An existing
+dependency image built from the same pinned sources can also serve as `BENCHMARK_BASE`.
 
 ```bash
-docker build --label orbit.task=embodied-eval -t orbit/libero-deps:reference \
-  -f "$OPENPI_SOURCE/examples/libero/Dockerfile" "$OPENPI_SOURCE"
+git clone https://github.com/Lifelong-Robot-Learning/LIBERO "$LIBERO_SOURCE"
+git -C "$LIBERO_SOURCE" checkout --detach f78abd68ee283de9f9be3c8f7e2a9ad60246e95c
+git clone https://github.com/Physical-Intelligence/openpi "$OPENPI_SOURCE"
+git -C "$OPENPI_SOURCE" checkout --detach 215abfb217dbac7d5f1273282331b9b1866c0479
+
+python3 examples/bench-adapters/embodied/benchmarks/libero/build_base.py \
+  --reference-source "$OPENPI_SOURCE" --libero-source "$LIBERO_SOURCE" \
+  --component benchmark --tag orbit/libero-deps:reference
 docker build --label orbit.task=embodied-eval --build-context openpi="$OPENPI_SOURCE" \
+  --build-context libero="$LIBERO_SOURCE" \
   --build-arg BENCHMARK_BASE=orbit/libero-deps:reference \
   -f examples/bench-adapters/embodied/benchmarks/libero/benchmark.Dockerfile -t orbit/libero-native:reference .
+```
 
+The benchmark alone can be prepared and registered with the following commands. Use the same
+audit file in Orbit's built-in LIBERO preparation recipe.
+
+```bash
+python3 examples/bench-adapters/embodied/benchmarks/libero/audit.py --reference-source "$OPENPI_SOURCE" \
+  --libero-source "$LIBERO_SOURCE" --benchmark-image orbit/libero-native:reference > "$AUDIT_FILE"
+python3 examples/bench-adapters/embodied/benchmarks/libero/configure.py --audit "$AUDIT_FILE" \
+  --libero-source "$LIBERO_SOURCE" --benchmark-only --output-dir "$LOCAL_CONFIG"
+```
+
+To prepare the optional π₀.₅ policy at the same time, build its image and include it and the
+checkpoint in the audit.
+
+```bash
 docker build --label orbit.task=embodied-eval -t orbit/openpi-deps:reference \
   -f "$OPENPI_SOURCE/scripts/docker/serve_policy.Dockerfile" "$OPENPI_SOURCE"
 docker build --label orbit.task=embodied-eval --build-context openpi="$OPENPI_SOURCE" \
@@ -31,10 +54,10 @@ docker build --label orbit.task=embodied-eval --build-context openpi="$OPENPI_SO
   -f examples/bench-adapters/embodied/policies/openpi/policy.Dockerfile -t orbit/openpi-policy:reference .
 
 python3 examples/bench-adapters/embodied/benchmarks/libero/audit.py --reference-source "$OPENPI_SOURCE" \
-  --checkpoint "$CHECKPOINT_DIR" --benchmark-image orbit/libero-native:reference \
+  --libero-source "$LIBERO_SOURCE" --checkpoint "$CHECKPOINT_DIR" --benchmark-image orbit/libero-native:reference \
   --policy-image orbit/openpi-policy:reference > "$AUDIT_FILE"
 python3 examples/bench-adapters/embodied/benchmarks/libero/configure.py --audit "$AUDIT_FILE" \
-  --reference-source "$OPENPI_SOURCE" --output-dir "$LOCAL_CONFIG"
+  --libero-source "$LIBERO_SOURCE" --output-dir "$LOCAL_CONFIG"
 ```
 
 Inspect the resolved image IDs and build inputs in the audit. `configure.py` uses those immutable
@@ -52,7 +75,7 @@ Python version. These provisioning changes are separate from evaluation protocol
 
 ```bash
 python3 examples/bench-adapters/embodied/benchmarks/libero/build_base.py --reference-source "$OPENPI_SOURCE" \
-  --component benchmark --python "$PYTHON38" --tag orbit/libero-deps:reference
+  --libero-source "$LIBERO_SOURCE" --component benchmark --python "$PYTHON38" --tag orbit/libero-deps:reference
 python3 examples/bench-adapters/embodied/benchmarks/libero/build_base.py --reference-source "$OPENPI_SOURCE" \
   --component policy --python "$PYTHON3119" --lerobot-source "$LEROBOT_SOURCE" \
   --tag orbit/openpi-deps:reference
@@ -66,7 +89,7 @@ orbit policy add "$LOCAL_CONFIG/policy.json"
 orbit bench add-file "$LOCAL_CONFIG/benchmark.json"
 orbit bench tasks libero-native --json
 
-python3 examples/bench-adapters/embodied/plan.py --reference-source "$OPENPI_SOURCE" \
+python3 examples/bench-adapters/embodied/plan.py --libero-source "$LIBERO_SOURCE" \
   --task "libero_spatial:$TASK_NAME" --initial-state 0 --initial-state 1 \
   > "$LOCAL_CONFIG/samples.json"
 orbit bench run libero-native --method pi05=policy,policyRef=pi05-libero \
@@ -112,7 +135,7 @@ files and records the comparison code, immutable runtime images and original evi
 
 ```bash
 python3 -B examples/bench-adapters/embodied/benchmarks/libero/parity_plan.py \
-  --reference-source "$OPENPI_SOURCE" --orbit-run "$SOLVE_RUN_JSON" \
+  --reference-source "$OPENPI_SOURCE" --libero-source "$LIBERO_SOURCE" --orbit-run "$SOLVE_RUN_JSON" \
   --orbit-output "$SOLVE_OUTPUT" --output-dir "$PARITY_CONFIG"
 ```
 

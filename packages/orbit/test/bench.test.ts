@@ -1244,7 +1244,40 @@ describe("resources file", () => {
       measured({}, { state: "failed", reason: "timeout after 60 min" }),
     ]);
     expect(timeout.suggest.timeoutMin).toBe(120);
+    const shared = measured(
+      {},
+      {
+        state: "failed",
+        reason: "timeout after 80 min",
+        endedAt: "2026-01-01T01:20:00Z",
+        spec: { ...run({}).spec, timeoutMin: 80, tags: { batch_size: "8" } },
+      },
+    );
+    const batchOnly = usageRow("t", { ...req, timeoutMin: 80 }, [shared]);
+    expect(batchOnly).toMatchObject({ maxMinutes: 80, timeouts: 1 });
+    expect(batchOnly.suggest.timeoutMin).toBeUndefined();
+    expect(batchOnly.notes.join()).toContain("per-episode timeout advice unavailable");
+    const dedicated = measured(
+      {},
+      {
+        id: "single",
+        endedAt: "2026-01-01T00:10:00Z",
+        spec: { ...run({}).spec, timeoutMin: 10 },
+      },
+    );
+    const mixed = usageRow("t", { ...req, timeoutMin: 80 }, [dedicated, shared]);
+    expect(mixed.suggest).toEqual({ memGB: 24, gpuMemGB: 12, cpus: 8 });
+    const sharedByPlan = { ...shared, id: "shared", spec: { ...shared.spec, tags: {} } };
+    expect(
+      usageRow("t", req, [dedicated, sharedByPlan], new Set(["shared"])).suggest.timeoutMin,
+    ).toBeUndefined();
     expect(usageRow("t", req, [run({})]).notes).toEqual(["no measured runs"]);
+    const unsampledBatch = usageRow("t", req, [{ ...shared, usage: null }]);
+    expect(unsampledBatch).toMatchObject({ runs: 0, maxMinutes: 80 });
+    expect(unsampledBatch.notes).toEqual([
+      "shared solve timings cover the entire batch; per-episode timeout advice unavailable",
+      "no measured runs",
+    ]);
   });
 });
 

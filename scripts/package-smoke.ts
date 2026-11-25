@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  accessSync,
+  constants,
   cpSync,
   existsSync,
   mkdtempSync,
@@ -56,6 +58,10 @@ try {
   run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball]);
   assert.equal(run(cli, ["--version"]).trim(), manifest.version);
   const pkg = join(temp, "node_modules/@zjunlp/orbit");
+  accessSync(
+    join(pkg, "dist/bench-assets/examples/bench-adapters/embodied/adapter.py"),
+    constants.X_OK,
+  );
   for (const file of [
     "bench-adapters/humaneval/adapter.py",
     "bench-adapters/harbor-suites/adapter.mjs",

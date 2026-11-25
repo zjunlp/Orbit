@@ -8,7 +8,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "sdk"))
 from orbit_embodied import digest
-from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_distinct_resets, seed_asset
+from orbit_embodied.binding import GENERATED_ENVIRONMENTS, check_plan_resets, fast_wam_seed, seed_asset
 from orbit_embodied.libero_plus import catalog as libero_plus_catalog
 from orbit_embodied.simpler import initial_state_count
 from orbit_embodied.vlabench import initial_state_count as vlabench_state_count
@@ -17,7 +17,9 @@ from adapter import catalog
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--reference-source", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--reference-source", type=Path)
+    source.add_argument("--libero-source", type=Path, help="Standalone official LIBERO checkout")
     parser.add_argument("--reference-file", type=Path, default=HERE / "reference.json")
     parser.add_argument("--suite", default="libero_spatial")
     selection = parser.add_mutually_exclusive_group(required=True)
@@ -31,16 +33,29 @@ def main():
     parser.add_argument("--environment-seed", type=int)
     parser.add_argument("--repetitions", type=int, default=1)
     args = parser.parse_args()
+    if args.repetitions < 1:
+        parser.error("--repetitions must be positive")
     reference = json.loads(args.reference_file.read_text())
     environment = reference.get("environment", {})
     kind = environment.get("kind")
+    fixed_seed = fast_wam_seed(reference)
     environment_seed = args.environment_seed
+    if fixed_seed is not None:
+        if environment_seed is not None and environment_seed != fixed_seed:
+            parser.error(f"Fast-WAM requires the frozen LIBERO environment seed {fixed_seed}")
+        environment_seed = fixed_seed
     if environment_seed is None:
         defaults = {"calvin": 0, "robodojo": 0, "vlabench": 42, "vima-bench": 42, "robomimic": 0, "colosseum-v2": 0}
-        environment_seed = environment.get("environmentSeed", 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7))
+        default_seed = 0 if environment.get("protocol") == "rvt-test" else defaults.get(kind, 7)
+        if (reference["id"] == "openvla-oft-libero-reference/1"
+                or (kind == "robocasa365" and environment.get("protocol") == "diffusion-policy")):
+            default_seed = reference["parameters"]["environmentSeed"]
+        environment_seed = environment.get("environmentSeed", default_seed)
     generated = kind in GENERATED_ENVIRONMENTS
-    uint32_seed = (kind in ("robocasa365", "robotwin", "robolab", "robodojo", "robomimic", "vima-bench", "colosseum-v2")
-                   or "simplerRobot" in environment or "initialStateCounts" in environment)
+    if args.libero_source and (generated or kind == "libero-plus"):
+        parser.error("--libero-source requires a base LIBERO evaluation profile")
+    uint32_seed = (kind in ("robolab", "robodojo", "robomimic", "vima-bench", "colosseum-v2")
+                   or "initialStateCounts" in environment)
     if environment_seed < 0:
         raise ValueError("environment seed must be nonnegative")
     if generated:
@@ -52,7 +67,8 @@ def main():
                 parser.error("--suite must match the registered LIBERO-Plus suite")
             listing = libero_plus_catalog(args.reference_source, args.suite)
         else:
-            listing = catalog(args.reference_source, args.suite)
+            listing = catalog(args.libero_source or args.reference_source, args.suite,
+                              standalone=args.libero_source is not None)
         tasks = {task["id"]: task for task in listing if task["supported"]}
     items = []
     unsupported = environment.get("unsupported", {})
@@ -94,8 +110,7 @@ def main():
                            "initialStateId": str(initial_state), "initialStateDigest": task["tags"]["initialStateDigest"],
                            "environmentSeed": environment_seed, "policySeed": 0, "repetition": repetition}
                 items.append({"sampleId": digest(content), **content})
-    if generated:
-        check_distinct_resets(items, reference)
+    check_plan_resets(items, reference)
     result = {"version": 1, "items": items, "digest": digest(items)}
     print(json.dumps(result, indent=2))
 

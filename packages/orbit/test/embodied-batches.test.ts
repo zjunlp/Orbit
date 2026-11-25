@@ -520,11 +520,11 @@ it("does not replace a valid completed episode merely because its shared Run lat
     cleanup: "done" as const,
     review: null,
   };
-  const target = f.trials.map((trial) => ({
+  const target = f.trials.map((trial, index) => ({
     ...trial,
     state: "done" as const,
     solveRunId: "shared",
-    outcome,
+    outcome: index === 0 ? outcome : { ...outcome, evaluation: "invalid" as const, score: null },
   }));
   const donor = f.trials.map((trial, index) => ({
     ...trial,
@@ -536,18 +536,56 @@ it("does not replace a valid completed episode merely because its shared Run lat
   }));
   const job = { ...f.job, id: "retry" };
   assignSolveBatches(job, donor);
+  const oldRuns = new Map([
+    ["shared", { ...f.solve, state: "failed" as const }],
+    ["retry-run", { ...f.solve, id: "retry-run", state: "succeeded" as const }],
+  ]);
+  const input = { oldRuns, failures: new Map() };
   expect(() =>
     planConsolidation({
+      ...input,
       target: { job: f.job, trials: target, summary: [] },
       donors: [{ job, trials: donor, summary: [] }],
-      oldRuns: new Map([
-        ["shared", { ...f.solve, state: "failed" as const }],
-        ["retry-run", { ...f.solve, id: "retry-run", state: "succeeded" as const }],
-      ]),
-      failures: new Map(),
       flags: { sources: ["retry"], replaceFailed: true },
     }),
   ).toThrow(/refusing to replace valid trial/);
+
+  const validTarget = target.map((trial) => ({ ...trial, outcome }));
+  const invalidDonor = donor.map((trial) => ({
+    ...trial,
+    outcome: { ...outcome, evaluation: "invalid" as const, score: null },
+  }));
+  const pruned = planConsolidation({
+    ...input,
+    target: { job: f.job, trials: validTarget, summary: [] },
+    donors: [{ job, trials: invalidDonor, summary: [] }],
+    flags: { sources: ["retry"], pruneInvalid: true },
+  });
+  expect(pruned.adopted).toEqual([]);
+  expect(pruned.removedRuns).toEqual(["retry-run"]);
+  expect(pruned.trials).toEqual(validTarget);
+
+  const mixedDonor = donor.map((trial, index) => ({
+    ...trial,
+    outcome: index === 0 ? (invalidDonor[0]?.outcome ?? outcome) : outcome,
+  }));
+  expect(() =>
+    planConsolidation({
+      ...input,
+      target: { job: f.job, trials: target, summary: [] },
+      donors: [{ job, trials: mixedDonor, summary: [] }],
+      flags: { sources: ["retry"], pruneInvalid: true },
+    }),
+  ).toThrow(/prune only part of shared Solve/);
+
+  expect(() =>
+    planConsolidation({
+      ...input,
+      target: { job: f.job, trials: target, summary: [] },
+      donors: [],
+      flags: { sources: [], pruneInvalid: true },
+    }),
+  ).toThrow(/prune only part of shared Solve/);
 });
 
 it("retains previous shared solve evidence and ownership when batch retries are adopted", () => {

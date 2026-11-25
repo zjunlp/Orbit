@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from adapter import HERE, digest, file_digest, implementation_digest
 from native_runtime import image_id
-from orbit_embodied.assets import checkpoint_tree_digest
+from orbit_embodied.assets import oft_checkpoint_digests
 from orbit_embodied.libero_suites import LABELS, benchmark_name
 
 
@@ -71,7 +71,8 @@ def main():
         if (config.get("num_images_in_input"), config.get("use_proprio"), config.get("action_dim"),
                 config.get("num_action_chunks"), config.get("is_lora")) != (1, False, 7, 8, False):
             raise ValueError("unexpected RLinf LIBERO-90 model configuration")
-    checkpoint, normalization = checkpoint_tree_digest(weights), file_digest(weights / "dataset_statistics.json")
+    checkpoint, _legacy = oft_checkpoint_digests(weights)
+    normalization = file_digest(weights / "dataset_statistics.json")
     service = {
         "name": "policy", "image": image_id(args.policy_image), "cpus": 4, "memGB": 32, "gpuMemGB": 24,
         "command": ["/opt/orbit/serve_openvla.py", "--checkpoint", "/weights",

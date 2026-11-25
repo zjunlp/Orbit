@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "sdk"))
-from orbit_embodied.binding import digest, seed_asset
+from orbit_embodied.binding import digest, robotwin_seed, seed_asset
 from orbit_embodied.evidence import write_json
 from orbit_embodied.robotwin import RoboTwinBenchmark
 
@@ -18,9 +18,9 @@ def sample_plan(reference, tasks, seed, trials, max_candidates):
     if not tasks or len(set(tasks)) != len(tasks) or not set(tasks) <= set(environment["tasks"]):
         raise ValueError("select distinct tasks from the frozen RoboTwin catalog")
     start = 100000 * (1 + seed)
-    if not (0 <= seed and 1 <= trials <= max_candidates <= 2 ** 31
-            and start + max_candidates <= 2 ** 32):
+    if not (0 <= seed and 1 <= trials <= max_candidates <= 2 ** 31):
         raise ValueError("invalid native seed or candidate search bounds")
+    robotwin_seed(start, max_candidates - 1)
 
     items = []
     for task in tasks:
@@ -28,7 +28,7 @@ def sample_plan(reference, tasks, seed, trials, max_candidates):
         initial_digest = seed_asset(reference, task)
         accepted = 0
         for offset in range(max_candidates):
-            if not benchmark.expert_accepts(start + offset, offset):
+            if not benchmark.expert_accepts(robotwin_seed(start, offset), offset):
                 continue
             content = {"taskId": task, "benchmarkProfile": reference["id"],
                        "initialStateId": str(offset), "initialStateDigest": initial_digest,

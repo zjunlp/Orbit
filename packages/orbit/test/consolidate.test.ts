@@ -47,6 +47,34 @@ it("rejects a changed preview before mutating jobs, ownership or files", async (
   for (const id of changed.removedRuns) expect(existsSync(join(f.paths.runs, id))).toBe(true);
 });
 
+it("refuses to prune a donor whose prior attempt is unknown", async () => {
+  const f = fixture();
+  const donor = f.store.getTrial("source.a");
+  const run = f.runs.get(donor?.solveRunId ?? "");
+  if (!donor?.outcome || !run) throw new Error("missing donor fixture");
+  const prior = { ...run, id: "unknown-prior-solve" };
+  f.store.putRun(prior);
+  mkdirSync(f.runs.dirs(prior.id).output, { recursive: true });
+  f.store.putTrial({
+    ...donor,
+    outcome: { ...donor.outcome, evaluation: "invalid" },
+    priorAttempts: [
+      {
+        solveRunId: prior.id,
+        verifyRunId: null,
+        history: [],
+        outcome: { ...donor.outcome, evaluation: "unknown" },
+      },
+    ],
+  });
+  for (const dryRun of [true, false])
+    await expect(
+      f.bench.consolidate("target", { sources: ["source"], pruneInvalid: true, dryRun }),
+    ).rejects.toThrow(/no valid result to adopt/);
+  expect(existsSync(f.runs.dirs(prior.id).output)).toBe(true);
+  expect(f.store.getTrial(donor.id)?.priorAttempts?.[0]?.solveRunId).toBe(prior.id);
+});
+
 it.each(["valid", "unknown"] as const)(
   "keeps freshly reclassified %s evidence until a later prune",
   async (evaluation) => {

@@ -2,7 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from .assets import checkpoint_tree_digest, policy_asset_digests, tree_digest
+from .assets import checkpoint_tree_digest, oft_checkpoint_digests, oft_checkpoint_files, policy_asset_digests, tree_digest
 
 
 class CheckpointDigestTests(unittest.TestCase):
@@ -35,6 +35,22 @@ class CheckpointDigestTests(unittest.TestCase):
             hub_ref.write_text("revision-1")
             weights.write_bytes(b"modified")
             self.assertNotEqual(checkpoint_tree_digest(checkpoint), expected)
+
+    def test_oft_cache_marker_keeps_a_stable_digest_and_legacy_identity(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            weights = root / "model.safetensors"
+            weights.write_bytes(b"weights")
+            expected = checkpoint_tree_digest(root)
+            marker = root / ".cache/huggingface/CACHEDIR.TAG"
+            marker.parent.mkdir(parents=True)
+            marker.write_text("cache metadata")
+
+            self.assertEqual(list(oft_checkpoint_files(root)), [weights])
+            self.assertEqual(oft_checkpoint_digests(root), (expected, checkpoint_tree_digest(root)))
+            self.assertNotEqual(checkpoint_tree_digest(root), expected)
+            weights.write_bytes(b"changed weights")
+            self.assertNotIn(expected, oft_checkpoint_digests(root))
 
     def test_bookkeeping_alone_does_not_count_as_a_checkpoint(self):
         with TemporaryDirectory() as directory:

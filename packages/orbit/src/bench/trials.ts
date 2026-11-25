@@ -11,6 +11,7 @@ import {
   type BenchJob,
   type Benchmark,
   type BenchReport,
+  fitRunName,
   isTerminal,
   type Method,
   type Outcome,
@@ -178,13 +179,14 @@ export class TrialMachine {
     }
     // Read again: the job may have been moved to another folder meanwhile.
     const folder = this.deps.store.getJob(job.id)?.folder ?? job.folder;
+    const sample = t.sampleRef || (job.spec.seeds ?? 1) > 1 ? ` #${sampleLabel(t)}` : "";
     return this.deps.runs.submit(
       {
         ...spec,
         ...(phase === "solve" && job.spec.checkpoint ? { checkpoint: job.spec.checkpoint } : {}),
         // Scoring reads run outputs from this node's disk, so benchmark runs stay here.
         resources: { ...spec.resources, node: this.deps.runs.nodeName },
-        name: `${t.task} · ${t.method}${t.sampleRef || (job.spec.seeds ?? 1) > 1 ? ` #${sampleLabel(t)}` : ""} · ${phase}`,
+        name: fitRunName(t.task, ` · ${t.method}${sample} · ${phase}`),
         group: benchGroup(job.id),
         tags: {
           ...spec.tags,

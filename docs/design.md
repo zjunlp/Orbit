@@ -199,6 +199,8 @@ unknown。纯粹用于展示：准入只看显存占用。
   hooks[{ service?, command, timeoutSec }] }
 ```
 
+Run 的展示名长度上限为 512。自动生成的名称在上限内原样保留。超长的 benchmark Run 名称保留方法名、样本编号和运行阶段，并缩短展示的任务部分。完整任务 ID 保存在 `params.task`。
+
 **Run**：`{ id, spec, state, exitCode?, node, remote, origin?, leaseId?, containerId?, code{commit, dirty, diffRef},
 createdAt/startedAt/endedAt, cleanup: pending|done|failed, usage?, trajectory, tokens }`
 
@@ -672,7 +674,9 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
   `LANG`、`LC_ALL`、`TZ`、`TMPDIR` 与 `ORBIT_ADAPTER_PROTOCOL=1`，daemon 环境里的密钥不传给适配器。每次调用 120 s 超时。
   适配器独立进程组运行；超时立即拒绝调用并向整组发 SIGTERM，250 ms 后 SIGKILL，关闭管道并解除子进程引用，
   不等待后代持有的 stdout 关闭。正常完成仍读到 stdout 末尾。
-- 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, solve?, verify? }`；`trial` =
+- 可选计划校验：`tasks` 回复声明 `validateSamplePlan: true` 后，daemon 在写入作业前调用 `validate-plan`，请求包含整份 `samplePlan`，通过时回复 `{ ok: true }`。
+- 可选试验次数校验：`tasks` 回复声明 `validateSeedSubmission: true` 后，daemon 在写入作业前调用 `validate-seed-submission`，传入已解析的任务、试验次数和作业选项。共享 vla-eval 由此检查 `episodes` 上限，RoboTwin 另按目录校验场景和显式 seed。
+- 请求：`{ protocol: 1, op, benchmark: { name, path, config }, trial?, samplePlan?, seedSubmission?, solve?, verify? }`；`trial` =
   `{ id, task, method, seed, options, timeoutMin?, resources?, staging, hostNetwork }`（`resources` 为 job 固定的任务 solve 资源覆盖值，供原生 runner 同步设置子容器限制；`staging` 是 trial 私有的宿主目录，用于要挂进
   Run 的副本，trial 结束时删除）；`solve` / `verify` = `{ run, output }`（Run 记录与其 `$ORBIT_OUTPUT` 的宿主路径）。
 - 回复：`tasks` → `{ tasks: BenchTask[], metrics?: MetricSpec[], capabilities?: BenchCapabilities, official?: OfficialRule }`；`solve` / `verify` → `{ spec, issues? }`；`score` →
@@ -970,7 +974,7 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 
 - **入口**：`orbit policy add / ls / rm`、`bench add-file`、`bench run --sample-plan [--batch-size]`、`bench calibrate --policy`
   都走现有 HTTP 控制面。原生路径为 `examples/bench-adapters/embodied` 加容器内 `examples/sdk/orbit_embodied`，不依赖 vla-eval；
-  旧 vla-eval 登记保持原行为。
+  SDK 版 RoboTwin 重评使用 Solve 保存的场景记录。
 - **源码布局**：原生登记使用公共 `adapter.py`。benchmark 的准备工具和镜像配方按家族放在 `embodied/benchmarks/`，
   模型服务、镜像配方与权重工具放在 `embodied/policies/`。[具身适配器索引](../examples/bench-adapters/embodied/README.md)。
 - **语义绑定**：`BenchCapabilities.embodied` 声明评测 profile、观测与动作语义、显式映射及可选的重规划步数。提交时核对
@@ -983,7 +987,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   Binding、执行快照和校准判定独立于提示。
 - **样本身份**：`spec.samplePlan` 是带摘要的有序计划；sampleId 由任务、profile、初态资产摘要与索引、环境 seed、模型 seed 和重复
   编号生成。新分支用 sampleRef、禁止 seed，联合契约拒绝混用；旧 seed 作业、报告与 n→n−1 规则不变，新报告为 `orbit-report/2`，
-  报告与 Trial 导航按计划顺序列出样本。WidowX 的重置种子为 `environmentSeed + initialStateId`，计划和批次拒绝别名到同一重置的样本。
+  报告与 Trial 导航按计划顺序列出样本。原版 SimplerEnv 与 ManiSkill3 的重置种子为 `environmentSeed + initialStateId`，计划校验与
+  Solve 检查其 32 位无符号整数上限。计划和批次拒绝别名到同一重置的样本。
 - **比较条件**：计划摘要与配对共用冻结条件：适配器配置、非秘密环境值、源码、协议、options、逐任务生效资源/timeout，以及固定
   批次的划分。批次划分与条件使用同一生效预算规则（`splitBatches`），共享模型服务与分别启动不会被当作同条件。配对要求相同
   有效样本；Web 对比把后端未配对的任务列为 “No paired result”。新旧作业不直接归并，归并逐样本核对冻结预算。
@@ -1024,7 +1029,9 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   场景准备和登记均核对固定的发布资产清单摘要，覆盖原始文件与派生场景。
   策略登记冻结投影版本并校验单步 HSSD-OV 动作契约，每个动作块封存归一化速度和解码状态，CPU 重评根据原始动作块复算离散动作。
   [评测协议](../examples/bench-adapters/embodied/benchmarks/hssd-ov/README.md)
-- **LIBERO 套件**：Spatial、Object、Goal、Long 共用原生 driver，并各自登记评测配置。π₀.₅ 共用官方多套件权重，GR00T 按
+- **LIBERO 套件**：Spatial、Object、Goal、Long、90 共用原生 driver，并各自登记评测配置。原生 LIBERO
+  准备流程从官方仓库的固定版本读取任务和初态，并与 OpenPI 的依赖配方、客户端及参考评测脚本分开审计。
+  π₀.₅ 共用官方多套件权重，GR00T 按
   suite 选择权重，OFT 可选联合权重。OFT 的 `normalizationKey` 随 Policy 冻结并与服务握手核对。[套件说明](guides/libero-suites.md)
   Fast-WAM Spatial 配方单独冻结 MuJoCo 3.3.2、30 步预热和 400 步控制上限。两个推理模式以独立 Policy 登记，复用相同的样本计划。
 - **RoboCasa365**：Atomic-Seen 使用原生 PandaOmron Gymnasium 环境。每个样本以 `environmentSeed + initialStateId` 创建首个
@@ -1041,7 +1048,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **RLBench**：MT100 的种子场景与 RVT-18 的测试初态独立登记。RVT 保留四路相机、世界坐标点云、原生位姿规划和碰撞标志。
   CoppeliaSim 使用 Xvfb 和 Mesa GLX，每个 episode 启动独立进程以保持相机输出一致。RVT 规划失败保留原生异常类型，计为有效失败。[接入说明](../examples/bench-adapters/embodied/benchmarks/rlbench/README.md)
   原版 RoboCasa 和 RLBench 从固定提交导出构建输入，登记时校验构建清单及入口。
-- **RoboTwin 2.0**：`demo_clean` 通过 SAPIEN 运行 Aloha-AgileX，首个任务为 `adjust_bottle`。Benchmark 负责专家筛选、原生重置、
+- **RoboTwin 2.0**：原生登记统一使用 `ea8b211`，通过 SAPIEN 运行 Aloha-AgileX。Clean 与 Randomized 各有 50 个任务。
+  Benchmark 负责专家筛选、原生重置、
   控制和判分。`robotwin-native` 将三路相机转为 CHW，保留 14 维关节与夹爪语义。社区 π₀.₅ 独立登记，每次预测最多执行
   50 步绝对动作。专家拒绝保留为 `sample_rejected`，批次继续执行后续冻结样本。[接入说明](../examples/bench-adapters/embodied/benchmarks/robotwin/README.md)
   固定批次按原生套件的 `clear_cache_freq` 在 episode 之间清理 SAPIEN 渲染缓存，周期以批次内的样本序号计算。
@@ -1449,6 +1457,11 @@ readiness、证据哈希与签名、verify 复核、失败映射与评分回读�
 
 所有方式都编译成现有 adapter 协议 1（§7）的四个操作，不新增执行路径；SDK 的签名与证据格式沿用 §7 已实现的规则，
 旧 trial 的 rescore 必须保持有效。
+
+声明式清单可用 `result.score.singleBinary` 要求恰好一个二值分数，用 `result.expectBeforeInvalid` 在归类上游错误前核对
+`result.expect`。每条期望可指定 JSON 字段类型。vla-eval 的 LIBERO Spatial 清单据此核对任务、初态、记录的配置种子和单集成功值。
+
+SDK 版 vla-eval 可声明 `taskIdentityFields`，用上游任务名、套件和指定字段区分独立任务。RoboTwin 以套件和任务名生成任务 ID，试验根据有序场景 seed 清单选取描述符。Solve 保存预期场景和场景配置，Verify 核对实际回合并绑定结果摘要。[配置说明](../examples/bench-adapters/vla-eval/README.md)
 
 **接入的验收与盘点**：
 
