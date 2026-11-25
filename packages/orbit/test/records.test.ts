@@ -13,7 +13,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { Redactor } from "../src/lib/redact.ts";
-import { downsample, outputFile, readLog, readMetrics, safeJoin } from "../src/records/index.ts";
+import {
+  downsample,
+  listArtifacts,
+  outputFile,
+  readLog,
+  readMetrics,
+  safeJoin,
+} from "../src/records/index.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "orbit-records-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -101,6 +108,17 @@ describe("records", () => {
     expect(safeJoin("/a/b", "c/d.txt")).toBe("/a/b/c/d.txt");
     expect(safeJoin("/a/b", "../x")).toBeNull();
     expect(safeJoin("/a/b", "/etc/passwd")).toBeNull();
+  });
+
+  it("lists artifacts with portable separators", async () => {
+    const root = join(dir, "portable");
+    mkdirSync(join(root, "reports", "2026"), { recursive: true });
+    writeFileSync(join(root, "top.json"), "{}");
+    writeFileSync(join(root, "reports", "2026", "run.csv"), "a,b\n");
+    const listed = await listArtifacts(root);
+    expect(listed.truncated).toBe(false);
+    expect(listed.files.map((f) => f.path).sort()).toEqual(["reports/2026/run.csv", "top.json"]);
+    expect(listed.files.every((f) => !f.path.includes("\\"))).toBe(true);
   });
 
   it("refuses symlinks outside the output root and serves a verified descriptor after a directory swap", async () => {

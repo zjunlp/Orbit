@@ -30,7 +30,9 @@ export function ArtifactsTab({ run, artifacts }: { run: Run; artifacts: Artifact
     const rows: { path: string; depth: number; dir: boolean; name: string }[] = [];
     const seen = new Set<string>();
     for (const f of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
-      const parts = f.path.split("/");
+      // An older Windows daemon may still send backslash paths; split on either separator so the
+      // tree renders, while the untouched path keeps working as the preview URL.
+      const parts = f.path.split(/[\\/]/);
       for (let i = 0; i < parts.length - 1; i++) {
         const d = parts.slice(0, i + 1).join("/");
         if (!seen.has(d)) {
@@ -74,6 +76,7 @@ export function ArtifactsTab({ run, artifacts }: { run: Run; artifacts: Artifact
             <div
               key={`d:${r.path}`}
               className="f"
+              title={r.path}
               style={{ paddingLeft: 8 + r.depth * 14, cursor: "default" }}
             >
               <IconFolder size={13} /> {r.name}
@@ -82,6 +85,7 @@ export function ArtifactsTab({ run, artifacts }: { run: Run; artifacts: Artifact
             <div
               key={r.path}
               className={`f${r.path === sel ? " on" : ""}`}
+              title={r.path}
               style={{ paddingLeft: 8 + r.depth * 14 }}
               onClick={() => setHash(encodeURIComponent(r.path))}
             >
