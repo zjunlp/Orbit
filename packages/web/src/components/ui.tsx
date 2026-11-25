@@ -143,14 +143,14 @@ export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd>{children}</kbd>;
 }
 
-/** Metric/param chip list: `k=v`. */
+/** Metric/param chip list: `k=v`. Truncates rather than widening its column, hence the titles. */
 export function Params({ params }: { params: Record<string, string> }) {
   const e = Object.entries(params);
   if (!e.length) return null;
   return (
-    <span className="params">
+    <span className="params" title={e.map(([k, v]) => `${k}=${v}`).join("\n")}>
       {e.map(([k, v]) => (
-        <span key={k} className="param">
+        <span key={k} className="param" title={`${k}=${v}`}>
           <i>{k}=</i>
           {v}
         </span>
