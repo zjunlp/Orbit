@@ -230,6 +230,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Docs, presentation and integration merges
 
+- [20261125](20261125-remote-branch-integration.md) Integrate pending embodied and Web/API branches
+
 - [20261008](20261008-orbit-ppt.md) Orbit editorial HTML presentation
 - [20261009](20261009-ppt-polish.md) Orbit presentation: product visuals and architecture
 - [20261012](20261012-readme-vision.md) README vision and navigation

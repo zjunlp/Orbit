@@ -24,10 +24,9 @@ export function useScrollRestore<T extends HTMLElement>(id: string, ready: boole
   const ref = useRef<T>(null);
   const done = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only retried when the content appears
   useEffect(() => {
     const el = ref.current;
-    if (!el || done.current) return;
+    if (!ready || !el || done.current) return;
     const saved = Number(sessionStorage.getItem(storageKey(id)) ?? "");
     if (!Number.isFinite(saved) || saved <= 0) {
       done.current = true;

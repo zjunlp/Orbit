@@ -2159,7 +2159,8 @@ a.score:hover {
 }
 /* Narrowing containers: first trim the secondary columns and the compare label, then drop the
    least useful columns. A dropped column keeps its cells in the layout at zero width, so rows
-   that span columns still line up with the header. */
+   that span columns still line up with the header. Job and trial rows span columns 4–6, so their
+   trailing cells have different DOM indices. */
 @container (max-width: 999px) {
   .runs-table .compare-label {
     display: none;
@@ -2190,7 +2191,9 @@ a.score:hover {
   .runs-table .state-count {
     display: none;
   }
-  .runs-table :is(col, th, td):is(:nth-child(6), :nth-child(8)) {
+  .runs-table :is(col, th):is(:nth-child(6), :nth-child(8)),
+  .runs-table tr:not(.job-row, .trial-row) > td:is(:nth-child(6), :nth-child(8)),
+  .runs-table :is(.job-row, .trial-row) > td:nth-child(6) {
     width: 0;
     padding: 0;
     border: 0;
@@ -2198,7 +2201,9 @@ a.score:hover {
   }
 }
 @container (max-width: 779px) {
-  .runs-table :is(col, th, td):nth-child(7) {
+  .runs-table :is(col, th):nth-child(7),
+  .runs-table tr:not(.job-row, .trial-row) > td:nth-child(7),
+  .runs-table :is(.job-row, .trial-row) > td:nth-child(5) {
     width: 0;
     padding: 0;
     border: 0;
@@ -2206,7 +2211,8 @@ a.score:hover {
   }
 }
 @container (max-width: 659px) {
-  .runs-table :is(col, th, td):nth-child(5) {
+  .runs-table :is(col, th):nth-child(5),
+  .runs-table tr:not(.job-row, .trial-row) > td:nth-child(5) {
     width: 0;
     padding: 0;
     border: 0;
