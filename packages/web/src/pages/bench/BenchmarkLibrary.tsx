@@ -1,6 +1,11 @@
 import type { BenchTaxonomy, SupportedBenchmark } from "@zjunlp/orbit/contracts";
-import { TAXONOMY_FIELDS, TAXONOMY_GROUPS, type TaxonomyField } from "@zjunlp/orbit/taxonomy";
-import { Fragment, useState } from "react";
+import {
+  TAXONOMY_FIELDS,
+  TAXONOMY_GROUPS,
+  type TaxonomyField,
+  taxonomyMatches,
+} from "@zjunlp/orbit/taxonomy";
+import { Fragment, useMemo } from "react";
 import {
   IconBox,
   IconBrain,
@@ -45,36 +50,66 @@ export function libraryEntry(benchmark: SupportedBenchmark) {
 export function BenchmarkLibrary() {
   const { query } = useLocation();
   const catalog = useAsync(() => api.benchCatalog(), [], { poll: true, pollMs: 10000 });
-  const entries = (catalog.data?.supported ?? []).map(libraryEntry);
-  const filters = readTaxonomyFilters(query);
+  const entries = useMemo(() => (catalog.data?.supported ?? []).map(libraryEntry), [catalog.data]);
+  const filterKey = new URLSearchParams(
+    taxonomyFields.map((field) => [field, query.get(field) ?? ""]),
+  ).toString();
+  const filters = useMemo(() => readTaxonomyFilters(new URLSearchParams(filterKey)), [filterKey]);
   const active = taxonomyFields.flatMap((field) =>
     (filters[field] ?? []).map((value) => ({ field, value })),
   );
   const q = (query.get("q") ?? "").trim().toLowerCase();
+  const localValue = query.get("local");
+  const local = localValue === "registered" || localValue === "unregistered" ? localValue : "all";
   const view = query.get("view") ?? "grid";
-  const base = entries.filter((entry) =>
-    [
-      entry.name,
-      entry.description,
-      ...entry.suites,
-      ...entry.integrations.map((route) => route.name),
-      ...taxonomyFields.flatMap((field) =>
-        (entry.taxonomy[field] ?? []).map((value) => taxonomyLabel(field, value)),
-      ),
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(q),
+  const index = useMemo(
+    () =>
+      entries.map((entry) => ({
+        entry,
+        text: [
+          entry.id,
+          entry.name,
+          ...entry.taxonomyGroups.map((group) => group.label),
+          entry.description,
+          ...entry.suites,
+          ...entry.integrations.map((route) => route.name),
+          ...taxonomyFields.flatMap((field) =>
+            (entry.taxonomy[field] ?? []).map((value) => taxonomyLabel(field, value)),
+          ),
+        ]
+          .join(" ")
+          .toLowerCase(),
+      })),
+    [entries],
   );
-  const shown = base
-    .filter((entry) => matchesTaxonomy(entry, filters))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const base = useMemo(
+    () =>
+      index
+        .filter(
+          ({ entry, text }) =>
+            text.includes(q) &&
+            (local === "all" ||
+              (local === "registered"
+                ? entry.registrationNames.length > 0
+                : entry.registrationNames.length === 0)),
+        )
+        .map(({ entry }) => entry),
+    [index, q, local],
+  );
+  const shown = useMemo(
+    () =>
+      base
+        .filter((entry) => matchesTaxonomy(entry, filters))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [base, filters],
+  );
   const toggle = (field: TaxonomyField, value: string) =>
     setQuery({ [field]: toggleTaxonomyValue(filters, field, value).join(",") || null });
   const clear = () =>
     setQuery({
       ...Object.fromEntries(taxonomyFields.map((field) => [field, null])),
       q: null,
+      local: null,
     });
   if (!catalog.data)
     return catalog.error ? (
@@ -139,8 +174,22 @@ export function BenchmarkLibrary() {
           <span>Refresh</span>
         </button>
       </div>
+      <div className="library-display-options">
+        <select
+          className="library-select"
+          aria-label="Filter by local setup"
+          value={local}
+          onChange={(event) =>
+            setQuery({ local: event.target.value === "all" ? null : event.target.value })
+          }
+        >
+          <option value="all">All local setup states</option>
+          <option value="registered">Has local setup</option>
+          <option value="unregistered">No local setup</option>
+        </select>
+      </div>
       <TaxonomyFacets entries={base} filters={filters} toggle={toggle} />
-      {(active.length > 0 || q) && (
+      {(active.length > 0 || q || local !== "all") && (
         <section className="library-active-filters" aria-label="Active filters">
           <IconFilter size={14} />
           {active.map(({ field, value }) => (
@@ -158,6 +207,16 @@ export function BenchmarkLibrary() {
           {q && (
             <button type="button" className="filter-token" onClick={() => setQuery({ q: null })}>
               Search: {query.get("q")}
+              <IconX size={11} />
+            </button>
+          )}
+          {local !== "all" && (
+            <button
+              type="button"
+              className="filter-token"
+              onClick={() => setQuery({ local: null })}
+            >
+              {local === "registered" ? "Has local setup" : "No local setup"}
               <IconX size={11} />
             </button>
           )}
@@ -216,11 +275,28 @@ export function BenchmarkLibrary() {
               key={entry.id}
               entry={entry}
               open={query.get("open") === entry.id}
-              toggle={() => setQuery({ open: query.get("open") === entry.id ? null : entry.id })}
+              filters={filters}
+              toggle={() =>
+                setQuery({ open: query.get("open") === entry.id ? null : entry.id, profile: null })
+              }
             />
           ))}
         </div>
       )}
+      <section className="callout">
+        <b>Bring your own benchmark</b>
+        <p>
+          Connect Harbor tasks, a manifest, the Python SDK, or a native adapter through Orbit’s
+          existing evaluation workflow.
+        </p>
+        <a
+          href="https://github.com/zjunlp/Orbit/blob/main/docs/guides/benchmark-onboarding.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Benchmark onboarding guide ↗
+        </a>
+      </section>
       <p className="library-footnote">
         Integration coverage is included with Orbit. Local installation, model compatibility, and
         evaluation results are separate; check each benchmark’s supported scope.
@@ -233,11 +309,15 @@ export function SupportedCard({
   entry,
   open,
   toggle,
+  filters = {},
 }: {
   entry: ReturnType<typeof libraryEntry>;
   open: boolean;
   toggle: () => void;
+  filters?: import("../../lib/taxonomy.ts").TaxonomyFilters;
 }) {
+  const matching = entry.taxonomyGroups.filter((group) => taxonomyMatches(group.taxonomy, filters));
+  const hasFilters = Object.values(filters).some((values) => values?.length);
   const domains = entry.taxonomy.domains ?? [];
   const Icon = domains.includes("robotics")
     ? IconBox
@@ -289,7 +369,41 @@ export function SupportedCard({
           <IconBox size={13} />
           <TaxonomyTags e={entry} field="platforms" limit={2} />
         </div>
+        <p className="muted">
+          {entry.registrationNames.length
+            ? `${entry.registrationNames.length} local setup${entry.registrationNames.length === 1 ? "" : "s"} registered`
+            : "No local setup registered"}
+        </p>
+        {hasFilters && (
+          <p className="muted">
+            Matching protocol{matching.length === 1 ? "" : "s"}:{" "}
+            {matching.map((group) => group.label).join(" · ")}. All selected fields match within
+            each protocol.
+          </p>
+        )}
         <div className="benchmark-card-footer">
+          {entry.registrationNames.length === 1 ? (
+            <>
+              <Link
+                className="btn sm"
+                href={`/benchmarks?mode=local&setup=${encodeURIComponent(entry.registrationNames[0] ?? "")}&open=${encodeURIComponent(entry.registrationNames[0] ?? "")}`}
+              >
+                View setup
+              </Link>
+              <Link
+                className="btn sm"
+                href={`/bench/new?benchmark=${encodeURIComponent(entry.registrationNames[0] ?? "")}`}
+              >
+                Evaluate
+              </Link>
+            </>
+          ) : (
+            entry.registrationNames.length > 1 && (
+              <button type="button" className="btn sm" onClick={toggle}>
+                {open ? "Hide local setup choices" : "Choose local setup"}
+              </button>
+            )
+          )}
           <Link
             className="btn sm"
             href={`/benchmarks?mode=resources&family=${encodeURIComponent(entry.id)}`}
@@ -306,13 +420,28 @@ export function SupportedCard({
           </button>
         </div>
       </div>
-      {open && <SupportedDetail entry={entry} />}
+      {open && <SupportedDetail entry={entry} filters={filters} />}
     </article>
   );
 }
 
-function SupportedDetail({ entry }: { entry: ReturnType<typeof libraryEntry> }) {
-  const [profile, setProfile] = useState(0);
+function SupportedDetail({
+  entry,
+  filters,
+}: {
+  entry: ReturnType<typeof libraryEntry>;
+  filters: import("../../lib/taxonomy.ts").TaxonomyFilters;
+}) {
+  const { query } = useLocation();
+  const requested = query.get("open") === entry.id ? query.get("profile") : null;
+  const selected = requested == null ? -1 : Number(requested);
+  const profile =
+    Number.isInteger(selected) && selected >= 0 && selected < entry.taxonomyGroups.length
+      ? selected
+      : Math.max(
+          0,
+          entry.taxonomyGroups.findIndex((group) => taxonomyMatches(group.taxonomy, filters)),
+        );
   const current = entry.taxonomyGroups[profile] ?? entry.taxonomyGroups[0];
   return (
     <div className="benchmark-expanded supported-detail">
@@ -357,7 +486,7 @@ function SupportedDetail({ entry }: { entry: ReturnType<typeof libraryEntry> }) 
             <select
               className="input"
               value={profile}
-              onChange={(event) => setProfile(Number(event.target.value))}
+              onChange={(event) => setQuery({ profile: event.target.value })}
             >
               {entry.taxonomyGroups.map((group, index) => (
                 <option key={group.label} value={index}>
@@ -389,13 +518,14 @@ function SupportedDetail({ entry }: { entry: ReturnType<typeof libraryEntry> }) 
           ))}
         </div>
       </div>
-      <details className="supported-local-setups">
+      <details className="supported-local-setups" open={entry.registrationNames.length > 1}>
         <summary>
           Local setups{entry.registrationNames.length ? ` (${entry.registrationNames.length})` : ""}
         </summary>
         <p>
           Choose a local setup to evaluate tasks or inspect its recorded evidence. Setups do not add
-          benchmark families to this library.
+          benchmark families to this library. Registration alone does not establish readiness or
+          calibration.
         </p>
         {entry.registrationNames.length ? (
           <ul>

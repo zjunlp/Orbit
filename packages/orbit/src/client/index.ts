@@ -20,6 +20,8 @@ import {
   BenchCompatibility,
   type BenchConsolidateInput,
   BenchConsolidateResult,
+  type BenchInitRequest,
+  BenchInitResult,
   BenchJob,
   BenchJobDetail,
   BenchJobList,
@@ -258,6 +260,8 @@ export class OrbitClient {
   policyPut = (policy: PolicyDefinitionInput) =>
     this.call(PolicyDefinition, "/policies", { method: "POST", body: policy });
   policyRemove = (name: string) => this.call(Ok, `/policies/${enc(name)}`, { method: "DELETE" });
+  benchInit = (body: BenchInitRequest) =>
+    this.call(BenchInitResult, "/bench/init", { method: "POST", body });
   benchmarks = () => this.call(BenchmarkList, "/benchmarks").then((r) => r.benchmarks);
   benchmarkPut = (b: BenchmarkInput) =>
     // Registration lists the tasks through the adapter (up to its 120 s limit).

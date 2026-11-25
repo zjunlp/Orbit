@@ -779,6 +779,15 @@ cwd 默认为代码快照（有快照时），否则 `project`，再否则 Run �
 取消 / 超时向进程组发 SIGTERM（宽限后 SIGKILL）并停止子容器；只有进程组与带标签的子容器都消失才释放租约。
 daemon 重启后按 pid + 启动时间重新接管进程。运行中的 process Run 日志通过 API 读取时按 §5 脱敏，结束后在磁盘上统一脱敏。
 
+**教学模板**：`orbit bench init <name> <directory> [--template adapter|manifest]` 经 client 调用
+`POST /bench/init`（`BenchInitRequest` / `BenchInitResult`）。daemon 是文件写者，在父目录已存在的全新绝对路径
+生成 CPU 合成任务、resources.json、benchmark.json、README 与协议入口；默认 adapter，不下载、不登记、不启动。
+拒绝已有目标、symlink 祖先及 Orbit home/data 内目标，以同目录暂存与 rename 发布，失败清理暂存。
+adapter 的 solve 与 verify 独立，私有 grader 仅 verify 挂载；manifest 仅演示 empty/oracle，由可信原生 runner
+评分，verify 复核结果证据，不重跑 grader。默认校准使用 empty/oracle；adapter 也可演示 Agent solve。
+模板校准只证明教学接线，不能表述为真实 benchmark 校准、官方评分等价或模型支持证明。
+返回文件列表及 add-file / coverage / calibrate 后续命令，用户明确执行后才登记或运行。
+
 **接口**：API `GET/POST /benchmarks`、`DELETE /benchmarks/:name`、`GET /benchmarks/:name/tasks`、
 `GET/POST /bench/jobs`、`GET /bench/jobs/:id`、`POST /bench/jobs/:id/{cancel,rescore}`、`GET /bench/compare?jobs=a,b`；
 CLI `orbit bench add|ls|rm|tasks|run|jobs|show|cancel|rescore|compare [--metric]|usage`（`add --adapter <name|path> -c KEY=VALUE
@@ -1801,6 +1810,15 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 评测历史也能浏览。目录不是新的运行注册表、安装器或成绩库；现有 daemon 仍是本地状态的唯一写者。
 实施与验收记录见 [目录任务](tasks/20261109-benchmark-library.md)，入口索引见 [catalog](catalog.md)。
 
+- CLI `orbit bench catalog [family] [--search text] [--filter field=value] [--registered] [--json]`
+  复用 client `benchCatalog()` 与已有 HTTP API；默认输出精简家族表，指定 family 展示描述、协议 profiles、
+  接入范围、验证事实/来源、本地登记事实及 resources/prepare 命令。search 忽略大小写且各关键词 AND，
+  搜索身份、描述、suite、路线、标签与协议文字；未知/空 filter 拒绝，未知 family 或无匹配正常返回空。
+  JSON 保持 `{ supported, entries }`：筛选后产品及其 registrationNames 显式关联的本地条目。
+  `--registered` 只表示有关联登记，`bench ls` 仍列全部本地登记，含未进入产品目录的自定义接入。
+- Web 产品目录提供共享 URL 的搜索、六维筛选、已登记/未登记筛选、列表/卡片视图、协议 profile 与展开详情。
+  卡片保持精简，详情承载支持范围、验证事实和本地 setup 选择；筛选与计数复用同一 profile 语义，
+  派生条目、搜索索引与筛选结果 memoize，不建立新的后端状态或登记路径。
 - 既有 `BenchCatalog` 增加 `supported[]` 产品目录，保留 `entries[]` 本地登记数据。Web 从同一个 HTTP 接口读取，
   CLI 和旧调用方仍可使用登记数据。受控数据按 benchmark 族拆在 `bench/benchmarks/<family>.ts`，由 `bench/benchmarks/index.ts` 汇总，`contracts/bench.ts` 声明
   `SupportedBenchmark`：id/name/description、具名 taxonomyGroups、integrations、verification、suites 与 registrationNames。

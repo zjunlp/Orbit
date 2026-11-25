@@ -126,14 +126,15 @@ it("filters one protocol at a time instead of combining a family display union",
   expect(renderToStaticMarkup(<BenchmarkLibrary />)).toContain("<h2>Fixture Benchmark</h2>");
 });
 
-it("shows what was checked as facts and keeps setup links inside expanded details", () => {
+it("shows registration and direct setup links separately from validation facts", () => {
   const entry = libraryEntry({ ...definition, registrationNames: ["fixture-local"] });
   const closed = renderToStaticMarkup(
     <SupportedCard entry={entry} open={false} toggle={vi.fn()} />,
   );
   expect(closed).toContain("1 integration");
   expect(closed).not.toContain("Sample checked");
-  expect(closed).not.toContain("fixture-local");
+  expect(closed).toContain("1 local setup registered");
+  expect(closed).toContain("/bench/new?benchmark=fixture-local");
   const opened = renderToStaticMarkup(<SupportedCard entry={entry} open toggle={vi.fn()} />);
   expect(opened).toContain("real environment calibration remains pending");
   expect(opened).toContain("Supported scope");
@@ -165,4 +166,29 @@ it("describes VLA models as evaluated policies within physical-control benchmark
   const html = renderToStaticMarkup(<SupportedCard entry={entry} open toggle={vi.fn()} />);
   expect(html).toContain("VLA models are evaluated policies");
   expect(html).toContain("model version, checkpoint, and suite");
+});
+
+it("filters local registrations without treating them as calibration", () => {
+  fixtureState.query = "local=registered";
+  expect(renderToStaticMarkup(<BenchmarkLibrary />)).toContain("No benchmarks match these filters");
+  fixtureState.data = {
+    entries: [],
+    supported: [{ ...definition, registrationNames: ["local-a", "local-b"] }],
+  };
+  const html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain("2 local setups registered");
+  expect(html).toContain("Choose local setup");
+  expect(html).not.toContain("/bench/new?benchmark=");
+  expect(html).not.toContain("Ready");
+});
+
+it("defaults to a matching protocol and restores an explicitly selected URL profile", () => {
+  fixtureState.query = "open=fixture-family&domains=software";
+  let html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain('value="1" selected=""');
+  expect(html).toContain("Matching protocol: Repair protocol");
+  fixtureState.query += "&profile=0";
+  html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain('value="0" selected=""');
+  expect(html).toContain("All selected fields match within each protocol");
 });

@@ -2,6 +2,11 @@
 
 接入方式（`harbor`、`manifest`、`sdk`、`native`）与校准要求见 [design §9.10](../design.md)、§9.14。Agent 用的 skill：`plugin/skills/orbit-bench`。模型、判定规则与协议定义见 [design §7](../design.md#7-刷榜bench)。
 
+先用 `orbit bench catalog` 查找已有接入，再查看 `orbit bench resources <family>`。
+从发现、准备到新建模板与校准的完整路径见 [benchmark 入门](benchmark-onboarding.md)。
+新建外部适配器可用 `orbit bench init my-bench /absolute/path/my-bench`；它只生成教学模板，
+不会登记或启动任务。正式接入须替换合成任务、保留官方 grader，并重新验证真实协议。
+
 ## 0. 仓库内适配器的目录契约
 
 本仓库自带的适配器放在 `examples/bench-adapters/<name>/`，一个 benchmark 一个目录。目录名就是产品目录里 `adapter("<name>")` 引用的名字。

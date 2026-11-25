@@ -32,6 +32,8 @@ import {
   resolveMetrics,
 } from "../contracts/metrics.ts";
 import type { Print } from "./auth.ts";
+import { registerBenchCatalog } from "./bench-catalog.ts";
+import { registerBenchInit } from "./bench-init.ts";
 import { calibrate } from "./calibrate.ts";
 import { confirmTyped } from "./confirm.ts";
 import { formatTokens, formatTokenUsage, compactTable as table } from "./format.ts";
@@ -390,6 +392,8 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
   registerGate(bench, client, print);
   registerTransfer(bench, client, print);
   registerPreparation(bench, client, print);
+  registerBenchInit(bench, client, print);
+  registerBenchCatalog(bench, client, print);
   bench
     .command("add-file <file>")
     .description("register a benchmark from a JSON definition")
@@ -404,7 +408,7 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
     .description("register a benchmark checkout (its adapter must list the tasks)")
     .requiredOption(
       "--adapter <adapter>",
-      "harbor (task.toml tasks) | asi (ASI-Bench seed31415) | path of an adapter executable",
+      "harbor (task.toml tasks) | asi (ASI-Bench seed31415) | manifest (orbit-bench.yaml) | path of an adapter executable",
     )
     .option(
       "-c, --config <KEY=VALUE>",

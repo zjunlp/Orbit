@@ -10,6 +10,26 @@ with the shared response shape in [contracts/bench.ts](../packages/orbit/src/con
 This document links the supported routes and explains how to read the catalog. [Six dimensions](design.md#917-benchmark-六维分类-v12026-11-09)
 · [Catalog contract and behavior](design.md#918-已适配-benchmark-产品目录2026-11-09)
 
+Discover the same product library from the CLI:
+
+```bash
+orbit bench catalog
+orbit bench catalog --search "browser tool"
+orbit bench catalog --filter domains=software --filter interfaces=terminal
+orbit bench catalog humaneval
+orbit bench catalog --registered --json
+```
+
+Lists stay compact; a family detail shows profiles, integration scope, verification facts and
+source links, local registrations, and resource commands. Filters use the field/value IDs below
+and in `contracts/taxonomy.ts`; repeat a field for OR, combine fields for AND. One profile must
+satisfy all fields. `unlabeled` matches unknown fields and `__none__` matches explicitly empty
+fields. Search requires every space-separated word, ignoring case. No matches is a normal empty
+result. JSON retains `{ supported, entries }`: filtered product families and only their explicitly
+associated local registrations. `--registered` means an associated registration exists; it does not
+establish readiness. `orbit bench ls` remains the list of all local registrations, including custom
+benchmarks outside the product library. Continue with the [onboarding guide](guides/benchmark-onboarding.md).
+
 The public classification has **six independent dimensions**, each with controlled values;
 these are not six mutually exclusive benchmark categories. The Web shows a card for each dimension.
 

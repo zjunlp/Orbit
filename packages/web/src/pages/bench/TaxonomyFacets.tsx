@@ -1,5 +1,5 @@
 import { TAXONOMY_FIELDS, TAXONOMY_GROUPS, type TaxonomyField } from "@zjunlp/orbit/taxonomy";
-import { useId } from "react";
+import { useId, useMemo } from "react";
 import {
   IconBox,
   IconBrain,
@@ -34,6 +34,27 @@ export function TaxonomyFacets({
   const activeDimension = useLocation().query.get("dimension");
   const setActiveDimension = (dimension: string | null) => setQuery({ dimension });
   const dimension = TAXONOMY_GROUPS.find((g) => g.id === activeDimension);
+  const counts = useMemo(
+    () =>
+      Object.fromEntries(
+        (dimension?.fields ?? []).map((field) => [
+          field,
+          Object.fromEntries(
+            [...TAXONOMY_FIELDS[field].values.map((v) => v.value), "unlabeled", "__none__"].map(
+              (value) => [
+                value,
+                countBenchmarks(
+                  entries.filter((entry) =>
+                    matchesTaxonomy(entry, { ...filters, [field]: [value] }),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ]),
+      ),
+    [dimension, entries, filters],
+  );
   return (
     <>
       <section className="dimension-categories" aria-label="Six classification dimensions">
@@ -110,9 +131,7 @@ export function TaxonomyFacets({
                     "unlabeled",
                     "__none__",
                   ].map((value) => {
-                    const count = countBenchmarks(
-                      entries.filter((e) => matchesTaxonomy(e, { ...filters, [field]: [value] })),
-                    );
+                    const count = counts[field]?.[value] ?? 0;
                     const selected = filters[field]?.includes(value) ?? false;
                     if (!count && !selected) return null;
                     return (

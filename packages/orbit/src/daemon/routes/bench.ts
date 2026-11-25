@@ -1,4 +1,6 @@
 import type { Hono } from "hono";
+import { scaffoldBenchmark } from "../../bench/scaffold.ts";
+import { BenchInitRequest } from "../../contracts/bench-init.ts";
 import type { BenchReport } from "../../contracts/index.ts";
 import { BenchLabels, type Benchmark, PolicyDefinition } from "../../contracts/index.ts";
 import { NotFoundError } from "../../runs/service.ts";
@@ -7,6 +9,9 @@ import { num } from "../http.ts";
 
 export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   const { bench, benchmarks } = deps;
+  api.post("/bench/init", async (c) =>
+    c.json(await scaffoldBenchmark(deps.paths, BenchInitRequest.parse(await c.req.json())), 201),
+  );
   api.get("/policies", (c) => c.json({ policies: bench.policies.list() }));
   api.post("/policies", async (c) =>
     c.json(bench.policies.put(PolicyDefinition.parse(await c.req.json())), 201),

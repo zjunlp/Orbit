@@ -284,6 +284,10 @@ Keep personal experiment notes, scores and artifacts in user-owned storage. The 
 
 Compare methods under the same resource rules, keeping execution, evaluation validity and cleanup separate. Only valid scores enter aggregates.
 
+Find an existing integration with `orbit bench catalog`, inspect `orbit bench catalog <family>`,
+then follow `orbit bench resources <family>`. For a new benchmark, start with `orbit bench init`.
+See [discovery and onboarding](docs/guides/benchmark-onboarding.md) for setup, integration routes and calibration.
+
 New installation: open **Benchmarks → Prepare resources** to choose any supported benchmark,
 download from its official sources or reuse local files, complete any upstream access requirements,
 and register the prepared setup. Specialized native prerequisites are listed explicitly.

@@ -3,6 +3,7 @@ export * from "./agent.ts";
 export * from "./atif.ts";
 export * from "./auth.ts";
 export * from "./bench.ts";
+export * from "./bench-init.ts";
 export * from "./calibration.ts";
 export * from "./cluster.ts";
 export { API_PREFIX, ApiError, Health, LoginCode, ProfileName } from "./common.ts";
