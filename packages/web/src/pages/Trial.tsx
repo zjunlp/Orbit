@@ -209,7 +209,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
 
   return (
     <>
-      <TopBar crumbs={crumbs} className="topbar-wrap">
+      <TopBar crumbs={crumbs}>
         {job.revisions[trial.method] &&
           !["empty", "oracle"].includes(
             job.spec.methods.find((m) => m.name === trial.method)?.agent ?? "",

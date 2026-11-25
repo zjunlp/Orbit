@@ -73,10 +73,7 @@ export function BenchJobDetail({ id }: { id: string }) {
 
   return (
     <>
-      <TopBar
-        className="topbar-wrap"
-        crumbs={[{ label: "Evaluations", href: "/bench" }, { label: jobLabel(job) }]}
-      >
+      <TopBar crumbs={[{ label: "Evaluations", href: "/bench" }, { label: jobLabel(job) }]}>
         <Link className="btn sm ghost" href={`/runs?q=bench-${job.id}`}>
           Runs
         </Link>
