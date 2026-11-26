@@ -6,10 +6,12 @@ import {
   constants,
   cpSync,
   existsSync,
+  globSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,32 +60,19 @@ try {
   run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball]);
   assert.equal(run(cli, ["--version"]).trim(), manifest.version);
   const pkg = join(temp, "node_modules/@zjunlp/orbit");
-  accessSync(
-    join(pkg, "dist/bench-assets/examples/bench-adapters/embodied/adapter.py"),
-    constants.X_OK,
-  );
+  const examples = join(pkg, "dist/bench-assets/examples");
+  const adapterEntries = globSync("*/adapter.py", { cwd: join(root, "examples/bench-adapters") });
+  adapterEntries.push("harbor-suites/adapter.mjs");
+  for (const entry of adapterEntries) {
+    const file = join(examples, "bench-adapters", entry);
+    assert.ok(statSync(file).isFile(), `packaged adapter is not a file: ${file}`);
+    accessSync(file, constants.X_OK);
+  }
   for (const file of [
-    "bench-adapters/humaneval/adapter.py",
-    "bench-adapters/harbor-suites/adapter.mjs",
     "sdk/orbit_bench/__init__.py",
     "bench-adapters/embodied/benchmarks/behavior-1k/configure_behavior.py",
-    ...[
-      "legalbench",
-      "lawbench",
-      "healthbench",
-      "longmemeval",
-      "financebench",
-      "agentdojo",
-      "swebench",
-      "appworld",
-      "minif2f",
-      "mmau",
-    ].map((family) => `bench-adapters/${family}/adapter.py`),
   ])
-    assert.ok(
-      existsSync(join(pkg, "dist/bench-assets/examples", file)),
-      `missing packaged benchmark asset: ${file}`,
-    );
+    assert.ok(existsSync(join(examples, file)), `missing packaged benchmark asset: ${file}`);
   assert.ok(existsSync(join(pkg, "LICENSE")));
   assert.ok(existsSync(join(pkg, "README.md")));
   const notices = readFileSync(join(pkg, "dist/web/THIRD_PARTY_LICENSES.md"), "utf8");
