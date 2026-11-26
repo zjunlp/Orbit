@@ -1819,6 +1819,14 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 - Web 产品目录提供共享 URL 的搜索、六维筛选、已登记/未登记筛选、列表/卡片视图、协议 profile 与展开详情。
   卡片保持精简，详情承载支持范围、验证事实和本地 setup 选择；筛选与计数复用同一 profile 语义，
   派生条目、搜索索引与筛选结果 memoize，不建立新的后端状态或登记路径。
+- Web 家族选择最多四项，`compare=id1,id2` 与 `view=compare` 存于 URL；搜索、taxonomy 或本地登记筛选
+  改变时保留选择，隐藏项明确计数，未知 ID/超额项显示忽略说明。每个家族用 `compareProfile.<id>` 独立选择
+  一个协议 profile；对比展示该 profile 的六维标签与家族描述、suite、接入范围、验证来源、本地登记事实，
+  不新增分数、排名或能力断言。清空筛选不清空选择，移除家族/清空选择清理对应 profile 参数。
+- Web `/benchmarks?mode=add` 显式提交 name/directory/template，经现有 `POST /bench/init` 生成教学文件。
+  表单校验名称和 daemon 本机绝对路径格式，最终路径与写入保护仍由 daemon 执行；pending 防止重复提交，
+  错误保留输入以便修正重试，离开页面不会取消已提交写入。成功展示文件列表、目录与可复制后续命令，
+  不自动登记、下载、启动或校准；教学、manifest 信任边界与 §7 一致。
 - 既有 `BenchCatalog` 增加 `supported[]` 产品目录，保留 `entries[]` 本地登记数据。Web 从同一个 HTTP 接口读取，
   CLI 和旧调用方仍可使用登记数据。受控数据按 benchmark 族拆在 `bench/benchmarks/<family>.ts`，由 `bench/benchmarks/index.ts` 汇总，`contracts/bench.ts` 声明
   `SupportedBenchmark`：id/name/description、具名 taxonomyGroups、integrations、verification、suites 与 registrationNames。

@@ -1,0 +1,131 @@
+.comparison-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  margin: 16px 0;
+  background: var(--surface);
+}
+.comparison-selection-summary {
+  flex: 1 1 200px;
+}
+.comparison-selection-summary p {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.comparison-selection-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.comparison-selection-items .filter-token {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.comparison-selection-items svg {
+  flex-shrink: 0;
+}
+.benchmark-comparison {
+  min-width: 0;
+  margin-bottom: 24px;
+}
+.benchmark-comparison h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+.benchmark-comparison > p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.comparison-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+.comparison-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.comparison-scroll table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.comparison-scroll th,
+.comparison-scroll td {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  vertical-align: top;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.comparison-scroll th:first-child {
+  width: 170px;
+  color: var(--text-2);
+}
+.comparison-scroll thead th {
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--text);
+}
+.comparison-scroll tr:last-child > * {
+  border-bottom: 0;
+}
+.comparison-scroll tr > :last-child {
+  border-right: 0;
+}
+.comparison-scroll p {
+  margin: 0 0 10px;
+}
+.comparison-scroll .input {
+  width: 100%;
+}
+.comparison-taxonomy {
+  margin: 0;
+}
+.comparison-taxonomy dt {
+  color: var(--text-3);
+  font-size: 11px;
+  margin: 10px 0 4px;
+}
+.comparison-taxonomy dt:first-child {
+  margin-top: 0;
+}
+.comparison-taxonomy dd {
+  margin: 0;
+}
+.comparison-item + .comparison-item {
+  margin-top: 14px;
+}
+.comparison-setup-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.comparison-scroll details {
+  margin: 10px 0;
+}
+.comparison-scroll summary {
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.comparison-scroll-hint {
+  color: var(--text-3);
+}
+
+.comparison-scroll caption {
+  padding: 10px 16px;
+  text-align: left;
+  color: var(--text-3);
+}

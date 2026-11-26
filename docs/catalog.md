@@ -30,6 +30,13 @@ associated local registrations. `--registered` means an associated registration 
 establish readiness. `orbit bench ls` remains the list of all local registrations, including custom
 benchmarks outside the product library. Continue with the [onboarding guide](guides/benchmark-onboarding.md).
 
+In Web cards, select up to four families and choose **Compare selected**. The `compare` URL
+parameter keeps the selection when search, taxonomy or local setup filters change; hidden selected
+families remain in the comparison. Each family has an independent protocol-profile selector.
+The table compares protocol labels, scope, verification sources and local setup facts, without score
+rankings. Use **Add your own benchmark** to generate a teaching template through the daemon;
+creation does not register it or start evaluation. See the [onboarding guide](guides/benchmark-onboarding.md).
+
 The public classification has **six independent dimensions**, each with controlled values;
 these are not six mutually exclusive benchmark categories. The Web shows a card for each dimension.
 

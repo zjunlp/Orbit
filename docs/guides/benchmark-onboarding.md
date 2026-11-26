@@ -14,6 +14,11 @@ orbit bench ls
 接入范围、验证事实与来源；登记存在、资源就绪、抽样校准、完整套件等价是不同事实。
 `--registered` 只筛选有关联本地登记的产品。详情与筛选规则见 [目录](../catalog.md)。
 
+Web 的 **Benchmarks** 卡片可选择最多四个家族，再点 **Compare selected**。
+选择保存在 URL，改变搜索、六维或本地登记筛选不会移除已选家族；隐藏项有明确提示。
+对比页按家族选择一个 protocol profile，查看协议标签、支持范围、验证来源和本地 setup，
+不提供分数排名，也不表示任意模型都能运行这些任务。
+
 ## 2. 准备现有 benchmark 的资源
 
 ```bash
@@ -46,6 +51,12 @@ orbit bench prepare humaneval --help
 orbit bench init my-bench /absolute/path/my-bench
 # 或：orbit bench init my-bench /absolute/path/my-bench --template manifest
 ```
+
+也可在 Web 点击 **Add your own benchmark**（`/benchmarks?mode=add`），填写
+Benchmark name、daemon 机器上的新绝对目录与 Template。确认文件预览后点击
+**Create tutorial**，由 daemon 写入；目标父目录必须存在，目标不能已存在或在 Orbit
+home/data 内，路径祖先不能是 symlink。错误后可修正输入重试；离开页面不会取消已提交的创建。
+成功后显示真实生成的目录、文件列表及可复制命令，仍需自己明确执行登记和校准。
 
 默认 `adapter` 模板提供独立 verify grader；`manifest` 模板由可信原生 runner 写结果，
 verify 复核记录。后者不允许任意模型自行报告分数。manifest 模板只支持 empty/oracle；adapter 模板也支持 Agent solve，校准默认先用这两个对照。

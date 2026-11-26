@@ -192,3 +192,26 @@ it("defaults to a matching protocol and restores an explicitly selected URL prof
   expect(html).toContain('value="0" selected=""');
   expect(html).toContain("All selected fields match within each protocol");
 });
+
+it("keeps URL-selected families for comparison when search hides their cards", () => {
+  fixtureState.data = {
+    entries: [],
+    supported: [definition, { ...definition, id: "second", name: "Second fixture" }],
+  };
+  fixtureState.query = "q=no-match&compare=fixture-family,second&view=compare";
+  const html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain("2 selected families are");
+  expect(html).toContain("hidden by current filters");
+  expect(html).toContain("Compare benchmark families");
+  expect(html).toContain("Second fixture");
+  expect(html).not.toContain("No benchmarks match these filters");
+  expect(html).toContain('href="/benchmarks?mode=add"');
+});
+
+it("explains unavailable shared IDs without presenting them as known benchmarks", () => {
+  fixtureState.query = "compare=missing,fixture-family,fixture-family&view=compare";
+  const html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain("1 of 4 families selected");
+  expect(html).toContain("1 unavailable family ID was");
+  expect(html).toContain("Select at least two benchmark families");
+});

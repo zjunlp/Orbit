@@ -13,6 +13,8 @@ import type {
   BenchCompatibility,
   BenchConsolidateInput,
   BenchConsolidateResult,
+  BenchInitRequest,
+  BenchInitResult,
   BenchJob,
   BenchJobDetail,
   BenchJobList,
@@ -210,6 +212,8 @@ export const api = {
     req<{ ok: boolean }>(`/notify/${enc(name)}`, { method: "DELETE" }),
   notifyTest: (name: string) =>
     req<{ ok: boolean }>(`/notify/${enc(name)}/test`, { method: "POST" }),
+  benchInit: (body: BenchInitRequest) =>
+    req<BenchInitResult>("/bench/init", { method: "POST", body: JSON.stringify(body) }),
   benchmarks: () => req<{ benchmarks: Benchmark[] }>("/benchmarks").then((r) => r.benchmarks),
   benchInfo: (name: string) => req<BenchTaskList>(`/benchmarks/${enc(name)}/tasks`),
   benchTasks: (name: string) => api.benchInfo(name).then((r) => r.tasks),

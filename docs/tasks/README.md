@@ -216,6 +216,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Web, catalog and taxonomy
 
+- [20261126](20261126-benchmark-selection-onboarding.md) Benchmark family selection and explicit Web tutorial generation
+
 - [20261125](20261125-benchmark-discovery-onboarding.md) Benchmark discovery, protocol scope and safe tutorial onboarding
 
 - [20261004](20261004-web-jobs-trials-delete.md) Web: bench jobs and trials in the run list, trial page, run names, deletion

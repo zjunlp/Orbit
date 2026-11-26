@@ -32,7 +32,14 @@ import {
   toggleTaxonomyValue,
 } from "../../lib/taxonomy.ts";
 import { useAsync } from "../../lib/use.ts";
+import { BenchmarkComparison } from "./BenchmarkComparison.tsx";
 import { CoverageMatrix, TaxonomyTags } from "./Catalog.tsx";
+import {
+  COMPARISON_LIMIT,
+  comparisonProfileKey,
+  readComparison,
+  toggleComparison,
+} from "./comparison-model.ts";
 import { TaxonomyFacets } from "./TaxonomyFacets.tsx";
 
 /** Display labels are a union; filtering always uses the original protocol groups. */
@@ -103,6 +110,27 @@ export function BenchmarkLibrary() {
         .sort((a, b) => a.name.localeCompare(b.name)),
     [base, filters],
   );
+  const compareValue = query.get("compare");
+  const comparison = useMemo(() => readComparison(compareValue, entries), [compareValue, entries]);
+  const selectedIds = comparison.entries.map((entry) => entry.id);
+  const visibleIds = new Set(shown.map((entry) => entry.id));
+  const hiddenCount = selectedIds.filter((id) => !visibleIds.has(id)).length;
+  const selectComparison = (id: string) => {
+    const next = toggleComparison(selectedIds, id);
+    setQuery({
+      compare: next.join(",") || null,
+      ...(selectedIds.includes(id) ? { [comparisonProfileKey(id)]: null } : {}),
+    });
+  };
+  const clearComparison = () =>
+    setQuery({
+      compare: null,
+      ...Object.fromEntries(
+        [...query.keys()]
+          .filter((key) => key.startsWith("compareProfile."))
+          .map((key) => [key, null]),
+      ),
+    });
   const toggle = (field: TaxonomyField, value: string) =>
     setQuery({ [field]: toggleTaxonomyValue(filters, field, value).join(",") || null });
   const clear = () =>
@@ -225,10 +253,76 @@ export function BenchmarkLibrary() {
           </button>
         </section>
       )}
+      {(selectedIds.length > 0 ||
+        view === "compare" ||
+        comparison.unknown.length > 0 ||
+        comparison.overflow > 0) && (
+        <section className="comparison-selection" aria-label="Selected benchmark families">
+          <div className="comparison-selection-summary" aria-live="polite">
+            <b>
+              {selectedIds.length} of {COMPARISON_LIMIT} families selected
+            </b>
+            <p>
+              {hiddenCount} selected {hiddenCount === 1 ? "family is" : "families are"} hidden by
+              current filters. Selection is kept when filters change.
+            </p>
+            {selectedIds.length === COMPARISON_LIMIT && (
+              <p>Selection limit reached. Remove a family to add another.</p>
+            )}
+            {comparison.unknown.length > 0 && (
+              <p>
+                {comparison.unknown.length} unavailable{" "}
+                {comparison.unknown.length === 1 ? "family ID was" : "family IDs were"} ignored from
+                this URL.
+              </p>
+            )}
+            {comparison.overflow > 0 && (
+              <p>
+                Only the first {COMPARISON_LIMIT} available families from this URL are selected.
+              </p>
+            )}
+          </div>
+          {view === "compare" ? (
+            <button type="button" className="btn sm" onClick={() => setQuery({ view: null })}>
+              Back to cards
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn primary sm"
+              disabled={selectedIds.length < 2}
+              onClick={() => setQuery({ view: "compare" })}
+            >
+              Compare selected
+            </button>
+          )}
+          <button type="button" className="btn sm" onClick={clearComparison}>
+            Clear selection
+          </button>
+          {selectedIds.length > 0 && (
+            <div className="comparison-selection-items">
+              {comparison.entries.map((entry) => (
+                <button
+                  type="button"
+                  className="filter-token"
+                  key={entry.id}
+                  aria-label={`Remove ${entry.name} from comparison`}
+                  onClick={() => selectComparison(entry.id)}
+                >
+                  {entry.name}
+                  {!visibleIds.has(entry.id) && <span> · hidden</span>}
+                  <IconX size={11} />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       <div className="library-results-bar">
         <div>
-          <b>{shown.length}</b> benchmark families <span className="library-results-dot">·</span>
-          <span>One card per benchmark</span>
+          <b>{view === "compare" ? selectedIds.length : shown.length}</b> benchmark families{" "}
+          <span className="library-results-dot">·</span>
+          <span>{view === "compare" ? "Selected for comparison" : "One card per benchmark"}</span>
         </div>
         <div className="library-display-options">
           <section className="library-view-toggle" aria-label="Catalog layout">
@@ -257,6 +351,8 @@ export function BenchmarkLibrary() {
           <h2>The integration library is not available</h2>
           <p>Rebuild Orbit and restart its daemon to load the benchmark library.</p>
         </div>
+      ) : view === "compare" ? (
+        <BenchmarkComparison entries={comparison.entries} filters={filters} />
       ) : !shown.length ? (
         <div className="library-empty">
           <IconSearch size={30} />
@@ -276,6 +372,11 @@ export function BenchmarkLibrary() {
               entry={entry}
               open={query.get("open") === entry.id}
               filters={filters}
+              comparison={{
+                selected: selectedIds.includes(entry.id),
+                disabled: selectedIds.length >= COMPARISON_LIMIT && !selectedIds.includes(entry.id),
+                toggle: () => selectComparison(entry.id),
+              }}
               toggle={() =>
                 setQuery({ open: query.get("open") === entry.id ? null : entry.id, profile: null })
               }
@@ -289,6 +390,9 @@ export function BenchmarkLibrary() {
           Connect Harbor tasks, a manifest, the Python SDK, or a native adapter through Orbit’s
           existing evaluation workflow.
         </p>
+        <Link className="btn sm" href="/benchmarks?mode=add">
+          Add your benchmark
+        </Link>{" "}
         <a
           href="https://github.com/zjunlp/Orbit/blob/main/docs/guides/benchmark-onboarding.md"
           target="_blank"
@@ -310,10 +414,12 @@ export function SupportedCard({
   open,
   toggle,
   filters = {},
+  comparison,
 }: {
   entry: ReturnType<typeof libraryEntry>;
   open: boolean;
   toggle: () => void;
+  comparison?: { selected: boolean; disabled: boolean; toggle: () => void };
   filters?: import("../../lib/taxonomy.ts").TaxonomyFilters;
 }) {
   const matching = entry.taxonomyGroups.filter((group) => taxonomyMatches(group.taxonomy, filters));
@@ -382,6 +488,23 @@ export function SupportedCard({
           </p>
         )}
         <div className="benchmark-card-footer">
+          {comparison && (
+            <button
+              type="button"
+              className="btn sm"
+              aria-label={`Compare ${entry.name}`}
+              aria-pressed={comparison.selected}
+              disabled={comparison.disabled}
+              onClick={comparison.toggle}
+              title={
+                comparison.disabled
+                  ? "Select up to four families. Remove a selected family first."
+                  : undefined
+              }
+            >
+              {comparison.selected ? "Selected for comparison" : "Compare"}
+            </button>
+          )}
           {entry.registrationNames.length === 1 ? (
             <>
               <Link
