@@ -358,6 +358,22 @@ function sharedMetrics(jobs: BenchJob[]): MetricSpec[] {
   return resolveMetrics(shared);
 }
 
+function tasksWithMatchingConditions(jobs: BenchJob[], tasks: string[]): Set<string> {
+  if (jobs.some((job) => !job.spec.samplePlan)) return new Set();
+  const [baseline, ...others] = jobs.map((job) => {
+    const { budgets, ...shared } = evaluationConditions(job, tasks);
+    return { budgets, shared };
+  });
+  if (!baseline || !others.every(({ shared }) => isDeepStrictEqual(shared, baseline.shared)))
+    return new Set();
+  // The budget lists use the same task order for every job.
+  return new Set(
+    baseline.budgets
+      .filter((budget, i) => others.every(({ budgets }) => isDeepStrictEqual(budgets[i], budget)))
+      .map(({ task }) => task),
+  );
+}
+
 /**
  * Columns `<job>/<method>`, one row per task. Per metric, a cell is the mean over the task's valid
  * trials; column means are over all its tasks and over the tasks every column has (`paired`), and
@@ -378,7 +394,8 @@ export function compareJobs(
       return { key, jobId: job.id, method: m.name, trials: own, valid: own.filter(isValid) };
     }),
   );
-  const metrics = sharedMetrics(jobs.map((j) => j.job));
+  const comparedJobs = jobs.map(({ job }) => job);
+  const metrics = sharedMetrics(comparedJobs);
   const tasks = [...new Set(jobs.flatMap(({ trials }) => trials.map((t) => t.task)))].sort();
   const means = Object.fromEntries(
     metrics.map((m) => [m.name, columns.map((c) => taskMeans(c.valid, m.name))]),
@@ -400,28 +417,18 @@ export function compareJobs(
       ]),
     ),
   }));
-  const planned = jobs.some(({ job }) => Boolean(job.spec.samplePlan));
-  const sameConditions = (task: string) =>
-    !planned ||
-    jobs.every(
-      ({ job }) =>
-        job.spec.samplePlan &&
-        isDeepStrictEqual(
-          evaluationConditions(job, [task]),
-          evaluationConditions(jobs[0]?.job ?? job, [task]),
-        ),
-    );
+  const planned = comparedJobs.some((job) => Boolean(job.spec.samplePlan));
+  let matchingConditions: Set<string> | undefined;
   const matchedSamples = (task: string) => {
+    matchingConditions ??= tasksWithMatchingConditions(comparedJobs, tasks);
+    if (!matchingConditions.has(task)) return false;
     const samples = columns.map((column) =>
       column.valid
         .filter((trial) => trial.task === task)
         .map(sampleKey)
         .sort(),
     );
-    return (
-      sameConditions(task) &&
-      samples.every((own) => own.length > 0 && isDeepStrictEqual(own, samples[0]))
-    );
+    return samples.every((own) => own.length > 0 && isDeepStrictEqual(own, samples[0]));
   };
   const stats: BenchCompare["stats"] = {};
   for (const m of metrics) {
