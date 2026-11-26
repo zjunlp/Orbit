@@ -57,7 +57,8 @@ RUN /.venv/bin/python -c 'from openpi.policies.policy_config import create_train
 ENTRYPOINT ["/.venv/bin/python"]
 
 FROM ${ROBOTWIN_DEPENDENCIES} AS simulator
-RUN rm -rf /opt/robotwin/envs /opt/robotwin/env_cfg /opt/robotwin/task_config /opt/robotwin/description /opt/robotwin/data
+RUN /.venv/bin/python -B -c 'from ctypes import CDLL; CDLL("libEGL.so.1")' && \
+    rm -rf /opt/robotwin/envs /opt/robotwin/env_cfg /opt/robotwin/task_config /opt/robotwin/description /opt/robotwin/data
 COPY examples/bench-adapters/embodied/runtime/nvidia_egl.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 COPY --from=robotwin /envs /opt/robotwin/envs
 COPY --from=robotwin /env_cfg/task_config /opt/robotwin/env_cfg/task_config
