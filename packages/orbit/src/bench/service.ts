@@ -83,6 +83,7 @@ import { consolidateOptions, planConsolidation, sameMethodSetup } from "./consol
 import {
   agentBlocker,
   agentCatalog,
+  agentCompatibility,
   authTests,
   compatibility,
   jobRevision,
@@ -692,6 +693,24 @@ export class BenchService {
         );
       },
     );
+  }
+
+  async benchmarkCompatibility(name: string): Promise<BenchCompatibility> {
+    const info = await this.infoOf(this.benchmark(name));
+    const defs = this.agents.list();
+    const profiles = this.deps.auth?.list() ?? [];
+    return {
+      checked: { benchmark: name, at: nowIso() },
+      agents: defs.map((d) => d.name),
+      rows: [
+        {
+          benchmark: name,
+          cells: Object.fromEntries(
+            defs.map((def) => [def.name, agentCompatibility(def, info.capabilities, profiles)]),
+          ),
+        },
+      ],
+    };
   }
 
   /** Which CLI Agent can take which registered benchmark, by the submission checks. */

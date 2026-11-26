@@ -99,3 +99,16 @@ benchmark 验证。真实接入须用官方任务检查 empty/oracle 或适合�
 检查私有答案未进入 solve 输入、资源边界和失败诊断，并与官方评分核对。
 抽样检查的报告应写明任务与版本范围；完整套件统计等价需要另行证明。
 根据 `orbit bench usage <job>` 的实测数据调整 resources，再扩大任务范围。
+
+## 6. 创建 Evaluation 时先看兼容反馈
+
+在 **New evaluation** 选择已登记环境后，**Configurations** 和 **Review & start** 会显示
+当前 CLI Agent 的准入反馈。已知 MCP/能力阻断会显示原因；凭据下拉仅提供同时满足所选
+Agent harness 与其接受 auth kind 的 profile。编辑配置、切换或刷新环境不会清空配置草稿。
+
+更新 Agent、凭据或 adapter 后点 **Refresh configuration checks**，重新枚举任务并读取
+当前定义；这可能执行可信 adapter 的 tasks 代码。targeted 检查不沿用旧目录缓存或历史成绩。
+unknown、检查失败、旧 daemon 无即时来源标记都不等于允许或 ready；它们本身不阻止继续，
+已知 profile/能力错误仍需修复。任务枚举失败则仍需刷新成功后才能继续，
+不同于兼容 metadata unknown 本身不阻断。最终提交始终由 daemon 再验，资源、安装、模型连通性与
+校准需要独立验证。empty/oracle、external 使用各自规则，不显示为 CLI Agent 兼容结论。

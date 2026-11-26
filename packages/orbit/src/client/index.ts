@@ -323,7 +323,12 @@ export class OrbitClient {
   benchCalibrate = (body: CalibrationRequestInput) =>
     this.call(BenchJob, "/bench/calibrations", { method: "POST", body, timeoutMs: 180_000 });
   agentCatalog = () => this.call(AgentCatalog, "/agents/catalog");
-  benchCompatibility = () => this.call(BenchCompatibility, "/bench/compatibility");
+  benchCompatibility = (benchmark?: string) =>
+    this.call(
+      BenchCompatibility,
+      `/bench/compatibility${benchmark === undefined ? "" : `?benchmark=${enc(benchmark)}`}`,
+      benchmark === undefined ? {} : { timeoutMs: 180_000 },
+    );
   methods = (metric?: string) =>
     this.call(MethodList, `/methods${metric ? `?metric=${enc(metric)}` : ""}`);
   benchLabel = (name: string, labels: BenchLabels) =>

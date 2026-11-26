@@ -56,7 +56,13 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.patch("/benchmarks/:name/labels", async (c) =>
     c.json(bench.label(c.req.param("name"), BenchLabels.parse(await c.req.json()))),
   );
-  api.get("/bench/compatibility", (c) => c.json(bench.compatibility()));
+  api.get("/bench/compatibility", async (c) => {
+    const name = c.req.query("benchmark");
+    if (name !== undefined && !name.trim()) throw new UserError("benchmark must not be empty");
+    return c.json(
+      name === undefined ? bench.compatibility() : await bench.benchmarkCompatibility(name),
+    );
+  });
   api.get("/methods", (c) => c.json(bench.methods(c.req.query("metric"))));
   api.get("/bench/catalog", (c) =>
     c.json(bench.catalog((c.req.query("refresh") ?? "").split(",").filter(Boolean))),

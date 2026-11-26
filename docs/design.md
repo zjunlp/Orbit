@@ -1622,6 +1622,15 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   矩阵是登记级准入，不代替逐任务的镜像、设备、资源和 adapter 运行前检查。
 - API：保留 `GET /agents`；新增 `GET /agents/catalog`（能力、profile、证据、使用情况）与 `GET /bench/compatibility`。
   本机探测版本不是历史 trial 的实跑版本；尚未记录的历史节点/版本不补造。
+- `GET /bench/compatibility?benchmark=<name>` 对当前登记即时调用 adapter tasks，返回同一 `BenchCompatibility`
+  的单行 cells 与可选 `checked: { benchmark, at }` 来源标记；不取十分钟 catalog cache，也不带历史 trial 证据。
+  无参数保留旧矩阵语义。当前 cells 复用 `agentBlocker` 与 Agent 接受的凭据 kind 检查，仍不证明模型连通性。
+- New Evaluation 选择环境后刷新任务并查询 targeted endpoint；Agent 与凭据在页面初载时加载。
+  手动 Refresh configuration checks 同时刷新任务、targeted 结果、Agent 与凭据。
+  仅使用 `checked.benchmark` 与当前环境一致的结果，旧 daemon 未提供标记时显示 unknown；切换/刷新保留配置草稿，
+  迟到结果不能串到另一环境。Configurations 与 Review 均展示反馈，已知 blocked 原因和所选 profile 的
+  harness/kind 不匹配会禁 Continue/提交；unknown、加载失败本身不阻断也不显示 ready，最终提交仍由 daemon 验证。
+  empty/oracle 等 controls、external 不套 CLI Agent cell；原生 Policy 继续走现有 CLI frozen-plan 路径。
 - 原生 VLA 策略独立登记在 `PolicyDefinition`，已有 `GET /policies`；当前 Agents 页仍只读取 CLI 定义与历史 external
   entrypoint，尚无原生 Policy 目录。后续可增加 VLA Policies 视图，列模型版本、可用配置与按 suite/recipe 验证的关系；
   不能把历史 external 列表冒充已适配模型目录，也不能把 VLA 模型加入 benchmark 的六维词表。

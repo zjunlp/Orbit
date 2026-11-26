@@ -238,7 +238,11 @@ export const api = {
     }),
   benchJobs: () => req<BenchJobList>("/bench/jobs").then((r) => r.jobs),
   agentCatalog: () => req<AgentCatalog>("/agents/catalog"),
-  benchCompatibility: () => req<BenchCompatibility>("/bench/compatibility"),
+  benchCompatibility: (benchmark?: string, signal?: AbortSignal) =>
+    req<BenchCompatibility>(
+      `/bench/compatibility${benchmark === undefined ? "" : `?benchmark=${enc(benchmark)}`}`,
+      { signal },
+    ),
   methods: (metric?: string) =>
     req<MethodList>(`/methods${metric ? `?metric=${encodeURIComponent(metric)}` : ""}`).then(
       (r) => r.methods,

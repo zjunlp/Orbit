@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type OrbitClient, tryConnect } from "../src/client/index.ts";
 import { orbitPaths } from "../src/config/paths.ts";
 import { type StartedDaemon, startDaemon } from "../src/daemon/server.ts";
+import { builtinRegistry } from "../src/harness/registry.ts";
 import { probeNode } from "../src/resources/probe.ts";
 
 const home = mkdtempSync(join(tmpdir(), "orbit-bench-daemon-"));
@@ -136,6 +137,113 @@ afterAll(async () => {
 });
 
 describe("bench jobs", () => {
+  it("shares the persistent custom Agent registry with benchmark admission and catalog", async () => {
+    const original = builtinRegistry().get("codex");
+    if (!original) throw new Error("missing built-in codex");
+    const definition = { ...structuredClone(original), name: "custom-admission" };
+    definition.capabilities.multiTurn = false;
+    await client.agentPut(definition);
+    const adapter = join(home, "custom-agent-compatibility.cjs");
+    writeFileSync(
+      adapter,
+      `#!${process.execPath}\nconsole.log(JSON.stringify({tasks:[{id:'one',title:'synthetic',supported:true,reason:null}],capabilities:{methods:['cli'],requires:['multiTurn'],conditions:{},scoreKind:'binary',rescore:'score'}}));`,
+    );
+    chmodSync(adapter, 0o755);
+    await client.benchmarkPut({ name: "custom-agent-bench", adapter, path: home });
+    const registrations = await client.benchmarks();
+    const jobs = await client.benchJobs();
+    const runs = await client.list({ limit: 1000 });
+    const targeted = await client.benchCompatibility("custom-agent-bench");
+    expect(targeted.agents).toContain(definition.name);
+    expect(targeted.rows[0]?.cells[definition.name]).toMatchObject({
+      state: "blocked",
+      reason: expect.stringContaining("multiTurn"),
+    });
+    for (let i = 0; i < 100; i++) {
+      const catalog = await client.benchCatalog();
+      if (catalog.entries.find((e) => e.benchmark.name === "custom-agent-bench")?.capabilities)
+        break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(
+      (await client.benchCompatibility()).rows.find((r) => r.benchmark === "custom-agent-bench")
+        ?.cells[definition.name]?.state,
+    ).toBe("blocked");
+    expect(
+      (await client.agentCatalog()).agents.find((a) => a.definition.name === definition.name)
+        ?.capabilities.multiTurn.declared,
+    ).toBe(false);
+    definition.capabilities.multiTurn = true;
+    await client.agentPut(definition);
+    expect(
+      (await client.benchCompatibility("custom-agent-bench")).rows[0]?.cells[definition.name]
+        ?.state,
+    ).toBe("needs-auth");
+    expect(
+      (await client.benchCompatibility()).rows.find((r) => r.benchmark === "custom-agent-bench")
+        ?.cells[definition.name]?.state,
+    ).toBe("needs-auth");
+    expect(
+      (await client.agentCatalog()).agents.find((a) => a.definition.name === definition.name)
+        ?.capabilities.multiTurn.declared,
+    ).toBe(true);
+    expect(await client.benchmarks()).toEqual(registrations);
+    expect(await client.benchJobs()).toEqual(jobs);
+    expect(await client.list({ limit: 1000 })).toEqual(runs);
+    await client.benchmarkRemove("custom-agent-bench");
+    await client.agentRemove(definition.name);
+  });
+
+  it("checks fresh targeted compatibility without cached fallback or state writes", async () => {
+    const adapter = join(home, "fresh-compatibility.cjs");
+    const caps = join(home, "fresh-capabilities.json");
+    writeFileSync(
+      adapter,
+      `#!${process.execPath}\nconst fs=require('node:fs');let input='';process.stdin.on('data', c=>input+=c);process.stdin.on('end',()=>{const value=JSON.parse(fs.readFileSync(${JSON.stringify(caps)}, 'utf8'));if(value.error){console.error(value.error);process.exit(1);}console.log(JSON.stringify({tasks:[{id:'a',title:'fixture',supported:true,reason:null}],...(value.caps?{capabilities:value.caps}:{})}));});`,
+    );
+    chmodSync(adapter, 0o755);
+    const original = {
+      methods: ["cli"],
+      conditions: {},
+      scoreKind: "binary",
+      rescore: "score",
+      requires: [],
+    };
+    writeFileSync(caps, JSON.stringify({ caps: original }));
+    await client.benchmarkPut({ name: "fresh", adapter, path: home });
+    // Warm the old bulk catalog, then change source capabilities without waiting for its TTL.
+    for (let i = 0; i < 100; i++) {
+      const catalog = await client.benchCatalog();
+      if (catalog.entries.find((e) => e.benchmark.name === "fresh")?.capabilities) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    const registrations = await client.benchmarks();
+    const runs = await client.list({ limit: 1000 });
+    const jobs = await client.benchJobs();
+    const before = await client.benchCompatibility("fresh");
+    expect(before.rows).toHaveLength(1);
+    expect(before.checked).toEqual({ benchmark: "fresh", at: expect.any(String) });
+    expect((await client.benchCompatibility()).checked).toBeUndefined();
+    expect(before.rows[0]?.cells.codex?.state).toBe("needs-auth");
+    writeFileSync(caps, JSON.stringify({ caps: { ...original, methods: ["empty"] } }));
+    const blocked = await client.benchCompatibility("fresh");
+    expect(blocked.rows[0]?.cells.codex).toMatchObject({ state: "blocked" });
+    expect(
+      (await client.benchCompatibility()).rows.find((r) => r.benchmark === "fresh")?.cells.codex
+        ?.state,
+    ).toBe("needs-auth");
+    writeFileSync(caps, JSON.stringify({}));
+    expect((await client.benchCompatibility("fresh")).rows[0]?.cells.codex?.state).toBe("unknown");
+    writeFileSync(caps, JSON.stringify({ error: "fresh listing failed" }));
+    await expect(client.benchCompatibility("fresh")).rejects.toThrow("fresh listing failed");
+    await expect(client.benchCompatibility("missing-name")).rejects.toMatchObject({ status: 404 });
+    await expect(client.benchCompatibility("")).rejects.toMatchObject({ status: 400 });
+    expect(await client.benchmarks()).toEqual(registrations);
+    expect(await client.list({ limit: 1000 })).toEqual(runs);
+    expect(await client.benchJobs()).toEqual(jobs);
+    await client.benchmarkRemove("fresh");
+  });
+
   it("previews definitions through HTTP without registration or runs and protects create-only", async () => {
     const input = { name: "preview-http", adapter: join(home, "adapter.cjs"), path: home };
     const registrations = await client.benchmarks();

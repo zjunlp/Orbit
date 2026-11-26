@@ -216,6 +216,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Web, catalog and taxonomy
 
+- [20261126](20261126-evaluation-compatibility-feedback.md) Current benchmark compatibility feedback before submission
+
 - [20261126](20261126-benchmark-registration-review.md) Check custom definitions before explicit create-only registration
 
 - [20261126](20261126-benchmark-selection-onboarding.md) Benchmark family selection and explicit Web tutorial generation
