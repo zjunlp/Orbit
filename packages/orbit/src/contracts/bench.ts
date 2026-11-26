@@ -111,13 +111,25 @@ export const BenchTask = z.object({
 export type BenchTask = z.infer<typeof BenchTask>;
 
 /** How much of a benchmark Orbit can run, by suite and by reason (`orbit bench coverage`). */
-export interface BenchCoverage {
-  total: number;
-  supported: number;
-  suites: { suite: string; total: number; supported: number }[];
-  /** Normalized reasons, most frequent first; a task with several reasons counts for each. */
-  reasons: { reason: string; tasks: number; suites: string[] }[];
-}
+export const BenchCoverage = z.object({
+  total: z.number().int().nonnegative(),
+  supported: z.number().int().nonnegative(),
+  suites: z.array(
+    z.object({
+      suite: z.string(),
+      total: z.number().int().nonnegative(),
+      supported: z.number().int().nonnegative(),
+    }),
+  ),
+  reasons: z.array(
+    z.object({
+      reason: z.string(),
+      tasks: z.number().int().nonnegative(),
+      suites: z.array(z.string()),
+    }),
+  ),
+});
+export type BenchCoverage = z.infer<typeof BenchCoverage>;
 
 /** A task's suite: its `suite` tag, else the id up to the first `.`, `:` or `/`. */
 export function taskSuite(t: Pick<BenchTask, "id" | "tags">): string {
@@ -1203,3 +1215,12 @@ export function isAgentMethod(m: { agent: string; policySnapshot?: { kind?: stri
 export function isCliMethod(m: { agent: string }): boolean {
   return !(RESERVED_METHOD_AGENTS as readonly string[]).includes(m.agent);
 }
+
+export const BenchRegistrationCheck = z.object({
+  definition: BenchmarkInput,
+  coverage: BenchCoverage,
+  metrics: z.array(MetricSpec),
+  capabilities: BenchCapabilities.optional(),
+  existing: z.boolean(),
+});
+export type BenchRegistrationCheck = z.infer<typeof BenchRegistrationCheck>;

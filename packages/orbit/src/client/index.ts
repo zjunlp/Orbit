@@ -30,6 +30,7 @@ import {
   Benchmark,
   type BenchmarkInput,
   BenchmarkList,
+  BenchRegistrationCheck,
   BenchReport,
   type BenchRescoreInput,
   BenchRescoreResult,
@@ -263,9 +264,19 @@ export class OrbitClient {
   benchInit = (body: BenchInitRequest) =>
     this.call(BenchInitResult, "/bench/init", { method: "POST", body });
   benchmarks = () => this.call(BenchmarkList, "/benchmarks").then((r) => r.benchmarks);
-  benchmarkPut = (b: BenchmarkInput) =>
+  benchmarkCheck = (b: BenchmarkInput) =>
+    this.call(BenchRegistrationCheck, "/benchmarks/check", {
+      method: "POST",
+      body: b,
+      timeoutMs: 180_000,
+    });
+  benchmarkPut = (b: BenchmarkInput, options: { createOnly?: boolean } = {}) =>
     // Registration lists the tasks through the adapter (up to its 120 s limit).
-    this.call(Benchmark, "/benchmarks", { method: "POST", body: b, timeoutMs: 180_000 });
+    this.call(Benchmark, `/benchmarks${options.createOnly ? "?createOnly=true" : ""}`, {
+      method: "POST",
+      body: b,
+      timeoutMs: 180_000,
+    });
   benchmarkRemove = (name: string) =>
     this.call(Ok, `/benchmarks/${enc(name)}`, { method: "DELETE" });
   benchInfo = (name: string) =>

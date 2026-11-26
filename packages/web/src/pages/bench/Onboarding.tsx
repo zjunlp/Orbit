@@ -1,7 +1,8 @@
-import type { BenchInitRequest, BenchInitResult } from "@zjunlp/orbit/contracts";
+import type { BenchInitRequest, BenchInitResult, BenchmarkInput } from "@zjunlp/orbit/contracts";
 import { useEffect, useRef, useState } from "react";
 import { CopyButton, Link } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
+import { RegistrationForm } from "./Registration.tsx";
 import "./onboarding.css";
 
 export function onboardingError(name: string, directory: string): string | null {
@@ -27,6 +28,9 @@ export const tutorialFiles = (template: BenchInitRequest["template"]) => [
 ];
 
 export function OnboardingView() {
+  const [mode, setMode] = useState<"tutorial" | "import">("tutorial");
+  const [definition, setDefinition] = useState<BenchmarkInput | undefined>();
+  const [registrationVersion, setRegistrationVersion] = useState(0);
   const [name, setName] = useState("");
   const [directory, setDirectory] = useState("");
   const [template, setTemplate] = useState<BenchInitRequest["template"]>("adapter");
@@ -96,7 +100,28 @@ export function OnboardingView() {
           <p>Keep the original runner and wrap its protocol.</p>
         </div>
       </section>
-      {!result ? (
+      <nav className="registration-actions" aria-label="Benchmark onboarding options">
+        <button
+          type="button"
+          className="btn"
+          aria-label="Show tutorial form"
+          aria-pressed={mode === "tutorial"}
+          onClick={() => setMode("tutorial")}
+        >
+          Create tutorial
+        </button>
+        <button
+          type="button"
+          className="btn"
+          aria-pressed={mode === "import"}
+          onClick={() => setMode("import")}
+        >
+          Import definition
+        </button>
+      </nav>
+      {mode === "import" ? (
+        <RegistrationForm key={registrationVersion} definition={definition} />
+      ) : !result ? (
         <form onSubmit={create} className="onboarding-form">
           <h2>Create a synthetic tutorial</h2>
           <p>
@@ -200,6 +225,19 @@ export function OnboardingView() {
               </li>
             ))}
           </ul>
+          {result.definition && (
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => {
+                setDefinition(result.definition);
+                setRegistrationVersion((value) => value + 1);
+                setMode("import");
+              }}
+            >
+              Continue to registration
+            </button>
+          )}
           <h3>Next steps to run yourself</h3>
           <p>
             Review the generated README, then register and calibrate when ready. Calibration

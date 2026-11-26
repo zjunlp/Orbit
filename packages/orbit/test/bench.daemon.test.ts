@@ -136,6 +136,41 @@ afterAll(async () => {
 });
 
 describe("bench jobs", () => {
+  it("previews definitions through HTTP without registration or runs and protects create-only", async () => {
+    const input = { name: "preview-http", adapter: join(home, "adapter.cjs"), path: home };
+    const registrations = await client.benchmarks();
+    const runs = await client.list({ limit: 1000 });
+    const jobs = await client.benchJobs();
+    const invalidQuery = await fetch(`${client.info.url}/api/v1/benchmarks?createOnly=invalid`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${client.info.token}`, "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    expect(invalidQuery.status).toBe(400);
+    const preview = await client.benchmarkCheck(input);
+    expect(preview).toMatchObject({
+      existing: false,
+      definition: { config: {}, env: {}, passEnv: [] },
+      coverage: { total: 1, supported: 1 },
+      metrics: [{ name: "answer" }],
+    });
+    expect(await client.benchmarks()).toEqual(registrations);
+    expect(await client.list({ limit: 1000 })).toEqual(runs);
+    expect(await client.benchJobs()).toEqual(jobs);
+    await expect(client.benchmarkCheck({ ...input, config: { broken: "1" } })).rejects.toThrow(
+      "checkout has no tasks",
+    );
+    const registered = await client.benchmarkPut(input, { createOnly: true });
+    expect((await client.benchmarkCheck(input)).existing).toBe(true);
+    await expect(
+      client.benchmarkPut({ ...input, config: { changed: "1" } }, { createOnly: true }),
+    ).rejects.toThrow("already registered");
+    expect((await client.benchmarks()).find((b) => b.name === input.name)).toEqual(registered);
+    const replacement = await client.benchmarkPut({ ...input, config: { changed: "1" } });
+    expect(replacement.config).toEqual({ changed: "1" });
+    await client.benchmarkRemove(input.name);
+  });
+
   it("exposes optional adapter capabilities without changing the tasks-only client", async () => {
     const registration = await client.benchmarkPut({
       name: "gui",

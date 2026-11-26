@@ -3,7 +3,7 @@ import { scaffoldBenchmark } from "../../bench/scaffold.ts";
 import { BenchInitRequest } from "../../contracts/bench-init.ts";
 import type { BenchReport } from "../../contracts/index.ts";
 import { BenchLabels, type Benchmark, PolicyDefinition } from "../../contracts/index.ts";
-import { NotFoundError } from "../../runs/service.ts";
+import { NotFoundError, UserError } from "../../runs/service.ts";
 import type { AppDeps } from "../app.ts";
 import { num } from "../http.ts";
 
@@ -24,7 +24,18 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.get("/benchmarks", (c) =>
     c.json<{ benchmarks: Benchmark[] }>({ benchmarks: benchmarks.list() }),
   );
-  api.post("/benchmarks", async (c) => c.json(await bench.register(await c.req.json()), 201));
+  api.post("/benchmarks/check", async (c) =>
+    c.json(await bench.checkRegistration(await c.req.json())),
+  );
+  api.post("/benchmarks", async (c) => {
+    const createOnly = c.req.query("createOnly");
+    if (createOnly !== undefined && createOnly !== "true" && createOnly !== "false")
+      throw new UserError("createOnly must be true or false");
+    return c.json(
+      await bench.register(await c.req.json(), { createOnly: createOnly === "true" }),
+      201,
+    );
+  });
   api.get("/bench/resources", (c) => c.json(bench.preparation.catalog()));
   api.post("/bench/resources/:family/prepare", async (c) =>
     c.json(await bench.preparation.submit(c.req.param("family"), await c.req.json()), 201),

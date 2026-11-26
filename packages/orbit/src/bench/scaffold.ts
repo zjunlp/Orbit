@@ -160,6 +160,9 @@ export async function scaffoldBenchmark(
       throw new UserError("create tutorials outside Orbit home and data directories");
   }
   const definition = {
+    config: {},
+    env: {},
+    passEnv: [],
     name: request.name,
     path: directory,
     adapter: request.template === "adapter" ? join(directory, "adapter.py") : "manifest",
@@ -197,7 +200,14 @@ export async function scaffoldBenchmark(
     created = true;
     await rename(stage, directory);
     published = true;
-    return { ...request, directory, files: Object.keys(files), nextSteps, tutorial: true };
+    return {
+      ...request,
+      directory,
+      definition,
+      files: Object.keys(files),
+      nextSteps,
+      tutorial: true,
+    };
   } catch (error) {
     if (created && !published) await rmdir(directory).catch(() => {});
     if ((error as NodeJS.ErrnoException).code === "EEXIST")

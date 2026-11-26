@@ -63,7 +63,31 @@ verify 复核记录。后者不允许任意模型自行报告分数。manifest �
 生成 benchmark.json 和 README，不自动登记或启动。按生成输出执行 `add-file`、
 `coverage` 与 `calibrate` 命令；在真实接入前替换合成数据、runner 与评分逻辑。
 
-## 4. 用校准检查接线，再验证真实协议
+## 4. 检查自定义定义，再明确登记
+
+CLI 可读取生成或自行编写的 benchmark JSON：
+
+```bash
+orbit bench add-file /absolute/path/benchmark.json --check --json
+orbit bench add-file /absolute/path/benchmark.json --create-only
+```
+
+先用 `--json` 检查完整返回的定义、supported/listed、suite、unsupported 原因与方法/指标；
+不带 `--json` 的人类输出仅包含名称、重名状态与覆盖摘要。
+`--check` 不登记，也不创建 job/Run；它会在 daemon 主机执行 adapter 的 tasks 代码，
+只检查可信来源的定义与适配器。检查成功仅证明任务枚举与配置校验，不证明运行就绪或校准。
+`--create-only` 是另一步明确登记，重名时拒绝覆盖；不带该参数的旧登记命令仍允许替换。
+检查和 create-only 参数不能同时使用。
+
+Web **Add your own benchmark → Import definition** 可上传 JSON 文件或粘贴 JSON（最多 1 MiB）。
+教学生成成功后也可点 **Continue to registration** 带入定义；旧 daemon 未返回定义时使用生成的
+benchmark.json。点 **Check definition** 后审阅规范化定义中的路径、配置/env/passEnv 名称、任务覆盖、
+suite 与不支持原因，再点 **Register local setup**。修改输入会撤销旧检查结果；错误后须重新检查。
+同名登记存在时显示提示并禁止登记，最终提交仍使用 create-only 保护检查后的重名竞争。
+成功后用 **View setup and task coverage** 查看，或明确选择 **Evaluate**；不会自动启动评测。
+家族专属资源准备继续使用 **Prepare resources**，不由这个通用导入流程替代。
+
+## 5. 用校准检查接线，再验证真实协议
 
 ```bash
 orbit bench coverage my-bench

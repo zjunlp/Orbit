@@ -13,7 +13,7 @@ export function readBounded(file: string, limit: number): Buffer {
   const fd = openSync(file, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);
-    if (!stat.isFile()) throw new Error("task files and manifests must be regular files");
+    if (!stat.isFile()) throw new Error("text files must be regular files");
     if (stat.size > limit) throw new Error(`text file exceeds ${limit} bytes`);
     const data = Buffer.alloc(stat.size + 1);
     let offset = 0;

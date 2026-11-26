@@ -36,6 +36,14 @@ below. Tutorial calibration proves wiring only; replace the synthetic tasks and 
 grader before claiming real benchmark validation. See the
 [onboarding guide](https://github.com/zjunlp/Orbit/blob/main/docs/guides/benchmark-onboarding.md).
 
+For an existing JSON definition, run `orbit bench add-file benchmark.json --check --json` to inspect
+the normalized definition and full listing summary before writing the registration. Without
+`--json`, human output shows the name, conflict status and coverage only. Checking executes the
+adapter's task-listing code on the daemon host: use trusted definitions only. It does not create
+registrations, jobs or Runs and does not prove calibration. After review, use
+`orbit bench add-file benchmark.json --create-only` to reject a name conflict instead of replacing
+an existing registration. These flags cannot be combined.
+
 ## 1. Study the benchmark first
 
 Before writing anything, find out from the benchmark's own code and docs (and write it down for the

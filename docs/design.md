@@ -787,6 +787,14 @@ adapter 的 solve 与 verify 独立，私有 grader 仅 verify 挂载；manifest
 评分，verify 复核结果证据，不重跑 grader。默认校准使用 empty/oracle；adapter 也可演示 Agent solve。
 模板校准只证明教学接线，不能表述为真实 benchmark 校准、官方评分等价或模型支持证明。
 返回文件列表及 add-file / coverage / calibrate 后续命令，用户明确执行后才登记或运行。
+`BenchInitResult.definition` 可选返回生成的 `BenchmarkInput`，供 Web 明确转入检查流程；旧 daemon 未返回时仍可上传生成文件。
+
+**登记前检查**：`POST /benchmarks/check` 复用登记校验和 adapter tasks listing，返回
+`BenchRegistrationCheck { definition, coverage, metrics, capabilities?, existing }`，不写登记、建 job 或创建 Run。
+检查会在 daemon 主机执行 adapter 的 tasks 代码，应仅用于可信定义；这不是隔离执行、试跑或校准。
+`POST /benchmarks?createOnly=true` 在异步 listing 前后均检查重名，再同步写既有 registry，防止检查期间产生的同名登记被覆盖。
+不指定该参数保留既有替换行为；`existing` 只是检查时事实，不能替代最终 create-only 冲突检查。
+CLI `bench add-file <file> --check` 只返回检查结果；`--create-only` 明确登记且拒绝重名，两参数互斥。
 
 **接口**：API `GET/POST /benchmarks`、`DELETE /benchmarks/:name`、`GET /benchmarks/:name/tasks`、
 `GET/POST /bench/jobs`、`GET /bench/jobs/:id`、`POST /bench/jobs/:id/{cancel,rescore}`、`GET /bench/compare?jobs=a,b`；
@@ -1827,6 +1835,10 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
   表单校验名称和 daemon 本机绝对路径格式，最终路径与写入保护仍由 daemon 执行；pending 防止重复提交，
   错误保留输入以便修正重试，离开页面不会取消已提交写入。成功展示文件列表、目录与可复制后续命令，
   不自动登记、下载、启动或校准；教学、manifest 信任边界与 §7 一致。
+  通用 Import definition 可上传/粘贴最多 1 MiB JSON，生成结果可显式带入定义；调用 §7 的登记前检查后，
+  展示定义、任务覆盖、suite/原因、方法和指标，用户再次明确提交 create-only 登记。编辑/换文件撤销旧 review，
+  版本标记屏蔽迟到的检查响应；登记失败清空 review 要求重查。成功链接现有 setup coverage 与 Evaluate，
+  不自动建 job；家族专属 preparation 保留原路径。定义和路径不写 URL 或浏览器持久存储。
 - 既有 `BenchCatalog` 增加 `supported[]` 产品目录，保留 `entries[]` 本地登记数据。Web 从同一个 HTTP 接口读取，
   CLI 和旧调用方仍可使用登记数据。受控数据按 benchmark 族拆在 `bench/benchmarks/<family>.ts`，由 `bench/benchmarks/index.ts` 汇总，`contracts/bench.ts` 声明
   `SupportedBenchmark`：id/name/description、具名 taxonomyGroups、integrations、verification、suites 与 registrationNames。

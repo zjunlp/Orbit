@@ -27,6 +27,9 @@ it("generates a standalone adapter using real protocol schemas and independent p
     template: "adapter",
   });
   expect(result.tutorial).toBe(true);
+  expect(result.definition).toEqual(
+    JSON.parse(readFileSync(join(directory, "benchmark.json"), "utf8")),
+  );
   expect(result.nextSteps[0]).toContain("'\\''");
   BenchmarkInput.parse(JSON.parse(readFileSync(join(directory, "benchmark.json"), "utf8")));
   const invoke = (op: string, extra = {}) => {

@@ -36,6 +36,7 @@ import {
   BenchLabels,
   type Benchmark,
   BenchmarkInput,
+  type BenchRegistrationCheck,
   type BenchReport,
   BenchRescore,
   type BenchRescoreInput,
@@ -44,6 +45,7 @@ import {
   type BenchSplitResult,
   type BenchTask,
   type BenchUsage,
+  benchCoverage,
   CalibrationRequest,
   type CalibrationRequestInput,
   calibrationMethods,
@@ -156,7 +158,7 @@ export class BenchService {
       ...deps,
       self: deps.self ?? [],
       datasets: new DatasetRegistry(deps.paths.datasets),
-      validate: (input) => this.validateRegistration(input),
+      validate: async (input) => (await this.validateRegistration(input)).definition,
       commit: (input) => deps.registry.put(input),
       registrations: () => deps.registry.list(),
     });
@@ -224,11 +226,26 @@ export class BenchService {
 
   // ---- benchmarks ----
 
-  async register(value: unknown): Promise<Benchmark> {
-    return this.deps.registry.put(await this.validateRegistration(value));
+  async register(value: unknown, options: { createOnly?: boolean } = {}): Promise<Benchmark> {
+    const input = BenchmarkInput.parse(value);
+    const checkName = () => {
+      if (options.createOnly && this.deps.registry.get(input.name))
+        throw new UserError(`benchmark already registered: ${input.name}`);
+    };
+    checkName();
+    const checked = await this.validateRegistration(input);
+    checkName();
+    return this.deps.registry.put(checked.definition);
   }
 
-  private async validateRegistration(value: unknown): Promise<BenchmarkInput> {
+  async checkRegistration(value: unknown): Promise<BenchRegistrationCheck> {
+    const checked = await this.validateRegistration(value);
+    return { ...checked, existing: Boolean(this.deps.registry.get(checked.definition.name)) };
+  }
+
+  private async validateRegistration(
+    value: unknown,
+  ): Promise<Omit<BenchRegistrationCheck, "existing">> {
     const input = BenchmarkInput.parse(value);
     if (!existsSync(input.path)) throw new UserError(`benchmark path not found: ${input.path}`);
     if (input.adapter.startsWith("/")) {
@@ -239,7 +256,8 @@ export class BenchService {
         throw new UserError(`adapter is not an executable file: ${input.adapter}`);
       }
     }
-    const { tasks } = await this.infoOf({ ...input, createdAt: "", updatedAt: "" });
+    const info = await this.infoOf({ ...input, createdAt: "", updatedAt: "" });
+    const { tasks } = info;
     if (input.resources) {
       try {
         const ids = tasks.map((t) => t.id);
@@ -249,7 +267,12 @@ export class BenchService {
       }
     }
     const labels = input.labels ?? this.deps.registry.get(input.name)?.labels;
-    return { ...input, ...(labels ? { labels } : {}) };
+    return {
+      definition: { ...input, ...(labels ? { labels } : {}) },
+      coverage: benchCoverage(tasks),
+      metrics: info.metrics ?? [],
+      ...(info.capabilities ? { capabilities: info.capabilities } : {}),
+    };
   }
 
   benchmark(name: string): Benchmark {

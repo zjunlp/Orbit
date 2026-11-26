@@ -40,7 +40,7 @@ import { formatTokens, formatTokenUsage, compactTable as table } from "./format.
 import { registerGate } from "./gate.ts";
 import { kv, numericOption } from "./options.ts";
 import { registerPreparation } from "./preparation.ts";
-import { readTaskFile } from "./task-file.ts";
+import { readBounded, readTaskFile } from "./task-file.ts";
 import { registerTransfer } from "./transfer.ts";
 
 type Job = BenchJobList["jobs"][number];
@@ -396,13 +396,36 @@ export function registerBench(program: Command, client: () => Promise<OrbitClien
   registerBenchCatalog(bench, client, print);
   bench
     .command("add-file <file>")
-    .description("register a benchmark from a JSON definition")
+    .description("check or register a benchmark JSON definition (executes its adapter tasks)")
     .option("--json", "print JSON")
-    .action(async (file: string, options: { json?: boolean }) => {
-      const definition = BenchmarkInput.parse(JSON.parse(readFileSync(resolve(file), "utf8")));
-      const saved = await (await client()).benchmarkPut(definition);
-      print(options.json, saved, () => `registered benchmark ${saved.name}`);
-    });
+    .option("--check", "validate and preview task coverage without registering")
+    .option("--create-only", "reject an existing registration instead of replacing it")
+    .action(
+      async (file: string, options: { json?: boolean; check?: boolean; createOnly?: boolean }) => {
+        if (options.check && options.createOnly)
+          throw new Error("--check and --create-only cannot be combined");
+        const definition = BenchmarkInput.parse(
+          JSON.parse(
+            new TextDecoder("utf-8", { fatal: true }).decode(
+              readBounded(resolve(file), 1024 * 1024),
+            ),
+          ),
+        );
+        const c = await client();
+        if (options.check) {
+          const result = await c.benchmarkCheck(definition);
+          print(
+            options.json,
+            result,
+            () =>
+              `Checked ${result.definition.name}; ${result.existing ? "name already registered" : "name available"}\n${formatCoverage(result.coverage, true)}\nNo registration or runs created.`,
+          );
+        } else {
+          const saved = await c.benchmarkPut(definition, { createOnly: options.createOnly });
+          print(options.json, saved, () => `registered benchmark ${saved.name}`);
+        }
+      },
+    );
   bench
     .command("add <name> <path>")
     .description("register a benchmark checkout (its adapter must list the tasks)")
