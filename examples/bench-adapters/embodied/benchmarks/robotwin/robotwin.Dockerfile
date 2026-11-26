@@ -12,7 +12,7 @@ FROM scratch AS torch-wheels
 FROM ${SIM_BASE} AS simulator-python
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libvulkan1 libgl1 libglib2.0-0 ffmpeg libx11-xcb1 libxcb-dri3-0 \
+    build-essential libvulkan1 libegl1 libgl1 libglib2.0-0 ffmpeg libx11-xcb1 libxcb-dri3-0 \
     libxcb-present0 libxcb-randr0 libxcb-glx0 libxcb-sync1 libxcb-xfixes0 && rm -rf /var/lib/apt/lists/*
 COPY --from=openpi-base /usr/bin/uv /usr/local/bin/uv
 RUN python3 -m venv /.venv
@@ -58,6 +58,7 @@ ENTRYPOINT ["/.venv/bin/python"]
 
 FROM ${ROBOTWIN_DEPENDENCIES} AS simulator
 RUN rm -rf /opt/robotwin/envs /opt/robotwin/env_cfg /opt/robotwin/task_config /opt/robotwin/description /opt/robotwin/data
+COPY examples/bench-adapters/embodied/runtime/nvidia_egl.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 COPY --from=robotwin /envs /opt/robotwin/envs
 COPY --from=robotwin /env_cfg/task_config /opt/robotwin/env_cfg/task_config
 COPY --from=robotwin /description /opt/robotwin/description
