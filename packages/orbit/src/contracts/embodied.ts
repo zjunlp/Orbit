@@ -144,7 +144,12 @@ export const PolicyDefinition = z.strictObject({
 });
 export type PolicyDefinition = z.infer<typeof PolicyDefinition>;
 export type PolicyDefinitionInput = z.input<typeof PolicyDefinition>;
-export const PolicyList = z.object({ policies: z.array(PolicyDefinition) });
+export const PolicyList = z.object({
+  policies: z.array(PolicyDefinition),
+  /** Execution snapshot digests keyed by policy registration name. */
+  policyDigests: z.record(ProfileName, ContentDigest).optional(),
+});
+export type PolicyList = z.infer<typeof PolicyList>;
 
 export const EpisodeSample = z.strictObject({
   sampleId: ContentDigest,

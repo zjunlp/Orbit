@@ -8,7 +8,9 @@ import type {
   Benchmark,
   BenchTask,
   CompatibilityCell,
+  JobCalibration,
   Method,
+  SamplePlan,
 } from "@zjunlp/orbit/contracts";
 import { stableValue } from "./conditions.ts";
 
@@ -44,6 +46,7 @@ export interface MethodDraft {
   id: string;
   name: string;
   agent: Method["agent"];
+  policyRef: string;
   model: string;
   auth: string;
   entrypoint: string;
@@ -60,6 +63,7 @@ export function methodDraft(method: Method): MethodDraft {
     id: `method-draft-${++draftSequence}`,
     name: method.name,
     agent: method.agent,
+    policyRef: method.policyRef ?? "",
     model: method.model ?? "",
     auth: method.auth ?? "",
     entrypoint: method.entrypoint ?? "",
@@ -135,11 +139,16 @@ export function buildMethods(
       );
     if (names.has(name)) throw new Error(`Duplicate configuration name: ${name}.`);
     names.add(name);
-    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(d.agent) || d.agent === "policy")
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(d.agent))
       throw new Error(`${name}: unknown configuration type.`);
     if (capabilities && !capabilityAllows(capabilities.methods, d.agent))
       throw new Error(`${name}: ${d.agent} is not supported by this environment.`);
     const m: Method = { name, agent: d.agent };
+    if (d.agent === "policy") {
+      const policyRef = d.policyRef.trim();
+      if (!profileName.test(policyRef)) throw new Error(`${name}: select a registered policy.`);
+      return { ...m, policyRef };
+    }
     const cli = isCliAgent(d.agent);
     if (cli) {
       const blocker = configurationBlocker(d, profiles, definitions, cells?.[d.agent]);
@@ -199,6 +208,8 @@ export function importMethods(text: string): MethodDraft[] {
     for (const key of ["name", "agent"]) {
       if (typeof v[key] !== "string") throw new Error(`Every configuration needs a ${key}.`);
     }
+    if (v.agent === "policy")
+      throw new Error("Choose registered policies in the frozen sample plan workflow.");
     for (const key of ["model", "auth", "entrypoint", "effort", "bundle"]) {
       if (v[key] !== undefined && typeof v[key] !== "string")
         throw new Error(`Configuration ${key} must be text.`);
@@ -238,6 +249,74 @@ export interface EvaluationFields {
   seeds: string;
   timeout: string;
   options: string;
+  samplePlan?: SamplePlan;
+  batchSize?: string;
+  maxBatchSize?: number;
+  calibration?: JobCalibration;
+}
+
+export function parseSamplePlan(text: string): SamplePlan {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error("The frozen sample plan must be valid JSON.");
+  }
+  if (
+    !isObject(value) ||
+    value.version !== 1 ||
+    typeof value.digest !== "string" ||
+    !Array.isArray(value.items) ||
+    !value.items.length ||
+    value.items.some((item) => !isObject(item) || typeof item.taskId !== "string" || !item.taskId)
+  )
+    throw new Error("Choose a version 1 frozen sample plan with a digest and at least one sample.");
+  // The daemon validates the complete plan and its digest on submission.
+  return value as unknown as SamplePlan;
+}
+
+export function samplePlanTasks(plan: SamplePlan): string[] {
+  return [...new Set(plan.items.map(({ taskId }) => taskId))];
+}
+
+export function evaluationTasks(
+  fields: Pick<EvaluationFields, "benchmark" | "tasks" | "samplePlan" | "calibration">,
+  tasks: BenchTask[],
+): string[] {
+  if (!fields.benchmark) throw new Error("Select a registered environment.");
+  const { samplePlan, calibration } = fields;
+  if (calibration?.mode === "policy") {
+    if (!samplePlan) throw new Error("Policy calibration needs a frozen sample plan.");
+    const sampleCount = samplePlan.items.length;
+    if (sampleCount < 2 || sampleCount > 5)
+      throw new Error("Policy calibration needs 2–5 samples.");
+  }
+  const selected = samplePlan ? samplePlanTasks(samplePlan) : [...new Set(fields.tasks)];
+  if (!selected.length) throw new Error("Select at least one supported task.");
+  const supported = new Set(tasks.filter((t) => t.supported).map((t) => t.id));
+  const unsupported = selected.find((id) => !supported.has(id));
+  if (unsupported !== undefined) {
+    if (samplePlan)
+      throw new Error(
+        `The sample plan task ${unsupported} is missing or unsupported in this environment.`,
+      );
+    throw new Error("Some selected tasks are missing or unsupported. Review the task selection.");
+  }
+  return selected;
+}
+
+export class BatchSizeError extends Error {}
+
+/** Undefined uses the environment preset; null means the input is invalid. */
+export function evaluationTimeoutMin(
+  value: string,
+  calibrationBudget?: number,
+): number | undefined | null {
+  const minutes = value.trim() ? Number(value) : undefined;
+  if (minutes !== undefined && (!Number.isFinite(minutes) || minutes <= 0)) return null;
+  return calibrationBudget === undefined
+    ? minutes
+    : Math.min(minutes ?? calibrationBudget, calibrationBudget);
 }
 
 export function evaluationSpec(
@@ -246,30 +325,55 @@ export function evaluationSpec(
   tasks: BenchTask[],
   source?: BenchJob,
 ): BenchJobSpecInput {
-  if (!fields.benchmark) throw new Error("Select a registered environment.");
-  const selected = [...new Set(fields.tasks)];
-  if (!selected.length) throw new Error("Select at least one supported task.");
-  const supported = new Set(tasks.filter((t) => t.supported).map((t) => t.id));
-  if (selected.some((id) => !supported.has(id)))
-    throw new Error("Some selected tasks are missing or unsupported. Review the task selection.");
-  const seeds = Number(fields.seeds);
-  if (!Number.isInteger(seeds) || seeds < 1 || seeds > 100)
-    throw new Error("Repetitions must be a whole number between 1 and 100.");
-  const timeout = fields.timeout.trim() ? Number(fields.timeout) : undefined;
-  if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0))
+  const selected = evaluationTasks(fields, tasks);
+  const samplePlan = fields.samplePlan;
+  const calibration = fields.calibration?.mode === "policy" ? fields.calibration : undefined;
+  const timeoutMin = evaluationTimeoutMin(fields.timeout, calibration?.budgetMin);
+  if (timeoutMin === null)
     throw new Error("Timeout must be a positive number of minutes, or blank for the preset.");
   if (fields.name.length > 200) throw new Error("Evaluation name must be at most 200 characters.");
   if (!methods.length) throw new Error("Add at least one configuration.");
-  return {
+  const spec = {
     benchmark: fields.benchmark,
     tasks: selected,
     methods,
-    seeds,
     options: stringMap(fields.options, "Evaluation options"),
     ...(fields.name.trim() ? { name: fields.name.trim() } : {}),
-    ...(timeout !== undefined ? { timeoutMin: timeout } : {}),
+    ...(timeoutMin !== undefined ? { timeoutMin } : {}),
     ...(source?.spec.checkpoint ? { checkpoint: source.spec.checkpoint } : {}),
   };
+  if (samplePlan) {
+    if (methods.some((method) => method.agent !== "policy"))
+      throw new Error("Frozen sample plans require registered policy configurations.");
+    if (calibration) {
+      if (methods.length !== 1)
+        throw new Error("Policy calibration needs exactly one registered policy.");
+      if (calibration.budgetMin === undefined)
+        throw new Error("The copied policy calibration has no total budget.");
+      return {
+        ...spec,
+        samplePlan,
+        batchSize: samplePlan.items.length,
+        calibration,
+      };
+    }
+    const batchSize = fields.batchSize?.trim() ? Number(fields.batchSize) : undefined;
+    const maxBatchSize = fields.maxBatchSize ?? 256;
+    if (
+      batchSize !== undefined &&
+      (!Number.isInteger(batchSize) || batchSize < 2 || batchSize > maxBatchSize)
+    )
+      throw new BatchSizeError(
+        `Batch size must be a whole number from 2 to ${maxBatchSize}. Leave it blank to run one sample per solve.`,
+      );
+    return { ...spec, samplePlan, ...(batchSize === undefined ? {} : { batchSize }) };
+  }
+  if (methods.some((method) => method.agent === "policy"))
+    throw new Error("Upload a frozen sample plan to evaluate a registered policy.");
+  const seeds = Number(fields.seeds);
+  if (!Number.isInteger(seeds) || seeds < 1 || seeds > 100)
+    throw new Error("Repetitions must be a whole number between 1 and 100.");
+  return { ...spec, seeds };
 }
 
 export function taskSubset(query: URLSearchParams): string[] | undefined {

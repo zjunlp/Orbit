@@ -235,6 +235,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261112](20261112-trial-review-views.md) Trial review views and grouped evidence
 - [20261112](20261112-trial-evidence-shapes.md) Native episode timelines and TextArena game conversations
 - [20261117](20261117-conversation-performance.md) Long Conversation virtualization and cancellable reads
+- [20261126](20261126-web-native-evaluation.md) Submit and copy native policy evaluations in Web
 
 ## Docs, presentation and integration merges
 

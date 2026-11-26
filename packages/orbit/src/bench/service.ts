@@ -102,11 +102,11 @@ import { CalibrationLifecycle } from "./calibration.ts";
 import { checkGateBundle } from "./gate-bundle.ts";
 import { planGate } from "./gate-plan.ts";
 import { evaluateGate } from "./gates.ts";
-import { connectorIssues, PolicyRegistry } from "./policies.ts";
+import { connectorIssues, executionPolicySnapshot, PolicyRegistry } from "./policies.ts";
 import { AdapterClient } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { loadResources, resolveResources, usageRows } from "./resources.ts";
-import { resolveBinding } from "./samples.ts";
+import { contentDigest, resolveBinding } from "./samples.ts";
 import {
   checkPlanAgainstBenchmark,
   checkTasksExist,
@@ -315,7 +315,13 @@ export class BenchService {
     if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
     const folder = Folder.safeParse(opts.folder ?? "");
     if (!folder.success) throw new UserError(folder.error.issues[0]?.message ?? "invalid folder");
-    const { tasksFile, taskSet: expectedTaskSet, expectedRevisions, ...spec } = parsed.data;
+    const {
+      tasksFile,
+      taskSet: expectedTaskSet,
+      expectedRevisions,
+      expectedPolicyDigests,
+      ...spec
+    } = parsed.data;
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
     const batch = info.capabilities?.embodied?.batch;
@@ -338,6 +344,7 @@ export class BenchService {
       : undefined;
     if (file) spec.tasks = file.tasks;
     const names = new Set<string>();
+    const policyDigests = new Map(Object.entries(expectedPolicyDigests ?? {}));
     const resolvedBindings: Record<string, ResolvedBinding> = {};
     const policyWarnings: string[] = [];
     const plannedTasks = new Set(spec.samplePlan?.items.map((sample) => sample.taskId));
@@ -350,15 +357,24 @@ export class BenchService {
       if (m.agent === "policy") {
         if (m.effort) throw new UserError(`${m.name}: effort is a CLI Agent option`);
         const policy = this.policies.get(m.policyRef ?? "");
-        if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
+        const expectedDigest = policyDigests.get(m.name);
+        if (!policy)
+          throw new UserError(
+            `${m.name}: unknown policy ${m.policyRef}${expectedDigest ? ". Refresh policies and review again." : ""}`,
+          );
+        const snapshot = structuredClone(executionPolicySnapshot(policy));
+        if (expectedDigest && contentDigest(snapshot) !== expectedDigest)
+          throw new UserError(
+            `${m.name}: registered policy ${policy.name} changed since review. Refresh policies and review again.`,
+          );
+        policyDigests.delete(m.name);
         const issues = connectorIssues(policy);
         if (issues.length) throw new UserError(`${m.name}: ${issues.join("; ")}`);
         if (spec.calibration?.mode === "policy" && policy.kind !== "model")
           throw new UserError(
             "policy integration checks require a real model registration, not a calibration fixture",
           );
-        const { recommendedScope, ...snapshot } = policy;
-        m.policySnapshot = structuredClone(snapshot);
+        m.policySnapshot = snapshot;
         const endpoint = info.capabilities?.embodied;
         if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
         // Legacy OpenPI registrations use the native runner's five-step default.
@@ -376,6 +392,7 @@ export class BenchService {
         } catch (e) {
           throw new UserError(`${m.name}: ${(e as Error).message}`);
         }
+        const { recommendedScope } = policy;
         if (recommendedScope) {
           if (!recommendedScope.profiles.includes(endpoint.profile))
             policyWarnings.push(
@@ -399,6 +416,8 @@ export class BenchService {
         }
       }
     }
+    for (const name of policyDigests.keys())
+      throw new UserError(`${name}: expected policy digest has no matching policy method`);
     resolveTaskSelection(spec, all);
     checkTasksExist(spec, all, b.name);
     if (new Set(spec.tasks).size !== spec.tasks.length) throw new UserError("duplicate task IDs");

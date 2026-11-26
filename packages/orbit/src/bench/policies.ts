@@ -73,6 +73,11 @@ export function connectorIssues(definition: PolicyDefinition): string[] {
   return issues;
 }
 
+export function executionPolicySnapshot(policy: PolicyDefinition): PolicyDefinition {
+  const { recommendedScope: _recommendedScope, ...snapshot } = policy;
+  return snapshot;
+}
+
 /** Persisted only by daemon routes, alongside the existing benchmark registry. */
 export class PolicyRegistry {
   private readonly file: string;

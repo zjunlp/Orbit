@@ -1002,7 +1002,9 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   分量名必须唯一。通过后生成不可变 `ResolvedBinding`。
 - **Policy 登记**：`PolicyDefinition` 是共享形状（固定镜像、readiness、checkpoint/归一化摘要、命名权重 dataset、随机流声明）；
   各 connector 的必需字段（OFT 的 8 步 LIBERO recipe、GR00T 的执行长度/动作顺序/backbone 摘要）在 `bench/policies.ts` 登记时检查。
-  提交时保存权威快照。`gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
+  提交时保存权威快照。`GET /policies` 返回各登记执行快照的摘要。Web 确认后提交按方法名索引的摘要，
+  daemon 在创建作业前核对即将保存的快照。登记发生变化时，用户可保留草稿，刷新登记后重新确认。
+  `gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
   可选的 `recommendedScope` 声明权重的建议评测 profile 与任务族。超出范围的计划在提交时记录提示，并随校准报告返回。
   Binding、执行快照和校准判定独立于提示。
 - **样本身份**：`spec.samplePlan` 是带摘要的有序计划；sampleId 由任务、profile、初态资产摘要与索引、环境 seed、模型 seed 和重复
@@ -1630,7 +1632,8 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   仅使用 `checked.benchmark` 与当前环境一致的结果，旧 daemon 未提供标记时显示 unknown；切换/刷新保留配置草稿，
   迟到结果不能串到另一环境。Configurations 与 Review 均展示反馈，已知 blocked 原因和所选 profile 的
   harness/kind 不匹配会禁 Continue/提交；unknown、加载失败本身不阻断也不显示 ready，最终提交仍由 daemon 验证。
-  empty/oracle 等 controls、external 不套 CLI Agent cell；原生 Policy 继续走现有 CLI frozen-plan 路径。
+  empty/oracle 等 controls、external 不套 CLI Agent cell。原生 Policy 评测在 Web 上传或复制冻结样本计划，
+  使用 Policy 登记和摘要确认流程。
 - 原生 VLA 策略独立登记在 `PolicyDefinition`，已有 `GET /policies`；当前 Agents 页仍只读取 CLI 定义与历史 external
   entrypoint，尚无原生 Policy 目录。后续可增加 VLA Policies 视图，列模型版本、可用配置与按 suite/recipe 验证的关系；
   不能把历史 external 列表冒充已适配模型目录，也不能把 VLA 模型加入 benchmark 的六维词表。

@@ -7,19 +7,24 @@ import type {
   Benchmark,
   BenchTask,
   Method,
+  SamplePlan,
 } from "@zjunlp/orbit/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  BatchSizeError,
   buildMethods,
   compatibilityCells,
   configurationBlocker,
   copiedMethods,
   type EvaluationFields,
   evaluationSpec,
+  evaluationTasks,
   importMethods,
   methodDraft,
+  parseSamplePlan,
   profileAllowed,
   registrationChanged,
+  samplePlanTasks,
   taskSubset,
   withLineage,
 } from "../src/pages/bench/new-job.ts";
@@ -190,6 +195,154 @@ it("rejects non-finite budgets and non-string adapter option values", () => {
   );
 });
 
+describe("frozen policy evaluations", () => {
+  const policy: Method = { name: "model", agent: "policy", policyRef: "pi05-libero" };
+  const nativeTasks = ["put_bowl_on_plate", "close_drawer"].map(
+    (id): BenchTask => ({ id, title: null, supported: true, reason: null, tags: {} }),
+  );
+  const plan: SamplePlan = {
+    version: 1,
+    digest: `sha256:${"a".repeat(64)}`,
+    items: ["close_drawer", "put_bowl_on_plate", "close_drawer"].map((taskId, i) => ({
+      sampleId: `sha256:${String(i).repeat(64)}`,
+      taskId,
+      benchmarkProfile: "libero-spatial",
+      initialStateId: String(i),
+      initialStateDigest: `sha256:${"b".repeat(64)}`,
+      environmentSeed: 42,
+      policySeed: 0,
+      repetition: 0,
+    })),
+  };
+  const nativeFields: EvaluationFields = {
+    ...fields,
+    benchmark: "libero-spatial",
+    tasks: [],
+    seeds: "",
+    samplePlan: plan,
+    batchSize: "2",
+  };
+  const calibration = { mode: "policy" as const, budgetMin: 20, rescore: false, noOracle: [] };
+
+  it("reads an uploaded plan and lists tasks in their first sample order", () => {
+    expect(parseSamplePlan(JSON.stringify(plan))).toEqual(plan);
+    expect(samplePlanTasks(plan)).toEqual(["close_drawer", "put_bowl_on_plate"]);
+    expect(() => parseSamplePlan("not JSON")).toThrow("valid JSON");
+    for (const value of [
+      { ...plan, items: [] },
+      { ...plan, items: [null] },
+      { ...plan, version: 2 },
+    ])
+      expect(() => parseSamplePlan(JSON.stringify(value))).toThrow("frozen sample plan");
+  });
+
+  it("copies the frozen sample order and batch size into a separate policy submission", () => {
+    const original: BenchJob = {
+      ...source,
+      spec: {
+        benchmark: nativeFields.benchmark,
+        tasks: samplePlanTasks(plan),
+        methods: [policy],
+        samplePlan: plan,
+        batchSize: 2,
+        options: {},
+        lineage: {},
+      },
+    };
+    const before = JSON.stringify(original);
+    const drafts = copiedMethods(original, "", "").map(methodDraft);
+    const spec = evaluationSpec(
+      {
+        ...nativeFields,
+        samplePlan: original.spec.samplePlan,
+        batchSize: String(original.spec.batchSize),
+      },
+      buildMethods(drafts, { ...caps, methods: ["policy"] }),
+      nativeTasks,
+      original,
+    );
+    expect(spec).toMatchObject({
+      benchmark: "libero-spatial",
+      tasks: ["close_drawer", "put_bowl_on_plate"],
+      methods: [policy],
+      samplePlan: plan,
+      batchSize: 2,
+    });
+    expect(spec).not.toHaveProperty("seeds");
+    expect(JSON.stringify(original)).toBe(before);
+  });
+
+  it("requires a registered policy reference and a frozen plan together", () => {
+    expect(() => buildMethods([methodDraft({ ...policy, policyRef: "bad reference" })])).toThrow(
+      "select a registered policy",
+    );
+    expect(() => evaluationSpec(nativeFields, [empty], nativeTasks)).toThrow(
+      "require registered policy",
+    );
+    expect(() =>
+      evaluationSpec(
+        { ...nativeFields, samplePlan: undefined, tasks: ["close_drawer"] },
+        [policy],
+        nativeTasks,
+      ),
+    ).toThrow("Upload a frozen sample plan");
+    expect(() => evaluationSpec(nativeFields, [policy], nativeTasks.slice(0, 1))).toThrow(
+      "missing or unsupported",
+    );
+  });
+
+  it("lets task selection proceed before validating the batch size on submission", () => {
+    const draft = { ...nativeFields, batchSize: "1", maxBatchSize: 128 };
+    expect(evaluationTasks(draft, nativeTasks)).toEqual(["close_drawer", "put_bowl_on_plate"]);
+    expect(() => evaluationSpec(draft, [policy], nativeTasks)).toThrow(BatchSizeError);
+    expect(() => evaluationSpec({ ...draft, batchSize: "129" }, [policy], nativeTasks)).toThrow(
+      "from 2 to 128",
+    );
+    expect(evaluationSpec({ ...draft, batchSize: "" }, [policy], nativeTasks)).not.toHaveProperty(
+      "batchSize",
+    );
+  });
+
+  it("keeps the copied calibration settings and derives its batch size from the plan", () => {
+    const spec = evaluationSpec(
+      { ...nativeFields, calibration, timeout: "25" },
+      [policy],
+      nativeTasks,
+    );
+    expect(spec).toMatchObject({
+      calibration,
+      timeoutMin: 20,
+      samplePlan: plan,
+      batchSize: 3,
+    });
+    expect(
+      evaluationSpec({ ...nativeFields, calibration, timeout: "5" }, [policy], nativeTasks)
+        .timeoutMin,
+    ).toBe(5);
+    expect(
+      evaluationSpec({ ...nativeFields, calibration, timeout: "" }, [policy], nativeTasks)
+        .timeoutMin,
+    ).toBe(20);
+  });
+
+  it("requires 2–5 planned samples and one model when copying a policy calibration", () => {
+    const fields = { ...nativeFields, calibration };
+    expect(() =>
+      evaluationSpec(fields, [policy, { ...policy, name: "second" }], nativeTasks),
+    ).toThrow("exactly one registered policy");
+    expect(() =>
+      evaluationSpec(
+        { ...fields, samplePlan: { ...plan, items: plan.items.slice(0, 1) } },
+        [policy],
+        nativeTasks,
+      ),
+    ).toThrow("2–5 samples");
+    expect(() =>
+      evaluationSpec({ ...fields, samplePlan: undefined }, [policy], nativeTasks),
+    ).toThrow("needs a frozen sample plan");
+  });
+});
+
 it("detects registration changes against saved conditions and treats missing history as unknown", () => {
   expect(
     registrationChanged(source, {
@@ -334,18 +487,16 @@ it("does not block valid selected profiles on unknown or needs-auth aggregate st
   }
 });
 
-it("keeps controls and external policies outside CLI compatibility and native policy outside this editor", () => {
+it("keeps controls and policies outside CLI compatibility", () => {
   const blocked = { state: "blocked" as const, reason: "CLI only" };
-  for (const agent of ["empty", "oracle", "external"] as const) {
+  for (const agent of ["empty", "oracle", "external", "policy"] as const) {
     const draft = methodDraft({
       name: agent,
       agent,
       ...(agent === "external" ? { entrypoint: "fixture:policy" } : {}),
+      ...(agent === "policy" ? { policyRef: "registered-policy" } : {}),
     });
     expect(configurationBlocker(draft, [], [], blocked)).toBeNull();
     expect(buildMethods([draft], undefined, [], [], { [agent]: blocked })[0]?.agent).toBe(agent);
   }
-  expect(() => buildMethods([methodDraft({ name: "native", agent: "policy" })])).toThrow(
-    "unknown configuration type",
-  );
 });
