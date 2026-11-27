@@ -92,6 +92,66 @@ it("links known built-in adapters and exact native semantic profiles only", () =
   );
 });
 
+it("links native RoboTwin and RoboCasa365 setups by frozen environment across profiles", () => {
+  const setups = (
+    [
+      ["fast-vla", "robotwin", "robotwin-aloha-agilex-head-history/1"],
+      ["lingbot-va", "robotwin", "robotwin-aloha-agilex-lingbot-va/1"],
+      ["diffusion-policy", "robocasa365", "robocasa365-panda-omron-history2/1"],
+      ["xiaomi-robotics-1", "robocasa365", "robocasa365-panda-omron-history4-stride2/1"],
+    ] as const
+  ).map(([name, kind, profile]) => {
+    const entry = registration(name, "derived-local", "derived");
+    const id = `${kind}-${name}/1`;
+    const profileDigest = `sha256:${"a".repeat(64)}`;
+    entry.benchmark.config = {
+      profileDigest,
+      reference: JSON.stringify({ id, environment: { kind }, benchmarkProfile: { id: profile } }),
+    };
+    entry.capabilities = {
+      conditions: { "Profile digest": profileDigest },
+      embodied: { profile: id, semanticProfile: { id: profile } },
+    } as never;
+    return entry;
+  });
+  const rows = supportedBenchmarks(setups);
+  expect(rows.find((row) => row.id === "robotwin")?.registrationNames).toEqual([
+    "fast-vla",
+    "lingbot-va",
+  ]);
+  expect(rows.find((row) => row.id === "robocasa365")?.registrationNames).toEqual([
+    "diffusion-policy",
+    "xiaomi-robotics-1",
+  ]);
+  const [fastVla] = setups;
+  if (!fastVla) throw new Error("missing native setup fixture");
+  expect(
+    supportedBenchmarks([
+      { ...fastVla, identitySource: "label", identity: { id: "local-custom", name: "Custom" } },
+      { ...fastVla, capabilities: null },
+    ]).every((row) => row.registrationNames.length === 0),
+  ).toBe(true);
+  const { config } = fastVla.benchmark;
+  for (const updated of [
+    { ...config, profileDigest: `sha256:${"b".repeat(64)}` },
+    { ...config, reference: "{" },
+    {
+      ...config,
+      reference: JSON.stringify({
+        id: "robotwin-fast-vla/1",
+        environment: { kind: "robotwin" },
+        benchmarkProfile: { id: "different-profile/1" },
+      }),
+    },
+  ]) {
+    expect(
+      supportedBenchmarks([
+        { ...fastVla, benchmark: { ...fastVla.benchmark, config: updated } },
+      ]).every((row) => row.registrationNames.length === 0),
+    ).toBe(true);
+  }
+});
+
 it("discovers the added embodied families and retains both CHORES registrations", () => {
   const local = [
     ["eb-navigation", "eb-navigation-projected/1"],

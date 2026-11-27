@@ -1854,7 +1854,8 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 - 既有 `BenchCatalog` 增加 `supported[]` 产品目录，保留 `entries[]` 本地登记数据。Web 从同一个 HTTP 接口读取，
   CLI 和旧调用方仍可使用登记数据。受控数据按 benchmark 族拆在 `bench/benchmarks/<family>.ts`，由 `bench/benchmarks/index.ts` 汇总，`contracts/bench.ts` 声明
   `SupportedBenchmark`：id/name/description、具名 taxonomyGroups、integrations、verification、suites 与 registrationNames。
-- registrationNames 只关联显式身份或代码已知的内置接入、原生语义 profile，不按登记名、文件路径或运行记录猜测。
+- registrationNames 只关联显式身份、代码已知的内置接入、原生冻结环境类型或精确语义 profile。
+  RoboTwin 和 RoboCasa365 使用与登记能力及摘要相符的冻结环境类型归类，同一家族可有多套观测和动作配置。
   CUA-Lite 必须有显式 `cua-lite` 身份，且列出的精确 suite 有 `supported > 0`，才关联 MiniWoB、WebVoyager 或
   Online-Mind2Web 家族；无 listing、未知 suite 或全部 unsupported 不自动关联。
   本地未关联的自定义登记仍在本地视图可用；没有本地登记时产品条目依然存在。
