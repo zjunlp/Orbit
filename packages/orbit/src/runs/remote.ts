@@ -16,6 +16,7 @@ import type { RunContext } from "./context.ts";
 import { UserError } from "./errors.ts";
 import { REFUSAL_TTL_MS } from "./execution.ts";
 import type { DispatchResult, RemoteNode } from "./placement.ts";
+import { hostNetworkError } from "./preflight.ts";
 
 type Context = Pick<
   RunContext,
@@ -207,6 +208,7 @@ export async function receiveRemote(ctx: Context, input: RemoteSubmit): Promise<
   }
   const spec = RunSpec.parse(input.spec);
   if (spec.backend !== "docker") throw new UserError("only docker runs can run on another node");
+  if (spec.services.length) throw new UserError("runs with services stay on the submitting node");
   if (spec.mounts.some((m) => m.source)) throw new UserError("host path mounts are not portable");
   if (spec.project && !input.workspace)
     throw new UserError("a project run needs its code snapshot");
@@ -225,7 +227,13 @@ export async function receiveRemote(ctx: Context, input: RemoteSubmit): Promise<
   }
   if (input.agentBundle) spec.agentBundle = bundle(input.agentBundle);
   if (spec.auth && ctx.deps.auth?.get(spec.auth)?.profile.hostNetwork) spec.hostNetwork = true;
-  const why = await ctx.localBlocker(spec);
+  if (spec.hostNetwork) {
+    const err = hostNetworkError(spec);
+    if (err) throw new UserError(err);
+  }
+  const checked = RunSpec.safeParse(spec);
+  if (!checked.success) throw new UserError(checked.error.issues[0]?.message ?? "invalid run spec");
+  const why = await ctx.localBlocker(checked.data);
   if (why) throw new UserError(why);
   const workspace = input.workspace ? bundle(input.workspace) : null;
 
@@ -237,7 +245,7 @@ export async function receiveRemote(ctx: Context, input: RemoteSubmit): Promise<
   if (workspace) await cp(workspace, dirs.workspace, { recursive: true, verbatimSymlinks: true });
   const run: Run = {
     id: input.id,
-    spec,
+    spec: checked.data,
     state: "queued",
     reason: null,
     exitCode: null,

@@ -595,6 +595,21 @@ timeout_sec = 120
     expect(() => toRunSpec({ command: ["true"] }, oracle, b, "solve")).toThrow(/image/);
     expect(AdapterRunSpec.safeParse({ command: ["true"], auth: "p" }).success).toBe(false);
     expect(AdapterRunSpec.safeParse({ image: "x" }).success).toBe(false);
+    const badAfter = {
+      image: "x",
+      command: ["true"],
+      after: { command: ["true"], timeoutMin: 1, passEnv: ["SECRET_KEY"] },
+    };
+    expect(AdapterRunSpec.safeParse(badAfter).success).toBe(false);
+    expect(() => toRunSpec(badAfter, oracle, b, "solve")).toThrow(/after\.passEnv/);
+    expect(() =>
+      toRunSpec(
+        { image: "x", command: ["true"], after: { command: ["true"], timeoutMin: 1 } },
+        oracle,
+        b,
+        "verify",
+      ),
+    ).toThrow(/after phase/);
   });
 
   it("uses the same executable verifier and stdout capture in separate and shared modes", () => {
@@ -664,6 +679,7 @@ process.stdin.on("end", () => {
   if (mode === "garbage") return console.log("not json");
   if (mode === "sleep") return setTimeout(() => {}, 10000);
   if (mode === "secret") return console.log(JSON.stringify({ tasks: [{ id: String(process.env.SECRET_KEY), title: null, supported: true, reason: null }] }));
+  if (mode === "after-pass-env") return console.log(JSON.stringify({ spec: { image: "x", command: ["true"], after: { command: ["true"], timeoutMin: 1, passEnv: ["SECRET_KEY"] } } }));
   if (process.argv[2] !== req.op) process.exit(9);
   if (req.op === "tasks")
     return console.log(JSON.stringify({ tasks: [{ id: "a", title: req.benchmark.path, supported: true, reason: null }] }));
@@ -729,6 +745,12 @@ process.stdin.on("end", () => {
     expect(() => new AdapterClient({ ...bench(), adapter: "harbor" }, undefined)).toThrow(
       /built-in adapters are not available/,
     );
+    await expect(
+      new AdapterClient(bench({ mode: "after-pass-env" }), undefined).verify(trial, {
+        run: run({ exitCode: 0 }),
+        output: tmp,
+      }),
+    ).rejects.toThrow(/after\.passEnv/);
   });
 });
 

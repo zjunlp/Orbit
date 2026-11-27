@@ -3,10 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it, vi } from "vitest";
+import { AuthStore } from "../src/auth/index.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
 import { BenchService } from "../src/bench/service.ts";
 import { ensureHome, orbitPaths } from "../src/config/paths.ts";
-import { BenchJob, Outcome, Run, Trial } from "../src/contracts/index.ts";
+import {
+  BenchJob,
+  type NodeResources,
+  Outcome,
+  Run,
+  RunSpec,
+  Trial,
+} from "../src/contracts/index.ts";
 import { RunService } from "../src/runs/service.ts";
 import { Store } from "../src/store/index.ts";
 
@@ -233,4 +241,113 @@ it("skips failed folder copies without writing metadata or counting the run", as
   expect(result.skipped).toEqual([expect.stringContaining("missing:")]);
   expect(existsSync(join(dest, "runs/missing/run.json"))).toBe(false);
   expect(readFileSync(join(dest, "runs/solve/artifact"), "utf8")).toBe("ok");
+});
+
+it("rejects auth hostNetwork conflicts and does not leak it to workers", async () => {
+  const f = fixture();
+  const auth = new AuthStore(f.paths.auth);
+  auth.put({
+    name: "host-codex",
+    harness: "codex",
+    kind: "api-key",
+    secret: "sk-fixture",
+    hostNetwork: true,
+  });
+  const resources: NodeResources = {
+    node: "primary",
+    probedAt: "2026-10-16T00:00:00.000Z",
+    gpus: [],
+    gpuError: null,
+    cpu: { count: 8, load1: 0, busy: 0 },
+    memory: { totalGB: 64, availableGB: 60 },
+    disk: { path: "/", totalGB: 100, freeGB: 50 },
+  };
+  const runs = new RunService({
+    store: f.store,
+    paths: f.paths,
+    auth,
+    probe: async () => resources,
+  });
+  try {
+    await expect(
+      runs.submit({
+        image: "python:3.12-slim",
+        command: ["true"],
+        auth: "host-codex",
+        services: [{ name: "sim", image: "sim:1" }],
+      }),
+    ).rejects.toThrow(/services do not work with host networking/);
+    expect(f.store.listRuns()).toEqual([]);
+
+    await expect(
+      runs.submit({
+        image: "python:3.12-slim",
+        command: ["true"],
+        auth: "host-codex",
+        network: false,
+      }),
+    ).rejects.toThrow(/host network conflicts with network disabled/);
+    expect(f.store.listRuns()).toEqual([]);
+
+    // Primary's hostNetwork profile must not mutate specs destined for a worker node.
+    runs.setRemote({
+      nodes: () => [
+        {
+          name: "worker-fixture",
+          online: false,
+          resources: { ...resources, node: "worker-fixture" },
+          leases: [],
+          datasets: [],
+          profiles: [{ name: "host-codex", harness: "codex", cli: true }],
+        },
+      ],
+      dispatch: async () => ({ ok: true }),
+      cancel: async () => {},
+    });
+    const queued = await runs.submit({
+      image: "python:3.12-slim",
+      command: ["true"],
+      auth: "host-codex",
+      network: false,
+      resources: { node: "worker-fixture", cpus: 1, memGB: 1 },
+    });
+    expect(queued.spec.hostNetwork).toBe(false);
+    expect(f.store.getRun(queued.id)?.spec.hostNetwork).toBe(false);
+
+    // Worker arrival rejects services and local auth hostNetwork conflicts before persisting.
+    await expect(
+      runs.submitRemote({
+        id: "remote-svc",
+        origin: "primary",
+        spec: RunSpec.parse({
+          image: "python:3.12-slim",
+          command: ["true"],
+          services: [{ name: "sim", image: "sim:1" }],
+        }),
+        code: null,
+        workspace: null,
+        dockerfile: null,
+        agentBundle: null,
+      }),
+    ).rejects.toThrow(/services stay on the submitting node/);
+    await expect(
+      runs.submitRemote({
+        id: "remote-nonet",
+        origin: "primary",
+        spec: RunSpec.parse({
+          image: "python:3.12-slim",
+          command: ["true"],
+          auth: "host-codex",
+          network: false,
+        }),
+        code: null,
+        workspace: null,
+        dockerfile: null,
+        agentBundle: null,
+      }),
+    ).rejects.toThrow(/host network conflicts with network disabled/);
+    expect(f.store.listRuns().map((r) => r.id)).toEqual([queued.id]);
+  } finally {
+    await runs.stop();
+  }
 });

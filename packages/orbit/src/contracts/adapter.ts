@@ -36,6 +36,13 @@ export const ORBIT_OWNED_SPEC_FIELDS = [
   "passEnv",
 ] as const;
 
+const OWNED_FIELDS = [...ORBIT_OWNED_SPEC_FIELDS, "after.passEnv"].join(", ");
+
+function hasOwnedAfterField(s: Record<string, unknown>): boolean {
+  const after = s.after;
+  return typeof after === "object" && after !== null && "passEnv" in after;
+}
+
 /**
  * A run as an adapter describes it: RunSpec fields (validated as a RunSpec once Orbit has added its
  * own) with either `command`, or `agentTask` for Agent methods, which Orbit turns into the method's
@@ -46,8 +53,8 @@ export const AdapterRunSpec = z
     command: z.array(z.string()).min(1).optional(),
     agentTask: z.object({ instruction: z.string().min(1) }).optional(),
   })
-  .refine((s) => !ORBIT_OWNED_SPEC_FIELDS.some((k) => k in s), {
-    message: `adapter run specs may not set ${ORBIT_OWNED_SPEC_FIELDS.join(", ")}`,
+  .refine((s) => !ORBIT_OWNED_SPEC_FIELDS.some((k) => k in s) && !hasOwnedAfterField(s), {
+    message: `adapter run specs may not set ${OWNED_FIELDS}`,
   })
   .refine((s) => Boolean(s.command) !== Boolean(s.agentTask), {
     message: "an adapter run spec needs exactly one of command or agentTask",

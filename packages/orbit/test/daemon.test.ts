@@ -48,6 +48,7 @@ beforeAll(async () => {
   }
   mkdirSync(daemon.runs.dirs("fixture").output, { recursive: true });
   writeFileSync(join(daemon.runs.dirs("fixture").output, "a b.txt"), "fixture output");
+  writeFileSync(daemon.runs.dirs("fixture").log, "first line\nsecond line\n");
 });
 afterAll(async () => {
   await daemon.stop();
@@ -98,7 +99,6 @@ describe("daemon", () => {
         "/runs?limit=",
         "/bench/jobs?limit=",
         "/runs/fixture/events?after=",
-        "/runs/fixture/logs?offset=",
         "/runs/fixture/logs?limit=",
         "/runs/fixture/wait?timeout=",
       ]) {
@@ -112,6 +112,30 @@ describe("daemon", () => {
       }
     },
   );
+
+  it.each(["1.5", "1e21", "9007199254740992", "-9007199254740992", "NaN", "Infinity", "abc"])(
+    "rejects non-safe integer log offsets: %s",
+    async (number) => {
+      const res = await fetch(`${daemon.url}/api/v1/runs/fixture/logs?offset=${number}`, {
+        headers: { authorization: `Bearer ${daemon.token}` },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: expect.stringContaining("safe integer") });
+    },
+  );
+
+  it("accepts negative log offsets to read from the tail", async () => {
+    const tail = await fetch(`${daemon.url}/api/v1/runs/fixture/logs?offset=-14&limit=100`, {
+      headers: { authorization: `Bearer ${daemon.token}` },
+    });
+    expect(tail.status).toBe(200);
+    expect(await tail.json()).toMatchObject({ text: "second line\n", eof: true });
+    const all = await fetch(`${daemon.url}/api/v1/runs/fixture/logs?offset=-100&limit=100`, {
+      headers: { authorization: `Bearer ${daemon.token}` },
+    });
+    expect(all.status).toBe(200);
+    expect(await all.json()).toMatchObject({ text: "first line\nsecond line\n", eof: true });
+  });
 
   it.each(["", "0", "1", "1e3", "9007199254740991"])(
     "accepts safe integer limits and the empty default: %s",

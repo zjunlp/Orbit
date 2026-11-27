@@ -572,10 +572,15 @@ export class RunService extends EventEmitter<{ change: [RunChange]; deleted: [st
       // until it is leased, placed or its reason saved.
       const run = this.store.getRun(q.id);
       if (run?.state !== "queued") continue;
-      if (blocked) reasons.push([this.node, blocked]);
+      const localHostNet = Boolean(
+        run.spec.auth && this.deps.auth?.get(run.spec.auth)?.profile.hostNetwork,
+      );
+      const localErr = blocked ?? (localHostNet ? preflight.hostNetworkError(run.spec) : null);
+      if (localErr) reasons.push([this.node, localErr]);
       else {
         const a = allocate(leaseRequest(run.spec), res, this.store.activeLeases());
         if (a.ok) {
+          if (localHostNet) run.spec.hostNetwork = true;
           this.leaseLocal(run, a.gpuIds);
           res.memory.availableGB -= leaseRequest(run.spec).memGB;
           continue;

@@ -218,7 +218,10 @@ export class FeishuBots {
 
   private async logTail(enc: string, run: Run): Promise<string> {
     if (run.state === "succeeded" || run.state === "queued") return "";
-    const chunk = await this.deps.api<LogChunk>(`/runs/${enc}/logs?offset=-4096&limit=4096`);
+    const chunk = await this.deps
+      .api<LogChunk>(`/runs/${enc}/logs?offset=-4096&limit=4096`)
+      .catch(() => null);
+    if (!chunk?.text) return "";
     return chunk.text.trimEnd().split("\n").slice(-15).join("\n");
   }
 

@@ -27,6 +27,13 @@ type Context = Pick<
   | "store"
 >;
 
+/** Why host networking cannot be enabled on `spec`, or null. */
+export function hostNetworkError(spec: Pick<RunSpec, "network" | "services">): string | null {
+  if (!spec.network) return "host network conflicts with network disabled";
+  if (spec.services.length > 0) return "services do not work with host networking";
+  return null;
+}
+
 export function specError(ctx: Context, spec: RunSpec): string | null {
   if (spec.project && !isAbsolute(spec.project)) return "project must be an absolute path";
   if (spec.project && !statSync(spec.project, { throwIfNoEntry: false })?.isDirectory())
@@ -62,9 +69,10 @@ export function specError(ctx: Context, spec: RunSpec): string | null {
       if (p && (!isAbsolute(p) || !existsSync(p)))
         return `service ${s.name}: ${p} not found (absolute paths only)`;
   }
-  // A node's own auth profile decides host networking; a worker applies its own on arrival.
-  if (spec.auth && ctx.deps.auth?.get(spec.auth)?.profile.hostNetwork) spec.hostNetwork = true;
-  if (spec.hostNetwork && !spec.network) return "host network conflicts with network disabled";
+  if (spec.hostNetwork) {
+    const err = hostNetworkError(spec);
+    if (err) return err;
+  }
   return null;
 }
 
@@ -185,6 +193,10 @@ export async function localBlocker(ctx: Context, spec: RunSpec): Promise<string 
   if (spec.auth) {
     const entry = ctx.deps.auth?.get(spec.auth);
     if (!entry) return `auth profile not found: ${spec.auth}`;
+    if (entry.profile.hostNetwork) {
+      const err = hostNetworkError(spec);
+      if (err) return err;
+    }
     if (!(await hostCli(entry.profile.harness)))
       return `${entry.profile.harness} CLI not found on this node`;
   }

@@ -289,7 +289,7 @@ URL 解析后 pathname 以 `//` 开头的目标（含 `/.//x` 与同源绝对 UR
 仍位于输出根目录内，然后直接从该 fd 发送（完成或取消时关闭），daemon 与 worker 共用；拒绝最后一级符号链接。
 以 `Content-Security-Policy: sandbox`、
 `nosniff` 返回，避免产物中的 HTML 以 Web UI 的身份执行脚本。非法百分号编码返回 400；数字查询参数
-（`limit`、`offset`、`after`、`timeout`）必须是非负安全整数，否则返回 400，省略或空值仍取默认值。
+（`limit`、`after`、`timeout`）必须是非负安全整数，`logs` 的 `offset` 必须是安全整数（负值从文件末尾倒数读取），否则返回 400，省略或空值仍取默认值。
 `wait` 在 Run 终态且清理结束后返回；CLI `wait -g` 与 `rm -g` 使用相同的 10000 条组内 Run 查询上限。
 HTTP wait 按 Run ID 保存等待者，与全部 SSE 订阅共用一个 Run change 监听器；SSE 删除通知也共用一个监听器。
 完成、超时或断开后删除对应等待者、计时器与 abort 回调，不随请求数量增加 RunService 监听器。
@@ -367,7 +367,7 @@ Web 页面（参考 W&B / Neptune 的实验对比、Modal / E2B 的沙箱运行�
 按镜像的 `PATH` 追加这些目录，并在事件中记录版本。版本固定 = 宿主机当前版本；`orbit doctor` 显示两者版本。
 Agent 的 home 放在 `/orbit/agent/{codex,claude}`（`CODEX_HOME`、`CLAUDE_CONFIG_DIR`），会话轨迹随 Run 记录保留。
 容器本身就是沙箱：容器内 codex 用 `--dangerously-bypass-approvals-and-sandbox`，claude 用
-`--dangerously-skip-permissions`。profile 设置 `hostNetwork` 时 Run 使用宿主网络（例如代理只监听 127.0.0.1）。
+`--dangerously-skip-permissions`。profile 设置 `hostNetwork` 时由执行节点在本地调度或 worker 接收时生效（不向其他节点泄漏），且落库前校验不与 `services` 或禁用网络冲突（例如代理只监听 127.0.0.1）。
 
 与 Harbor 内置 Agent 的对照（本地 harbor `09f5b964`）：
 - claude-code：方法的 `effort` → `--effort`；设 `IS_SANDBOX=1`（Harbor 任务以 root 运行，否则 Claude Code 拒绝跳过权限）
@@ -508,10 +508,10 @@ Outcome      = { execution, evaluation: valid|invalid|unknown, score?, maxScore,
   标注。未知字段保留（`looseObject`），在 Details 中按键值显示；长文本截断，条目数有上限。`review` 随 Outcome 保存，
   分数无效时也保留。没有 `review`（旧 trial、旧 adapter）时 trial 页退回猜测：solve 的 Markdown 报告与 verify 的 JSON。适配器只生成 Run 描述、读文件，不提交 Run，不判定取消、超时、未启动。
 - Run 描述是 RunSpec 字段，但不能含 Orbit 自己管的字段（`name group params project snapshot auth agentBundle agent
-  parentId priority passEnv`），且 `command` 与 `agentTask: { instruction }` 二选一。Agent 方法（codex / claude-code）的
+  parentId priority passEnv` 与 `after.passEnv`），且 `command` 与 `agentTask: { instruction }` 二选一。Agent 方法（codex / claude-code）的
   solve 用 `agentTask`：Orbit 按方法生成 Agent CLI 命令（`harness.agentCommand`，参数只在这里维护），并设置 auth、bundle 与
   网络；也可以给 `command`（原生 runner 自己启动 Agent，如 ASI），Orbit 同样设置 auth 与 bundle。oracle / empty 只能给
-  `command`，verify 不能请求 Agent。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
+  `command`，verify 不能请求 Agent 或声明 `after` 阶段。Orbit 再加上 benchmark `env`（两个 Run）、`passEnv` 与 `priority = 1`（verify），
   `snapshot = false`，最后按 RunSpec 校验。
 - **任务资源文件**（`contracts.BenchResources`，`bench/resources.ts`）：`orbit bench add --resources <file>` 登记一个
   JSON：`{ version: 1, default, tasks: { <task>: { cpus?, memGB?, gpus?, gpuMemGB?, timeoutMin?, evidence?, confidence?,

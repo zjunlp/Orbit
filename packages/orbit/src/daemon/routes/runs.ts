@@ -22,7 +22,7 @@ import {
 } from "../../records/index.ts";
 import { loadRunAgentTranscript, loadTranscript } from "../../sessions/index.ts";
 import type { AppDeps } from "../app.ts";
-import { must, num, remoteRecords } from "../http.ts";
+import { must, num, remoteRecords, signedNum } from "../http.ts";
 
 export function registerRunsRoutes(api: Hono, deps: AppDeps): void {
   const { runs, cluster } = deps;
@@ -110,7 +110,7 @@ export function registerRunsRoutes(api: Hono, deps: AppDeps): void {
 
   api.get("/runs/:id/logs", async (c) => {
     const run = must(runs.get(c.req.param("id")));
-    const offset = num(c.req.query("offset"), 0);
+    const offset = signedNum(c.req.query("offset"), 0);
     const limit = num(c.req.query("limit"), 256 * 1024);
     // Process runs write straight to the log; it is redacted in place only when they end.
     const terminal = isTerminal(run.state);

@@ -97,8 +97,9 @@ Run 描述就是 `orbit run` 的 RunSpec 字段（`image` 或 `dockerfile`、`re
 - **Agent 交给 Orbit**：`trial.method.agent` 是 `codex` / `claude-code` 时，solve 给 `"agentTask": {"instruction": "..."}`
   而不是 `command`。Orbit 生成对应 CLI 命令并注入 auth、方法 bundle 和网络；适配器不要拼 `codex exec` 之类的参数。
   `oracle` / `empty` 给 `command`（没有参考解时对 oracle 报错即可，trial 会记为 invalid 并写明原因）。
-- **不要写 Orbit 管的字段**：`name group params project snapshot auth agentBundle agent parentId priority passEnv`。
-  benchmark 的 `env` 会加到两个 Run，`--pass-env` 的密钥只给 verify Run。
+- **不要写 Orbit 管的字段**：`name group params project snapshot auth agentBundle agent parentId priority passEnv`
+  以及 `after.passEnv`（`after` 阶段仅限 `solve` 使用，不允许出现在 `verify`）。
+  benchmark 的 `env` 会加到两个 Run，`--pass-env` 的密钥只给 verify Run（或 solve 的 `after` 阶段）。
 
 约定：
 

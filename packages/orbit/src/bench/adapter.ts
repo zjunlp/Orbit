@@ -11,11 +11,13 @@ import {
   type ScoreResult,
 } from "../contracts/index.ts";
 
+type AdapterAfterPhase = Omit<NonNullable<RunSpecInput["after"]>, "passEnv">;
+
 /** A run as an adapter describes it (see `contracts.AdapterRunSpec`). */
 export type RunDescription = Omit<
   RunSpecInput,
-  (typeof ORBIT_OWNED_SPEC_FIELDS)[number] | "command"
-> & { command?: string[]; agentTask?: { instruction: string } };
+  (typeof ORBIT_OWNED_SPEC_FIELDS)[number] | "command" | "after"
+> & { command?: string[]; agentTask?: { instruction: string }; after?: AdapterAfterPhase };
 export interface SpecReply {
   spec: RunDescription;
   issues?: string[];

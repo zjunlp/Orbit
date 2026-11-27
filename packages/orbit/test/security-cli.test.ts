@@ -127,3 +127,17 @@ it.each([false, true])("waits for new log bytes only when following: %s", async 
   expect(logs).toHaveBeenCalledTimes(follow ? 3 : 2);
   expect(write).toHaveBeenCalledWith("safe text\n");
 });
+
+it("passes negative offsets for logs --tail and rejects non-positive values", async () => {
+  const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+  const logs = vi
+    .spyOn(client, "logs")
+    .mockResolvedValue({ offset: 20, next: 30, size: 30, text: "tail line\n", eof: true });
+  await parse(["logs", "fixture", "--tail", "128"]);
+  expect(logs).toHaveBeenCalledWith("fixture", -128);
+  expect(write).toHaveBeenCalledWith("tail line\n");
+  logs.mockClear();
+  for (const bad of ["0", "-5", "1.5"])
+    await expect(parse(["logs", "fixture", "--tail", bad])).rejects.toThrow(/positive integer/);
+  expect(logs).not.toHaveBeenCalled();
+});

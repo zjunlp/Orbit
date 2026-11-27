@@ -38,5 +38,13 @@ export function num(v: string | undefined, def: number): number {
   const n = Number(v);
   if (!Number.isSafeInteger(n) || n < 0)
     throw new UserError("query number must be a non-negative safe integer");
-  return n;
+  return n || 0;
+}
+
+/** A safe integer query parameter (negative allowed), or the default when absent. */
+export function signedNum(v: string | undefined, def: number): number {
+  if (v === undefined || v === "") return def;
+  const n = Number(v);
+  if (!Number.isSafeInteger(n)) throw new UserError("query number must be a safe integer");
+  return n || 0;
 }

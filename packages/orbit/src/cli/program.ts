@@ -302,6 +302,8 @@ export function createProgram(deps: ProgramDeps, paths: OrbitPaths = orbitPaths(
     .option("-f, --follow", "keep printing until the run ends")
     .option("--tail <bytes>", "start this many bytes before the end", num)
     .action(async (id: string, o: { follow?: boolean; tail?: number }) => {
+      if (o.tail !== undefined && (!Number.isSafeInteger(o.tail) || o.tail <= 0))
+        throw new Error("--tail must be a positive integer");
       const c = await client();
       let offset = o.tail ? -o.tail : 0;
       for (;;) {

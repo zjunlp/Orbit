@@ -539,6 +539,8 @@ function LogPeek({ run, onTab }: { run: Run; onTab: (t: string) => void }) {
               </div>
             ))}
           </div>
+        ) : tail.error ? (
+          <div className="faint">Could not load log tail: {tail.error}</div>
         ) : (
           <div className="faint">{run.state === "queued" ? "Not started yet." : "No output."}</div>
         )}

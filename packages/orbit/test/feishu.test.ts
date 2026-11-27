@@ -260,6 +260,42 @@ describe("feishu bots", () => {
     expect(json(sent[1]?.card ?? {})).toContain("/gpu");
   });
 
+  it("shows failed runs with a log tail and tolerates log errors", async () => {
+    const store = new NotifyStore(join(dir, `bots-show-${Math.random()}.json`));
+    store.put({ ...APP, name: "app" });
+    store.addUser("app", "ou_me");
+    const { api, sent } = fakeApi();
+    let failLogs = false;
+    const calls: string[] = [];
+    const bots = new FeishuBots({
+      store,
+      feishu: () => api,
+      log: () => {},
+      api: async <T>(path: string) => {
+        calls.push(path);
+        if (path === "/runs/a") return run("a", "failed") as T;
+        if (path === "/runs/a/metrics") return metrics(["loss"], 4) as T;
+        if (path === "/runs/a/logs?offset=-4096&limit=4096") {
+          if (failLogs) throw new Error("log unavailable");
+          return { offset: 0, next: 10, size: 10, text: "boom line\n", eof: true } as T;
+        }
+        throw new Error(`unexpected ${path}`);
+      },
+      connect: async (_t, _m, onState) => {
+        onState("connected");
+        return { close: () => {} };
+      },
+    });
+    await bots.onMessage("app", msg("s1", "/show a"));
+    expect(calls).toContain("/runs/a/logs?offset=-4096&limit=4096");
+    expect(json(sent[0]?.card ?? {})).toContain("boom line");
+
+    failLogs = true;
+    await bots.onMessage("app", msg("s2", "/show a"));
+    expect(json(sent[1]?.card ?? {})).toContain("n-a");
+    expect(json(sent[1]?.card ?? {})).not.toContain("log unavailable");
+  });
+
   it("connects app targets and closes removed or changed ones", async () => {
     const { store, bots, links } = setup();
     await bots.sync();

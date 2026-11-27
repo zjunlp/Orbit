@@ -9,7 +9,7 @@ import {
   type AdapterOp,
   type AdapterRequest,
   type AdapterRunRef,
-  type AdapterRunSpec,
+  AdapterRunSpec,
   AdapterSpecResponse,
   AdapterTasksResponse,
   type Benchmark,
@@ -174,13 +174,17 @@ export function toRunSpec(
   b: Benchmark,
   phase: "solve" | "verify",
 ): RunSpecInput {
-  const { agentTask, command, ...rest } = s;
+  const checked = AdapterRunSpec.safeParse(s);
+  if (!checked.success) throw new AdapterError(`invalid ${phase} run: ${describe(checked.error)}`);
+  const { agentTask, command, ...rest } = checked.data;
   if (agentTask && (phase === "verify" || !isAgentMethod(method)))
     throw new AdapterError(
       phase === "verify"
         ? "verify runs cannot ask for an Agent"
         : `the adapter asked for an Agent, but method ${method.name} is ${method.agent}`,
     );
+  if (phase === "verify" && rest.after !== undefined)
+    throw new AdapterError("verify runs cannot define an after phase");
   const spec = {
     ...rest,
     command: agentTask ? agentCommand(method, agentTask.instruction) : command,
@@ -193,7 +197,12 @@ export function toRunSpec(
     spec.agentBundle = method.bundle;
     spec.network = true;
   }
-  if (phase === "solve" && spec.after) {
+  if (
+    phase === "solve" &&
+    spec.after &&
+    typeof spec.after === "object" &&
+    !Array.isArray(spec.after)
+  ) {
     // A verifier in the solve container (after the Agent) gets the grader secrets for its phase only.
     spec.after = { ...spec.after, passEnv: b.passEnv };
   }
