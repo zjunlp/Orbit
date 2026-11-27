@@ -1,0 +1,27 @@
+.bench-compatibility {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.bench-compatibility.blocked {
+  border-color: var(--st-failed);
+}
+.bench-compatibility p,
+.bench-compatibility-refresh p {
+  margin: 0 0 8px;
+}
+.bench-compatibility-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.bench-compatibility-refresh {
+  margin: 8px 0;
+}
+.bench-compatibility-refresh button {
+  margin-bottom: 8px;
+}

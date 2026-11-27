@@ -18,12 +18,31 @@ Use `orbit` when it is on PATH. Otherwise replace `orbit` in the commands below 
 `npx -y @zjunlp/orbit` (requires Node.js 24.18+ in the 24.x line); no source checkout is needed
 to use the CLI. Run `doctor` before the first benchmark job.
 
-For an already supported benchmark, start with `orbit bench resources <family>` and
+Discover existing integrations with `orbit bench catalog`; use `orbit bench catalog <family>`
+for protocol profiles, support scope, verification sources and local setup facts. Registration does
+not establish resource readiness or calibration. For an already supported benchmark, continue with
+`orbit bench resources <family>` and
 `orbit bench prepare <family>`. This downloads official resources, reuses local paths with
 `--reuse RESOURCE=PATH`, and lists authorization or native environment prerequisites.
 Follow `orbit logs <run> -f`, then check `orbit bench preparation <run>` for registration
 and next steps. Preparation is distinct from calibration. The installed package carries
 these adapters and helpers; see the [resource guide](https://github.com/zjunlp/Orbit/blob/main/docs/guides/benchmark-resources.md).
+
+For a new integration, `orbit bench init <name> <directory>` generates a CPU synthetic tutorial
+in a new directory through the daemon; `--template manifest` selects a trusted-runner manifest
+instead of the default independent-grader adapter. It does not register or run anything. Follow its
+printed `add-file`, `coverage` and `calibrate` commands, then the integration and validation steps
+below. Tutorial calibration proves wiring only; replace the synthetic tasks and reuse the original
+grader before claiming real benchmark validation. See the
+[onboarding guide](https://github.com/zjunlp/Orbit/blob/main/docs/guides/benchmark-onboarding.md).
+
+For an existing JSON definition, run `orbit bench add-file benchmark.json --check --json` to inspect
+the normalized definition and full listing summary before writing the registration. Without
+`--json`, human output shows the name, conflict status and coverage only. Checking executes the
+adapter's task-listing code on the daemon host: use trusted definitions only. It does not create
+registrations, jobs or Runs and does not prove calibration. After review, use
+`orbit bench add-file benchmark.json --create-only` to reject a name conflict instead of replacing
+an existing registration. These flags cannot be combined.
 
 ## 1. Study the benchmark first
 

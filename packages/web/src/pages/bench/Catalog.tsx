@@ -1,6 +1,6 @@
 import { fmtCi, fmtMetric, primaryMetric, resolveMetrics } from "@zjunlp/orbit/metrics";
 import { TAXONOMY_FIELDS, TAXONOMY_GROUPS, type TaxonomyField } from "@zjunlp/orbit/taxonomy";
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   IconAlert,
   IconBan,
@@ -117,8 +117,11 @@ export function BenchCatalogView() {
     poll: true,
     pollMs: 4000,
   });
-  const entries = catalog.data ?? [];
-  const filters = readTaxonomyFilters(loc.query);
+  const entries = useMemo(() => catalog.data ?? [], [catalog.data]);
+  const filterKey = new URLSearchParams(
+    taxonomyFields.map((field) => [field, loc.query.get(field) ?? ""]),
+  ).toString();
+  const filters = useMemo(() => readTaxonomyFilters(new URLSearchParams(filterKey)), [filterKey]);
   const active = taxonomyFields.flatMap((field) =>
     (filters[field] ?? []).map((value) => ({ field, value })),
   );
@@ -127,30 +130,50 @@ export function BenchCatalogView() {
   const view = loc.query.get("view") ?? "grid";
   const order = loc.query.get("sort") ?? "name";
   const open = loc.query.get("open");
-  const searched = entries.filter((e) => {
-    if (loc.query.get("setup") && e.benchmark.name !== loc.query.get("setup")) return false;
-    const labels = taxonomyFields.flatMap((field) =>
-      (e.taxonomy?.[field] ?? []).map((v) => taxonomyLabel(field, v)),
-    );
-    return `${e.benchmark.name} ${e.identity.name} ${e.identity.id} ${identity(e) ?? ""} ${e.benchmark.adapter} ${labels.join(" ")}`
-      .toLowerCase()
-      .includes(q);
-  });
-  const base = searched.filter(
-    (e) => ev === "all" || (EVIDENCE.find((f) => f.key === ev)?.test(e) ?? false),
+  const setup = loc.query.get("setup");
+  const index = useMemo(
+    () =>
+      entries.map((e) => {
+        const labels = taxonomyFields.flatMap((field) =>
+          (e.taxonomy?.[field] ?? []).map((v) => taxonomyLabel(field, v)),
+        );
+        return {
+          entry: e,
+          text: `${e.benchmark.name} ${e.identity.name} ${e.identity.id} ${identity(e) ?? ""} ${e.benchmark.adapter} ${labels.join(" ")}`.toLowerCase(),
+        };
+      }),
+    [entries],
   );
-  const shown = base
-    .filter((e) => matchesTaxonomy(e, filters))
-    .sort(
-      (a, b) =>
-        (order === "tasks"
-          ? (b.listing?.coverage.total ?? -1) - (a.listing?.coverage.total ?? -1)
-          : order === "recent"
-            ? b.benchmark.updatedAt.localeCompare(a.benchmark.updatedAt)
-            : 0) ||
-        a.identity.name.localeCompare(b.identity.name) ||
-        a.benchmark.name.localeCompare(b.benchmark.name),
-    );
+  const searched = useMemo(
+    () =>
+      index
+        .filter(({ entry, text }) => (!setup || entry.benchmark.name === setup) && text.includes(q))
+        .map(({ entry }) => entry),
+    [index, setup, q],
+  );
+  const base = useMemo(
+    () =>
+      searched.filter(
+        (e) => ev === "all" || (EVIDENCE.find((f) => f.key === ev)?.test(e) ?? false),
+      ),
+    [searched, ev],
+  );
+  const shown = useMemo(
+    () =>
+      base
+        .filter((e) => matchesTaxonomy(e, filters))
+        .sort(
+          (a, b) =>
+            (order === "tasks"
+              ? (b.listing?.coverage.total ?? -1) - (a.listing?.coverage.total ?? -1)
+              : order === "recent"
+                ? b.benchmark.updatedAt.localeCompare(a.benchmark.updatedAt)
+                : 0) ||
+            a.identity.name.localeCompare(b.identity.name) ||
+            a.benchmark.name.localeCompare(b.benchmark.name),
+        ),
+    [base, filters, order],
+  );
   const families = [...new Set(shown.map(benchmarkKey))];
   const toggle = (field: TaxonomyField, value: string) =>
     setQuery({
@@ -161,6 +184,7 @@ export function BenchCatalogView() {
       ...Object.fromEntries(taxonomyFields.map((f) => [f, null])),
       q: null,
       ev: null,
+      setup: null,
     });
   const refresh = async () => {
     setRefreshing(true);
@@ -244,7 +268,7 @@ export function BenchCatalogView() {
         </button>
       </div>
       <TaxonomyFacets entries={base} filters={filters} toggle={toggle} />
-      {(active.length > 0 || q || ev !== "all") && (
+      {(active.length > 0 || q || ev !== "all" || setup) && (
         <section className="library-active-filters" aria-label="Active filters">
           <IconFilter size={14} />
           {active.map(({ field, value }) => (
@@ -262,6 +286,16 @@ export function BenchCatalogView() {
           {q && (
             <button type="button" className="filter-token" onClick={() => setQuery({ q: null })}>
               Search: {loc.query.get("q")}
+              <IconX size={11} />
+            </button>
+          )}
+          {setup && (
+            <button
+              type="button"
+              className="filter-token"
+              onClick={() => setQuery({ setup: null })}
+            >
+              Setup: {setup}
               <IconX size={11} />
             </button>
           )}

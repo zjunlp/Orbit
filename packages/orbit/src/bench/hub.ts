@@ -6,6 +6,7 @@ import {
   type AgentDefinition,
   type AgentInfo,
   type AuthProfile,
+  type BenchCapabilities,
   type BenchCompatibility,
   type BenchJob,
   type BenchReport,
@@ -36,7 +37,7 @@ export function agentBlocker(
   requires: readonly Cap[],
 ): string | null {
   if (methods && !capabilityAllows(methods, def.name))
-    return "the benchmark does not admit CLI Agents";
+    return `the benchmark does not admit ${def.name}`;
   if (
     (requires.includes("mcp") || (requires.includes("gui") && def.capabilities.gui)) &&
     def.command.mcp.kind === "none"
@@ -187,6 +188,20 @@ export function agentCatalog(
   return { agents, external: [...ext.values()].sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1)) };
 }
 
+/** Declared admission and existence of a compatible profile; not model connectivity. */
+export function agentCompatibility(
+  def: AgentDefinition,
+  caps: BenchCapabilities | null | undefined,
+  profiles: AuthProfile[],
+): CompatibilityCell {
+  if (!caps) return { state: "unknown", reason: "benchmark capabilities are not available" };
+  const reason = agentBlocker(def, caps.methods, caps.requires);
+  if (reason) return { state: "blocked", reason };
+  if (!profiles.some((p) => p.harness === def.name && def.auth.kinds.includes(p.kind)))
+    return { state: "needs-auth", reason: `no compatible auth profile for ${def.name}` };
+  return { state: "allowed" };
+}
+
 /** Agent × benchmark: what a submission would say, and what already ran. */
 export function compatibility(
   defs: AgentDefinition[],
@@ -217,23 +232,12 @@ export function compatibility(
               job: latest?.j.id,
             }
           : {};
-      if (!caps) {
-        cells[def.name] = {
-          ...evidence,
-          state: "unknown",
-          reason: "the task listing is not available yet",
-        };
-      } else {
-        const why = agentBlocker(def, caps.methods, caps.requires);
-        if (why) cells[def.name] = { ...evidence, state: "blocked", reason: why };
-        else if (!profiles.some((p) => p.harness === def.name && def.auth.kinds.includes(p.kind)))
-          cells[def.name] = {
-            ...evidence,
-            state: "needs-auth",
-            reason: `no compatible auth profile for ${def.name}`,
-          };
-        else cells[def.name] = { ...evidence, state: valid > 0 ? "ran" : "allowed" };
-      }
+      const cell = agentCompatibility(def, caps, profiles);
+      cells[def.name] = {
+        ...evidence,
+        ...cell,
+        ...(cell.state === "allowed" && valid > 0 ? { state: "ran" as const } : {}),
+      };
     }
     return { benchmark: e.benchmark.name, cells };
   });

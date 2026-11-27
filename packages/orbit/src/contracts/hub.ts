@@ -83,6 +83,7 @@ export const CompatibilityCell = z.object({
 });
 export type CompatibilityCell = z.infer<typeof CompatibilityCell>;
 export const BenchCompatibility = z.object({
+  checked: z.object({ benchmark: z.string(), at: z.iso.datetime() }).optional(),
   agents: z.array(z.string()),
   rows: z.array(
     z.object({ benchmark: z.string(), cells: z.record(z.string(), CompatibilityCell) }),

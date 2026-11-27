@@ -1,10 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import type { CalibrationReport, CatalogEntry } from "../src/lib/api.ts";
-import { CalibrationCell, CalibrationDetail, calState } from "../src/pages/bench/Catalog.tsx";
+import {
+  BenchCatalogView,
+  CalibrationCell,
+  CalibrationDetail,
+  calState,
+} from "../src/pages/bench/Catalog.tsx";
+
+const state = vi.hoisted(() => ({ query: "", entries: [] as CatalogEntry[] }));
+vi.mock("../src/lib/use.ts", async (original) => ({
+  ...(await original<typeof import("../src/lib/use.ts")>()),
+  useAsync: () => ({ data: state.entries, error: null, reload: vi.fn() }),
+}));
 
 vi.mock("../src/lib/router.ts", () => ({
-  useLocation: () => ({ query: new URLSearchParams() }),
+  useLocation: () => ({ query: new URLSearchParams(state.query) }),
   setQuery: vi.fn(),
   onLinkClick: vi.fn(),
 }));
@@ -117,4 +128,12 @@ it("shows completed execution waiting for cleanup without claiming acceptance", 
   expect(renderToStaticMarkup(<CalibrationDetail e={e} />)).toContain(
     "execution finished; waiting for resource cleanup",
   );
+});
+
+it("exposes a setup-only URL condition so it can be cleared even with no matching entries", () => {
+  state.query = "setup=missing-local";
+  const html = renderToStaticMarkup(<BenchCatalogView />);
+  expect(html).toContain("Setup: missing-local");
+  expect(html).toContain("Clear all");
+  state.query = "";
 });

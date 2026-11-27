@@ -1,10 +1,13 @@
 import type {
+  AgentDefinition,
   AuthProfile,
   BenchCapabilities,
+  BenchCompatibility,
   BenchJob,
   BenchJobSpecInput,
   Benchmark,
   BenchTask,
+  CompatibilityCell,
   Method,
 } from "@zjunlp/orbit/contracts";
 import { stableValue } from "./conditions.ts";
@@ -84,10 +87,43 @@ export function stringMap(text: string, label: string): Record<string, string> {
   return value as Record<string, string>;
 }
 
+export function compatibilityCells(benchmark: string, result?: BenchCompatibility) {
+  return result?.checked?.benchmark === benchmark
+    ? result.rows.find((row) => row.benchmark === benchmark)?.cells
+    : undefined;
+}
+
+export function profileAllowed(profile: AuthProfile, agent: string, definition?: AgentDefinition) {
+  return profile.harness === agent && (!definition || definition.auth.kinds.includes(profile.kind));
+}
+
+export function configurationBlocker(
+  draft: MethodDraft,
+  profiles?: AuthProfile[],
+  definitions?: AgentDefinition[],
+  cell?: CompatibilityCell,
+): string | null {
+  if (!isCliAgent(draft.agent)) return null;
+  const definition = definitions?.find((entry) => entry.name === draft.agent);
+  if (definitions && !definition) return `Agent ${draft.agent} is not registered.`;
+  if (cell?.state === "blocked")
+    return cell.reason ?? "This Agent is blocked for the selected environment.";
+  if (!draft.auth) return "Select an auth profile.";
+  const profile = profiles?.find((entry) => entry.name === draft.auth);
+  if (profiles && !profile) return `Auth profile ${draft.auth} is not available.`;
+  if (profile && profile.harness !== draft.agent)
+    return `Auth profile ${draft.auth} is for ${profile.harness}, not ${draft.agent}.`;
+  if (profile && definition && !definition.auth.kinds.includes(profile.kind))
+    return `${draft.agent} does not accept ${profile.kind} auth profiles.`;
+  return null;
+}
+
 export function buildMethods(
   drafts: MethodDraft[],
   capabilities?: BenchCapabilities,
   profiles?: AuthProfile[],
+  definitions?: AgentDefinition[],
+  cells?: Record<string, CompatibilityCell>,
 ): Method[] {
   if (!drafts.length) throw new Error("Add at least one configuration.");
   const names = new Set<string>();
@@ -106,6 +142,8 @@ export function buildMethods(
     const m: Method = { name, agent: d.agent };
     const cli = isCliAgent(d.agent);
     if (cli) {
+      const blocker = configurationBlocker(d, profiles, definitions, cells?.[d.agent]);
+      if (blocker) throw new Error(`${name}: ${blocker}`);
       if (!d.auth || !profileName.test(d.auth)) throw new Error(`${name}: select an auth profile.`);
       if (profiles && !profiles.some((p) => p.name === d.auth && p.harness === d.agent))
         throw new Error(`${name}: select an auth profile for ${d.agent}.`);

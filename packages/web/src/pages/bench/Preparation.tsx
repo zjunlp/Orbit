@@ -339,7 +339,7 @@ export function PreparationResult({ status }: { status: PreparationStatus }) {
           <strong>{name}</strong>{" "}
           <Link
             className="btn sm"
-            href={`/benchmarks?mode=local&setup=${encodeURIComponent(name)}&open=${encodeURIComponent(name)}`}
+            href={`/benchmarks?mode=local&setup=${encodeURIComponent(name)}&open=${encodeURIComponent(name)}&ptab=coverage`}
           >
             View setup and task coverage
           </Link>

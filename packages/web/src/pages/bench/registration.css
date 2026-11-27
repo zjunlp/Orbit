@@ -1,0 +1,52 @@
+.registration-form,
+.registration-result {
+  max-width: 900px;
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  line-height: 1.7;
+}
+.registration-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+.registration-form input[type="file"] {
+  max-width: 100%;
+}
+.registration-form textarea {
+  width: 100%;
+  resize: vertical;
+}
+.registration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+.registration-review {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 12px;
+  overflow-wrap: anywhere;
+}
+.registration-review dl > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr);
+  gap: 12px;
+  padding: 6px 0;
+}
+.registration-review dt {
+  color: var(--text-3);
+}
+.registration-review dd {
+  margin: 0;
+}
+.registration-review details {
+  margin: 12px 0;
+}
+.registration-review summary {
+  cursor: pointer;
+}

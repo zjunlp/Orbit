@@ -250,7 +250,10 @@ it("answers which Agent can take which benchmark by the submission checks", () =
   expect(cell("humaneval", "codex")?.reason).toMatch(/does not admit/);
   // A native runner that names its Agents admits only those.
   expect(cell("asi", "codex")?.state).toBe("allowed");
-  expect(cell("asi", "opencode")).toMatchObject({ state: "blocked", reason: /does not admit/ });
+  expect(cell("asi", "opencode")).toMatchObject({
+    state: "blocked",
+    reason: "the benchmark does not admit opencode",
+  });
   expect(cell("new", "codex")?.state).toBe("unknown");
 });
 

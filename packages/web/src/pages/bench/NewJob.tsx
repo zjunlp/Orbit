@@ -1,4 +1,5 @@
 import type {
+  AgentDefinition,
   AuthProfile,
   BenchCapabilities,
   BenchJob,
@@ -12,10 +13,13 @@ import { api } from "../../lib/api.ts";
 import { jobPath } from "../../lib/format.ts";
 import { navigate, useLocation } from "../../lib/router.ts";
 import { useAsync } from "../../lib/use.ts";
+import { CompatibilityRefresh, CompatibilityStatus } from "./CompatibilityStatus.tsx";
 import { jobLabel } from "./common.tsx";
 import {
   buildMethods,
   capabilityAllows,
+  compatibilityCells,
+  configurationBlocker,
   copiedMethods,
   evaluationSpec,
   importMethods,
@@ -24,6 +28,7 @@ import {
   type MethodDraft,
   methodDraft,
   methodTypes,
+  profileAllowed,
   registrationChanged,
   taskSubset,
   withLineage,
@@ -94,8 +99,26 @@ export function NewBenchJob() {
               preset={preset}
               subset={subset}
               jobs={jobs.data ?? []}
-              profiles={profiles.data ?? []}
-              agentNames={agents.data?.map((a) => a.definition.name) ?? null}
+              profiles={profiles.loading || profiles.error ? undefined : profiles.data}
+              definitions={
+                agents.loading || agents.error ? undefined : agents.data?.map((a) => a.definition)
+              }
+              registryNotice={
+                agents.error
+                  ? `Agent registry unavailable: ${agents.error}`
+                  : agents.loading
+                    ? "Agent definitions are loading."
+                    : profiles.error
+                      ? `Credential profiles unavailable: ${profiles.error}`
+                      : profiles.loading
+                        ? "Credential profiles are loading."
+                        : undefined
+              }
+              checksLoading={agents.loading || profiles.loading}
+              onRefresh={() => {
+                agents.reload();
+                profiles.reload();
+              }}
               profilesError={profiles.error}
             />
           )}
@@ -113,7 +136,10 @@ function NewJobForm({
   jobs,
   profiles,
   profilesError,
-  agentNames,
+  definitions,
+  registryNotice,
+  checksLoading,
+  onRefresh,
   derive,
 }: {
   derive: { parent: string; method: string; informedBy: string[] };
@@ -122,10 +148,12 @@ function NewJobForm({
   preset: string;
   subset?: string[];
   jobs: BenchJob[];
-  profiles: AuthProfile[];
+  profiles?: AuthProfile[];
   profilesError: string | null;
-  /** Registered Agent names; null until the daemon answers. */
-  agentNames: string[] | null;
+  definitions?: AgentDefinition[];
+  registryNotice?: string;
+  checksLoading: boolean;
+  onRefresh: () => void;
 }) {
   const [stage, setStage] = useState(0);
   const [benchmark, setBenchmark] = useState(source?.spec.benchmark ?? preset);
@@ -156,6 +184,18 @@ function NewJobForm({
     async () => (benchmark ? { benchmark, value: await api.benchInfo(benchmark) } : null),
     [benchmark],
   );
+  const compatibility = useAsync(
+    async (signal) =>
+      benchmark ? { benchmark, value: await api.benchCompatibility(benchmark, signal) } : null,
+    [benchmark],
+    { resetKey: benchmark },
+  );
+  const cells = compatibilityCells(
+    benchmark,
+    !compatibility.loading && !compatibility.error && compatibility.data?.benchmark === benchmark
+      ? compatibility.data.value
+      : undefined,
+  );
   const current = info.data?.benchmark === benchmark ? info.data.value : undefined;
   const registered = benchmarks.find((b) => b.name === benchmark);
   const tasks = current?.tasks ?? [];
@@ -171,13 +211,34 @@ function NewJobForm({
     drafts.length *
     (Number.isInteger(Number(seeds)) && Number(seeds) > 0 ? Number(seeds) : 0);
   const fields = { benchmark, tasks: selected, name, seeds, timeout, options };
-  const types = agentNames ? methodTypes(agentNames) : METHOD_TYPES;
+  const types = definitions
+    ? methodTypes(definitions.map((definition) => definition.name))
+    : METHOD_TYPES;
   const methodAllowed = capabilities
     ? types.filter((a) => capabilityAllows(capabilities.methods, a))
     : types;
   const updateMethod = (index: number, patch: Partial<MethodDraft>) =>
     setDrafts((all) => all.map((m, i) => (i === index ? { ...m, ...patch } : m)));
 
+  const blocked = drafts.some((draft) =>
+    configurationBlocker(draft, profiles, definitions, cells?.[draft.agent]),
+  );
+  const refreshChecks = () => {
+    info.reload();
+    compatibility.reload();
+    onRefresh();
+  };
+  const refreshing = compatibility.loading || info.loading || checksLoading;
+  const status = (draft: MethodDraft) => (
+    <CompatibilityStatus
+      draft={draft}
+      cell={cells?.[draft.agent]}
+      loading={compatibility.loading}
+      error={compatibility.error}
+      blocker={configurationBlocker(draft, profiles, definitions, cells?.[draft.agent])}
+      registryNotice={registryNotice}
+    />
+  );
   const next = () => {
     try {
       if (!registered || !current || info.loading || info.error)
@@ -187,7 +248,7 @@ function NewJobForm({
           "This policy benchmark requires a frozen sample plan. Submit it with orbit bench run --sample-plan.",
         );
       if (stage === 0) evaluationSpec(fields, [{ name: "preview", agent: "empty" }], tasks, source);
-      else buildMethods(drafts, capabilities, profiles);
+      else buildMethods(drafts, capabilities, profiles, definitions, cells);
       setError(null);
       setStage((s) => s + 1);
     } catch (e) {
@@ -200,7 +261,12 @@ function NewJobForm({
       if (!registered || !current || info.loading || info.error)
         throw new Error("Reload the environment before starting.");
       const spec = withLineage(
-        evaluationSpec(fields, buildMethods(drafts, capabilities, profiles), tasks, source),
+        evaluationSpec(
+          fields,
+          buildMethods(drafts, capabilities, profiles, definitions, cells),
+          tasks,
+          source,
+        ),
         { parent, note, informedBy, method: lineageMethod?.name.trim() },
       );
       setError(null);
@@ -252,6 +318,12 @@ function NewJobForm({
           {changed === null
             ? "The original environment configuration was not recorded. Review the current preset before starting."
             : "The registered environment differs from the saved configuration. This evaluation will use the current preset shown below."}
+        </div>
+      )}
+      {stage > 0 && info.error && (
+        <div className="callout" role="alert">
+          Could not reload environment tasks: {info.error}. Use Refresh configuration checks to
+          reload tasks before continuing or starting. Your draft configurations are kept.
         </div>
       )}
       <div className="bench-launch-grid">
@@ -427,6 +499,7 @@ function NewJobForm({
                       </button>
                     </div>
                   </details>
+                  <CompatibilityRefresh loading={refreshing} onRefresh={refreshChecks} />
                   {profilesError && drafts.some((d) => isCliAgent(d.agent)) && (
                     <div className="callout">Could not load auth profiles: {profilesError}</div>
                   )}
@@ -438,7 +511,16 @@ function NewJobForm({
                   draft={draft}
                   index={i}
                   allowed={methodAllowed}
+                  unavailableType={
+                    capabilities && !capabilityAllows(capabilities.methods, draft.agent)
+                      ? "unsupported"
+                      : definitions
+                        ? "not registered"
+                        : "not verified"
+                  }
                   profiles={profiles}
+                  definition={definitions?.find((definition) => definition.name === draft.agent)}
+                  status={status(draft)}
                   onChange={(patch) => updateMethod(i, patch)}
                   onRemove={() => setDrafts((all) => all.filter((_, j) => j !== i))}
                 />
@@ -567,6 +649,7 @@ function NewJobForm({
                   />
                 </label>
                 <PresetConditions capabilities={capabilities} />
+                <CompatibilityRefresh loading={refreshing} onRefresh={refreshChecks} />
                 <div className="bench-review-methods">
                   {drafts.map((d) => (
                     <div key={d.id}>
@@ -577,6 +660,7 @@ function NewJobForm({
                         {d.model ? ` · ${d.model}` : ""}
                       </span>
                       {d.entrypoint && <div className="mono muted">{d.entrypoint}</div>}
+                      {status(d)}
                     </div>
                   ))}
                 </div>
@@ -643,7 +727,13 @@ function NewJobForm({
               <button
                 type="button"
                 className="btn primary"
-                disabled={!current || info.loading || Boolean(info.error) || !registered}
+                disabled={
+                  !current ||
+                  info.loading ||
+                  Boolean(info.error) ||
+                  !registered ||
+                  (stage === 1 && blocked)
+                }
                 onClick={next}
               >
                 Continue
@@ -652,7 +742,14 @@ function NewJobForm({
               <button
                 type="button"
                 className="btn primary"
-                disabled={submitting}
+                disabled={
+                  submitting ||
+                  blocked ||
+                  info.loading ||
+                  Boolean(info.error) ||
+                  !current ||
+                  !registered
+                }
                 onClick={() => void submit()}
               >
                 {submitting ? "Starting…" : "Start evaluation"}
@@ -724,14 +821,20 @@ function MethodEditor({
   draft: d,
   index,
   allowed,
+  unavailableType,
   profiles,
+  definition,
+  status,
   onChange,
   onRemove,
 }: {
   draft: MethodDraft;
   index: number;
   allowed: Method["agent"][];
-  profiles: AuthProfile[];
+  unavailableType: string;
+  profiles?: AuthProfile[];
+  definition?: AgentDefinition;
+  status: React.ReactNode;
   onChange: (patch: Partial<MethodDraft>) => void;
   onRemove: () => void;
 }) {
@@ -764,7 +867,7 @@ function MethodEditor({
             >
               {!allowed.includes(d.agent) && (
                 <option value={d.agent} disabled>
-                  {typeLabel(d.agent)} (unsupported)
+                  {typeLabel(d.agent)} ({unavailableType})
                 </option>
               )}
               {allowed.map((agent) => (
@@ -775,6 +878,7 @@ function MethodEditor({
             </select>
           </label>
         </div>
+        {status}
         {(cli || d.agent === "external") && (
           <label className="bench-field">
             Model
@@ -791,17 +895,21 @@ function MethodEditor({
             Auth profile
             <select
               className="input"
+              aria-label="Auth profile"
               value={d.auth}
               onChange={(e) => onChange({ auth: e.target.value })}
             >
               <option value="">Select a profile</option>
-              {d.auth && !profiles.some((p) => p.name === d.auth && p.harness === d.agent) && (
-                <option value={d.auth} disabled>
-                  {d.auth} (unavailable)
-                </option>
-              )}
-              {profiles
-                .filter((p) => p.harness === d.agent)
+              {d.auth &&
+                !(profiles ?? []).some(
+                  (p) => p.name === d.auth && profileAllowed(p, d.agent, definition),
+                ) && (
+                  <option value={d.auth} disabled>
+                    {d.auth} ({profiles ? "unavailable or incompatible" : "not verified"})
+                  </option>
+                )}
+              {(profiles ?? [])
+                .filter((p) => profileAllowed(p, d.agent, definition))
                 .map((p) => (
                   <option key={p.name} value={p.name}>
                     {p.name}

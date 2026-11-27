@@ -1215,3 +1215,7 @@ dialog.taxonomy-editor {
     padding: 16px;
   }
 }
+
+.supported-benchmark .benchmark-card-footer {
+  flex-wrap: wrap;
+}

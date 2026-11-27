@@ -281,6 +281,10 @@ daemon 只监听 `127.0.0.1`。从其他机器查看时用 SSH 隧道：
 
 在相同资源规则下比较方法，分别保留执行结果、评分有效性与清理状态。只有有效分数计入统计。
 
+用 `orbit bench catalog` 查找已有接入，`orbit bench catalog <family>` 查看范围，
+再按 `orbit bench resources <family>` 准备资源。新 benchmark 可从 `orbit bench init` 开始。
+发现、准备、接入路线与校准见 [入门指南](docs/guides/benchmark-onboarding.md)。
+
 | 接入方式 | 适用场景 | 文档 |
 | --- | --- | --- |
 | **Harbor 格式** | [TB-Science](https://github.com/harbor-framework/terminal-bench-science)、Terminal-Bench 及其他 Harbor 数据集；具体支持范围由 `bench tasks` 列出 | [适配指南](docs/guides/bench-adapter.md) |

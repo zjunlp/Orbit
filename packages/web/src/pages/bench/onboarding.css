@@ -1,0 +1,71 @@
+.onboarding-page {
+  max-width: 850px;
+}
+.onboarding-page p {
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.onboarding-routes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 24px 0;
+}
+.onboarding-routes > div,
+.onboarding-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.onboarding-routes p {
+  margin-bottom: 0;
+}
+.onboarding-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 20px 0;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.onboarding-form label {
+  display: grid;
+  gap: 8px;
+}
+.onboarding-form input,
+.onboarding-form select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.onboarding-preview {
+  margin-bottom: 20px;
+}
+.onboarding-page code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.onboarding-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+}
+.onboarding-copy code {
+  flex: 1;
+  min-width: 0;
+}
+.onboarding-copy button {
+  flex-shrink: 0;
+}
+.onboarding-result > button {
+  margin-top: 20px;
+}
+@media (max-width: 560px) {
+  .onboarding-routes {
+    grid-template-columns: 1fr;
+  }
+  .onboarding-copy {
+    flex-direction: column;
+  }
+}

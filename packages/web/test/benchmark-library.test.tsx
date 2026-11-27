@@ -126,14 +126,15 @@ it("filters one protocol at a time instead of combining a family display union",
   expect(renderToStaticMarkup(<BenchmarkLibrary />)).toContain("<h2>Fixture Benchmark</h2>");
 });
 
-it("shows what was checked as facts and keeps setup links inside expanded details", () => {
+it("shows registration and direct setup links separately from validation facts", () => {
   const entry = libraryEntry({ ...definition, registrationNames: ["fixture-local"] });
   const closed = renderToStaticMarkup(
     <SupportedCard entry={entry} open={false} toggle={vi.fn()} />,
   );
   expect(closed).toContain("1 integration");
   expect(closed).not.toContain("Sample checked");
-  expect(closed).not.toContain("fixture-local");
+  expect(closed).toContain("1 local setup registered");
+  expect(closed).toContain("/bench/new?benchmark=fixture-local");
   const opened = renderToStaticMarkup(<SupportedCard entry={entry} open toggle={vi.fn()} />);
   expect(opened).toContain("real environment calibration remains pending");
   expect(opened).toContain("Supported scope");
@@ -165,4 +166,52 @@ it("describes VLA models as evaluated policies within physical-control benchmark
   const html = renderToStaticMarkup(<SupportedCard entry={entry} open toggle={vi.fn()} />);
   expect(html).toContain("VLA models are evaluated policies");
   expect(html).toContain("model version, checkpoint, and suite");
+});
+
+it("filters local registrations without treating them as calibration", () => {
+  fixtureState.query = "local=registered";
+  expect(renderToStaticMarkup(<BenchmarkLibrary />)).toContain("No benchmarks match these filters");
+  fixtureState.data = {
+    entries: [],
+    supported: [{ ...definition, registrationNames: ["local-a", "local-b"] }],
+  };
+  const html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain("2 local setups registered");
+  expect(html).toContain("Choose local setup");
+  expect(html).not.toContain("/bench/new?benchmark=");
+  expect(html).not.toContain("Ready");
+});
+
+it("defaults to a matching protocol and restores an explicitly selected URL profile", () => {
+  fixtureState.query = "open=fixture-family&domains=software";
+  let html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain('value="1" selected=""');
+  expect(html).toContain("Matching protocol: Repair protocol");
+  fixtureState.query += "&profile=0";
+  html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain('value="0" selected=""');
+  expect(html).toContain("All selected fields match within each protocol");
+});
+
+it("keeps URL-selected families for comparison when search hides their cards", () => {
+  fixtureState.data = {
+    entries: [],
+    supported: [definition, { ...definition, id: "second", name: "Second fixture" }],
+  };
+  fixtureState.query = "q=no-match&compare=fixture-family,second&view=compare";
+  const html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain("2 selected families are");
+  expect(html).toContain("hidden by current filters");
+  expect(html).toContain("Compare benchmark families");
+  expect(html).toContain("Second fixture");
+  expect(html).not.toContain("No benchmarks match these filters");
+  expect(html).toContain('href="/benchmarks?mode=add"');
+});
+
+it("explains unavailable shared IDs without presenting them as known benchmarks", () => {
+  fixtureState.query = "compare=missing,fixture-family,fixture-family&view=compare";
+  const html = renderToStaticMarkup(<BenchmarkLibrary />);
+  expect(html).toContain("1 of 4 families selected");
+  expect(html).toContain("1 unavailable family ID was");
+  expect(html).toContain("Select at least two benchmark families");
 });

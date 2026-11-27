@@ -151,6 +151,7 @@ async function startLockedDaemon(
   runs.setRemote(cluster);
   const benchmarks = new BenchmarkRegistry(paths.benchmarks);
   const bench = new BenchService({
+    agents,
     store,
     runs,
     registry: benchmarks,

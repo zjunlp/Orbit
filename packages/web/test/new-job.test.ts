@@ -1,5 +1,8 @@
 import type {
+  AgentDefinition,
+  AuthProfile,
   BenchCapabilities,
+  BenchCompatibility,
   BenchJob,
   Benchmark,
   BenchTask,
@@ -8,11 +11,14 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   buildMethods,
+  compatibilityCells,
+  configurationBlocker,
   copiedMethods,
   type EvaluationFields,
   evaluationSpec,
   importMethods,
   methodDraft,
+  profileAllowed,
   registrationChanged,
   taskSubset,
   withLineage,
@@ -127,7 +133,7 @@ it("validates capabilities, duplicate names, installed policy entrypoints and va
   ]);
   expect(() =>
     buildMethods([methodDraft({ name: "cli", agent: "codex", auth: "missing" })], undefined, []),
-  ).toThrow("auth profile");
+  ).toThrow(/auth profile/i);
 });
 
 it("does not turn an empty or unsupported task selection into all tasks", () => {
@@ -268,5 +274,78 @@ it("derives only the selected trial method from a multi-method evaluation", () =
   });
   expect(() => withLineage(job.spec, { ...lineage, method: "empty" })).toThrow(
     "Select the configuration",
+  );
+});
+
+const cliDefinition = { name: "custom", auth: { kinds: ["api-key"] } } as AgentDefinition;
+const cliProfile = { name: "key", harness: "custom", kind: "api-key" } as AuthProfile;
+const cliDraft = methodDraft({ name: "agent", agent: "custom", auth: "key" });
+
+it("only accepts compatibility cells marked fresh for the exact benchmark", () => {
+  const result: BenchCompatibility = {
+    agents: ["custom"],
+    rows: [
+      {
+        benchmark: "one",
+        cells: { custom: { state: "blocked", reason: "MCP is not wired", valid: 5 } },
+      },
+    ],
+  };
+  expect(compatibilityCells("one", result)).toBeUndefined();
+  result.checked = { benchmark: "two", at: "2026-11-26T00:00:00Z" };
+  expect(compatibilityCells("one", result)).toBeUndefined();
+  result.checked.benchmark = "one";
+  expect(compatibilityCells("one", result)?.custom?.state).toBe("blocked");
+  expect(compatibilityCells("two", result)).toBeUndefined();
+});
+
+it("blocks fresh declared incompatibility despite historical valid trials", () => {
+  const cells = {
+    custom: { state: "blocked" as const, reason: "MCP is not wired", valid: 5, trials: 6 },
+  };
+  expect(configurationBlocker(cliDraft, [cliProfile], [cliDefinition], cells.custom)).toContain(
+    "MCP",
+  );
+  expect(() => buildMethods([cliDraft], undefined, [cliProfile], [cliDefinition], cells)).toThrow(
+    "MCP",
+  );
+});
+
+it("checks the selected credential kind and known Agent registry, not just the existence of some profile", () => {
+  const wrong = { ...cliProfile, kind: "login" } as AuthProfile;
+  expect(profileAllowed(wrong, "custom", cliDefinition)).toBe(false);
+  expect(configurationBlocker(cliDraft, [wrong], [cliDefinition], { state: "allowed" })).toContain(
+    "does not accept",
+  );
+  expect(() => buildMethods([cliDraft], undefined, [wrong], [cliDefinition])).toThrow(
+    "does not accept",
+  );
+  expect(configurationBlocker(cliDraft, [cliProfile], [])).toContain("not registered");
+  expect(configurationBlocker(cliDraft, [cliProfile], undefined)).toBeNull();
+  expect(configurationBlocker(cliDraft, undefined, [cliDefinition])).toBeNull();
+});
+
+it("does not block valid selected profiles on unknown or needs-auth aggregate states", () => {
+  for (const state of ["unknown", "needs-auth", "allowed", "ran"] as const) {
+    expect(
+      buildMethods([cliDraft], undefined, [cliProfile], [cliDefinition], { custom: { state } })[0]
+        ?.agent,
+    ).toBe("custom");
+  }
+});
+
+it("keeps controls and external policies outside CLI compatibility and native policy outside this editor", () => {
+  const blocked = { state: "blocked" as const, reason: "CLI only" };
+  for (const agent of ["empty", "oracle", "external"] as const) {
+    const draft = methodDraft({
+      name: agent,
+      agent,
+      ...(agent === "external" ? { entrypoint: "fixture:policy" } : {}),
+    });
+    expect(configurationBlocker(draft, [], [], blocked)).toBeNull();
+    expect(buildMethods([draft], undefined, [], [], { [agent]: blocked })[0]?.agent).toBe(agent);
+  }
+  expect(() => buildMethods([methodDraft({ name: "native", agent: "policy" })])).toThrow(
+    "unknown configuration type",
   );
 });
