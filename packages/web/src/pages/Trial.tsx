@@ -129,8 +129,13 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
       out.push({ key: "details", label: "Details" });
     return [...out, ...ALWAYS_TABS];
   }, [review, plan]);
-  // A link to a file that is now listed under Evidence opens it there.
-  const asked = loc.query.get("tab");
+  // A saved file link follows the file between Evidence and its own tab.
+  const requestedTab = loc.query.get("tab");
+  const requestedFile = Number(loc.query.get("file") ?? Number.NaN);
+  const asked =
+    requestedTab === "evidence" && plan.documents.includes(requestedFile)
+      ? `f${requestedFile}`
+      : requestedTab;
   const linked = /^f(\d+)$/.exec(asked ?? "");
   const grouped = linked && plan.rest.length > 1 && plan.rest.includes(Number(linked[1]));
   const tab = grouped
@@ -138,7 +143,7 @@ export function TrialPage({ jobId, trialId }: { jobId: string; trialId: string }
     : tabs.some((t) => t.key === asked)
       ? (asked as string)
       : (tabs[0]?.key as string);
-  const evidenceFile = grouped ? Number(linked[1]) : Number(loc.query.get("file") ?? Number.NaN);
+  const evidenceFile = grouped ? Number(linked[1]) : requestedFile;
   const now = useNow(
     1000,
     Boolean((solve && isActive(solve.state)) || (verify && isActive(verify.state))),
