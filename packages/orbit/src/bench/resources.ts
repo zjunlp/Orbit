@@ -13,6 +13,7 @@ import {
   type RunSpecInput,
   type Trial,
 } from "../contracts/index.ts";
+import { UserError } from "../runs/errors.ts";
 import { tokenUsage } from "../sessions/tokens.ts";
 import { timedOut } from "./classify.ts";
 
@@ -22,11 +23,11 @@ export function loadResources(file: string): BenchResources {
   try {
     raw = JSON.parse(readFileSync(file, "utf8"));
   } catch (e) {
-    throw new Error(`resources file ${file}: ${(e as Error).message}`);
+    throw new UserError(`resources file ${file}: ${(e as Error).message}`);
   }
   const r = BenchResources.safeParse(raw);
   if (!r.success)
-    throw new Error(
+    throw new UserError(
       `resources file ${file}: ${r.error.issues.map((i) => `${i.path.join(".") || "file"}: ${i.message}`).join("; ")}`,
     );
   return r.data;
@@ -48,8 +49,10 @@ export function resolveResources(
   tasks: string[],
   known: string[],
 ): Record<string, ResourceOverride> {
-  const unknown = Object.keys(r.tasks).filter((t) => !known.includes(t));
-  if (unknown.length) throw new Error(`resources file names unknown tasks: ${unknown.join(", ")}`);
+  const knownTasks = new Set(known);
+  const unknown = Object.keys(r.tasks).filter((t) => !knownTasks.has(t));
+  if (unknown.length)
+    throw new UserError(`resources file names unknown tasks: ${unknown.join(", ")}`);
   return Object.fromEntries(tasks.map((t) => [t, taskOverride(r, t)]));
 }
 

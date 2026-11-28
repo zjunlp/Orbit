@@ -130,7 +130,7 @@ describe("trial tabs", () => {
     expect(fileLabel(file("logs/result.json"))).toBe("result.json");
   });
 
-  it("opens on the replay and groups the remaining files as evidence", () => {
+  it("opens on the episode and gives its standalone video a tab", () => {
     const files = [
       file("native.json", "json"),
       file("trace.md", "markdown"),
@@ -138,10 +138,16 @@ describe("trial tabs", () => {
       file("ctrf.json"),
       file("video.mp4"),
     ];
-    expect(reviewTabs(files)).toEqual({ main: [2, 3], documents: [], rest: [0, 1, 4] });
+    expect(reviewTabs(files)).toEqual({ main: [2, 3], documents: [4], rest: [0, 1] });
     expect(fileHref(files, 1)).toBe("?tab=evidence&file=1");
     expect(fileHref(files, 2)).toBe("?tab=f2");
+    expect(fileHref(files, 4)).toBe("?tab=f4");
     expect(files.map(isReplay)).toEqual([false, false, true, false, false]);
+  });
+
+  it("groups videos under Evidence beside a non-episode replay", () => {
+    const files = [file("session.json", "trajectory"), file("trace.md"), file("video.mp4")];
+    expect(reviewTabs(files)).toEqual({ main: [0], documents: [], rest: [1, 2] });
   });
 
   it("keeps reports and videos as tabs without a replay, and a single leftover file", () => {

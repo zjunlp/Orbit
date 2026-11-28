@@ -76,6 +76,7 @@ def initial_state_count(environment, task):
 class VLABenchBenchmark:
     action_size = 8
     settle_steps = 0
+    video_camera = "front_rgb"
     video = None
     env = None
 
@@ -180,10 +181,12 @@ class VLABenchBenchmark:
     def start_video(self, directory):
         import imageio
 
-        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=10)
+        path, fps = "video.mp4", 10
+        self.video = imageio.get_writer(str(Path(directory) / path), fps=fps)
+        return {"path": path, "camera": self.video_camera, "fps": fps}
 
     def record_frame(self, observation):
-        self.video.append_data(observation["front_rgb"])
+        self.video.append_data(observation[self.video_camera])
 
     def finish_video(self):
         if self.video is not None:

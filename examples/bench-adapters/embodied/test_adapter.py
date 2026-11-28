@@ -60,6 +60,39 @@ class AdapterPlanningTests(unittest.TestCase):
                 self.assertEqual(reply.stdout, "")
                 self.assertIn("--repetitions must be positive", reply.stderr)
 
+    def test_tasks_show_the_configured_default_simulator_vram(self):
+        reference = json.loads((ADAPTER.parent / "profiles/robodojo-native.json").read_text())
+        root = ADAPTER.parent
+        reference["environment"]["assets"]["digest"] = "sha256:" + "a" * 64
+        reference["environment"]["layouts"] = {}
+        key = "Default simulator VRAM minimum"
+        for minimum in (None, "4", "16"):
+            with self.subTest(minimum=minimum):
+                config = {"image": "fixture", "profileDigest": digest(reference), "simGpus": "1"}
+                if minimum is not None:
+                    config["simGpuMemGB"] = minimum
+                with patch.object(adapter, "settings", return_value=(root, config, reference)):
+                    conditions = adapter.tasks({})["capabilities"]["conditions"]
+                solve = adapter.solve_spec({}, config, reference["environment"], root)["spec"]
+                if minimum is None:
+                    self.assertEqual(conditions[key], "No minimum")
+                    self.assertNotIn("gpuMemGB", solve["resources"])
+                else:
+                    self.assertEqual(conditions[key], minimum + " GB")
+                    self.assertEqual(solve["resources"]["gpuMemGB"], float(minimum))
+
+    def test_tasks_show_the_same_simulator_gpu_models_as_solve(self):
+        reference = json.loads((ADAPTER.parent / "profiles/robodojo-native.json").read_text())
+        root = ADAPTER.parent
+        reference["environment"]["assets"]["digest"] = "sha256:" + "a" * 64
+        reference["environment"]["layouts"] = {}
+        config = {"image": "fixture", "profileDigest": digest(reference), "simGpus": "1"}
+        with patch.object(adapter, "settings", return_value=(root, config, reference)):
+            conditions = adapter.tasks({})["capabilities"]["conditions"]
+        models = adapter.solve_spec({}, config, reference["environment"], root)["spec"]["resources"]["gpuModels"]
+        self.assertTrue(models)
+        self.assertEqual(conditions["Allowed simulator GPU models"], ", ".join(models))
+
     def test_robocasa365_diffusion_plan_defaults_to_the_reference_environment_seed(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

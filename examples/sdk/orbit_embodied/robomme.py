@@ -109,8 +109,10 @@ class RoboMMEBenchmark:
             raise ValueError("RoboMME native status contradicts its step result")
         self.observation = self.observations(raw)
         success = self.status == "success"
-        return StepResult(self.observation, float(success), self.done or self.steps == self.horizon,
-                          success, native_action=command.tolist(), native_done=self.done)
+        at_limit = self.steps == self.horizon
+        return StepResult(self.observation, float(success), self.done or at_limit, success,
+                          native_action=command.tolist(), native_done=self.done,
+                          truncated=self.status == "timeout" or (not self.done and at_limit))
 
     def result(self):
         return {"source": "RoboMME native status", "task": self.task, "episode": self.episode,

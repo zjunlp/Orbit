@@ -221,7 +221,7 @@ class ChoresBenchmark:
         evidence = goal_evidence(self.task, self.row) if done and name == "end" else None
         self.success = bool(self.task.is_successful()) if evidence is not None else False
         return StepResult(self.observation(evidence, result.observation), float(result.reward), done, self.success,
-                          native_action=[index], native_done=done)
+                          native_action=[index], native_done=done, truncated=done and name != "end")
 
     def result(self):
         steps = self.task.num_steps_taken()

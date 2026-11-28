@@ -38,10 +38,12 @@ class SuiteTests(unittest.TestCase):
             (episode / "actions.jsonl").write_text("\n".join(map(json.dumps, rows)))
             write_json(episode / "chunks/0.json", {"inferSeconds": 0.2})
             write_json(episode / "contract.json", {"horizon": 2})
+            write_json(episode / "initial-state.json", {"state": control["state"]})
             output = episode / "orbit-trajectory.json"
             write_trajectory(episode, output, {"success": False, "issues": []},
                              {"sample": {"taskId": "libero_90:synthetic"}}, kind="libero")
             trace = json.loads(output.read_text())
+            self.assertEqual(trace["goal"], "libero_90:synthetic")
             self.assertEqual([row["time"] for row in trace["samples"]], [0, 0.1])
             self.assertEqual(trace["samples"][0]["proprio"], [1, 2, 3, 0, 0, 0, 1, 0.01, 0.02])
             self.assertTrue(trace["samples"][-1]["truncated"])

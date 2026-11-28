@@ -25,7 +25,7 @@ export function CompatibilityStatus({
       draft.agent === "external"
         ? "External policies use an installed entrypoint. CLI Agent compatibility does not apply; environment and policy checks remain necessary."
         : draft.agent === "policy"
-          ? "Native policies require a frozen sample plan through the CLI."
+          ? "Native policies require a frozen sample plan and a registered policy."
           : "This baseline is a control, not a CLI Agent. Its admission follows the benchmark’s declared methods.";
   else if (blocker) message = `Cannot submit this configuration: ${blocker}`;
   else if (loading)

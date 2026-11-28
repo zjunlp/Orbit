@@ -118,8 +118,9 @@ class RLBenchBenchmark(GymBenchmark):
         self.steps += 1
         self.previous_observation = observation
         self.success = bool(reward >= 1)
-        return StepResult(observation, float(self.success), bool(done or self.success or self.steps == self.horizon),
-                          self.success)
+        truncated = not (done or self.success) and self.steps == self.horizon
+        return StepResult(observation, float(self.success), bool(done or self.success or truncated),
+                          self.success, truncated=truncated)
 
     def result(self):
         return {"success": self.success, "source": "RLBench sparse task success", "task": self.task,

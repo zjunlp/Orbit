@@ -91,6 +91,15 @@ describe("saved embodied episode", () => {
       (t: ReturnType<typeof fixture>) => {
         t.samples[0].late = "false";
       },
+      (t: ReturnType<typeof fixture>) => {
+        t.instructionChanges = [
+          { time: 0.2, text: "Lift the block." },
+          { time: 0.1, text: "Open the drawer." },
+        ];
+      },
+      (t: ReturnType<typeof fixture>) => {
+        t.instructionChanges = [{ time: 0, text: null }];
+      },
     ];
     for (const mutate of cases) {
       const trace = fixture();
@@ -98,6 +107,45 @@ describe("saved embodied episode", () => {
       expect(() => EpisodeTrajectory.parse(trace)).toThrow();
       expect(() => parseEpisode(JSON.stringify(trace))).toThrow();
     }
+  });
+  it("shows the instruction for the selected frame", () => {
+    const raw = fixture();
+    raw.instructionChanges = [
+      { time: raw.samples[0].time, text: "Open the drawer." },
+      { time: raw.samples[1].time, text: "Lift the pink block." },
+    ];
+    const trace = parseEpisode(JSON.stringify(raw));
+    expect(EpisodeTrajectory.parse(trace)).toEqual(trace);
+    const render = (index: number) =>
+      renderToStaticMarkup(
+        <EpisodeViewer
+          trace={trace}
+          runId="fixture"
+          files={new Set()}
+          control={{ index, select: vi.fn() }}
+        />,
+      );
+    expect(render(0)).toContain("<b>Open the drawer.</b>");
+    expect(render(1)).toContain("<b>Lift the pink block.</b>");
+  });
+  it("shows an explicit empty instruction and the recorded stop flag", () => {
+    const raw = fixture();
+    raw.instructionChanges = [{ time: raw.samples[1].time, text: "" }];
+    raw.samples[1].terminated = false;
+    raw.samples[1].truncated = true;
+    const trace = parseEpisode(JSON.stringify(raw));
+    expect(EpisodeTrajectory.parse(trace)).toEqual(trace);
+    const html = renderToStaticMarkup(
+      <EpisodeViewer
+        trace={trace}
+        runId="fixture"
+        files={new Set()}
+        control={{ index: 1, select: vi.fn() }}
+      />,
+    );
+    expect(html).toContain("<b>No language instruction</b>");
+    expect(html).toContain(">Truncated</span>");
+    expect(html).not.toContain(trace.goal);
   });
   it("renders synchronized cameras, chunk boundaries, reward and live timing markers", () => {
     const trace = parseEpisode(source);

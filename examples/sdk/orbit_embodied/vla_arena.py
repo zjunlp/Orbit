@@ -138,7 +138,8 @@ class VLAArenaBenchmark(TabletopBenchmark):
         self.success = arena_success(self.config["safety"], task_success, reported, cost)
         self.evidence = {"stepCost": step_cost, "timeoutCost": timeout_cost, "costReported": reported,
                          "safetyCost": cost, "taskSuccess": task_success}
-        return StepResult(self.observation(raw), float(reward), done, self.success, native_done=done)
+        return StepResult(self.observation(raw), float(reward), done, self.success, native_done=done,
+                          truncated=False)
 
     def result(self):
         row = self.config["catalog"][self.task]
@@ -149,7 +150,7 @@ class VLAArenaBenchmark(TabletopBenchmark):
                 "instruction": self.instruction}
 
     def record_frame(self, observation):
-        self.video.append_data(np.ascontiguousarray(observation["front_rgb"][::-1, ::-1]))
+        self.video.append_data(np.ascontiguousarray(observation[self.video_camera][::-1, ::-1]))
 
 
 def verify_arena_evidence(reference, sample, controls, result, reset_actions=None):

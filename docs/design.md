@@ -693,8 +693,9 @@ Outcome       = { execution, evaluation: valid|invalid|unknown, score?, maxScore
 - `capabilities` 描述身份、六维分类（`taxonomy`）、支持的 method（具体名保持原义：`["codex"]` 只允许 Codex；`cli` 显式允许所有 Agent CLI）、固定条件、二元/标量成绩和 `evidence | score | none` 重查语义；`requires`（`oneShot | multiTurn | mcp | gui`，默认空）列出 CLI method 必须在 Agent 定义中声明的能力；daemon 在提交时检查 method 与 `requires`（要求 MCP 时还需实际接线），Web 不按 benchmark 名称猜能力。任务 HTTP 接口返回这些可选信息，旧客户端仍可只读 tasks。旧 adapter 回复中的 `category` / `profiles` / `domains` / `kind` 被忽略（§9.10）；分类标签不替代准入检查。
 - `GuiTrajectory` 是版本 1 的 JSON 产物：goal、连续 steps 和可选 stopReason；step 0 是无动作初始截图，后续行记录动作后的截图、奖励、动作错误和终止标志。路径相对 solve 输出目录；Web 在请求截图前验证结构和路径，不执行动作。BrowserGym 从原始 JSONL 生成该视图，核验时同时检查视图一致性与哈希；旧输出保持兼容。
 - `contracts/trajectory.ts`：`GuiStepContext`（step 的 `actionId` / `at`，用于把 Agent 会话中的工具调用与 GUI step 精确对齐，不按时钟猜）与
-  `EpisodeTrajectory`（版本 1、`kind: "episode"`：多相机帧/视频、动作与本体感知曲线、奖励；只含保存的媒体和数值，不含可执行动作）。
-  review `kind` 因此增加 `episode`，Web 按该 schema 校验后渲染具身时间线。
+  `EpisodeTrajectory`（版本 1、`kind: "episode"`：保存的多相机帧/视频、动作与本体感知曲线、奖励及可选的指令切换时间）。
+  原生回放用动作前的观测指令对齐画面，显式空字符串表示无语言指令。Web 按 `episode` schema 校验回放，按时间显示当前指令或 `goal`。
+  回放的终止和截断标志取自已验证的停止证据或评测步数规则，与任务是否成功分别显示。
 - CLI Agent 驱动 GUI 时，环境运行在可信 service 中，Agent 只经 `orbit-computer`（CLI / MCP）拿观测、发动作；证据只由 service 写出并在
   收集时进入 `services/<name>/`。service 每个 trial 生成 Ed25519 密钥，私钥只在 service 内，公钥写进 solve Run 的 service env；
   verify 与 score 用 Run 记录里的公钥核验签名，伪造或缺失签名记 `scorer_error`（无效）。daemon 采集时只写入真实目录（不跟随运行
@@ -1002,9 +1003,16 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   分量名必须唯一。通过后生成不可变 `ResolvedBinding`。
 - **Policy 登记**：`PolicyDefinition` 是共享形状（固定镜像、readiness、checkpoint/归一化摘要、命名权重 dataset、随机流声明）；
   各 connector 的必需字段（OFT 的 8 步 LIBERO recipe、GR00T 的执行长度/动作顺序/backbone 摘要）在 `bench/policies.ts` 登记时检查。
-  提交时保存权威快照。`gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
+  提交时保存权威快照。`GET /policies` 返回各登记执行快照的摘要。Web 确认后提交按方法名索引的摘要，
+  daemon 在创建作业前核对即将保存的快照。登记发生变化时，用户可保留草稿，刷新登记后重新确认。
+  `gpusOf: main` 允许模型服务共享模拟器已租的 GPU，不另设 role/GPU。
   可选的 `recommendedScope` 声明权重的建议评测 profile 与任务族。超出范围的计划在提交时记录提示，并随校准报告返回。
   Binding、执行快照和校准判定独立于提示。
+- **环境确认**：任务列表接口返回 benchmark 登记、解析后的逐任务资源覆盖值及执行配置摘要。摘要涵盖登记和生效的资源配置。
+  Web 在原生评测确认页显示模拟器默认资源、所选任务的资源覆盖值和模型服务资源，包括适用的 GPU 型号限制。
+  新建作业以草稿第一次确认的配置为对照，复制作业优先使用原作业的资源快照。刷新和返回上一步保留对照配置，只更新当前可提交的值。
+  提交原生评测时携带摘要，daemon 核对并保存同一次读取解析出的资源值。
+  运行设置变化时，用户可保留草稿和样本计划，刷新环境后重新确认。
 - **样本身份**：`spec.samplePlan` 是带摘要的有序计划；sampleId 由任务、profile、初态资产摘要与索引、环境 seed、模型 seed 和重复
   编号生成。新分支用 sampleRef、禁止 seed，联合契约拒绝混用；旧 seed 作业、报告与 n→n−1 规则不变，新报告为 `orbit-report/2`，
   报告与 Trial 导航按计划顺序列出样本。原版 SimplerEnv 与 ManiSkill3 的重置种子为 `environmentSeed + initialStateId`，计划校验与
@@ -1015,6 +1023,9 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
 - **SDK 与证据**：Benchmark adapter、PolicyClient、connector、driver、证据写入分离；SDK 核心只依赖标准库与 NumPy。原生判定与
   Orbit 有效性分开，可选媒体失败不改变分数。证据原子封存，含 contract、binding、初态、逐步动作、请求的动作块、源码包摘要；
   CPU 验证使用 Solve 的动作块形状、最小长度和数值规则，逐步核对消费顺序及重规划边界。
+  当策略绑定唯一的任务指令且适配器未记录时，driver 将观测中的指令补入初态与逐步状态，供回放读取。
+  适配器通过 `StepResult.truncated` 区分步数截断和原生或策略终止。driver 在最终控制记录写入 `state.truncated`，
+  缺少原生标记时也记录自身耗尽的步数。时间线从控制记录读取停止原因，任务成功与停止原因分别保存。
   固定步长评测按冻结间隔重规划。CALVIN 可在原生子任务完成时提前重规划，验证器复核完成信号和子任务进度。
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。
@@ -1370,10 +1381,12 @@ P6 的首个具身导入器 `bench/trajectory.ts` 是纯函数：读取 EFE Meta
 sample 的 `sessionStepIds`（引用同一 Run 的 ATIF 步骤，兼容旧 `sessionMessageIndexes`）和 video 的 `timeMap`（仿真步与 render 帧的精确时间映射），旧索引兼容。会话按调用完成时间关联，GUI 仍按动作 id 精确关联。
 Docker root 的 agentTask 通过既有 main 收尾 hook 先把私有 Agent 目录归还 daemon 用户，再运行 adapter hooks，保证会话可读与凭据清理；不改变模拟器评分。
 
-原生 RoboTwin、LIBERO、RoboDojo 和 RoboLab 的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
+原生具身评测的 verifier 从已验证的动作与批次记录生成 `EpisodeTrajectory`，索引保存在 Verify 产物中。
+提供录像说明的评测在录像完成后保存可选的 `recording.json`，记录相机、文件名、帧率和帧数。
+帧数与控制步数一致时才关联这段录像。录像不可用时，有冻结控制频率的回合仍可显示动作和奖励。
 `mediaPhase: "solve"` 将相机路径限定在同一 Trial 的 Solve 产物中。`frameBeforeAction` 标记每步画面取自动作前，状态和奖励取自动作后。
 动作批次可带 `inferSeconds`。录像以控制步取样，时间轴按录像帧率排列，推理时长使用实际测量值。
-除 LIBERO 的固定字段外，动作与状态通道名来自冻结的 Binding profile；没有声明顺序的状态字段不猜测通道。
+除 LIBERO 的固定字段外，动作与状态通道名来自冻结的 Binding profile。未声明名称的动作分量显示编号，状态曲线只显示已记录且声明顺序的字段。
 RoboDojo 录像为 25 FPS，RoboLab 使用冻结配置中的控制频率。索引以紧凑 JSON 写入，按实际 UTF-8 字节数限制在 2 MiB 内；
 必要时抽样并标为 `truncated`，保留首尾与最慢动作批次的跳转位置和原始视频时间。原始动作、状态与录像仍完整保留。
 Web 对长批次列表显示耗时摘要和最慢批次跳转；抽样后的列表与统计明确标为所显示的记录。
@@ -1630,7 +1643,8 @@ Method 的定义与生命周期留待后续设计。[原信息架构调研](rese
   仅使用 `checked.benchmark` 与当前环境一致的结果，旧 daemon 未提供标记时显示 unknown；切换/刷新保留配置草稿，
   迟到结果不能串到另一环境。Configurations 与 Review 均展示反馈，已知 blocked 原因和所选 profile 的
   harness/kind 不匹配会禁 Continue/提交；unknown、加载失败本身不阻断也不显示 ready，最终提交仍由 daemon 验证。
-  empty/oracle 等 controls、external 不套 CLI Agent cell；原生 Policy 继续走现有 CLI frozen-plan 路径。
+  empty/oracle 等 controls、external 不套 CLI Agent cell。原生 Policy 评测在 Web 上传或复制冻结样本计划，
+  使用 Policy 登记和摘要确认流程。
 - 原生 VLA 策略独立登记在 `PolicyDefinition`，已有 `GET /policies`；当前 Agents 页仍只读取 CLI 定义与历史 external
   entrypoint，尚无原生 Policy 目录。后续可增加 VLA Policies 视图，列模型版本、可用配置与按 suite/recipe 验证的关系；
   不能把历史 external 列表冒充已适配模型目录，也不能把 VLA 模型加入 benchmark 的六维词表。
@@ -1851,7 +1865,8 @@ Benchmarks 默认回答“Orbit 已经适配了哪些 benchmark，它们分别�
 - 既有 `BenchCatalog` 增加 `supported[]` 产品目录，保留 `entries[]` 本地登记数据。Web 从同一个 HTTP 接口读取，
   CLI 和旧调用方仍可使用登记数据。受控数据按 benchmark 族拆在 `bench/benchmarks/<family>.ts`，由 `bench/benchmarks/index.ts` 汇总，`contracts/bench.ts` 声明
   `SupportedBenchmark`：id/name/description、具名 taxonomyGroups、integrations、verification、suites 与 registrationNames。
-- registrationNames 只关联显式身份或代码已知的内置接入、原生语义 profile，不按登记名、文件路径或运行记录猜测。
+- registrationNames 只关联显式身份、代码已知的内置接入、原生冻结环境类型或精确语义 profile。
+  RoboTwin 和 RoboCasa365 使用与登记能力及摘要相符的冻结环境类型归类，同一家族可有多套观测和动作配置。
   CUA-Lite 必须有显式 `cua-lite` 身份，且列出的精确 suite 有 `supported > 0`，才关联 MiniWoB、WebVoyager 或
   Online-Mind2Web 家族；无 listing、未知 suite 或全部 unsupported 不自动关联。
   本地未关联的自定义登记仍在本地视图可用；没有本地登记时产品条目依然存在。

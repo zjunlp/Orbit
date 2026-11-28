@@ -46,6 +46,7 @@ def unpack_prompt_context(value):
 
 
 class VIMABenchBenchmark(GymBenchmark):
+    video_camera = "front_rgb"
     action_size = 12
 
     def reset(self, sample):
@@ -72,7 +73,7 @@ class VIMABenchBenchmark(GymBenchmark):
                 "prompt_context": self.context}
 
     def record_frame(self, observation):
-        self.video.append_data(np.moveaxis(observation["front_rgb"], 0, -1))
+        self.video.append_data(np.moveaxis(observation[self.video_camera], 0, -1))
 
     def state(self, observation):
         return {"promptDigest": self.context_digest, "endEffector": int(observation["ee"][0])}
@@ -82,9 +83,10 @@ class VIMABenchBenchmark(GymBenchmark):
         observation, reward, done, info = self.env.step(native)
         self.steps += 1
         self.success = bool(info["success"])
-        return StepResult(self.observation(observation), float(reward), bool(done or self.steps == self.horizon),
+        truncated = not done and self.steps == self.horizon
+        return StepResult(self.observation(observation), float(reward), bool(done) or truncated,
                           self.success, native_action=np.concatenate(list(native.values())).tolist(),
-                          native_done=bool(done))
+                          native_done=bool(done), truncated=truncated)
 
     def result(self):
         return {"success": self.success, "source": "VIMA-Bench task success", "task": self.task}

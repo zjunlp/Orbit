@@ -139,12 +139,13 @@ class MolmoSpacesBenchmark(GymBenchmark):
         raw, rewards, terminated, truncated, _ = self.env.step({"arm": command[:7], "gripper": command[7:]})
         reward, = rewards
         done, = np.logical_or(terminated, truncated)
+        timed_out, = np.logical_and(truncated, np.logical_not(terminated))
         self.steps += 1
         self.success = bool(self.env.judge_success())
         stopped = bool(done or (self.success and self.reference["parameters"]["endOnSuccess"]))
         return StepResult(self.observation(raw), float(reward), stopped, self.success,
                           simulation_time=self.steps * self.reference["parameters"]["policyDtMs"] / 1000,
-                          native_action=command.tolist(), native_done=bool(done))
+                          native_action=command.tolist(), native_done=bool(done), truncated=bool(timed_out))
 
     def result(self):
         return {"success": self.success, "source": "MolmoSpaces native final judge_success",

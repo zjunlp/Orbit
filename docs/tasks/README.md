@@ -133,6 +133,8 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Embodied: policies and native benchmarks
 
+- [20261128](20261128-native-evaluation-review-baseline.md) Stable review baselines for native evaluations
+- [20261127](20261127-native-recording-timelines.md) Basic native timelines from recorder metadata
 - [20261124](20261124-robotwin-current-source.md) Unify native RoboTwin on the current upstream revision
 - [20261124](20261124-libero-official-source.md) Prepare native LIBERO from its official repository
 - [20261121](20261121-embodied-review-follow-up.md) Embodied review follow-up
@@ -235,6 +237,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 - [20261112](20261112-trial-review-views.md) Trial review views and grouped evidence
 - [20261112](20261112-trial-evidence-shapes.md) Native episode timelines and TextArena game conversations
 - [20261117](20261117-conversation-performance.md) Long Conversation virtualization and cancellable reads
+- [20261126](20261126-web-native-evaluation.md) Submit and copy native policy evaluations in Web
 
 ## Docs, presentation and integration merges
 

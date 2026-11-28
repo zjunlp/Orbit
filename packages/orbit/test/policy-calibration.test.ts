@@ -230,6 +230,49 @@ it("explains how to validate a policy when the benchmark has no fixed batches", 
   expect(f.store.listJobs()).toHaveLength(0);
 });
 
+it.each(["model", "calibration"] as const)(
+  "checks the reviewed policy digest for a %s registration before publishing a job",
+  async (kind) => {
+    const f = fixture();
+    const policy = f.bench.policies.get("synthetic");
+    if (!policy) throw new Error("missing fixture policy");
+    const original = f.bench.policies.put({ ...policy, kind });
+    const method = { name: "reviewed", agent: "policy", policyRef: original.name };
+    const submission = {
+      benchmark: f.request.benchmark,
+      samplePlan: f.request.samplePlan,
+      methods: [method],
+    };
+    const updated = f.bench.policies.put({
+      ...original,
+      checkpointDigest: `sha256:${"d".repeat(64)}`,
+    });
+    await expect(
+      f.bench.submit({
+        ...submission,
+        expectedPolicyDigests: { [method.name]: contentDigest(original) },
+      }),
+    ).rejects.toThrow(/registered policy synthetic changed since review/);
+    await expect(
+      f.bench.submit({
+        ...submission,
+        expectedPolicyDigests: { [updated.name]: contentDigest(updated) },
+      }),
+    ).rejects.toThrow(/expected policy digest has no matching policy method/);
+    expect(f.store.listJobs()).toEqual([]);
+    expect(f.submit).not.toHaveBeenCalled();
+
+    f.bench.policies.put({ ...updated, recommendedScope: { profiles: ["other-profile"] } });
+    const job = await f.bench.submit({
+      ...submission,
+      expectedPolicyDigests: { [method.name]: contentDigest(updated) },
+    });
+    expect(f.store.getJob(job.id)?.spec.methods[0]?.policySnapshot).toEqual(updated);
+    expect(f.store.getJob(job.id)?.spec).not.toHaveProperty("expectedPolicyDigests");
+    await expect.poll(() => f.store.trials(job.id).every((t) => t.state === "solving")).toBe(true);
+  },
+);
+
 it("keeps checkpoint scope warnings advisory and exposes them in both CLI output modes", async () => {
   const f = fixture();
   const original = f.bench.policies.get("synthetic");

@@ -192,7 +192,7 @@ def main(argv):
         kind = environment.get("kind")
         if kind is None and expected["sample"]["taskId"].partition(":")[0] in HORIZONS:
             kind = "libero"
-        if kind in ("libero-plus", "libero-mem"):
+        if kind in ("libero-plus", "libero-mem", "libero-pro"):
             kind = "libero"
         if result["valid"]:
             # The review index is optional: a kind without one, or a failure to build it, leaves the verdict alone.

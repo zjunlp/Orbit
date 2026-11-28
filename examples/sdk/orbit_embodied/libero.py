@@ -18,6 +18,7 @@ VIDEO_FPS = 10
 class LiberoBenchmark:
     action_size = 7
     settle_steps = 10
+    video_camera = "front_rgb"
 
     def __init__(self, suite, task_name, *, settle_steps=10, horizon=None):
         from libero.libero import benchmark
@@ -38,10 +39,12 @@ class LiberoBenchmark:
 
     def start_video(self, directory):
         import imageio
-        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=VIDEO_FPS)
+        path = "video.mp4"
+        self.video = imageio.get_writer(str(Path(directory) / path), fps=VIDEO_FPS)
+        return {"path": path, "camera": self.video_camera, "fps": VIDEO_FPS}
 
     def record_frame(self, observation):
-        self.video.append_data(np.ascontiguousarray(observation["front_rgb"][::-1, ::-1]))
+        self.video.append_data(np.ascontiguousarray(observation[self.video_camera][::-1, ::-1]))
 
     def finish_video(self):
         if self.video is not None:

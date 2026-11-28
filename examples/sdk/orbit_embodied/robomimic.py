@@ -43,7 +43,7 @@ class RoboMimicBenchmark(GymBenchmark):
 
     def start_video(self, directory):
         if any(field["semantic"] == "rgb" for field in self.fields.values()):
-            super().start_video(directory)
+            return super().start_video(directory)
 
     def record_frame(self, observation):
         if self.video is not None:

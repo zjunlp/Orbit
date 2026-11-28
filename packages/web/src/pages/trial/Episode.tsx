@@ -275,13 +275,17 @@ export function EpisodeViewer({
   );
   const shownSeries = channel ? series.filter((item) => item.name === channel) : series;
   if (!sample) return <Empty title="No episode samples" />;
+  const instruction = trace.instructionChanges?.findLast((change) => change.time <= sample.time);
+  const heading = instruction
+    ? instruction.text || "No language instruction"
+    : trace.goal || "Saved episode";
   const chunks = trace.chunks.filter(
     (chunk) => chunk.start <= sample.time && chunk.end >= sample.time,
   );
   return (
     <div className="episode-viewer">
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-        <b>{trace.goal || "Saved episode"}</b>
+        <b>{heading}</b>
         {trace.producer && <span className="chip">{trace.producer}</span>}
         {trace.trust && <span className="chip">{trace.trust}</span>}
         {trace.completeness && (

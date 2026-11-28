@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type AdapterHandlers, handle } from "../src/bench/adapter.ts";
+import * as batches from "../src/bench/batches.ts";
 import { connectorIssues, PolicyRegistry } from "../src/bench/policies.ts";
 import { AdapterClient } from "../src/bench/protocol.ts";
 import { BenchmarkRegistry } from "../src/bench/registry.ts";
@@ -23,6 +24,7 @@ import {
   EpisodeSample,
   isAgentMethod,
   Method,
+  MetricSpec,
   PolicyDefinition,
   Run,
   RunSpec,
@@ -379,6 +381,26 @@ it("pairs common samples with equivalent effective budgets despite registration 
   const comparison = compareJobs([original, other]);
   expect(comparison.stats.score?.pairedTasks).toBe(1);
   expect(Object.values(comparison.stats.score?.columns ?? {}).at(1)?.diff?.mean).toBe(0);
+});
+
+it("reuses each job's batch partition across Compare metrics", () => {
+  const original = comparisonFixture();
+  original.job.spec.batchSize = 2;
+  original.job.metrics = [MetricSpec.parse({ name: "steps", label: "Steps" })];
+  for (const trial of original.trials) {
+    if (trial.outcome) trial.outcome.metrics = { steps: 1 };
+  }
+  const other = structuredClone(original);
+  other.job.id = "other-job";
+  const split = vi.spyOn(batches, "splitBatches");
+
+  const { stats } = compareJobs([original, other]);
+
+  expect(stats.score?.pairedTaskIds).toEqual(["synthetic:task"]);
+  expect(stats.steps?.pairedTaskIds).toEqual(["synthetic:task"]);
+  expect(split).toHaveBeenCalledTimes(2);
+  expect(split.mock.calls[0]?.[0]).toBe(original.job);
+  expect(split.mock.calls[1]?.[0]).toBe(other.job);
 });
 
 describe("planned sample and explicit binding contracts", () => {

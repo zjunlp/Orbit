@@ -46,6 +46,7 @@ import type {
   MethodList,
   Metrics,
   NotifyTarget,
+  PolicyList,
   PreparationCatalog,
   PreparationInput,
   PreparationStatus,
@@ -224,6 +225,7 @@ export const api = {
   benchRegister: (body: BenchmarkInput) =>
     req<Benchmark>("/benchmarks?createOnly=true", { method: "POST", body: JSON.stringify(body) }),
   benchmarks: () => req<{ benchmarks: Benchmark[] }>("/benchmarks").then((r) => r.benchmarks),
+  policies: (signal?: AbortSignal) => req<PolicyList>("/policies", { signal, cache: "no-store" }),
   benchInfo: (name: string) => req<BenchTaskList>(`/benchmarks/${enc(name)}/tasks`),
   benchTasks: (name: string) => api.benchInfo(name).then((r) => r.tasks),
   benchSplit: (name: string, body: BenchSplitRequest) =>

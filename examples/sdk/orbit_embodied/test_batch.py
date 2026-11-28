@@ -125,14 +125,41 @@ class BatchTests(unittest.TestCase):
     def test_result_is_sealed_before_optional_video_and_remains_unchanged_on_media_failure(self):
         test = self
         class OptionalMedia(SyntheticBenchmark):
+            def start_video(self, _directory):
+                return {"path": "video.mp4", "camera": "front_rgb", "fps": 20}
+
+            def record_frame(self, _observation):
+                pass
+
             def finish_video(self):
                 test.assertTrue(test.verify(0)["valid"])
                 raise RuntimeError("synthetic optional encoder failure")
         request = self.episodes[0]
-        result = self.execute(request, self.output / "episodes" / request["episodeId"], lambda: False,
-                              benchmark=OptionalMedia(success_at=2))
+        directory = self.output / "episodes" / request["episodeId"]
+        result = self.execute(request, directory, lambda: False, benchmark=OptionalMedia(success_at=2))
         self.assertEqual(result, self.verify(0))
-        self.assertTrue((self.output / "episodes" / request["episodeId"] / "media-status.json").exists())
+        self.assertTrue((directory / "media-status.json").exists())
+        self.assertFalse((directory / "recording.json").exists())
+
+    def test_completed_recording_is_published_separately_from_scoring_evidence(self):
+        class OptionalMedia(SyntheticBenchmark):
+            def start_video(self, directory):
+                self.directory = directory
+                return {"path": "video.mp4", "camera": "right_rgb", "fps": 20}
+
+            def record_frame(self, _observation):
+                pass
+
+            def finish_video(self):
+                (self.directory / "video.mp4").write_bytes(b"synthetic finalized video")
+
+        request = self.episodes[0]
+        directory = self.output / "episodes" / request["episodeId"]
+        result = self.execute(request, directory, lambda: False, benchmark=OptionalMedia(success_at=2))
+        self.assertEqual(json.loads((directory / "recording.json").read_text()),
+                         {"version": 1, "path": "video.mp4", "camera": "right_rgb", "fps": 20, "frames": 2})
+        (directory / "recording.json").unlink()
+        self.assertEqual(result, self.verify(0))
 
     def test_evidence_finalizer_failure_is_invalid_and_preserves_an_earlier_failure(self):
         class BrokenFinalizer(SyntheticBenchmark):

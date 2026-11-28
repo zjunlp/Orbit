@@ -33,7 +33,8 @@ For a local CUDA 12.4 toolkit, add `--cuda-toolkit "$CUDA_124_TOOLKIT"`. The too
 must contain `bin`, `include`, and `lib64`. A local wheel cache for Torch 2.4.1+cu124 can be
 passed with `--torch-wheels "$ROBOTWIN_TORCH_WHEELS"`. To reuse the installed dependencies in
 an existing compatible simulator image, pass it with `--base-image` along with the pinned
-RoboTwin source and the output tag.
+RoboTwin source and the output tag. The base image must already provide `libEGL.so.1`.
+The build checks that it can load this library before tagging the output image.
 
 Asset preparation verifies the published archive hashes and extracts Aloha-AgileX and the complete
 object tree. Randomized adds the native unseen backgrounds for evaluation, so Clean installations

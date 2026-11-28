@@ -54,8 +54,8 @@ export const isReplay = (f: Pick<ReviewFile, "kind" | "fallback" | "path">) =>
 /**
  * How the declared files become tabs. `main` are the views a trial is read through (replays, then
  * test reports), `documents` are reports and videos with a tab of their own, and `rest` is every
- * other file: grouped under one Evidence tab, or a tab of its own when it is the only one. Next to
- * a replay, documents and videos are renditions of it and belong to the rest.
+ * other file: grouped under one Evidence tab, or a tab of its own when it is the only one.
+ * Episode replays may have no camera data, so their standalone videos keep their own tabs.
  */
 export function reviewTabs(files: readonly Pick<ReviewFile, "kind" | "fallback" | "path">[]): {
   main: number[];
@@ -64,10 +64,12 @@ export function reviewTabs(files: readonly Pick<ReviewFile, "kind" | "fallback" 
 } {
   const kinds = files.map((f) => resolveKind(f).kind);
   const replay = kinds.some((k) => REPLAY.includes(k));
+  const episode = kinds.includes("episode");
   const rank = (k: Kind) => {
     if (REPLAY.includes(k)) return 0;
     if (k === "tests") return 1;
-    return !replay && (k === "markdown" || k === "video") ? 2 : 3;
+    if ((k === "markdown" && !replay) || (k === "video" && (!replay || episode))) return 2;
+    return 3;
   };
   const of = (r: number) => kinds.flatMap((k, i) => (rank(k) === r ? [i] : []));
   return { main: [...of(0), ...of(1)], documents: of(2), rest: of(3) };

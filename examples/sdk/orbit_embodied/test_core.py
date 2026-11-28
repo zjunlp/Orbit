@@ -9,6 +9,7 @@ import unittest
 import numpy as np
 
 from orbit_embodied import EpisodeFailure, StepResult, digest, resolve_binding, run_episode, verify_episode
+from orbit_embodied.episode_trajectory import write_trajectory
 from orbit_embodied.evidence import seal, verify_manipulation_stopping, write_json
 from orbit_embodied.driver import SampleRejected
 from orbit_embodied.libero_mem import verify_mem_episode
@@ -88,6 +89,89 @@ class CoreTests(unittest.TestCase):
 
     def verify(self):
         return verify_episode(self.output, self.sample["sampleId"], "synthetic-trial.attempt")
+
+    def test_run_preserves_the_bound_language_in_episode_replay(self):
+        source = "annotation.human.task_description"
+        first = "Open the left drawer."
+        second = "Put the spoon in the drawer."
+        language = {"semantic": "language_instruction", "dtype": "string", "shape": []}
+        benchmark_profile = {**self.benchmark_profile,
+                             "observations": {**self.benchmark_profile["observations"], source: language}}
+        policy_profile = {**self.policy_profile,
+                          "observations": {**self.policy_profile["observations"], "prompt": language}}
+        self.binding = resolve_binding(benchmark_profile, policy_profile, {"state": "state", "prompt": source})
+
+        class DrawerBenchmark(SyntheticBenchmark):
+            def reset(self, sample):
+                return {**super().reset(sample), source: first}
+
+            def state(self, observation):
+                state = super().state(observation)
+                return {**state, "instruction": second} if self.count == 2 else state
+
+            def step(self, action):
+                result = super().step(action)
+                result.observation[source] = second if self.count == 1 else "Close the drawer."
+                return result
+
+        result = self.run_sample(DrawerBenchmark(success_at=3), SyntheticPolicy())
+        self.assertTrue(result["valid"])
+        self.assertEqual(self.verify(), result)
+        output = self.output / "orbit-trajectory.json"
+        write_trajectory(self.output, output, result, {"sample": self.sample, "binding": self.binding,
+                                                       "reference": {"environment": {"controlHz": 5}}},
+                         kind="synthetic")
+        trace = json.loads(output.read_text())
+        self.assertEqual(trace["goal"], first)
+        self.assertEqual(trace["instructionChanges"], [{"time": 0, "text": first}, {"time": 0.2, "text": second}])
+
+    def test_driver_records_the_stop_cause_independently_of_success(self):
+        reference = {"environment": {"controlHz": 5},
+                     "parameters": {"successRule": "any", "replanSteps": SyntheticPolicy.replan_steps}}
+
+        class BoundaryBenchmark(SyntheticBenchmark):
+            def __init__(self, end, truncated, success_at, native_flag):
+                super().__init__(success_at=success_at)
+                self.end, self.truncated = end, truncated
+                self.native_flag = native_flag
+
+            def state(self, observation):
+                state = super().state(observation)
+                if self.native_flag is not None:
+                    state["truncated"] = self.native_flag
+                return state
+
+            def step(self, action):
+                control = super().step(action)
+                control.terminated = self.count == self.end and self.truncated is not None
+                control.truncated = self.truncated if control.terminated else None
+                return control
+
+            def result(self):
+                return {"success": self.success_at is not None}
+
+        cases = (("native-stop", 7, False, None, None, False),
+                 ("cap-after-success", 7, True, 2, None, True),
+                 ("driver-cap", 7, None, None, None, True),
+                 ("driver-cap-with-native-flag", 7, None, None, False, True),
+                 ("early-native-cap", 3, True, None, None, True))
+        for name, end, truncated, success_at, native_flag, expected in cases:
+            with self.subTest(name=name):
+                self.output = Path(self.temporary.name) / name
+                result = self.run_sample(BoundaryBenchmark(end, truncated, success_at, native_flag),
+                                         SyntheticPolicy(), {"reference": reference})
+                self.assertTrue(result["valid"])
+                self.assertEqual(result["success"], success_at is not None)
+                self.assertEqual(self.verify(), result)
+                rows = [json.loads(line) for line in (self.output / "actions.jsonl").read_text().splitlines()]
+                self.assertIs(rows[-1]["state"]["truncated"], expected if native_flag is None else native_flag)
+                self.assertIs(rows[-2]["state"].get("truncated"), native_flag)
+                output = self.output / "orbit-trajectory.json"
+                write_trajectory(self.output, output, result, {"sample": self.sample, "binding": self.binding,
+                                                               "reference": reference}, kind="synthetic")
+                last = json.loads(output.read_text())["samples"][-1]
+                self.assertIs(last["terminated"], not expected)
+                self.assertIs(last["truncated"], expected)
 
     def test_libero_mem_partial_progress_is_scored_without_terminating(self):
         first = ["and", ["in", "cream_cheese_1", "basket_1_contain_region"]]

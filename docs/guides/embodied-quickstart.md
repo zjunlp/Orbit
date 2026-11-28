@@ -24,6 +24,9 @@ orbit bench run "$BENCHMARK" --method "model=policy,policyRef=$POLICY" \
   --sample-plan "$SAMPLE_PLAN"
 ```
 
+也可以在 Web 的 **Benchmarks** 页面点 **Evaluate**，上传样本计划并选择已登记的 Policy。已有原生作业的 **Copy and create** 会带入原作业的样本计划、批次大小和模型选择，提交时按当前登记校验。
+如果复制的是 Policy 校准，确认页还会显示总预算和自动重评设置。总预算从新作业提交时开始计时。
+
 一个样本对应一个 Trial。Solve 执行仿真并保存证据，Verify 在独立 CPU Run 中校验证据并计分。
 先看 Trial 是否有效，再看任务得分。模型在步数上限内未完成任务可以是有效的零分；
 无法初始化或证据缺失则会有对应的问题状态。

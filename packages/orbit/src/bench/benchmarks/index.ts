@@ -185,6 +185,35 @@ const collectionSuites: Record<string, string> = {
   online_mind2web: "online-mind2web",
 };
 
+function nativeReferenceFamily(entry: CatalogEntry): string | undefined {
+  const { reference, profileDigest } = entry.benchmark.config;
+  const capabilities = entry.capabilities;
+  const embodied = capabilities?.embodied;
+  if (
+    !embodied ||
+    !reference ||
+    !profileDigest ||
+    capabilities.conditions?.["Profile digest"] !== profileDigest
+  )
+    return;
+  try {
+    const frozen = JSON.parse(reference) as {
+      id?: string;
+      environment?: { kind?: string };
+      benchmarkProfile?: { id?: string };
+    } | null;
+    if (
+      frozen?.id !== embodied.profile ||
+      frozen?.benchmarkProfile?.id !== embodied.semanticProfile.id
+    )
+      return;
+    const kind = frozen.environment?.kind;
+    if (kind === "robotwin" || kind === "robocasa365") return kind;
+  } catch {
+    // The local registration can still be displayed without a product family.
+  }
+}
+
 function registrationFamilies(entry: CatalogEntry): string[] {
   if (entry.identitySource !== "derived") {
     if (entry.identity.id === "cua-lite")
@@ -196,6 +225,8 @@ function registrationFamilies(entry: CatalogEntry): string[] {
     return knownIds.has(entry.identity.id) ? [entry.identity.id] : [];
   }
   if (entry.benchmark.adapter === "asi") return ["asi-bench"];
+  const referenceFamily = nativeReferenceFamily(entry);
+  if (referenceFamily) return [referenceFamily];
   const profile = entry.capabilities?.embodied?.semanticProfile?.id;
   return profile && Object.hasOwn(nativeProfiles, profile)
     ? [nativeProfiles[profile] as string]

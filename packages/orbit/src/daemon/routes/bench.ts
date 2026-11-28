@@ -1,7 +1,9 @@
 import type { Hono } from "hono";
+import { executionPolicySnapshot } from "../../bench/policies.ts";
+import { contentDigest } from "../../bench/samples.ts";
 import { scaffoldBenchmark } from "../../bench/scaffold.ts";
 import { BenchInitRequest } from "../../contracts/bench-init.ts";
-import type { BenchReport } from "../../contracts/index.ts";
+import type { BenchReport, PolicyList } from "../../contracts/index.ts";
 import { BenchLabels, type Benchmark, PolicyDefinition } from "../../contracts/index.ts";
 import { NotFoundError, UserError } from "../../runs/service.ts";
 import type { AppDeps } from "../app.ts";
@@ -12,7 +14,13 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
   api.post("/bench/init", async (c) =>
     c.json(await scaffoldBenchmark(deps.paths, BenchInitRequest.parse(await c.req.json())), 201),
   );
-  api.get("/policies", (c) => c.json({ policies: bench.policies.list() }));
+  api.get("/policies", (c) => {
+    const policies = bench.policies.list();
+    const policyDigests = Object.fromEntries(
+      policies.map((policy) => [policy.name, contentDigest(executionPolicySnapshot(policy))]),
+    );
+    return c.json<PolicyList>({ policies, policyDigests });
+  });
   api.post("/policies", async (c) =>
     c.json(bench.policies.put(PolicyDefinition.parse(await c.req.json())), 201),
   );
@@ -48,7 +56,7 @@ export function registerBenchRoutes(api: Hono, deps: AppDeps): void {
     return c.json({ ok: true });
   });
   api.get("/benchmarks/:name/tasks", async (c) =>
-    c.json(await bench.infoOf(bench.benchmark(c.req.param("name")))),
+    c.json(await bench.taskList(c.req.param("name"))),
   );
   api.post("/benchmarks/:name/split", async (c) =>
     c.json(await bench.split(c.req.param("name"), await c.req.json())),

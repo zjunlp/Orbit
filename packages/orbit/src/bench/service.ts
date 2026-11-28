@@ -44,6 +44,7 @@ import {
   BenchSplitRequest,
   type BenchSplitResult,
   type BenchTask,
+  type BenchTaskList,
   type BenchUsage,
   benchCoverage,
   CalibrationRequest,
@@ -90,7 +91,7 @@ import {
   methodLines,
 } from "./hub.ts";
 import { BenchmarkPreparation } from "./preparation.ts";
-import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
+import { benchmarkReviewDigest, bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
 import { transferMatrix } from "./transfer.ts";
 
@@ -102,11 +103,11 @@ import { CalibrationLifecycle } from "./calibration.ts";
 import { checkGateBundle } from "./gate-bundle.ts";
 import { planGate } from "./gate-plan.ts";
 import { evaluateGate } from "./gates.ts";
-import { connectorIssues, PolicyRegistry } from "./policies.ts";
+import { connectorIssues, executionPolicySnapshot, PolicyRegistry } from "./policies.ts";
 import { AdapterClient } from "./protocol.ts";
 import type { BenchmarkRegistry } from "./registry.ts";
 import { loadResources, resolveResources, usageRows } from "./resources.ts";
-import { resolveBinding } from "./samples.ts";
+import { contentDigest, resolveBinding } from "./samples.ts";
 import {
   checkPlanAgainstBenchmark,
   checkTasksExist,
@@ -300,6 +301,26 @@ export class BenchService {
     return (await this.infoOf(this.benchmark(name))).tasks;
   }
 
+  async taskList(name: string): Promise<BenchTaskList> {
+    const registration = this.benchmark(name);
+    const info = await this.infoOf(registration);
+    const listing = { ...info, registration };
+    const ids = info.tasks.map((task) => task.id);
+    try {
+      const overrides = registration.resources
+        ? resolveResources(loadResources(registration.resources), ids, ids)
+        : null;
+      return {
+        ...listing,
+        ...(overrides ? { resourceOverrides: overrides } : {}),
+        benchmarkDigest: benchmarkReviewDigest(registration, overrides),
+      };
+    } catch (e) {
+      if (!(e instanceof UserError)) throw e;
+      return { ...listing, resourceError: e.message };
+    }
+  }
+
   async split(name: string, input: unknown): Promise<BenchSplitResult> {
     const request = BenchSplitRequest.parse(input);
     const b = this.benchmark(name);
@@ -315,9 +336,24 @@ export class BenchService {
     if (!parsed.success) throw new UserError(parsed.error.issues.map((i) => i.message).join("; "));
     const folder = Folder.safeParse(opts.folder ?? "");
     if (!folder.success) throw new UserError(folder.error.issues[0]?.message ?? "invalid folder");
-    const { tasksFile, taskSet: expectedTaskSet, expectedRevisions, ...spec } = parsed.data;
+    const {
+      tasksFile,
+      taskSet: expectedTaskSet,
+      expectedRevisions,
+      expectedPolicyDigests,
+      expectedBenchmarkDigest,
+      ...spec
+    } = parsed.data;
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
+    const all = info.tasks;
+    const taskIds = all.map((task) => task.id);
+    const resourceFile = b.resources ? loadResources(b.resources) : null;
+    const overrides = resourceFile ? resolveResources(resourceFile, taskIds, taskIds) : null;
+    if (expectedBenchmarkDigest && benchmarkReviewDigest(b, overrides) !== expectedBenchmarkDigest)
+      throw new UserError(
+        `${b.name}: the environment changed since review. Refresh the environment and review it again.`,
+      );
     const batch = info.capabilities?.embodied?.batch;
     if (spec.batchSize && (!batch || spec.batchSize > batch.maxEpisodes)) {
       if (spec.calibration?.mode === "policy") {
@@ -331,13 +367,13 @@ export class BenchService {
       }
       throw new UserError("batchSize exceeds the benchmark's declared fixed-batch support");
     }
-    const all = info.tasks;
     const source = await gitSource(b.path);
     const file = tasksFile
-      ? resolveTaskFile(tasksFile, spec.tasks, all, taskBenchmark(b, info, source))
+      ? resolveTaskFile(tasksFile, spec.tasks, all, taskBenchmark(b, info, source, resourceFile))
       : undefined;
     if (file) spec.tasks = file.tasks;
     const names = new Set<string>();
+    const policyDigests = new Map(Object.entries(expectedPolicyDigests ?? {}));
     const resolvedBindings: Record<string, ResolvedBinding> = {};
     const policyWarnings: string[] = [];
     const plannedTasks = new Set(spec.samplePlan?.items.map((sample) => sample.taskId));
@@ -350,15 +386,24 @@ export class BenchService {
       if (m.agent === "policy") {
         if (m.effort) throw new UserError(`${m.name}: effort is a CLI Agent option`);
         const policy = this.policies.get(m.policyRef ?? "");
-        if (!policy) throw new UserError(`${m.name}: unknown policy ${m.policyRef}`);
+        const expectedDigest = policyDigests.get(m.name);
+        if (!policy)
+          throw new UserError(
+            `${m.name}: unknown policy ${m.policyRef}${expectedDigest ? ". Refresh policies and review again." : ""}`,
+          );
+        const snapshot = structuredClone(executionPolicySnapshot(policy));
+        if (expectedDigest && contentDigest(snapshot) !== expectedDigest)
+          throw new UserError(
+            `${m.name}: registered policy ${policy.name} changed since review. Refresh policies and review again.`,
+          );
+        policyDigests.delete(m.name);
         const issues = connectorIssues(policy);
         if (issues.length) throw new UserError(`${m.name}: ${issues.join("; ")}`);
         if (spec.calibration?.mode === "policy" && policy.kind !== "model")
           throw new UserError(
             "policy integration checks require a real model registration, not a calibration fixture",
           );
-        const { recommendedScope, ...snapshot } = policy;
-        m.policySnapshot = structuredClone(snapshot);
+        m.policySnapshot = snapshot;
         const endpoint = info.capabilities?.embodied;
         if (!endpoint) throw new UserError("the benchmark has no independent policy contract");
         // Legacy OpenPI registrations use the native runner's five-step default.
@@ -376,6 +421,7 @@ export class BenchService {
         } catch (e) {
           throw new UserError(`${m.name}: ${(e as Error).message}`);
         }
+        const { recommendedScope } = policy;
         if (recommendedScope) {
           if (!recommendedScope.profiles.includes(endpoint.profile))
             policyWarnings.push(
@@ -399,6 +445,8 @@ export class BenchService {
         }
       }
     }
+    for (const name of policyDigests.keys())
+      throw new UserError(`${name}: expected policy digest has no matching policy method`);
     resolveTaskSelection(spec, all);
     checkTasksExist(spec, all, b.name);
     if (new Set(spec.tasks).size !== spec.tasks.length) throw new UserError("duplicate task IDs");
@@ -433,18 +481,8 @@ export class BenchService {
         throw new UserError(
           `${name}: parent revision matches this method; change the method or remove the parent to rerun it`,
         );
-    let resources: BenchJob["resources"] = null;
-    if (b.resources) {
-      try {
-        resources = resolveResources(
-          loadResources(b.resources),
-          spec.tasks,
-          all.map((t) => t.id),
-        );
-      } catch (e) {
-        throw new UserError((e as Error).message);
-      }
-    }
+    const resources =
+      overrides && Object.fromEntries(spec.tasks.map((task) => [task, overrides[task] ?? {}]));
     const job: BenchJob = {
       id: newId(),
       spec,
