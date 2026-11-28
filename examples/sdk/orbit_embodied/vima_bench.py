@@ -83,9 +83,10 @@ class VIMABenchBenchmark(GymBenchmark):
         observation, reward, done, info = self.env.step(native)
         self.steps += 1
         self.success = bool(info["success"])
-        return StepResult(self.observation(observation), float(reward), bool(done or self.steps == self.horizon),
+        truncated = not done and self.steps == self.horizon
+        return StepResult(self.observation(observation), float(reward), bool(done) or truncated,
                           self.success, native_action=np.concatenate(list(native.values())).tolist(),
-                          native_done=bool(done))
+                          native_done=bool(done), truncated=truncated)
 
     def result(self):
         return {"success": self.success, "source": "VIMA-Bench task success", "task": self.task}

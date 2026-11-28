@@ -48,7 +48,7 @@ class TabletopBenchmark:
         raw, reward, terminated, truncated, info = self.env.step(np.asarray(action, dtype=np.float32))
         self.success = bool(info["success"])
         return StepResult(self.observation(raw), float(reward), bool(terminated or truncated or self.success),
-                          self.success)
+                          self.success, truncated=bool(truncated and not terminated))
 
     def result(self):
         return {"success": self.success, "source": "native Gymnasium info.success", "task": self.task}

@@ -110,6 +110,7 @@ def stopped_at_step_limit(last, horizon, kind, success):
     truncated = last["state"].get("truncated")
     if isinstance(truncated, bool):
         return truncated
+    # Older control records can omit the explicit stop cause.
     if kind == "colosseum-v2":
         # Verify accepts only complete horizons, which the native evaluator truncates.
         return reached_horizon

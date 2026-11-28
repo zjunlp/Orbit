@@ -136,8 +136,10 @@ class CLIPortBenchmark(GymBenchmark):
         self.steps += 1
         self.score += float(reward)
         self.success = self.score > SUCCESS_REWARD
-        return StepResult(self.observation(raw, info), float(reward), bool(done) or self.steps == self.horizon,
-                          self.success, native_action=flatten_action(command).tolist(), native_done=bool(done))
+        truncated = not done and self.steps == self.horizon
+        return StepResult(self.observation(raw, info), float(reward), bool(done) or truncated,
+                          self.success, native_action=flatten_action(command).tolist(), native_done=bool(done),
+                          truncated=truncated)
 
     def result(self):
         return {"source": "CLIPort test mean reward", "task": self.task, "seed": self.seed, "primitive": self.primitive,

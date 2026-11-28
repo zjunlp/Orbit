@@ -166,7 +166,7 @@ class ColosseumBenchmark(GymBenchmark):
         self.success_at_end = bool(info["success"])
         self.success = self.success or self.success_at_end
         return StepResult(self.observation(raw), float(reward), finished, self.success_at_end,
-                          native_action=command.tolist(), native_done=bool(done))
+                          native_action=command.tolist(), native_done=bool(done), truncated=bool(truncated))
 
     def result(self):
         return {"success": self.success, "successOnce": self.success, "successAtEnd": self.success_at_end,

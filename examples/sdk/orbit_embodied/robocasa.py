@@ -176,7 +176,8 @@ class RoboCasaXiaomiBenchmark(RoboCasaSeededBenchmark):
         self.success = bool(info.get("success", False))
         native_done = bool(done or truncated)
         return StepResult(self.observation(raw), float(reward), self.success or native_done,
-                          self.success, native_action=self.native_action, native_done=native_done)
+                          self.success, native_action=self.native_action, native_done=native_done,
+                          truncated=bool(truncated and not done))
 
     @staticmethod
     def state(observation):

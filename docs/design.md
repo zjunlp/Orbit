@@ -1023,6 +1023,8 @@ Unavailable originals and exact protocol gaps are recorded in [availability](gui
   Orbit 有效性分开，可选媒体失败不改变分数。证据原子封存，含 contract、binding、初态、逐步动作、请求的动作块、源码包摘要；
   CPU 验证使用 Solve 的动作块形状、最小长度和数值规则，逐步核对消费顺序及重规划边界。
   当策略绑定唯一的任务指令且适配器未记录时，driver 将观测中的指令补入初态与逐步状态，供回放读取。
+  适配器通过 `StepResult.truncated` 区分步数截断和原生或策略终止。driver 在最终控制记录写入 `state.truncated`，
+  缺少原生标记时也记录自身耗尽的步数。时间线从控制记录读取停止原因，任务成功与停止原因分别保存。
   固定步长评测按冻结间隔重规划。CALVIN 可在原生子任务完成时提前重规划，验证器复核完成信号和子任务进度。
   有命名转换（如 LIBERO 夹爪）时同时保存模型原始输出，验证器重算转换。批次 episode 的期限写入 contract，driver 在每次环境
   步之后检查，验证器拒绝越过期限的有效结果。有效失败须到达 horizon 或原生终止（Gym truncation）。证据 v2 起必须带求解实现包。

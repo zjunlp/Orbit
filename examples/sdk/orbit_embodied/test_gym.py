@@ -114,6 +114,7 @@ class GymTests(unittest.TestCase):
                      "parameters": {"controlHz": 20}}
         benchmark = RLBenchBenchmark(reference, "open_drawer")
         benchmark.previous_observation = {"instruction": "open the drawer"}
+        benchmark.steps = benchmark.horizon - 1
         benchmark.task_env = types.SimpleNamespace(step=Mock(side_effect=ConfigurationPathError))
         modules = {
             "pyrep.errors": types.SimpleNamespace(ConfigurationPathError=ConfigurationPathError, IKError=IKError),
@@ -122,6 +123,7 @@ class GymTests(unittest.TestCase):
         with patch.dict("sys.modules", modules):
             result = benchmark.step(np.zeros(9))
             self.assertTrue(result.terminated)
+            self.assertIs(result.truncated, False)
             self.assertFalse(result.success)
             self.assertEqual(result.reward, 0)
             self.assertEqual(benchmark.result()["planningError"], "ConfigurationPathError")

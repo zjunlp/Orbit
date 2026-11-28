@@ -93,9 +93,10 @@ class BiGym2Benchmark(GymBenchmark):
         self.episode = {"taskSucceeded": bool(self.env.episode_succeeded()), "fell": bool(self.env.episode_fell()),
                         "truncation": self.env.last_truncation_reason()}
         self.success = bool(is_success(self.env))
-        return StepResult(self.observation(timestep), float(timestep.reward or 0), bool(timestep.last()),
-                          self.success, simulation_time=self.steps / self.control_hz,
-                          native_action=native.tolist(), native_done=bool(timestep.last()))
+        done = bool(timestep.last())
+        return StepResult(self.observation(timestep), float(timestep.reward or 0), done, self.success,
+                          simulation_time=self.steps / self.control_hz, native_action=native.tolist(),
+                          native_done=done, truncated=done and self.env.episode_termination() == "timeout")
 
     def result(self):
         return {"source": "BiGym 2.0 protocol v1", "task": self.task, "seed": self.seed,

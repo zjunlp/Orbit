@@ -44,6 +44,8 @@ class StepResult:
     native_action: Optional[list] = None
     replan: bool = False
     native_done: Optional[bool] = None
+    # When terminated is true, distinguish a limit from a native or policy stop.
+    truncated: Optional[bool] = None
 
 
 def run_episode(benchmark, policy, sample, binding, directory, episode_id, identity,
@@ -190,12 +192,21 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                 check_control()
                 stage = "env_step"
                 native = benchmark.step(action)
+                state = recorded_state(native.observation)
+                if native.terminated:
+                    truncated = native.truncated
+                elif step + 1 == benchmark.horizon and "truncated" not in state:
+                    truncated = True
+                else:
+                    truncated = None
+                if truncated is not None:
+                    state = {**state, "truncated": truncated}
                 row = {"phase": "control", "step": step, "sourceObservation": step - chunk_index,
                        "chunk": call, "chunkIndex": chunk_index, "action": action.tolist(),
                        "reward": float(native.reward), "terminated": bool(native.terminated),
                        "nativeSuccess": bool(native.success), "wallSeconds": time.monotonic() - start,
                        "simulationSeconds": native.simulation_time,
-                       "state": recorded_state(native.observation)}
+                       "state": state}
                 if native.native_action is not None:
                     row["nativeAction"] = native.native_action
                 if native.native_done is not None:

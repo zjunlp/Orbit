@@ -138,7 +138,8 @@ class VLAArenaBenchmark(TabletopBenchmark):
         self.success = arena_success(self.config["safety"], task_success, reported, cost)
         self.evidence = {"stepCost": step_cost, "timeoutCost": timeout_cost, "costReported": reported,
                          "safetyCost": cost, "taskSuccess": task_success}
-        return StepResult(self.observation(raw), float(reward), done, self.success, native_done=done)
+        return StepResult(self.observation(raw), float(reward), done, self.success, native_done=done,
+                          truncated=False)
 
     def result(self):
         row = self.config["catalog"][self.task]

@@ -96,7 +96,7 @@ class GymBenchmark:
         self.steps += 1
         finished = self.steps % self.reference["parameters"]["replanSteps"] == 0 and self.success
         return StepResult(self.observation(raw), float(reward), bool(done or truncated or finished),
-                          success, native_action=self.native_action)
+                          success, native_action=self.native_action, truncated=bool(truncated and not done))
 
     def result(self):
         return {"success": self.success, "source": "native Gymnasium info.success", "task": self.task}

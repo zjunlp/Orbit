@@ -59,8 +59,9 @@ class CalvinBenchmark:
             self.completed += 1
             self.initial, self.subtask_steps = info, 0
         success = self.completed == len(self.sequence)
-        return StepResult(self.observation(raw), float(completed), success or self.subtask_steps == self.limit,
-                          success, replan=completed)
+        truncated = self.subtask_steps == self.limit
+        return StepResult(self.observation(raw), float(completed), success or truncated,
+                          success, replan=completed, truncated=truncated)
 
     def state(self, observation):
         return {"state": observation["state"].tolist(), "completedSubtasks": self.completed,
