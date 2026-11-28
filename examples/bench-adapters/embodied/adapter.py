@@ -265,6 +265,8 @@ def tasks(req):
                                             "Default simulator GPU count": str(resources["gpus"]),
                                             "Default simulator VRAM minimum": (config["simGpuMemGB"] + " GB"
                                                                                if "gpuMemGB" in resources else "No minimum"),
+                                            **({"Allowed simulator GPU models": ", ".join(resources["gpuModels"])}
+                                               if "gpuModels" in resources else {}),
                                             "Randomness": "fresh policy service per solve Run; fixed batches advance its declared stream in frozen order"}},
             "official": {"name": reference.get("scoreName", "OpenPI LIBERO success"), "version": source["commit"],
                          "errors": reference.get("scoreErrors", "fail"), "unit": reference.get("scoreUnit", "sample"),
@@ -339,6 +341,8 @@ def simulator_resources(config, kind):
     memory_gb = {"robocasa-v02": 20, "chores": 16, "hssd-ov": 16, "behavior1k": 32,
                  "robomme": 16}.get(kind, 8)
     resources = {"gpus": int(config.get("simGpus", "0")), "cpus": 4, "memGB": memory_gb}
+    if kind in ("robolab", "robodojo", "behavior1k"):
+        resources["gpuModels"] = ["RTX", "L4", "L40", "L40S", "A10", "A40"]
     if "simGpuMemGB" in config:
         memory = float(config["simGpuMemGB"])
         if resources["gpus"] < 1 or not math.isfinite(memory) or memory <= 0:
@@ -356,8 +360,6 @@ def solve_spec(trial, config, environment, destination):
             if not gpu or "," in gpu or resources["gpus"] != 1:
                 raise ValueError("gpuId must name a single GPU for the native simulator")
             resources["gpuIds"] = [gpu]
-    if environment.get("kind") in ("robolab", "robodojo", "behavior1k"):
-        resources["gpuModels"] = ["RTX", "L4", "L40", "L40S", "A10", "A40"]
     mounts = [{"source": str(destination), "target": "/orbit-embodied", "mode": "ro"}]
     libero_kind = environment.get("kind")
     libero_path = "/opt/" + libero_kind + ":" if libero_kind in ("libero-pro", "libero-mem") else ""

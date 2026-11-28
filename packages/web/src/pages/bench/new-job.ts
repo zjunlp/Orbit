@@ -11,6 +11,7 @@ import type {
   CompatibilityCell,
   JobCalibration,
   Method,
+  PolicyDefinition,
   ResourceOverride,
   SamplePlan,
   ServiceSpec,
@@ -396,19 +397,23 @@ export function registrationChanged(source: BenchJob, registered: Benchmark): bo
 
 export type ReviewValue = { label: string; value: string; previous?: string };
 
-/** The first differing baseline is the one the user most recently reviewed. */
+export function policyRegistrationChanged(current: PolicyDefinition, baseline: PolicyDefinition) {
+  return (
+    stableValue({ ...current, recommendedScope: null }) !==
+    stableValue({ ...baseline, recommendedScope: null })
+  );
+}
+
 export function reviewValues(
   current: Record<string, string>,
-  baselines: readonly Record<string, string>[],
+  baseline: Record<string, string> | undefined,
   missing: string,
 ): ReviewValue[] {
-  const labels = new Set([...Object.keys(current), ...baselines.flatMap(Object.keys)]);
+  const labels = new Set([...Object.keys(current), ...Object.keys(baseline ?? {})]);
   return [...labels].map((label) => {
     const value = current[label] ?? missing;
-    const previous = baselines
-      .map((baseline) => baseline[label] ?? missing)
-      .find((v) => v !== value);
-    return { label, value, previous };
+    const previous = baseline && (baseline[label] ?? missing);
+    return { label, value, previous: previous !== value ? previous : undefined };
   });
 }
 
@@ -428,13 +433,24 @@ function resourceValues(resources?: ResourceOverride): Record<string, string> {
   );
 }
 
-export function policyResourceValues(service: ServiceSpec): Record<string, string> {
+export function policyResourceValues(
+  service: Pick<
+    ServiceSpec,
+    "cpus" | "memGB" | "gpus" | "gpuMemGB" | "gpuModels" | "gpuFeatures" | "gpusOf"
+  >,
+): Record<string, string> {
   return {
     CPU: "No limit",
     Memory: "No limit",
     "GPU count": "0",
     "GPU memory": "No minimum",
     ...resourceValues(service),
+    ...(service.gpuModels?.length
+      ? { "GPU models": [...new Set(service.gpuModels)].sort().join(" / ") }
+      : {}),
+    ...(service.gpuFeatures?.length
+      ? { "GPU features": [...new Set(service.gpuFeatures)].sort().join(", ") }
+      : {}),
     ...(service.gpusOf
       ? {
           "GPU count":
@@ -453,11 +469,10 @@ export function taskResourceReview(
   const previous = baselines.map(({ tasks, resources }) => ({ tasks: new Set(tasks), resources }));
   return selected.flatMap((task) => {
     if (!known.has(task)) return [];
+    const baseline = previous.find(({ tasks }) => tasks.has(task));
     const values = reviewValues(
       resourceValues(current.resourceOverrides?.[task]),
-      previous.flatMap(({ tasks, resources }) =>
-        tasks.has(task) ? [resourceValues(resources?.[task])] : [],
-      ),
+      baseline ? resourceValues(baseline.resources?.[task]) : undefined,
       "no override",
     );
     return values.length ? [{ task, values }] : [];

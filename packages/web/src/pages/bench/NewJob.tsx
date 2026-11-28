@@ -19,7 +19,6 @@ import { navigate, useLocation } from "../../lib/router.ts";
 import { type Async, useAsync } from "../../lib/use.ts";
 import { CompatibilityRefresh, CompatibilityStatus } from "./CompatibilityStatus.tsx";
 import { jobLabel } from "./common.tsx";
-import { stableValue } from "./conditions.ts";
 import {
   BatchSizeError,
   buildMethods,
@@ -37,6 +36,7 @@ import {
   methodDraft,
   methodTypes,
   parseSamplePlan,
+  policyRegistrationChanged,
   policyResourceValues,
   profileAllowed,
   type ReviewValue,
@@ -219,8 +219,8 @@ function NewJobForm({
   const [reviewedPolicies, setReviewedPolicies] = useState<Map<string, ReviewedPolicy> | null>(
     null,
   );
-  const [previousPolicies, setPreviousPolicies] = useState<typeof reviewedPolicies>(null);
-  const [previousEnvironment, setPreviousEnvironment] = useState<BenchTaskList | null>(null);
+  const [policyBaselines, setPolicyBaselines] = useState(() => new Map<string, ReviewedPolicy>());
+  const [environmentBaseline, setEnvironmentBaseline] = useState<BenchTaskList | null>(null);
   const info = useAsync(async () => {
     if (!benchmark) return null;
     const value = await api.benchInfo(benchmark);
@@ -279,16 +279,16 @@ function NewJobForm({
   const taskResources =
     planned && current
       ? taskResourceReview(current, selected, [
-          ...(previousEnvironment
-            ? [
-                {
-                  tasks: previousEnvironment.tasks.map(({ id }) => id),
-                  resources: previousEnvironment.resourceOverrides,
-                },
-              ]
-            : []),
           ...(original?.benchmarkSnapshot
             ? [{ tasks: original.spec.tasks, resources: original.resources }]
+            : []),
+          ...(environmentBaseline
+            ? [
+                {
+                  tasks: environmentBaseline.tasks.map(({ id }) => id),
+                  resources: environmentBaseline.resourceOverrides,
+                },
+              ]
             : []),
         ])
       : [];
@@ -296,14 +296,11 @@ function NewJobForm({
     values.some(({ previous }) => previous !== undefined),
   );
   const conditions = capabilities?.conditions ?? {};
+  const originalConditions = planned ? original?.capabilities?.conditions : undefined;
+  const draftConditions = environmentBaseline?.capabilities?.conditions;
   const environmentRows = reviewValues(
     conditions,
-    [
-      ...(previousEnvironment?.capabilities ? [previousEnvironment.capabilities.conditions] : []),
-      ...(planned && original?.capabilities
-        ? [{ ...conditions, ...original.capabilities.conditions }]
-        : []),
-    ],
+    originalConditions ? { ...draftConditions, ...originalConditions } : draftConditions,
     "not recorded",
   );
   const sampleCount = samplePlan?.items.length ?? 0;
@@ -366,9 +363,9 @@ function NewJobForm({
     planRead.current++;
     setReadingPlan(false);
     setBenchmark(name);
-    setPreviousEnvironment(null);
+    setEnvironmentBaseline(null);
     setReviewedPolicies(null);
-    setPreviousPolicies(null);
+    setPolicyBaselines(new Map());
     setChosen(null);
     setSearch("");
     setError(null);
@@ -435,7 +432,17 @@ function NewJobForm({
       } else {
         const methods = buildMethods(drafts, capabilities, profiles, definitions, cells);
         const updated = planned ? reviewPolicies(methods) : null;
-        setPreviousPolicies(reviewedPolicies);
+        if (updated) {
+          setEnvironmentBaseline((baseline) => baseline ?? current);
+          setPolicyBaselines((baselines) => {
+            const firstReviews = new Map(baselines);
+            for (const policy of updated.values()) {
+              const name = policy.definition.name;
+              if (!firstReviews.has(name)) firstReviews.set(name, policy);
+            }
+            return firstReviews;
+          });
+        }
         setReviewedPolicies(updated);
       }
       setError(null);
@@ -1025,22 +1032,22 @@ function NewJobForm({
                 <div className="bench-review-methods">
                   {drafts.map((d) => {
                     const policy = reviewedPolicies?.get(d.name.trim());
-                    const refreshed =
-                      previousPolicies &&
-                      [...previousPolicies.values()].find(
-                        ({ definition }) => definition.name === d.policyRef,
-                      );
+                    const baseline = policyBaselines.get(d.policyRef);
                     const originalPolicy = original?.spec.methods.find(
                       (method) => method.policyRef === d.policyRef,
                     )?.policySnapshot;
+                    const priorPolicy = originalPolicy ?? baseline?.definition;
+                    const policyChanged =
+                      policy &&
+                      (originalPolicy
+                        ? policyRegistrationChanged(policy.definition, originalPolicy)
+                        : baseline && policy.digest !== baseline.digest);
                     const resources =
                       policy &&
                       reviewValues(
                         policyResourceValues(policy.definition.service),
-                        [refreshed?.definition, originalPolicy].flatMap((definition) =>
-                          definition ? [policyResourceValues(definition.service)] : [],
-                        ),
-                        "not recorded",
+                        priorPolicy ? policyResourceValues(priorPolicy.service) : undefined,
+                        "No restriction",
                       );
                     return (
                       <div key={d.id}>
@@ -1056,6 +1063,12 @@ function NewJobForm({
                           <div className="muted">
                             Registration digest{" "}
                             <code title={policy.digest}>{policy.digest.slice(0, 19)}</code>
+                          </div>
+                        )}
+                        {policyChanged && (
+                          <div className="muted">
+                            Policy registration changed. This evaluation will use the current
+                            registration.
                           </div>
                         )}
                         {resources && (
@@ -1127,7 +1140,6 @@ function NewJobForm({
                 disabled={submitting || info.loading}
                 onClick={() => {
                   setError(null);
-                  if (current && stage === 2) setPreviousEnvironment(current);
                   info.reload();
                 }}
               >
@@ -1299,7 +1311,7 @@ function PresetConditions({
     <div className="bench-preset">
       <p className="muted">Environment preset · read-only</p>
       <dl className="kv">
-        {(values ?? reviewValues(capabilities.conditions, [], "not recorded")).map((row) => (
+        {(values ?? reviewValues(capabilities.conditions, undefined, "not recorded")).map((row) => (
           <div key={row.label} style={{ display: "contents" }}>
             <dt>{row.label}</dt>
             <dd>{reviewValueText(row)}</dd>
@@ -1338,10 +1350,7 @@ function MethodEditor({
   const cli = isCliAgent(d.agent);
   const policy = policies?.find((p) => p.name === d.policyRef);
   const policyChanged =
-    policy &&
-    originalPolicy &&
-    stableValue({ ...policy, recommendedScope: null }) !==
-      stableValue({ ...originalPolicy, recommendedScope: null });
+    policy && originalPolicy && policyRegistrationChanged(policy, originalPolicy);
   return (
     <section className="card">
       <div className="card-h">

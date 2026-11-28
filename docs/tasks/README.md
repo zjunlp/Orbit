@@ -133,6 +133,7 @@ Current behavior is in [design](../design.md) and [status](../status.md). Older 
 
 ## Embodied: policies and native benchmarks
 
+- [20261128](20261128-native-evaluation-review-baseline.md) Stable review baselines for native evaluations
 - [20261127](20261127-native-recording-timelines.md) Basic native timelines from recorder metadata
 - [20261124](20261124-robotwin-current-source.md) Unify native RoboTwin on the current upstream revision
 - [20261124](20261124-libero-official-source.md) Prepare native LIBERO from its official repository

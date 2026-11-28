@@ -22,6 +22,7 @@ import {
   importMethods,
   methodDraft,
   parseSamplePlan,
+  policyResourceValues,
   profileAllowed,
   registrationChanged,
   reviewValues,
@@ -363,7 +364,7 @@ it("detects registration changes against saved conditions and treats missing his
   expect(registrationChanged({ ...source, benchmarkSnapshot: undefined }, registration)).toBeNull();
 });
 
-it("reviews only selected task overrides and prefers the previous review when present", () => {
+it("reviews only selected task overrides against the first applicable baseline", () => {
   const tasks = ["click", "type", "scroll"].map(
     (id): BenchTask => ({ id, title: id, supported: true, reason: null, tags: {} }),
   );
@@ -375,12 +376,15 @@ it("reviews only selected task overrides and prefers the previous review when pr
     tasks,
     resourceOverrides: { click: { memGB: 8, cpus: 12 }, type: { cpus: 16 }, scroll: { cpus: 16 } },
   };
-  const refreshed = { tasks: ["click"], resources: { click: { cpus: 8, memGB: 8 } } };
-  expect(taskResourceReview(current, ["click", "scroll"], [refreshed, original])).toEqual([
+  const firstReview = {
+    tasks: ["click", "scroll"],
+    resources: { click: { cpus: 8, memGB: 8 }, scroll: { cpus: 16 } },
+  };
+  expect(taskResourceReview(current, ["click", "scroll"], [original, firstReview])).toEqual([
     {
       task: "click",
       values: [
-        { label: "CPU", value: "12 cores", previous: "8 cores" },
+        { label: "CPU", value: "12 cores", previous: "4 cores" },
         { label: "Memory", value: "8 GB", previous: undefined },
       ],
     },
@@ -398,12 +402,25 @@ it("reviews only selected task overrides and prefers the previous review when pr
     value: "12 cores",
     previous: "no override",
   });
+  expect(
+    taskResourceReview(
+      { tasks, resourceOverrides: original.resources },
+      ["click"],
+      [original, firstReview],
+    )[0]?.values,
+  ).toContainEqual({ label: "CPU", value: "4 cores", previous: undefined });
 });
 
-it("falls back to the copied value when a refresh did not change the field", () => {
-  expect(
-    reviewValues({ CPU: "8 cores" }, [{ CPU: "8 cores" }, { CPU: "4 cores" }], "none"),
-  ).toEqual([{ label: "CPU", value: "8 cores", previous: "4 cores" }]);
+it("reviews additions and removals of model GPU restrictions", () => {
+  const baseline = policyResourceValues({ gpus: 1, gpuModels: ["H100", "A800"], gpuFeatures: [] });
+  const current = policyResourceValues({ gpus: 1, gpuFeatures: ["cuda"] });
+  expect(reviewValues(current, baseline, "No restriction")).toEqual(
+    expect.arrayContaining([
+      { label: "GPU count", value: "1", previous: undefined },
+      { label: "GPU models", value: "No restriction", previous: "A800 / H100" },
+      { label: "GPU features", value: "cuda", previous: "No restriction" },
+    ]),
+  );
 });
 
 describe("registered Agent methods", () => {
