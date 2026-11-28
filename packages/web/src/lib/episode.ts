@@ -40,6 +40,22 @@ export function parseEpisode(text: string): EpisodeTrajectory {
     !choice(value.completeness, ["complete", "environment-only", "truncated"])
   )
     throw new Error("Unsupported or incomplete episode index.");
+  if (value.instructionChanges !== undefined) {
+    if (!Array.isArray(value.instructionChanges) || value.instructionChanges.length > 100_000)
+      throw new Error("Invalid episode instructions.");
+    let previous = -1;
+    for (const change of value.instructionChanges) {
+      if (
+        !object(change) ||
+        !time(change.time) ||
+        change.time <= previous ||
+        typeof change.text !== "string" ||
+        change.text.length > 100_000
+      )
+        throw new Error("Invalid episode instruction or timestamp.");
+      previous = change.time;
+    }
+  }
   let previous = -1;
   for (const sample of value.samples) {
     if (

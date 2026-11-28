@@ -9,14 +9,15 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
 from orbit_embodied import run_episode, verify_episode
 from orbit_embodied.binding import digest, resolve_binding, seed_asset
+from orbit_embodied.episode_trajectory import write_trajectory
 from orbit_embodied.evidence import seal, write_json
-from orbit_embodied.robocasa import RoboCasaBenchmark, RoboCasaDiffusionBenchmark
+from orbit_embodied.robocasa import RoboCasaBenchmark, RoboCasaDiffusionBenchmark, RoboCasaXiaomiBenchmark
 
 HERE = Path(__file__).resolve().parents[2] / "bench-adapters/embodied"
 
@@ -36,6 +37,30 @@ def load_config():
 
 
 class RoboCasaRegistrationTests(unittest.TestCase):
+    def test_recording_descriptor_names_the_camera_used_for_each_recipe(self):
+        left, right = "video.robot0_agentview_left", "video.robot0_agentview_right"
+        reference = {"parameters": {"controlHz": 20},
+                     "environment": {"tasks": ["task"], "horizons": {"task": 4},
+                                     "controlRates": {"task": 5}},
+                     "benchmarkProfile": {"observations": {left: {"semantic": "rgb"},
+                                                           right: {"semantic": "rgb"}}}}
+        with tempfile.TemporaryDirectory() as temporary:
+            for recipe, camera, pixels in ((RoboCasaBenchmark, left, "left"),
+                                           (RoboCasaDiffusionBenchmark, right, "latest"),
+                                           (RoboCasaXiaomiBenchmark, right, "latest")):
+                with self.subTest(recipe=recipe):
+                    writer = Mock()
+                    open_video = Mock(return_value=writer)
+                    benchmark = recipe(reference, "task")
+                    with patch.dict(sys.modules, {"imageio": SimpleNamespace(get_writer=open_video)}):
+                        description = benchmark.start_video(temporary)
+                        benchmark.record_frame({left: "left", right: ["old", "latest"]})
+                        benchmark.finish_video()
+                    self.assertEqual(description, {"path": "video.mp4", "camera": camera, "fps": 5})
+                    open_video.assert_called_once_with(str(Path(temporary) / "video.mp4"), fps=5)
+                    writer.append_data.assert_called_once_with(pixels)
+                    writer.close.assert_called_once_with()
+
     def test_diffusion_history_and_chunk_stop_follow_native_runner(self):
         observations = {"state.position": {"dtype": "float32"}, "instruction": {"dtype": "string"}}
         reference = {"parameters": {"controlHz": 20, "replanSteps": 8},
@@ -96,7 +121,9 @@ class RoboCasaRegistrationTests(unittest.TestCase):
             def record_frame(self, _observation):
                 pass
 
-        for success_at, done_at, steps in ((1, None, 16), (None, None, 16), (7, None, 8), (None, 3, 3)):
+        cases = ((1, None, 16, True), (None, None, 16, True), (7, None, 8, False), (None, 3, 3, False),
+                 (15, None, 16, False), (None, 16, 16, False))
+        for success_at, done_at, steps, truncated in cases:
             with self.subTest(success_at=success_at, done_at=done_at), tempfile.TemporaryDirectory() as temporary:
                 benchmark = Fixture(reference, "task")
 
@@ -113,15 +140,25 @@ class RoboCasaRegistrationTests(unittest.TestCase):
                 path = directory / "actions.jsonl"
                 rows = [json.loads(line) for line in path.read_text().splitlines()]
                 self.assertEqual(result["steps"], steps)
+                self.assertIs(result["success"], success_at is not None)
                 self.assertEqual([row["nativeDone"] for row in rows], [i == done_at for i in range(1, steps + 1)])
                 self.assertEqual(verify_episode(directory, sample["sampleId"], episode_id, expected), result)
+                self.assertIs(json.loads((directory / "initial-state.json").read_text())["state"]["truncated"], False)
+                self.assertEqual([row["state"]["truncated"] for row in rows], [False] * (steps - 1) + [truncated])
+                timeline = directory / "orbit-trajectory.json"
+                write_trajectory(directory, timeline, result, expected, kind="robocasa")
+                last = json.loads(timeline.read_text())["samples"][-1]
+                self.assertIs(last["truncated"], truncated)
+                self.assertIs(last["terminated"], not truncated)
 
                 def save(controls, verdict):
                     path.write_text("".join(json.dumps(row) + "\n" for row in controls))
                     seal(directory, verdict)
 
                 if steps == 16:
-                    save([{**rows[0], "terminated": not result["success"]}], {**result, "steps": 1})
+                    first = rows[0]
+                    save([{**first, "terminated": not first["nativeSuccess"]}],
+                         {**result, "steps": 1, "success": first["nativeSuccess"]})
                     with self.assertRaisesRegex(ValueError, "stopping point"):
                         verify_episode(directory, sample["sampleId"], episode_id, expected)
                     save([{**rows[0], "reward": 1 - rows[0]["reward"]}, *rows[1:]], result)

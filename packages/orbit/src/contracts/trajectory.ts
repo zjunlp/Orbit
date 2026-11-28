@@ -24,12 +24,16 @@ export type GuiTrace = Omit<GuiTrajectory, "steps"> & {
   steps: (GuiTrajectory["steps"][number] & GuiStepContext)[];
 };
 
-/** Saved media and numeric samples, never executable actions or a live environment connection. */
+/** Saved media, instructions and numeric samples. */
 export const EpisodeTrajectory = z
   .object({
     version: z.literal(1),
     kind: z.literal("episode"),
     goal: z.string().max(100_000),
+    instructionChanges: z
+      .array(z.object({ time: Time, text: z.string().max(100_000) }))
+      .max(100_000)
+      .optional(),
     sessionRunId: z.string().optional(),
     mediaPhase: z.literal("solve").optional(),
     frameBeforeAction: z.boolean().optional(),
@@ -104,6 +108,8 @@ export const EpisodeTrajectory = z
       times.every((time, i) => i === 0 || time > (times[i - 1] ?? -1));
     if (!ordered(trace.samples.map((sample) => sample.time)))
       ctx.addIssue({ code: "custom", message: "sample times must strictly increase" });
+    if (trace.instructionChanges && !ordered(trace.instructionChanges.map((change) => change.time)))
+      ctx.addIssue({ code: "custom", message: "instruction times must strictly increase" });
     for (const camera of trace.cameras)
       if (camera.frames && !ordered(camera.frames.map((frame) => frame.time)))
         ctx.addIssue({ code: "custom", message: "camera frame times must strictly increase" });

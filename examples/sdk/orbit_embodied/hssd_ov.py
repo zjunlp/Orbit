@@ -209,7 +209,8 @@ class HssdOvBenchmark:
                 "agent_position": pose.position.tolist(), "rotation": rotation[[1, 2, 3, 0]].tolist()}
 
     def state(self, observation):
-        return {key: observation[key] for key in ("instruction", "agent_position", "rotation")}
+        state = {key: observation[key] for key in ("instruction", "agent_position", "rotation")}
+        return {**state, "truncated": not self.stopped and self.steps == HORIZON}
 
     def step(self, action):
         from .driver import StepResult

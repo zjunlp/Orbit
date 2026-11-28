@@ -13,6 +13,7 @@ from .driver import StepResult
 class GymBenchmark:
     action_size = 7
     settle_steps = 0
+    video_camera = None
 
     def __init__(self, reference, task, *, sample=None):
         self.reference, self.task = reference, task
@@ -102,11 +103,15 @@ class GymBenchmark:
 
     def start_video(self, directory):
         import imageio
-        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=self.control_hz)
+        self.video_camera = self.video_camera or next(
+            key for key, field in self.reference["benchmarkProfile"]["observations"].items()
+            if field["semantic"] == "rgb")
+        path = "video.mp4"
+        self.video = imageio.get_writer(str(Path(directory) / path), fps=self.control_hz)
+        return {"path": path, "camera": self.video_camera, "fps": self.control_hz}
 
     def record_frame(self, observation):
-        name = next(k for k, v in self.reference["benchmarkProfile"]["observations"].items() if v["semantic"] == "rgb")
-        self.video.append_data(observation[name])
+        self.video.append_data(observation[self.video_camera])
 
     def finish_video(self):
         if self.video is not None:

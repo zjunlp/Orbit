@@ -149,7 +149,7 @@ class VLAArenaBenchmark(TabletopBenchmark):
                 "instruction": self.instruction}
 
     def record_frame(self, observation):
-        self.video.append_data(np.ascontiguousarray(observation["front_rgb"][::-1, ::-1]))
+        self.video.append_data(np.ascontiguousarray(observation[self.video_camera][::-1, ::-1]))
 
 
 def verify_arena_evidence(reference, sample, controls, result, reset_actions=None):

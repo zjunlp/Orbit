@@ -13,6 +13,7 @@ import numpy as np
 from orbit_embodied import digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.assets import tree_digest
 from orbit_embodied.binding import check_distinct_resets, file_digest, reset_seed, seed_asset
+from orbit_embodied.episode_trajectory import write_trajectory
 from orbit_embodied.evidence import seal, write_json
 from orbit_embodied.gym import GymBenchmark
 from orbit_embodied.rlbench import RLBenchBenchmark, demo_directory
@@ -169,7 +170,8 @@ class GymTests(unittest.TestCase):
                 return observation
 
             def native_step(self, _action):
-                return observation, 0., False, False, {"success": self.steps + 1 == success_step}
+                step = self.steps + 1
+                return observation, 0., step == done_step, False, {"success": step == success_step}
 
             def start_video(self, _directory):
                 pass
@@ -180,8 +182,10 @@ class GymTests(unittest.TestCase):
         policy = Policy()
         policy.replan_steps = 2
         native = types.SimpleNamespace(convert_action=lambda action: action)
-        for success_step, expected in ((1, False), (2, True), (5, True)):
-            with self.subTest(success_step=success_step), tempfile.TemporaryDirectory() as temporary, patch.dict(
+        for success_step, done_step, expected in ((1, None, False), (2, None, True), (5, None, True),
+                                                  (2, 5, True), (1, 5, False)):
+            with self.subTest(success_step=success_step, done_step=done_step), \
+                    tempfile.TemporaryDirectory() as temporary, patch.dict(
                 "sys.modules", {"robocasa.utils.env_utils": native},
             ):
                 directory = Path(temporary) / "episode"
@@ -191,6 +195,12 @@ class GymTests(unittest.TestCase):
                 self.assertEqual(result["steps"], 5)
                 self.assertEqual(result["success"], expected)
                 self.assertEqual(verify_episode(directory, sample["sampleId"], result["episodeId"])["success"], expected)
+                output = directory / "orbit-trajectory.json"
+                write_trajectory(directory, output, result,
+                                 {"sample": sample, "reference": reference, "binding": binding}, kind="robocasa")
+                last = json.loads(output.read_text())["samples"][-1]
+                self.assertIs(last["truncated"], done_step is None)
+                self.assertIs(last["terminated"], done_step is not None)
 
     def test_robocasa_can_write_transient_xml_beside_read_only_objects(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -46,6 +46,7 @@ def unpack_prompt_context(value):
 
 
 class VIMABenchBenchmark(GymBenchmark):
+    video_camera = "front_rgb"
     action_size = 12
 
     def reset(self, sample):
@@ -72,7 +73,7 @@ class VIMABenchBenchmark(GymBenchmark):
                 "prompt_context": self.context}
 
     def record_frame(self, observation):
-        self.video.append_data(np.moveaxis(observation["front_rgb"], 0, -1))
+        self.video.append_data(np.moveaxis(observation[self.video_camera], 0, -1))
 
     def state(self, observation):
         return {"promptDigest": self.context_digest, "endEffector": int(observation["ee"][0])}

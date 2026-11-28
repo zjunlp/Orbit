@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import sys
 import time
 from typing import Optional
 
@@ -53,6 +54,22 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     first_replan = reference.get("parameters", {}).get("firstReplanSteps", policy.replan_steps)
     if type(first_replan) is not int or not 0 < first_replan <= policy.replan_steps:
         raise ValueError("initial replan interval must fit the policy chunk")
+    policy_fields = binding["policyProfile"]["observations"]
+    instruction_sources = {
+        source for target, source in binding["observationMap"].items()
+        if policy_fields[target]["dtype"] == "string" and policy_fields[target]["semantic"] in (
+            "language_instruction", "language-instruction", "task-instruction", "task-language")
+    }
+    instruction_source = next(iter(instruction_sources)) if len(instruction_sources) == 1 else None
+
+    def recorded_state(observation):
+        state = benchmark.state(observation)
+        if instruction_source is not None and not isinstance(state.get("instruction"), str):
+            instruction = observation.get(instruction_source)
+            if isinstance(instruction, str):
+                return {**state, "instruction": instruction}
+        return state
+
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
     write_json(directory / "resolved-binding.json", binding)
@@ -74,6 +91,9 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
               "success": False, "valid": False, "steps": 0, "issues": []}
     stage = "reset_failed"
     recording = False
+    video = None
+    video_frames = 0
+    closed_video = False
     completed = False
     sealed = False
 
@@ -90,7 +110,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
             result["issues"].append(message)
     if hasattr(benchmark, "start_video"):
         try:
-            benchmark.start_video(directory)
+            video = benchmark.start_video(directory)
             recording = True
         except Exception as exc:
             result["issues"].append("optional video: " + str(exc))
@@ -102,7 +122,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                 check_control()
             observation = benchmark.reset(sample)
             write_json(directory / "initial-state.json", {"sampleRef": sample_ref,
-                       "state": benchmark.state(observation),
+                       "state": recorded_state(observation),
                        "initialStateId": sample.get("initialStateId"),
                        "initialStateDigest": sample.get("initialStateDigest")})
             for row in getattr(benchmark, "reset_actions", []):
@@ -115,13 +135,14 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                 if recording:
                     try:
                         benchmark.record_frame(observation)
+                        video_frames += 1
                     except Exception as exc:
                         result["issues"].append("optional video: " + str(exc))
                         recording = False
                 if chunk_index >= len(chunk):
                     stage = "env_step"
                     inputs = {target: observation[source] for target, source in binding["observationMap"].items()}
-                    validate_observation(inputs, binding["policyProfile"]["observations"])
+                    validate_observation(inputs, policy_fields)
                     stage = "policy_act"
                     call += 1
                     chunks = directory / "chunks"
@@ -174,7 +195,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
                        "reward": float(native.reward), "terminated": bool(native.terminated),
                        "nativeSuccess": bool(native.success), "wallSeconds": time.monotonic() - start,
                        "simulationSeconds": native.simulation_time,
-                       "state": benchmark.state(native.observation)}
+                       "state": recorded_state(native.observation)}
                 if native.native_action is not None:
                     row["nativeAction"] = native.native_action
                 if native.native_done is not None:
@@ -217,6 +238,7 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
         if hasattr(benchmark, "finish_video") and (completed or not seal_before_media):
             try:
                 benchmark.finish_video()
+                closed_video = True
             except Exception as exc:
                 final_issue("optional video finalization: " + str(exc))
         for endpoint in (policy, benchmark):
@@ -227,4 +249,10 @@ def run_episode(benchmark, policy, sample, binding, directory, episode_id, ident
     if not sealed:
         result["wallSeconds"] = time.monotonic() - start
         seal(directory, result)
+    if video is not None and recording and closed_video and video_frames:
+        # The recording description is optional review data, published after scoring evidence.
+        try:
+            write_json(directory / "recording.json", {"version": 1, **video, "frames": video_frames})
+        except (OSError, ValueError, TypeError) as exc:
+            print("Native recording description unavailable: " + str(exc), file=sys.stderr)
     return result

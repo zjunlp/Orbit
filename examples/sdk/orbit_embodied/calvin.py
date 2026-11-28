@@ -17,6 +17,7 @@ def sequence_for(reference, sample):
 class CalvinBenchmark:
     action_size = 7
     settle_steps = 0
+    video_camera = "front_rgb"
 
     def __init__(self, reference, task):
         if task not in reference["environment"]["tasks"]:
@@ -72,10 +73,12 @@ class CalvinBenchmark:
     def start_video(self, directory):
         import imageio
 
-        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=30)
+        path, fps = "video.mp4", 30
+        self.video = imageio.get_writer(str(Path(directory) / path), fps=fps)
+        return {"path": path, "camera": self.video_camera, "fps": fps}
 
     def record_frame(self, observation):
-        self.video.append_data(observation["front_rgb"])
+        self.video.append_data(observation[self.video_camera])
 
     def finish_video(self):
         if self.video is not None:

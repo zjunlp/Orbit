@@ -3,6 +3,7 @@ import json
 import math
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -12,8 +13,9 @@ from orbit_embodied import digest, resolve_binding, run_episode, verify_episode
 from orbit_embodied.chores import ACTIONS, native_goal, semantic_profile, start_pose, verify_chores
 from orbit_embodied.binding import file_digest
 from orbit_embodied.driver import StepResult
+from orbit_embodied.episode_trajectory import stopped_at_step_limit
 from orbit_embodied.evidence import seal
-from orbit_embodied.hssd_ov import HORIZON, score_navigation, verify_hssd
+from orbit_embodied.hssd_ov import HORIZON, HssdOvBenchmark, score_navigation, verify_hssd
 
 
 class ChoresProtocolTests(unittest.TestCase):
@@ -170,6 +172,24 @@ class ChoresProtocolTests(unittest.TestCase):
 
 
 class HssdProtocolTests(unittest.TestCase):
+    def test_failed_explicit_stop_at_the_limit_is_distinct_from_truncation(self):
+        observation = {"agent_position": [0.0, 0.0, 0.0], "rotation": [0, 0, 0, 1], "instruction": "Find the chair."}
+        reference = {"environment": {"catalog": {"task": {}}}}
+        for action, truncated in ((0, False), (2, True)):
+            with self.subTest(action=action):
+                benchmark = HssdOvBenchmark(reference, "task")
+                benchmark.previous, benchmark.path_length = observation["agent_position"], 0.0
+                benchmark.steps, benchmark.targets = HORIZON - 1, []
+                benchmark.env = SimpleNamespace(step=lambda _: None, episode_over=True,
+                                                sim=SimpleNamespace(pathfinder=None))
+                with patch.object(benchmark, "observation", return_value=observation), \
+                        patch("orbit_embodied.hssd_ov.distance_to_target", return_value=2.0):
+                    result = benchmark.step([action])
+                self.assertTrue(result.terminated)
+                self.assertFalse(result.success)
+                last = {"step": HORIZON - 1, "terminated": result.terminated, "state": benchmark.state(observation)}
+                self.assertIs(stopped_at_step_limit(last, HORIZON, "hssd-ov", result.success), truncated)
+
     def test_native_stop_radius_and_supplemental_spl(self):
         self.assertEqual(score_navigation(0.5, 0.24, 1.0, True)["spl"], 0.5)
         self.assertFalse(score_navigation(0.5, 0.25, 1.0, True)["success"])
@@ -177,8 +197,6 @@ class HssdProtocolTests(unittest.TestCase):
         self.assertFalse(score_navigation(0.5, None, 0.0, True)["success"])
 
     def test_cpu_replay_rejects_changed_viewpoint_and_wrong_control(self):
-        from types import SimpleNamespace
-
         task = "example:1"
         initial = {"agent_position": [0.0, 0.0, 0.0], "rotation": [0, 0, 0, 1], "instruction": "Find the chair."}
         slid_position = [-0.0625, 0.0, -0.125]

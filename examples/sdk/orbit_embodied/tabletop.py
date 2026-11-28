@@ -17,6 +17,8 @@ METAWORLD_MUJOCO_VERSION = "3.3.0"
 
 
 class TabletopBenchmark:
+    video_camera = "front_rgb"
+
     def __init__(self, reference, task):
         self.reference, self.task = reference, task
         self.config = reference["environment"]
@@ -57,10 +59,12 @@ class TabletopBenchmark:
 
     def start_video(self, directory):
         import imageio
-        self.video = imageio.get_writer(str(Path(directory) / "video.mp4"), fps=self.config["controlHz"])
+        path, fps = "video.mp4", self.config["controlHz"]
+        self.video = imageio.get_writer(str(Path(directory) / path), fps=fps)
+        return {"path": path, "camera": self.video_camera, "fps": fps}
 
     def record_frame(self, observation):
-        self.video.append_data(observation["front_rgb"])
+        self.video.append_data(observation[self.video_camera])
 
     def finish_video(self):
         if self.video is not None:

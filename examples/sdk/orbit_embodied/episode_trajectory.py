@@ -20,7 +20,7 @@ LIBERO_STATE = {
     "gripper_position": ("finger_joint1", "finger_joint2"),
 }
 LIBERO_ACTIONS = ["delta_x", "delta_y", "delta_z", "rotation_x", "rotation_y", "rotation_z", "gripper"]
-# Saved videos per environment kind and their frame rate; None records at the reference control rate.
+# Recorders without a description use these known paths and rates.
 VIDEOS = {
     "libero": ({"front_rgb": "video.mp4"}, LIBERO_FPS),
     "robotwin": (ROBOTWIN_CAMERAS, ROBOTWIN_FPS),
@@ -79,43 +79,99 @@ def bound_preview(trace):
         target = max(2, min(target - 1, int(target * PREVIEW_LIMIT / size * 0.8)))
 
 
+def positive_rate(value):
+    return type(value) in (int, float) and 0 < value < math.inf
+
+
+def read_recording(directory):
+    path = directory / "recording.json"
+    if path.is_symlink():
+        return None
+    try:
+        recording = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(recording, dict) or recording.get("version") != 1:
+        return None
+    camera, name = recording.get("camera"), recording.get("path")
+    frames = recording.get("frames")
+    if (not isinstance(camera, str) or not 0 < len(camera) <= 100
+            or not isinstance(name, str) or name != Path(name).name or "\\" in name
+            or Path(name).suffix != ".mp4" or type(frames) is not int or frames < 0
+            or not positive_rate(recording.get("fps"))):
+        return None
+    return recording
+
+
+def stopped_at_step_limit(last, horizon, kind, success):
+    reached_horizon = last["step"] + 1 >= horizon
+    if reached_horizon and not last["terminated"]:
+        return True
+    truncated = last["state"].get("truncated")
+    if isinstance(truncated, bool):
+        return truncated
+    if kind == "colosseum-v2":
+        # Verify accepts only complete horizons, which the native evaluator truncates.
+        return reached_horizon
+    # Verify accepts an unfinished CALVIN sequence only after a subtask reaches its step limit.
+    return not success and (kind == "calvin" or reached_horizon)
+
+
 def write_trajectory(directory, destination, result, expected, *, kind):
-    """Write the episode index of a verified episode; kinds without a known recording are skipped."""
-    if kind not in VIDEOS:
-        return
+    """Write a review index from a verified episode with a known control rate."""
     directory = Path(directory)
+    recording = read_recording(directory)
+    videos, fps = VIDEOS.get(kind, ({}, None))
+    reference = expected.get("reference", {})
+    environment = reference.get("environment", {})
+    task = expected.get("sample", {}).get("taskId")
+    if recording is not None:
+        fps = recording["fps"]
+    elif fps is None:
+        fps = environment.get("controlRates", {}).get(
+            task, environment.get("controlHz", reference.get("parameters", {}).get("controlHz")))
+    if fps is None and kind not in VIDEOS:
+        return
+    if not positive_rate(fps):
+        raise ValueError("video frame rate must be positive and finite")
+
     with (directory / "actions.jsonl").open() as log:
         controls = [row for row in map(json.loads, log) if row["phase"] == "control"]
     if not controls:
         return
 
-    videos, fps = VIDEOS[kind]
-    environment = expected.get("reference", {}).get("environment", {})
-    task = expected["sample"]["taskId"]
-    if fps is None:
-        fps = environment["controlHz"]
-    if type(fps) not in (int, float) or not math.isfinite(fps) or fps <= 0:
-        raise ValueError("video frame rate must be positive and finite")
+    if recording is not None:
+        videos = {recording["camera"]: recording["path"]} if recording["frames"] == len(controls) else {}
     if kind == "libero":
-        action_names, state_fields, goal = LIBERO_ACTIONS, LIBERO_STATE, task
+        action_names, state_fields = LIBERO_ACTIONS, LIBERO_STATE
     else:
         # The benchmark profile names the action channels and those of each state vector it orders.
         profile = expected["binding"]["benchmarkProfile"]
-        action_names = profile["action"]["order"]
+        action_names = profile["action"].get("order")
+        if action_names is None:
+            action_names = [f"action {index + 1}" for index in range(len(controls[0]["action"]))]
         state_fields = {field: descriptor["order"] for field, descriptor in profile["observations"].items()
                         if field in controls[0]["state"] and "order" in descriptor}
-        initial = json.loads((directory / "initial-state.json").read_text())["state"]
-        goal = initial.get("instruction") or environment.get("instructions", {}).get(task) or task
+    initial = json.loads((directory / "initial-state.json").read_text())["state"]
+    recorded = initial.get("instruction")
+    goal = (recorded if isinstance(recorded, str)
+            else environment.get("instructions", {}).get(task) or task)
     state_names = [name for names in state_fields.values() for name in names]
     horizon = json.loads((directory / "contract.json").read_text())["horizon"]
-    # A failure on the last allowed step ran out of time; an earlier one was ended by the environment.
-    reached_horizon = not result["success"] and controls[-1]["step"] + 1 >= horizon
+    step_limit_reached = stopped_at_step_limit(controls[-1], horizon, kind, result["success"])
 
     def at(step):
         return round(step / fps, 6)
 
-    samples = []
+    samples, instruction_changes = [], []
+    instruction = initial.get("instruction")
     for row in controls:
+        time = at(row["step"])
+        if isinstance(instruction, str) and (
+                not instruction_changes or instruction_changes[-1]["text"] != instruction):
+            instruction_changes.append({"time": time, "text": instruction})
+        # The state in this row follows the action, so its instruction belongs to the next frame.
+        instruction = row["state"].get("instruction")
         action = row["action"]
         state = []
         for field, names in state_fields.items():
@@ -125,10 +181,10 @@ def write_trajectory(directory, destination, result, expected, *, kind):
             state.extend(values)
         if len(action) != len(action_names):
             raise ValueError("recorded action does not match its channel names")
-        samples.append({"time": at(row["step"]), "action": [rounded(value) for value in action],
+        samples.append({"time": time, "action": [rounded(value) for value in action],
                         "proprio": [rounded(value) for value in state], "reward": rounded(row["reward"]),
-                        "terminated": row["terminated"] and not reached_horizon,
-                        "truncated": row is controls[-1] and reached_horizon})
+                        "terminated": row["terminated"] and not step_limit_reached,
+                        "truncated": row is controls[-1] and step_limit_reached})
 
     chunks = []
     for index, group in groupby(controls, key=lambda row: row["chunk"]):
@@ -160,5 +216,8 @@ def write_trajectory(directory, destination, result, expected, *, kind):
              "actionNames": action_names, "proprioNames": state_names, "samples": samples,
              "chunks": chunks, "cameras": cameras, "producer": "verifier",
              "completeness": "environment-only", "mediaPhase": "solve", "frameBeforeAction": True}
+    if instruction_changes and (len(instruction_changes) > 1 or not goal
+                                or instruction_changes[0]["text"] != goal):
+        trace["instructionChanges"] = instruction_changes
     bound_preview(trace)
     write_json(destination, trace, compact=True)

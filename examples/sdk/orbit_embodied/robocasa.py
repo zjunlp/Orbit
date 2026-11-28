@@ -13,6 +13,9 @@ from .driver import StepResult
 from .gym import GymBenchmark
 
 
+RIGHT_VIDEO_CAMERA = "video.robot0_agentview_right"
+
+
 @lru_cache(maxsize=1)
 def prepare_assets(target, view, expected):
     if tree_digest(target) != expected:
@@ -23,6 +26,7 @@ def prepare_assets(target, view, expected):
 
 class RoboCasaBenchmark(GymBenchmark):
     action_size = 12
+    truncated = False
 
     def reset(self, sample):
         seed = self.reset_seed(sample)
@@ -43,8 +47,11 @@ class RoboCasaBenchmark(GymBenchmark):
             observation = self.reset_drinkware(seed)
         else:
             observation = self.reset_native(seed)
-        self.success, self.steps = False, 0
+        self.success, self.steps, self.truncated = False, 0, False
         return self.observation(observation)
+
+    def state(self, observation):
+        return {**super().state(observation), "truncated": self.truncated}
 
     def constructor_seed(self, seed):
         return seed
@@ -83,7 +90,8 @@ class RoboCasaBenchmark(GymBenchmark):
         native_success = bool(info["success"])
         parameters = self.reference["parameters"]
         if parameters.get("successRule") == "chunk-last-any":
-            terminated = bool(done or self.steps == self.horizon)
+            self.truncated = not done and self.steps == self.horizon
+            terminated = bool(done) or self.truncated
             if terminated or self.steps % parameters["replanSteps"] == 0:
                 self.success |= native_success
         else:
@@ -93,9 +101,12 @@ class RoboCasaBenchmark(GymBenchmark):
 
 
 class RoboCasaDiffusionBenchmark(RoboCasaBenchmark):
+    video_camera = RIGHT_VIDEO_CAMERA
+
     def reset(self, sample):
         self.previous_observation = {}
         self.previous_success = False
+        self.truncated = False
         return super().reset(sample)
 
     def observation(self, raw):
@@ -115,17 +126,18 @@ class RoboCasaDiffusionBenchmark(RoboCasaBenchmark):
         self.success |= native_success
         # The upstream runner reads info["success"][0] from the last two control steps.
         chunk_end = self.steps % self.reference["parameters"]["replanSteps"] == 0
-        terminated = bool(done or self.steps == self.horizon or (chunk_end and self.previous_success))
+        terminated = bool(done or (chunk_end and self.previous_success))
+        self.truncated = not terminated and self.steps == self.horizon
         self.previous_success = native_success
-        return StepResult(self.observation(raw), float(reward), terminated, native_success,
+        return StepResult(self.observation(raw), float(reward), terminated or self.truncated, native_success,
                           native_action=self.native_action, native_done=bool(done))
 
-    @staticmethod
-    def state(observation):
-        return {name: value[-1].tolist() for name, value in observation.items() if name.startswith("state.")}
+    def state(self, observation):
+        return {**{name: value[-1].tolist() for name, value in observation.items() if name.startswith("state.")},
+                "truncated": self.truncated}
 
     def record_frame(self, observation):
-        self.video.append_data(observation["video.robot0_agentview_right"][-1])
+        self.video.append_data(observation[self.video_camera][-1])
 
 
 class RoboCasaSeededBenchmark(RoboCasaBenchmark):
@@ -145,6 +157,8 @@ class RoboCasaGigaWorldBenchmark(RoboCasaSeededBenchmark):
 
 
 class RoboCasaXiaomiBenchmark(RoboCasaSeededBenchmark):
+    video_camera = RIGHT_VIDEO_CAMERA
+
     def reset(self, sample):
         self.history = deque(maxlen=7)
         return super().reset(sample)
@@ -169,7 +183,7 @@ class RoboCasaXiaomiBenchmark(RoboCasaSeededBenchmark):
         return {name: value[-1].tolist() for name, value in observation.items() if name.startswith("state.")}
 
     def record_frame(self, observation):
-        self.video.append_data(observation["video.robot0_agentview_right"][-1])
+        self.video.append_data(observation[self.video_camera][-1])
 
 
 def verify_robocasa_stopping(controls, horizon, protocol, replan_steps):
