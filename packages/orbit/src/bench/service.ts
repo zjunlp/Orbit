@@ -44,6 +44,7 @@ import {
   BenchSplitRequest,
   type BenchSplitResult,
   type BenchTask,
+  type BenchTaskList,
   type BenchUsage,
   benchCoverage,
   CalibrationRequest,
@@ -90,7 +91,7 @@ import {
   methodLines,
 } from "./hub.ts";
 import { BenchmarkPreparation } from "./preparation.ts";
-import { bundleDigest, methodBasis, revisionOf } from "./revision.ts";
+import { benchmarkReviewDigest, bundleDigest, methodBasis, revisionOf } from "./revision.ts";
 import { compareJobs, summarize } from "./summary.ts";
 import { transferMatrix } from "./transfer.ts";
 
@@ -300,6 +301,26 @@ export class BenchService {
     return (await this.infoOf(this.benchmark(name))).tasks;
   }
 
+  async taskList(name: string): Promise<BenchTaskList> {
+    const registration = this.benchmark(name);
+    const info = await this.infoOf(registration);
+    const listing = { ...info, registration };
+    const ids = info.tasks.map((task) => task.id);
+    try {
+      const overrides = registration.resources
+        ? resolveResources(loadResources(registration.resources), ids, ids)
+        : null;
+      return {
+        ...listing,
+        ...(overrides ? { resourceOverrides: overrides } : {}),
+        benchmarkDigest: benchmarkReviewDigest(registration, overrides),
+      };
+    } catch (e) {
+      if (!(e instanceof UserError)) throw e;
+      return { ...listing, resourceError: e.message };
+    }
+  }
+
   async split(name: string, input: unknown): Promise<BenchSplitResult> {
     const request = BenchSplitRequest.parse(input);
     const b = this.benchmark(name);
@@ -320,10 +341,19 @@ export class BenchService {
       taskSet: expectedTaskSet,
       expectedRevisions,
       expectedPolicyDigests,
+      expectedBenchmarkDigest,
       ...spec
     } = parsed.data;
     const b = this.benchmark(spec.benchmark);
     const info = await this.infoOf(b);
+    const all = info.tasks;
+    const taskIds = all.map((task) => task.id);
+    const resourceFile = b.resources ? loadResources(b.resources) : null;
+    const overrides = resourceFile ? resolveResources(resourceFile, taskIds, taskIds) : null;
+    if (expectedBenchmarkDigest && benchmarkReviewDigest(b, overrides) !== expectedBenchmarkDigest)
+      throw new UserError(
+        `${b.name}: the environment changed since review. Refresh the environment and review it again.`,
+      );
     const batch = info.capabilities?.embodied?.batch;
     if (spec.batchSize && (!batch || spec.batchSize > batch.maxEpisodes)) {
       if (spec.calibration?.mode === "policy") {
@@ -337,10 +367,9 @@ export class BenchService {
       }
       throw new UserError("batchSize exceeds the benchmark's declared fixed-batch support");
     }
-    const all = info.tasks;
     const source = await gitSource(b.path);
     const file = tasksFile
-      ? resolveTaskFile(tasksFile, spec.tasks, all, taskBenchmark(b, info, source))
+      ? resolveTaskFile(tasksFile, spec.tasks, all, taskBenchmark(b, info, source, resourceFile))
       : undefined;
     if (file) spec.tasks = file.tasks;
     const names = new Set<string>();
@@ -452,18 +481,8 @@ export class BenchService {
         throw new UserError(
           `${name}: parent revision matches this method; change the method or remove the parent to rerun it`,
         );
-    let resources: BenchJob["resources"] = null;
-    if (b.resources) {
-      try {
-        resources = resolveResources(
-          loadResources(b.resources),
-          spec.tasks,
-          all.map((t) => t.id),
-        );
-      } catch (e) {
-        throw new UserError((e as Error).message);
-      }
-    }
+    const resources =
+      overrides && Object.fromEntries(spec.tasks.map((task) => [task, overrides[task] ?? {}]));
     const job: BenchJob = {
       id: newId(),
       spec,

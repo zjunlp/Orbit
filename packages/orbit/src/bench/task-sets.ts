@@ -6,6 +6,7 @@ import {
   type AdapterTasksResponse,
   type BenchJob,
   type Benchmark,
+  type BenchResources,
   BenchSplitManifest,
   type BenchSplitRequest,
   type BenchSplitResult,
@@ -30,6 +31,7 @@ export function taskBenchmark(
   b: Benchmark,
   info: AdapterTasksResponse,
   source: BenchJob["source"],
+  resources: BenchResources | null = b.resources ? loadResources(b.resources) : null,
 ): TaskBenchmark {
   const identity = benchIdentity(b, info.capabilities ?? null).identity;
   const { identity: _identity, ...capabilities } = executionCapabilities(info.capabilities) ?? {};
@@ -47,7 +49,7 @@ export function taskBenchmark(
       config: b.config,
       env: b.env,
       passEnv: [...b.passEnv].sort(),
-      resources: b.resources ? loadResources(b.resources) : null,
+      resources,
       capabilities,
       official: info.official ?? null,
     }).slice(7),

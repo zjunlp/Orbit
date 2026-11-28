@@ -7,10 +7,13 @@ import type {
   BenchJobSpecInput,
   Benchmark,
   BenchTask,
+  BenchTaskList,
   CompatibilityCell,
   JobCalibration,
   Method,
+  ResourceOverride,
   SamplePlan,
+  ServiceSpec,
 } from "@zjunlp/orbit/contracts";
 import { stableValue } from "./conditions.ts";
 
@@ -389,6 +392,76 @@ export function registrationChanged(source: BenchJob, registered: Benchmark): bo
       stableValue(saved[key as keyof Benchmark]) !==
       stableValue(registered[key as keyof Benchmark]),
   );
+}
+
+export type ReviewValue = { label: string; value: string; previous?: string };
+
+/** The first differing baseline is the one the user most recently reviewed. */
+export function reviewValues(
+  current: Record<string, string>,
+  baselines: readonly Record<string, string>[],
+  missing: string,
+): ReviewValue[] {
+  const labels = new Set([...Object.keys(current), ...baselines.flatMap(Object.keys)]);
+  return [...labels].map((label) => {
+    const value = current[label] ?? missing;
+    const previous = baselines
+      .map((baseline) => baseline[label] ?? missing)
+      .find((v) => v !== value);
+    return { label, value, previous };
+  });
+}
+
+function resourceValues(resources?: ResourceOverride): Record<string, string> {
+  const fields = [
+    ["cpus", "CPU", " cores"],
+    ["memGB", "Memory", " GB"],
+    ["gpus", "GPU count", ""],
+    ["gpuMemGB", "GPU memory", " GB"],
+    ["timeoutMin", "Timeout", " min"],
+  ] as const;
+  return Object.fromEntries(
+    fields.flatMap(([field, label, unit]) => {
+      const value = resources?.[field];
+      return value === undefined ? [] : [[label, `${value}${unit}`]];
+    }),
+  );
+}
+
+export function policyResourceValues(service: ServiceSpec): Record<string, string> {
+  return {
+    CPU: "No limit",
+    Memory: "No limit",
+    "GPU count": "0",
+    "GPU memory": "No minimum",
+    ...resourceValues(service),
+    ...(service.gpusOf
+      ? {
+          "GPU count":
+            service.gpusOf === "main" ? "Shared with simulator" : `Shared with ${service.gpusOf}`,
+        }
+      : {}),
+  };
+}
+
+export function taskResourceReview(
+  current: Pick<BenchTaskList, "tasks" | "resourceOverrides">,
+  selected: readonly string[],
+  baselines: { tasks: readonly string[]; resources?: BenchJob["resources"] }[],
+): { task: string; values: ReviewValue[] }[] {
+  const known = new Set(current.tasks.map(({ id }) => id));
+  const previous = baselines.map(({ tasks, resources }) => ({ tasks: new Set(tasks), resources }));
+  return selected.flatMap((task) => {
+    if (!known.has(task)) return [];
+    const values = reviewValues(
+      resourceValues(current.resourceOverrides?.[task]),
+      previous.flatMap(({ tasks, resources }) =>
+        tasks.has(task) ? [resourceValues(resources?.[task])] : [],
+      ),
+      "no override",
+    );
+    return values.length ? [{ task, values }] : [];
+  });
 }
 
 /** Attach explicit lineage to one method under test. */

@@ -2,16 +2,8 @@ import { type Benchmark, GatePlan, isCliMethod, type MethodRevision } from "../c
 import type { Store } from "../store/index.ts";
 import { gate, gateBenchmark } from "./gate.ts";
 import { resolveGateEvidence } from "./gates.ts";
+import { benchmarkExecutionDigest, benchmarkExecutionSettings } from "./revision.ts";
 import { contentDigest } from "./samples.ts";
-
-const setup = (b: Benchmark) => ({
-  adapter: b.adapter,
-  path: b.path,
-  config: b.config,
-  env: b.env,
-  passEnv: b.passEnv,
-  resources: b.resources ?? null,
-});
 
 /** Read saved evidence only. Planning neither saves a verdict nor submits/backfills a job. */
 export function planGate(store: Store, input: unknown, registrations: Benchmark[]): GatePlan {
@@ -142,7 +134,7 @@ export function planGate(store: Store, input: unknown, registrations: Benchmark[
           ...new Map(
             (exact.length ? exact : templates).map((j) => [
               contentDigest({
-                benchmark: setup(j.benchmarkSnapshot as Benchmark),
+                benchmark: benchmarkExecutionSettings(j.benchmarkSnapshot as Benchmark),
                 options: j.spec.options,
                 seeds: j.spec.seeds,
                 samplePlan: j.spec.samplePlan ?? null,
@@ -182,7 +174,8 @@ export function planGate(store: Store, input: unknown, registrations: Benchmark[
         if (
           !benchmark ||
           !template.benchmarkSnapshot ||
-          contentDigest(setup(benchmark)) !== contentDigest(setup(template.benchmarkSnapshot))
+          benchmarkExecutionDigest(benchmark) !==
+            benchmarkExecutionDigest(template.benchmarkSnapshot)
         ) {
           block(
             "The recorded benchmark registration is missing or its execution settings changed; reconcile it first.",

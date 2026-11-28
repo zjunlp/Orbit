@@ -58,13 +58,19 @@ process.stdin.on("data", (c) => (input += c));
 process.stdin.on("end", () => {
   const req = JSON.parse(input);
   const say = (v) => console.log(JSON.stringify(v));
+  const editResources = req.benchmark.config.editResources;
   if (req.benchmark.config.broken) { console.error("checkout has no tasks/"); process.exit(1); }
   if (req.op === "tasks")
     return say({
       tasks: [{ id: "t1", title: "one", supported: true, reason: null }],
       metrics: [{ name: "answer", label: "Answer", unit: "pts", primary: true }],
-      capabilities: req.benchmark.config.gui ? { kind: "browser", methods: ["empty"], conditions: { actionSet: "coord" }, scoreKind: "binary", rescore: "evidence" } : undefined,
+      validateSeedSubmission: editResources ? true : undefined,
+      capabilities: req.benchmark.config.gui ? { kind: "browser", methods: ["empty"], conditions: { actionSet: "coord", Environment: req.benchmark.config.image }, scoreKind: "binary", rescore: "evidence" } : undefined,
     });
+  if (req.op === "validate-seed-submission" && editResources) {
+    require("node:fs").writeFileSync(editResources, JSON.stringify({ version: 1, default: { timeoutMin: 5 } }));
+    return say({ ok: true });
+  }
   const node = ${JSON.stringify(process.execPath)};
   if (req.op === "solve") {
     const v = req.trial.method.agent === "oracle" ? "7" : "0";
@@ -304,6 +310,108 @@ describe("bench jobs", () => {
     ).rejects.toThrow("does not support oracle");
     await client.benchmarkRemove(registration.name);
     expect((await client.benchInfo("ext")).capabilities).toBeUndefined();
+  });
+
+  it("checks the reviewed environment against the registration frozen for the job", async () => {
+    const oldImage = `sha256:${"a".repeat(64)}`;
+    const newImage = `sha256:${"b".repeat(64)}`;
+    const input = {
+      name: "reviewed-environment",
+      adapter: join(home, "adapter.cjs"),
+      path: home,
+      config: { gui: "1", image: oldImage },
+    };
+    const resources = join(home, "reviewed-resources.json");
+    writeFileSync(resources, JSON.stringify({ version: 1, default: { timeoutMin: 20 } }));
+    const registration = await client.benchmarkPut({ ...input, resources });
+    const original = await client.benchInfo(input.name);
+    expect(original.registration).toEqual(registration);
+    expect(original.capabilities?.conditions.Environment).toBe(oldImage);
+    expect(original.benchmarkDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    await client.benchLabel(input.name, { identity: { id: "reviewed", name: "Reviewed" } });
+    expect((await client.benchInfo(input.name)).benchmarkDigest).toBe(original.benchmarkDigest);
+
+    const updated = await client.benchmarkPut({
+      ...input,
+      config: { ...input.config, image: newImage },
+    });
+    const submission = {
+      benchmark: input.name,
+      methods: [{ name: "empty", agent: "empty" as const }],
+    };
+    const jobs = await client.benchJobs();
+    await expect(
+      client.benchSubmit({ ...submission, expectedBenchmarkDigest: original.benchmarkDigest }),
+    ).rejects.toThrow(/environment changed since review/);
+    expect(await client.benchJobs()).toEqual(jobs);
+
+    const refreshed = await client.benchInfo(input.name);
+    expect(refreshed.registration).toEqual(updated);
+    expect(refreshed.capabilities?.conditions.Environment).toBe(newImage);
+    expect(refreshed.benchmarkDigest).not.toBe(original.benchmarkDigest);
+    const job = await client.benchSubmit({
+      ...submission,
+      expectedBenchmarkDigest: refreshed.benchmarkDigest,
+    });
+    expect(job.benchmarkSnapshot).toEqual(updated);
+    expect(job.resources).toBeNull();
+    expect(job.spec).not.toHaveProperty("expectedBenchmarkDigest");
+    await expect
+      .poll(async () => (await client.benchJob(job.id)).job.state, { timeout: 10_000 })
+      .toBe("done");
+    await client.benchmarkRemove(input.name);
+  });
+
+  it("checks edits to the same resource file and saves the values checked at submission", async () => {
+    const resources = join(home, "reviewed-task-limits.json");
+    const name = "reviewed-task-limits";
+    writeFileSync(resources, JSON.stringify({ version: 1, default: { timeoutMin: 20 } }));
+    await client.benchmarkPut({
+      name,
+      adapter: join(home, "adapter.cjs"),
+      path: home,
+      resources,
+      config: { editResources: resources },
+    });
+    const reviewed = await client.benchInfo(name);
+    expect(reviewed.resourceOverrides).toEqual({ t1: { timeoutMin: 20 } });
+    writeFileSync(
+      resources,
+      JSON.stringify(
+        { default: { note: "Reviewed by a maintainer", timeoutMin: 20 }, version: 1 },
+        null,
+        2,
+      ),
+    );
+    expect((await client.benchInfo(name)).benchmarkDigest).toBe(reviewed.benchmarkDigest);
+
+    writeFileSync(resources, JSON.stringify({ version: 1, tasks: { typo: { timeoutMin: 1 } } }));
+    const invalid = await client.benchInfo(name);
+    expect(invalid.tasks).toEqual(reviewed.tasks);
+    expect(invalid.resourceError).toContain("unknown tasks: typo");
+    expect(invalid.benchmarkDigest).toBeUndefined();
+
+    writeFileSync(resources, JSON.stringify({ version: 1, default: { timeoutMin: 1 } }));
+    const submission = { benchmark: name, methods: [{ name: "empty", agent: "empty" as const }] };
+    const jobs = await client.benchJobs();
+    await expect(
+      client.benchSubmit({ ...submission, expectedBenchmarkDigest: reviewed.benchmarkDigest }),
+    ).rejects.toThrow(/environment changed since review/);
+    expect(await client.benchJobs()).toEqual(jobs);
+
+    const refreshed = await client.benchInfo(name);
+    expect(refreshed.resourceOverrides).toEqual({ t1: { timeoutMin: 1 } });
+    const job = await client.benchSubmit({
+      ...submission,
+      expectedBenchmarkDigest: refreshed.benchmarkDigest,
+    });
+    // The fixture adapter edits the file during seed validation, after the digest check.
+    expect((await client.benchInfo(name)).resourceOverrides).toEqual({ t1: { timeoutMin: 5 } });
+    expect(job.resources).toEqual({ t1: { timeoutMin: 1 } });
+    await expect
+      .poll(async () => (await client.benchJob(job.id)).job.state, { timeout: 10_000 })
+      .toBe("done");
+    await client.benchmarkRemove(name);
   });
 
   it("accepts external policy methods without CLI auth through the HTTP client", async () => {

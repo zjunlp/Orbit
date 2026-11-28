@@ -24,7 +24,9 @@ import {
   parseSamplePlan,
   profileAllowed,
   registrationChanged,
+  reviewValues,
   samplePlanTasks,
+  taskResourceReview,
   taskSubset,
   withLineage,
 } from "../src/pages/bench/new-job.ts";
@@ -359,6 +361,49 @@ it("detects registration changes against saved conditions and treats missing his
   ).toBe(true);
   expect(registrationChanged(source, { ...registration, adapter: "/different.py" })).toBe(true);
   expect(registrationChanged({ ...source, benchmarkSnapshot: undefined }, registration)).toBeNull();
+});
+
+it("reviews only selected task overrides and prefers the previous review when present", () => {
+  const tasks = ["click", "type", "scroll"].map(
+    (id): BenchTask => ({ id, title: id, supported: true, reason: null, tags: {} }),
+  );
+  const original = {
+    tasks: source.spec.tasks,
+    resources: { click: { cpus: 4, memGB: 8 }, type: { cpus: 4 } },
+  };
+  const current = {
+    tasks,
+    resourceOverrides: { click: { memGB: 8, cpus: 12 }, type: { cpus: 16 }, scroll: { cpus: 16 } },
+  };
+  const refreshed = { tasks: ["click"], resources: { click: { cpus: 8, memGB: 8 } } };
+  expect(taskResourceReview(current, ["click", "scroll"], [refreshed, original])).toEqual([
+    {
+      task: "click",
+      values: [
+        { label: "CPU", value: "12 cores", previous: "8 cores" },
+        { label: "Memory", value: "8 GB", previous: undefined },
+      ],
+    },
+    { task: "scroll", values: [{ label: "CPU", value: "16 cores", previous: undefined }] },
+  ]);
+  expect(taskResourceReview({ tasks }, ["click"], [original])[0]?.values).toContainEqual({
+    label: "CPU",
+    value: "no override",
+    previous: "4 cores",
+  });
+  expect(
+    taskResourceReview(current, ["click"], [{ tasks: source.spec.tasks }])[0]?.values,
+  ).toContainEqual({
+    label: "CPU",
+    value: "12 cores",
+    previous: "no override",
+  });
+});
+
+it("falls back to the copied value when a refresh did not change the field", () => {
+  expect(
+    reviewValues({ CPU: "8 cores" }, [{ CPU: "8 cores" }, { CPU: "4 cores" }], "none"),
+  ).toEqual([{ label: "CPU", value: "8 cores", previous: "4 cores" }]);
 });
 
 describe("registered Agent methods", () => {

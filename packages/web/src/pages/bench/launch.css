@@ -37,6 +37,18 @@
 .bench-launch .kv dd {
   overflow-wrap: anywhere;
 }
+.bench-resource-overrides {
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.bench-resource-overrides dt {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.bench-resource-overrides dd {
+  margin: 0;
+}
 .bench-task-picker {
   max-height: 380px;
   overflow: auto;

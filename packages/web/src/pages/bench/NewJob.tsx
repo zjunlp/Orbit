@@ -5,6 +5,7 @@ import type {
   BenchCapabilities,
   BenchJob,
   Benchmark,
+  BenchTaskList,
   Method,
   PolicyDefinition,
   SamplePlan,
@@ -36,9 +37,13 @@ import {
   methodDraft,
   methodTypes,
   parseSamplePlan,
+  policyResourceValues,
   profileAllowed,
+  type ReviewValue,
   registrationChanged,
+  reviewValues,
   samplePlanTasks,
+  taskResourceReview,
   taskSubset,
   withLineage,
 } from "./new-job.ts";
@@ -54,6 +59,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 const typeLabel = (agent: string) => TYPE_LABEL[agent] ?? agent;
 const STEPS = ["Environment & tasks", "Configurations", "Review & start"];
+type ReviewedPolicy = { definition: PolicyDefinition; digest: string };
 
 export function NewBenchJob() {
   const loc = useLocation();
@@ -210,14 +216,17 @@ function NewJobForm({
   const [informedBy, setInformedBy] = useState(derive.informedBy.join(", "));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [reviewedPolicies, setReviewedPolicies] = useState<Map<
-    string,
-    { version: string; digest: string }
-  > | null>(null);
-  const info = useAsync(
-    async () => (benchmark ? { benchmark, value: await api.benchInfo(benchmark) } : null),
-    [benchmark],
+  const [reviewedPolicies, setReviewedPolicies] = useState<Map<string, ReviewedPolicy> | null>(
+    null,
   );
+  const [previousPolicies, setPreviousPolicies] = useState<typeof reviewedPolicies>(null);
+  const [previousEnvironment, setPreviousEnvironment] = useState<BenchTaskList | null>(null);
+  const info = useAsync(async () => {
+    if (!benchmark) return null;
+    const value = await api.benchInfo(benchmark);
+    if (value.resourceError) throw new Error(value.resourceError);
+    return { benchmark, value };
+  }, [benchmark]);
   const compatibility = useAsync(
     async (signal) =>
       benchmark ? { benchmark, value: await api.benchCompatibility(benchmark, signal) } : null,
@@ -232,6 +241,7 @@ function NewJobForm({
   );
   const current = info.data?.benchmark === benchmark ? info.data.value : undefined;
   const registered = benchmarks.find((b) => b.name === benchmark);
+  const reviewedRegistration = current?.registration ?? registered;
   const tasks = current?.tasks ?? [];
   const capabilities = current?.capabilities;
   const planned = Boolean(capabilities?.embodied);
@@ -263,7 +273,39 @@ function NewJobForm({
   const visibleTasks = tasks.filter((t) =>
     `${t.id} ${t.title ?? ""}`.toLowerCase().includes(search.toLowerCase()),
   );
-  const changed = source && registered ? registrationChanged(source, registered) : false;
+  const changed =
+    source && reviewedRegistration ? registrationChanged(source, reviewedRegistration) : false;
+  const original = source?.spec.benchmark === benchmark ? source : undefined;
+  const taskResources =
+    planned && current
+      ? taskResourceReview(current, selected, [
+          ...(previousEnvironment
+            ? [
+                {
+                  tasks: previousEnvironment.tasks.map(({ id }) => id),
+                  resources: previousEnvironment.resourceOverrides,
+                },
+              ]
+            : []),
+          ...(original?.benchmarkSnapshot
+            ? [{ tasks: original.spec.tasks, resources: original.resources }]
+            : []),
+        ])
+      : [];
+  const resourcesChanged = taskResources.some(({ values }) =>
+    values.some(({ previous }) => previous !== undefined),
+  );
+  const conditions = capabilities?.conditions ?? {};
+  const environmentRows = reviewValues(
+    conditions,
+    [
+      ...(previousEnvironment?.capabilities ? [previousEnvironment.capabilities.conditions] : []),
+      ...(planned && original?.capabilities
+        ? [{ ...conditions, ...original.capabilities.conditions }]
+        : []),
+    ],
+    "not recorded",
+  );
   const sampleCount = samplePlan?.items.length ?? 0;
   const repetitions = Number.isInteger(Number(seeds)) && Number(seeds) > 0 ? Number(seeds) : 0;
   const count = (planned ? sampleCount : selected.length * repetitions) * drafts.length;
@@ -324,6 +366,9 @@ function NewJobForm({
     planRead.current++;
     setReadingPlan(false);
     setBenchmark(name);
+    setPreviousEnvironment(null);
+    setReviewedPolicies(null);
+    setPreviousPolicies(null);
     setChosen(null);
     setSearch("");
     setError(null);
@@ -363,14 +408,13 @@ function NewJobForm({
         const digest = digests && Object.hasOwn(digests, policy.name) ? digests[policy.name] : null;
         if (!digest)
           throw new Error(`${method.name}: policy digest is unavailable. Refresh policies.`);
-        return [method.name, { version: policy.version, digest }];
+        return [method.name, { definition: policy, digest }];
       }),
     );
   };
 
   const refreshPolicies = () => {
     setError(null);
-    setReviewedPolicies(null);
     if (configuringPolicies) policies.reload();
     else setStage(1);
   };
@@ -390,7 +434,9 @@ function NewJobForm({
         }
       } else {
         const methods = buildMethods(drafts, capabilities, profiles, definitions, cells);
-        setReviewedPolicies(planned ? reviewPolicies(methods) : null);
+        const updated = planned ? reviewPolicies(methods) : null;
+        setPreviousPolicies(reviewedPolicies);
+        setReviewedPolicies(updated);
       }
       setError(null);
       setStage((s) => s + 1);
@@ -408,6 +454,11 @@ function NewJobForm({
       if (planned && !samplePlan) throw new Error("Choose a frozen sample plan.");
       if (planned && !reviewedPolicies)
         throw new Error("Review the selected policies before starting.");
+      const expectedBenchmarkDigest = planned ? current.benchmarkDigest : undefined;
+      if (planned && !expectedBenchmarkDigest)
+        throw new Error(
+          "Environment digest is unavailable. Refresh the environment before starting.",
+        );
       const methods = buildMethods(drafts, capabilities, profiles, definitions, cells);
       const spec = withLineage(evaluationSpec(fields, methods, tasks, source), {
         parent,
@@ -422,7 +473,10 @@ function NewJobForm({
             Array.from(reviewedPolicies, ([name, policy]) => [name, policy.digest]),
           )
         : undefined;
-      const job = await api.benchSubmit({ ...spec, expectedPolicyDigests }, folder.trim());
+      const job = await api.benchSubmit(
+        { ...spec, expectedPolicyDigests, expectedBenchmarkDigest },
+        folder.trim(),
+      );
       navigate(jobPath(job.id));
     } catch (e) {
       if (e instanceof BatchSizeError) {
@@ -470,17 +524,24 @@ function NewJobForm({
           {calibration ? "policy calibration" : "evaluation"} using the selected registration.
         </div>
       )}
-      {source && registered && changed !== false && (
+      {source && changed !== false && (
         <div className="callout">
           {changed === null
             ? "The original environment configuration was not recorded. Review the current preset before starting."
             : "The registered environment differs from the saved configuration. This evaluation will use the current preset shown below."}
         </div>
       )}
+      {resourcesChanged && (
+        <div className="callout">
+          Registered resource overrides changed for selected tasks. Review the differences before
+          starting.
+        </div>
+      )}
       {stage > 0 && info.error && (
         <div className="callout" role="alert">
-          Could not reload environment tasks: {info.error}. Use Refresh configuration checks to
-          reload tasks before continuing or starting. Your draft configurations are kept.
+          Could not reload environment tasks: {info.error}. Use{" "}
+          {planned ? "Refresh environment" : "Refresh configuration checks"} to reload tasks before
+          continuing or starting. Your draft configurations are kept.
         </div>
       )}
       <div className="bench-launch-grid">
@@ -957,13 +1018,30 @@ function NewJobForm({
                     placeholder="Optional, e.g. gui/experiments"
                   />
                 </label>
-                <PresetConditions capabilities={capabilities} />
+                <PresetConditions capabilities={capabilities} values={environmentRows} />
                 {!planned && (
                   <CompatibilityRefresh loading={refreshing} onRefresh={refreshChecks} />
                 )}
                 <div className="bench-review-methods">
                   {drafts.map((d) => {
                     const policy = reviewedPolicies?.get(d.name.trim());
+                    const refreshed =
+                      previousPolicies &&
+                      [...previousPolicies.values()].find(
+                        ({ definition }) => definition.name === d.policyRef,
+                      );
+                    const originalPolicy = original?.spec.methods.find(
+                      (method) => method.policyRef === d.policyRef,
+                    )?.policySnapshot;
+                    const resources =
+                      policy &&
+                      reviewValues(
+                        policyResourceValues(policy.definition.service),
+                        [refreshed?.definition, originalPolicy].flatMap((definition) =>
+                          definition ? [policyResourceValues(definition.service)] : [],
+                        ),
+                        "not recorded",
+                      );
                     return (
                       <div key={d.id}>
                         <b>{d.name}</b>
@@ -971,13 +1049,21 @@ function NewJobForm({
                           {" "}
                           · {typeLabel(d.agent)}
                           {d.policyRef ? ` · ${d.policyRef}` : ""}
-                          {policy ? ` · ${policy.version}` : ""}
+                          {policy ? ` · ${policy.definition.version}` : ""}
                           {d.model ? ` · ${d.model}` : ""}
                         </span>
                         {policy && (
                           <div className="muted">
                             Registration digest{" "}
                             <code title={policy.digest}>{policy.digest.slice(0, 19)}</code>
+                          </div>
+                        )}
+                        {resources && (
+                          <div className="muted">
+                            Model service resources ·{" "}
+                            {resources
+                              .map(({ label, ...value }) => `${label} ${reviewValueText(value)}`)
+                              .join(" · ")}
                           </div>
                         )}
                         {d.entrypoint && <div className="mono muted">{d.entrypoint}</div>}
@@ -1034,6 +1120,20 @@ function NewJobForm({
               Cancel
             </Link>
             <div className="spacer" />
+            {planned && (stage === 2 || (stage === 1 && info.error)) && (
+              <button
+                type="button"
+                className="btn"
+                disabled={submitting || info.loading}
+                onClick={() => {
+                  setError(null);
+                  if (current && stage === 2) setPreviousEnvironment(current);
+                  info.reload();
+                }}
+              >
+                Refresh environment
+              </button>
+            )}
             {planned && (stage === 1 || (stage === 2 && error)) && (
               <button
                 type="button"
@@ -1123,8 +1223,19 @@ function NewJobForm({
                 ? `${sampleCount} samples × ${drafts.length} configurations`
                 : `${selected.length} tasks × ${drafts.length} configurations × ${seeds || "—"} repetitions`}
             </p>
-            {registered?.resources && (
-              <p className="muted">Resource limits come from the registered per-task settings.</p>
+            {planned &&
+            stage === 2 &&
+            current &&
+            (current.resourceOverrides || resourcesChanged) ? (
+              <ReviewedResources
+                key={current.benchmarkDigest}
+                rows={taskResources}
+                changed={resourcesChanged}
+              />
+            ) : (
+              reviewedRegistration?.resources && (
+                <p className="muted">Resource limits come from the registered per-task settings.</p>
+              )
             )}
             {capabilities?.rescore === "evidence" && (
               <p className="muted">
@@ -1138,7 +1249,45 @@ function NewJobForm({
   );
 }
 
-function PresetConditions({ capabilities }: { capabilities?: BenchCapabilities }) {
+function ReviewedResources({
+  rows,
+  changed,
+}: {
+  rows: ReturnType<typeof taskResourceReview>;
+  changed: boolean;
+}) {
+  return rows.length ? (
+    <details open={changed ? true : undefined}>
+      <summary>Registered resource overrides</summary>
+      <dl className="bench-resource-overrides">
+        {rows.map(({ task, values }) => (
+          <div key={task}>
+            <dt>{task}</dt>
+            <dd>
+              {values
+                .map(({ label, ...value }) => `${label} ${reviewValueText(value)}`)
+                .join(" · ")}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  ) : (
+    <p className="muted">Selected tasks use the environment's resource defaults.</p>
+  );
+}
+
+function reviewValueText({ value, previous }: Pick<ReviewValue, "value" | "previous">): string {
+  return previous === undefined ? value : `${previous} → ${value}`;
+}
+
+function PresetConditions({
+  capabilities,
+  values,
+}: {
+  capabilities?: BenchCapabilities;
+  values?: ReviewValue[];
+}) {
   if (!capabilities)
     return (
       <p className="muted">
@@ -1150,10 +1299,10 @@ function PresetConditions({ capabilities }: { capabilities?: BenchCapabilities }
     <div className="bench-preset">
       <p className="muted">Environment preset · read-only</p>
       <dl className="kv">
-        {Object.entries(capabilities.conditions).map(([key, value]) => (
-          <div key={key} style={{ display: "contents" }}>
-            <dt>{key}</dt>
-            <dd>{value}</dd>
+        {(values ?? reviewValues(capabilities.conditions, [], "not recorded")).map((row) => (
+          <div key={row.label} style={{ display: "contents" }}>
+            <dt>{row.label}</dt>
+            <dd>{reviewValueText(row)}</dd>
           </div>
         ))}
       </dl>

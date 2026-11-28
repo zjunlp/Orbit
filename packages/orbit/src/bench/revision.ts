@@ -1,9 +1,37 @@
 // Method revisions (design §9.16): what a method is made of, hashed, so results of the same content
 // line up across jobs and a changed bundle, model or CLI is a new revision even under the same name.
 import { createHash } from "node:crypto";
-import type { BenchCapabilities, Method, MethodBasis, MethodRevision } from "../contracts/index.ts";
+import type {
+  BenchCapabilities,
+  BenchJob,
+  Benchmark,
+  Method,
+  MethodBasis,
+  MethodRevision,
+} from "../contracts/index.ts";
 import { inspectBundle } from "../lib/bundle.ts";
 import { contentDigest } from "./samples.ts";
+
+export function benchmarkExecutionSettings(b: Benchmark) {
+  return {
+    adapter: b.adapter,
+    path: b.path,
+    config: b.config,
+    env: b.env,
+    passEnv: b.passEnv,
+    resources: b.resources ?? null,
+  };
+}
+
+export function benchmarkExecutionDigest(b: Benchmark): string {
+  return contentDigest(benchmarkExecutionSettings(b));
+}
+
+export function benchmarkReviewDigest(b: Benchmark, resources: BenchJob["resources"]): string {
+  return resources
+    ? contentDigest({ registration: benchmarkExecutionSettings(b), resources })
+    : benchmarkExecutionDigest(b);
+}
 
 /** Discovery labels never change comparability or retry compatibility. */
 export function executionCapabilities(capabilities: BenchCapabilities | null | undefined) {

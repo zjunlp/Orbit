@@ -516,6 +516,8 @@ export const BenchJobSubmission = BenchJobSpec.and(
     expectedRevisions: z.record(ProfileName, z.string().regex(/^[a-f0-9]{12}$/)).optional(),
     /** Reviewed policy snapshot digests keyed by method name, for submission only. */
     expectedPolicyDigests: z.record(ProfileName, ContentDigest).optional(),
+    /** Reviewed benchmark registration digest, for submission only. */
+    expectedBenchmarkDigest: ContentDigest.optional(),
   }),
 );
 export type BenchJobSubmissionInput = z.input<typeof BenchJobSubmission>;
@@ -1135,6 +1137,10 @@ export const BenchTaskList = z.object({
   metrics: z.array(MetricSpec).default([]),
   capabilities: BenchCapabilities.optional(),
   official: OfficialRule.optional(),
+  registration: Benchmark.optional(),
+  resourceOverrides: z.record(z.string(), ResourceOverride).optional(),
+  resourceError: z.string().optional(),
+  benchmarkDigest: ContentDigest.optional(),
 });
 export type BenchTaskList = z.infer<typeof BenchTaskList>;
 
